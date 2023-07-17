@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "fungi_server_abstract"
+name = "fungi-server-abstract"
 version = "0.1.0"

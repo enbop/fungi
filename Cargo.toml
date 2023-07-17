@@ -1,5 +1,5 @@
 [workspace]
 
 members = [
-    "server/fungi_server_abstract",
+    "server/fungi-server-abstract",
 ]
