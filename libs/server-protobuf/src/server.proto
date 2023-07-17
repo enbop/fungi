@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package server;
+
+message Person {
+    string name = 1;
+    int32 age = 2;
+    repeated string hobbies = 3;
+}
