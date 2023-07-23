@@ -4,5 +4,5 @@ resolver = "2"
 members = [
     "server/fungi-server-abstract",
     "server/fungi-server-simple-impl",
-    "libs/server-protobuf",
+    "libs/auth-service-proto",
 ]

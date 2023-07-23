@@ -44,6 +44,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "auth-service-proto"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "tonic",
+ "tonic-build",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -190,16 +199,13 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 [[package]]
 name = "fungi-server-abstract"
 version = "0.1.0"
-dependencies = [
- "server-protobuf",
-]
 
 [[package]]
 name = "fungi-server-simple-impl"
 version = "0.1.0"
 dependencies = [
+ "auth-service-proto",
  "fungi-server-abstract",
- "server-protobuf",
  "tokio",
  "tonic",
 ]
@@ -779,15 +785,6 @@ name = "serde"
 version = "1.0.174"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b88756493a5bd5e5395d53baa70b194b05764ab85b59e43e4b8f4e1192fa9b1"
-
-[[package]]
-name = "server-protobuf"
-version = "0.1.0"
-dependencies = [
- "prost",
- "tonic",
- "tonic-build",
-]
 
 [[package]]
 name = "signal-hook-registry"

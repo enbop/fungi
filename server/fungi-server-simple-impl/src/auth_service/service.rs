@@ -1,4 +1,4 @@
-use server_protobuf::server::{test_service_server::{TestService, TestServiceServer} , HelloReply, HelloRequest};
+use auth_service_proto::server::{test_service_server::{TestService, TestServiceServer} , HelloReply, HelloRequest};
 use tonic::{transport::Server, Request, Response, Status};
 
 #[derive(Default)]
