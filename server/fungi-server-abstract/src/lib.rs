@@ -1,5 +1,7 @@
 #![feature(async_fn_in_trait)]
 
+pub mod auth_service; 
+pub mod p2p_service;
 use std::{error, fmt};
 
 #[derive(Debug)]
