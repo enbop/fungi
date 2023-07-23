@@ -2,8 +2,14 @@ syntax = "proto3";
 
 package server;
 
-message Person {
+service TestService {
+    rpc Greet(HelloRequest) returns (HelloReply) {}
+}
+
+message HelloRequest {
     string name = 1;
-    int32 age = 2;
-    repeated string hobbies = 3;
+}
+
+message HelloReply {
+    string message = 1;
 }

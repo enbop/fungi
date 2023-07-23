@@ -45,16 +45,3 @@ trait ServerAbstract {
         Ok(self.get_verifier().verify(identity).await)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use server_protobuf::server::Person;
-
-    #[test]
-    fn it_works() {
-        let mut server = Person::default();
-        server.name = "test".to_string();
-        assert_eq!(server.name, "test");
-    }
-}

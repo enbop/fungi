@@ -1,3 +1,3 @@
 fn main() {
-    prost_build::compile_protos(&["src/server.proto"], &["src/"]).unwrap();
+    tonic_build::compile_protos("src/server.proto").unwrap();
 }
