@@ -3,4 +3,6 @@ resolver = "2"
 
 members = [
     "fungi",
+    "fungi-gateway",
+    "fungi-util",
 ]

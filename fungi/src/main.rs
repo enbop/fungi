@@ -18,12 +18,13 @@ enum Commands {
     Daemon,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     env_logger::init();
     let args = Args::parse();
     match args.command {
         Some(Commands::Init) => commands::init(),
-        Some(Commands::Daemon) => commands::daemon(),
+        Some(Commands::Daemon) => commands::daemon().await,
         None => println!("No command provided"),
     }
 }
