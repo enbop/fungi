@@ -1,50 +1,14 @@
-use std::ops::{Deref, DerefMut};
-
-use fungi_util::{AsyncResult, Completer};
+use fungi_util::{AsyncBorrow, AsyncBorrowGuard, AsyncResult, Completer};
 use libp2p::{
     futures::StreamExt,
     noise, ping,
     swarm::{dial_opts::DialOpts, DialError, NetworkInfo, SwarmEvent},
     tcp, yamux, PeerId, Swarm,
 };
-use tokio::sync::{
-    mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-    oneshot,
-};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
-#[derive(Debug)]
-struct SwarmGuard {
-    swarm_ptr: *mut Swarm<ping::Behaviour>,
-    #[allow(dead_code)]
-    end_signal: oneshot::Sender<()>,
-}
-
-unsafe impl Send for SwarmGuard {}
-
-impl SwarmGuard {
-    fn new(swarm: &mut Swarm<ping::Behaviour>) -> (Self, oneshot::Receiver<()>) {
-        let (end_signal, end_signal_rx) = oneshot::channel();
-        let swarm_guard = Self {
-            swarm_ptr: swarm as *mut Swarm<ping::Behaviour>,
-            end_signal,
-        };
-        (swarm_guard, end_signal_rx)
-    }
-}
-
-impl Deref for SwarmGuard {
-    type Target = Swarm<ping::Behaviour>;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.swarm_ptr }
-    }
-}
-
-impl DerefMut for SwarmGuard {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.swarm_ptr }
-    }
-}
+type TSwarm = Swarm<ping::Behaviour>;
+type SwarmGuard = AsyncBorrowGuard<TSwarm>;
 
 pub struct SwarmState {
     #[allow(dead_code)]
@@ -125,11 +89,11 @@ impl SwarmState {
                         _ => {}
                     }
                 },
-                borrwo_request = borrow_swarm_signal_rx.recv() => {
-                    let request = borrwo_request.unwrap(); // TODO unwrap
-                    let (swarm_guard, end) = SwarmGuard::new(&mut swarm);
-                    request.complete(swarm_guard);
-                    end.await.ok();
+                borrow_request = borrow_swarm_signal_rx.recv() => {
+                    let request = borrow_request.unwrap(); // TODO unwrap
+                    AsyncBorrow::new(&mut swarm).borrow(|swarm_guard| {
+                        request.complete(swarm_guard);
+                    }).await;
                 },
             }
         }
