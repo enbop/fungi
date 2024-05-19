@@ -72,7 +72,6 @@ impl SwarmState {
         AsyncResult::new(|completer| {
             self.borrow_swarm_signal_tx.send(completer).unwrap(); // TODO unwrap
         })
-        .wait()
         .await
     }
 

@@ -11,24 +11,18 @@ impl<T> Completer<T> {
     }
 }
 
-pub struct AsyncResult<T> {
-    rx: oneshot::Receiver<T>,
-}
+pub struct AsyncResult {}
 
-impl<T> AsyncResult<T> {
-    pub fn new(mut f: impl FnMut(Completer<T>)) -> Self {
+impl AsyncResult {
+    pub async fn new<T>(mut f: impl FnMut(Completer<T>)) -> T {
         let (tx, rx) = oneshot::channel();
         f(Completer { tx });
-        Self { rx }
+        rx.await.unwrap()
     }
 
-    pub async fn new_async<F: Future<Output = ()>>(mut f: impl FnMut(Completer<T>) -> F) -> Self {
+    pub async fn new_async<T, F: Future<Output = ()>>(mut f: impl FnMut(Completer<T>) -> F) -> T {
         let (tx, rx) = oneshot::channel();
         f(Completer { tx }).await;
-        Self { rx }
-    }
-
-    pub async fn wait(self) -> T {
-        self.rx.await.unwrap()
+        rx.await.unwrap()
     }
 }
