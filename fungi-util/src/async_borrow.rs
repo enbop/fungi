@@ -1,58 +1,47 @@
-use std::{
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
+use std::sync::{Arc, Mutex, MutexGuard};
 use tokio::sync::Notify;
 
-pub struct AsyncBorrow<'a, T> {
-    t: &'a mut T,
+pub struct AsyncBorrow<T> {
+    t: Arc<Mutex<T>>,
     notify: Arc<Notify>,
-    _marker: std::marker::PhantomData<&'a mut T>,
 }
 
-impl<'a, T> AsyncBorrow<'a, T> {
-    pub fn new(t: &'a mut T) -> Self {
+impl<T> AsyncBorrow<T> {
+    pub fn new(t: T) -> Self {
         let notify = Arc::new(Notify::new());
         Self {
-            t,
+            t: Arc::new(Mutex::new(t)),
             notify,
-            _marker: std::marker::PhantomData,
         }
     }
 
-    pub async fn borrow(&mut self, f: impl FnOnce(AsyncBorrowGuard<T>)) {
+    pub async fn borrow(self, f: impl FnOnce(AsyncBorrowGuard<T>)) -> T {
         let guard = AsyncBorrowGuard {
-            ptr: self.t as *mut T,
+            t: self.t.clone(), // SAFETY: arc clone is only called once here
             notify: self.notify.clone(),
         };
         f(guard);
         self.notify.notified().await;
+        // SAFETY: arc clone was only called once and the guard is dropped
+        assert!(Arc::strong_count(&self.t) == 1);
+        let t = Arc::into_inner(self.t).unwrap();
+        t.into_inner().unwrap()
     }
 }
 
 pub struct AsyncBorrowGuard<T> {
-    ptr: *mut T,
+    t: Arc<Mutex<T>>,
     notify: Arc<Notify>,
 }
 
-unsafe impl<T> Send for AsyncBorrowGuard<T> {}
-
 impl<T> Drop for AsyncBorrowGuard<T> {
     fn drop(&mut self) {
-        self.notify.notify_one();
+        self.notify.notify_waiters();
     }
 }
 
-impl<T> Deref for AsyncBorrowGuard<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.ptr }
-    }
-}
-
-impl<T> DerefMut for AsyncBorrowGuard<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.ptr }
+impl<T> AsyncBorrowGuard<T> {
+    pub fn lock(&self) -> MutexGuard<'_, T> {
+        self.t.lock().unwrap()
     }
 }

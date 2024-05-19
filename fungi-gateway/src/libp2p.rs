@@ -91,7 +91,7 @@ impl SwarmState {
                 },
                 borrow_request = borrow_swarm_signal_rx.recv() => {
                     let request = borrow_request.unwrap(); // TODO unwrap
-                    AsyncBorrow::new(&mut swarm).borrow(|swarm_guard| {
+                    swarm = AsyncBorrow::new(swarm).borrow(|swarm_guard| {
                         request.complete(swarm_guard);
                     }).await;
                 },
@@ -103,11 +103,13 @@ impl SwarmState {
 impl SwarmState {
     pub async fn network_info(&self) -> NetworkInfo {
         let swarm_guard = self.borrow_swarm().await;
-        swarm_guard.network_info()
+        let lock = swarm_guard.lock();
+        lock.network_info()
     }
 
     pub async fn dial(&mut self, opts: impl Into<DialOpts>) -> Result<(), DialError> {
-        let mut swarm_guard = self.borrow_swarm().await;
-        swarm_guard.dial(opts)
+        let swarm_guard = self.borrow_swarm().await;
+        let mut lock = swarm_guard.lock();
+        lock.dial(opts)
     }
 }
