@@ -1,21 +1,27 @@
-use fungi_util::{AsyncBorrow, AsyncBorrowGuard, AsyncResult, Completer};
+use std::sync::Arc;
+
 use libp2p::{
     futures::StreamExt,
     noise, ping,
     swarm::{dial_opts::DialOpts, DialError, NetworkInfo, SwarmEvent},
     tcp, yamux, PeerId, Swarm,
 };
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::{Mutex, MutexGuard, Notify};
 
 type TSwarm = Swarm<ping::Behaviour>;
-type SwarmGuard = AsyncBorrowGuard<TSwarm>;
+
+#[derive(Clone)]
+struct SwarmWrapper {
+    ptr: Arc<Mutex<TSwarm>>,
+    notify: Arc<Notify>,
+}
 
 pub struct SwarmState {
     #[allow(dead_code)]
     swarm_task: tokio::task::JoinHandle<()>,
     local_peer_id: PeerId,
 
-    borrow_swarm_signal_tx: UnboundedSender<Completer<SwarmGuard>>,
+    swarm: SwarmWrapper,
 }
 
 impl SwarmState {
@@ -50,16 +56,17 @@ impl SwarmState {
             )
             .map_err(|e| format!("Failed to listen on address: {:?}", e))?;
 
-        let (borrow_swarm_signal_tx, borrow_swarm_signal_rx) =
-            unbounded_channel::<Completer<SwarmGuard>>();
-
         let local_peer_id = swarm.local_peer_id().to_owned();
-        let swarm_task = tokio::spawn(Self::start_swarm_task(swarm, borrow_swarm_signal_rx));
+        let swarm_wrapper = SwarmWrapper {
+            ptr: Arc::new(Mutex::new(swarm)),
+            notify: Arc::new(Notify::new()),
+        };
+        let swarm_task = tokio::spawn(Self::start_swarm_task(swarm_wrapper.clone()));
 
         Ok(Self {
             swarm_task,
+            swarm: swarm_wrapper,
             local_peer_id,
-            borrow_swarm_signal_tx,
         })
     }
 
@@ -68,32 +75,33 @@ impl SwarmState {
     }
 
     // TODO return Result
-    async fn borrow_swarm(&self) -> SwarmGuard {
-        AsyncResult::new(|completer| {
-            self.borrow_swarm_signal_tx.send(completer).unwrap(); // TODO unwrap
-        })
-        .await
+    async fn require_swarm(&self) -> MutexGuard<'_, TSwarm> {
+        self.swarm.notify.notify_one();
+        self.swarm.ptr.lock().await
     }
 
-    async fn start_swarm_task(
-        mut swarm: Swarm<ping::Behaviour>,
-        mut borrow_swarm_signal_rx: UnboundedReceiver<Completer<SwarmGuard>>,
-    ) {
+    async fn start_swarm_task(swarm: SwarmWrapper) {
         loop {
-            tokio::select! {
-                swarm_events = swarm.select_next_some() => {
-                    match swarm_events {
-                        SwarmEvent::NewListenAddr { address, .. } => log::info!("Listening on {address:?}"),
-                        SwarmEvent::Behaviour(event) => log::info!("{event:?}"),
-                        _ => {}
-                    }
-                },
-                borrow_request = borrow_swarm_signal_rx.recv() => {
-                    let request = borrow_request.unwrap(); // TODO unwrap
-                    swarm = AsyncBorrow::new(swarm).borrow(|swarm_guard| {
-                        request.complete(swarm_guard);
-                    }).await;
-                },
+            swarm_loop(&swarm).await;
+        }
+        async fn swarm_loop(swarm: &SwarmWrapper) {
+            let mut swarm_lock = swarm.ptr.lock().await;
+            loop {
+                tokio::select! {
+                    biased;
+                    swarm_events = swarm_lock.select_next_some() => {
+                        log::debug!("Handle swarm event {:?}", swarm_events);
+                        match swarm_events {
+                            SwarmEvent::NewListenAddr { address, .. } => log::info!("Listening on {address:?}"),
+                            SwarmEvent::Behaviour(event) => log::info!("{event:?}"),
+                            _ => {}
+                        }
+                    },
+                    // release the lock
+                    _ = swarm.notify.notified() => {
+                        break;
+                    },
+                }
             }
         }
     }
@@ -101,14 +109,12 @@ impl SwarmState {
 
 impl SwarmState {
     pub async fn network_info(&self) -> NetworkInfo {
-        let swarm_guard = self.borrow_swarm().await;
-        let lock = swarm_guard.lock();
-        lock.network_info()
+        let swarm_guard = self.require_swarm().await;
+        swarm_guard.network_info()
     }
 
     pub async fn dial(&mut self, opts: impl Into<DialOpts>) -> Result<(), DialError> {
-        let swarm_guard = self.borrow_swarm().await;
-        let mut lock = swarm_guard.lock();
-        lock.dial(opts)
+        let mut swarm_guard = self.require_swarm().await;
+        swarm_guard.dial(opts)
     }
 }
