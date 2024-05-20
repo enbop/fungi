@@ -6,3 +6,8 @@ members = [
     "fungi-gateway",
     "fungi-util",
 ]
+
+[workspace.dependencies]
+futures = "0.3"
+log = "0.4"
+once_cell = "1"
