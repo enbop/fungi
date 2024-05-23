@@ -1,14 +1,16 @@
 use fungi_gateway::SwarmState;
 use futures::{AsyncReadExt, AsyncWriteExt, StreamExt as _};
+use home::home_dir;
 use libp2p::StreamProtocol;
 use libp2p_stream::IncomingStreams;
 use std::time::Duration;
 
 pub async fn daemon() {
     println!("Starting Fungi daemon...");
-    let mut swarm = SwarmState::start_libp2p_swarm().await.unwrap();
+    let fungi_dir = home_dir().unwrap().join(".fungi");
+    let mut swarm = SwarmState::start_libp2p_swarm(&fungi_dir).await.unwrap();
     let peer_id = swarm.local_peer_id();
-    log::debug!("Peer ID: {:?}", peer_id);
+    println!("Local Peer ID: {:?}", peer_id);
 
     let test_stream_listener = swarm
         .stream_accept(StreamProtocol::new("/echo"))

@@ -11,3 +11,4 @@ members = [
 futures = "0.3"
 log = "0.4"
 once_cell = "1"
+anyhow = "1"

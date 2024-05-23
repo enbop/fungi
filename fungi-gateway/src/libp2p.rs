@@ -1,7 +1,9 @@
-use std::{sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
+use anyhow::Result;
 use libp2p::{
     futures::StreamExt,
+    identity::Keypair,
     noise, ping,
     swarm::{dial_opts::DialOpts, DialError, NetworkBehaviour, NetworkInfo, SwarmEvent},
     tcp, yamux, PeerId, StreamProtocol, Swarm,
@@ -43,38 +45,34 @@ struct FungiBehaviours {
 impl SwarmState {
     // TODO: error handling
     // TODO: configurable, consider using a builder pattern
-    pub async fn start_libp2p_swarm() -> Result<Self, String> {
-        let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+    pub async fn start_libp2p_swarm(fungi_dir: &PathBuf) -> Result<Self> {
+        let keypair = get_keypair_from_dir(fungi_dir)?;
+
+        let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
             .with_tcp(
                 tcp::Config::default(),
                 noise::Config::new,
                 yamux::Config::default,
-            )
-            .map_err(|e| format!("Failed to build swarm: {:?}", e))?
+            )?
             .with_quic()
             .with_behaviour(|_| FungiBehaviours {
                 ping: ping::Behaviour::new(ping::Config::new()),
                 stream: libp2p_stream::Behaviour::new(),
-            })
-            .map_err(|e| format!("Failed to build swarm: {:?}", e))?
+            })?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
             .build();
 
-        swarm
-            .listen_on(
-                "/ip4/0.0.0.0/tcp/0"
-                    .parse()
-                    .expect("address should be valid"),
-            )
-            .map_err(|e| format!("Failed to listen on address: {:?}", e))?;
-        swarm
-            .listen_on(
-                "/ip4/0.0.0.0/udp/0/quic-v1"
-                    .parse()
-                    .expect("address should be valid"),
-            )
-            .map_err(|e| format!("Failed to listen on address: {:?}", e))?;
+        swarm.listen_on(
+            "/ip4/0.0.0.0/tcp/0"
+                .parse()
+                .expect("address should be valid"),
+        )?;
+        swarm.listen_on(
+            "/ip4/0.0.0.0/udp/0/quic-v1"
+                .parse()
+                .expect("address should be valid"),
+        )?;
 
         let local_peer_id = swarm.local_peer_id().to_owned();
         let swarm_wrapper = SwarmWrapper::new(swarm);
@@ -163,4 +161,11 @@ impl SwarmState {
             .open_stream(peer, protocol)
             .await
     }
+}
+
+fn get_keypair_from_dir(fungi_dir: &PathBuf) -> Result<Keypair> {
+    let keypair_file = fungi_dir.join(".keys").join("keypair");
+    let encoded = std::fs::read(&keypair_file)?;
+    let keypair = Keypair::from_protobuf_encoding(&encoded)?;
+    Ok(keypair)
 }

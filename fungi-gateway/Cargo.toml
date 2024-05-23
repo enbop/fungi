@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 log = { workspace = true }
 once_cell = { workspace = true }
+anyhow = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 libp2p = { version = "0.53" , features = ["macros", "noise", "ping", "tcp", "quic", "tokio", "yamux", "serde"] }
 libp2p-stream = "0.1.0-alpha"

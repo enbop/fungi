@@ -13,6 +13,6 @@ clap = { version = "4", features = ["derive"]}
 home = "0.5"
 thiserror = "1.0"
 fungi-gateway = { path = "../fungi-gateway" }
-libp2p = { version = "0.53" , features = ["macros", "noise", "ping", "tcp", "quic", "tokio", "yamux", "serde"] }
+libp2p = { version = "0.53" , features = ["macros", "noise", "ping", "tcp", "quic", "tokio", "yamux", "serde", "secp256k1"] }
 libp2p-stream = "0.1.0-alpha"
 futures = { workspace = true }
