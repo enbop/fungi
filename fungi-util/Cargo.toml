@@ -5,4 +5,14 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["tcp-tunneling"]
+tcp-tunneling = []
+
 [dependencies]
+log = { workspace = true }
+futures = { workspace = true }
+tokio = { version = "1", features = ["full"] }
+libp2p-swarm = "0.44"
+libp2p-stream = "0.1.0-alpha"
+libp2p-identity = "0.2"

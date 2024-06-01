@@ -27,7 +27,11 @@ pub fn init() {
 pub fn init_keypair(fungi_dir: &PathBuf) {
     println!("Generating key pair...");
     let keypair = libp2p::identity::Keypair::generate_secp256k1();
-    println!("Key pair generated {}:{:?}", keypair.key_type(), keypair.public());
+    println!(
+        "Key pair generated {}:{:?}",
+        keypair.key_type(),
+        keypair.public()
+    );
     let encoded = keypair.to_protobuf_encoding().unwrap();
     std::fs::create_dir(fungi_dir.join(".keys")).unwrap();
     let keypair_file = fungi_dir.join(".keys").join("keypair");

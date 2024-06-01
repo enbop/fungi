@@ -815,6 +815,7 @@ dependencies = [
  "clap",
  "env_logger",
  "fungi-gateway",
+ "fungi-util",
  "futures",
  "home",
  "libp2p",
@@ -840,6 +841,14 @@ dependencies = [
 [[package]]
 name = "fungi-util"
 version = "0.1.0"
+dependencies = [
+ "futures",
+ "libp2p-identity",
+ "libp2p-stream",
+ "libp2p-swarm",
+ "log",
+ "tokio",
+]
 
 [[package]]
 name = "futures"

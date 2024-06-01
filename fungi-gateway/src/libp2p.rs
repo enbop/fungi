@@ -1,4 +1,10 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use anyhow::Result;
 use libp2p::{
@@ -6,23 +12,23 @@ use libp2p::{
     identity::Keypair,
     noise, ping,
     swarm::{dial_opts::DialOpts, DialError, NetworkBehaviour, NetworkInfo, SwarmEvent},
-    tcp, yamux, PeerId, StreamProtocol, Swarm,
+    tcp, yamux, Multiaddr, PeerId, StreamProtocol, Swarm,
 };
 use libp2p_stream::{AlreadyRegistered, IncomingStreams, OpenStreamError};
-use tokio::sync::{Mutex, MutexGuard, Notify};
+use tokio::sync::{Mutex as TokioMutex, MutexGuard as TokioMutexGuard, Notify};
 
 type TSwarm = Swarm<FungiBehaviours>;
 
 #[derive(Clone)]
-struct SwarmWrapper {
-    ptr: Arc<Mutex<TSwarm>>,
+pub struct SwarmWrapper {
+    ptr: Arc<TokioMutex<TSwarm>>,
     notify: Arc<Notify>,
 }
 
 impl SwarmWrapper {
     fn new(swarm: TSwarm) -> Self {
         Self {
-            ptr: Arc::new(Mutex::new(swarm)),
+            ptr: Arc::new(TokioMutex::new(swarm)),
             notify: Arc::new(Notify::new()),
         }
     }
@@ -32,6 +38,7 @@ pub struct SwarmState {
     #[allow(dead_code)]
     swarm_task: tokio::task::JoinHandle<()>,
     local_peer_id: PeerId,
+    permanent_peers: Arc<Mutex<HashMap<PeerId, DialOpts>>>,
 
     swarm: SwarmWrapper,
 }
@@ -81,18 +88,13 @@ impl SwarmState {
         Ok(Self {
             swarm_task,
             swarm: swarm_wrapper,
+            permanent_peers: Default::default(),
             local_peer_id,
         })
     }
 
     pub fn local_peer_id(&self) -> &PeerId {
         &self.local_peer_id
-    }
-
-    // TODO return Result
-    async fn require_swarm(&self) -> MutexGuard<'_, TSwarm> {
-        self.swarm.notify.notify_one();
-        self.swarm.ptr.lock().await
     }
 
     async fn start_swarm_task(swarm: SwarmWrapper) {
@@ -125,15 +127,37 @@ impl SwarmState {
     }
 }
 
-impl SwarmState {
+impl SwarmWrapper {
+    // TODO return Result
+    async fn require_swarm(&self) -> TokioMutexGuard<'_, TSwarm> {
+        self.notify.notify_one();
+        self.ptr.lock().await
+    }
+
     pub async fn network_info(&self) -> NetworkInfo {
         let swarm_guard = self.require_swarm().await;
         swarm_guard.network_info()
     }
 
+    pub async fn add_peer_addresses(
+        &mut self,
+        peer_id: PeerId,
+        addrs: impl IntoIterator<Item = Multiaddr>,
+    ) {
+        let mut swarm_guard = self.require_swarm().await;
+        for addr in addrs {
+            swarm_guard.add_peer_address(peer_id, addr);
+        }
+    }
+
     pub async fn dial(&mut self, opts: impl Into<DialOpts>) -> Result<(), DialError> {
         let mut swarm_guard = self.require_swarm().await;
         swarm_guard.dial(opts)
+    }
+
+    pub async fn new_stream_control(&mut self) -> libp2p_stream::Control {
+        let mut swarm_guard = self.require_swarm().await;
+        swarm_guard.behaviour_mut().stream.new_control()
     }
 
     pub async fn stream_accept(
@@ -160,6 +184,20 @@ impl SwarmState {
             .new_control()
             .open_stream(peer, protocol)
             .await
+    }
+}
+
+impl Deref for SwarmState {
+    type Target = SwarmWrapper;
+
+    fn deref(&self) -> &Self::Target {
+        &self.swarm
+    }
+}
+
+impl DerefMut for SwarmState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.swarm
     }
 }
 
