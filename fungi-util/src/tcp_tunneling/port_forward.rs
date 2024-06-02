@@ -1,13 +1,14 @@
+use std::net::SocketAddr;
+
 use libp2p_identity::PeerId;
 use libp2p_stream::Control;
 use libp2p_swarm::StreamProtocol;
-use tokio::net::ToSocketAddrs;
 
 use crate::tcp_tunneling::copy_stream;
 
-pub async fn forward_port_to_peer<A: ToSocketAddrs>(
+pub async fn forward_port_to_peer(
     mut stream_control: Control,
-    local_addr: A,
+    local_addr: SocketAddr,
     target_peer: PeerId,
     target_protocol: StreamProtocol,
 ) {

@@ -6,7 +6,7 @@ mod daemon;
 use clap::{Parser, Subcommand};
 pub use daemon::daemon;
 
-const FUNGI_DIR: &'static str = ".fungi";
+use crate::DEFAULT_FUNGI_DIR;
 
 /// Fungi the world!
 #[derive(Parser, Debug)]
@@ -33,6 +33,6 @@ impl FungiArgs {
         self.fungi_dir
             .as_ref()
             .map(|p| PathBuf::from(p))
-            .unwrap_or_else(|| home::home_dir().unwrap().join(FUNGI_DIR))
+            .unwrap_or_else(|| home::home_dir().unwrap().join(DEFAULT_FUNGI_DIR))
     }
 }

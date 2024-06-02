@@ -17,7 +17,7 @@ use libp2p::{
 use libp2p_stream::{AlreadyRegistered, IncomingStreams, OpenStreamError};
 use tokio::sync::{Mutex as TokioMutex, MutexGuard as TokioMutexGuard, Notify};
 
-type TSwarm = Swarm<FungiBehaviours>;
+pub type TSwarm = Swarm<FungiBehaviours>;
 
 #[derive(Clone)]
 pub struct SwarmWrapper {
@@ -44,16 +44,19 @@ pub struct SwarmState {
 }
 
 #[derive(NetworkBehaviour)]
-struct FungiBehaviours {
+pub struct FungiBehaviours {
     ping: ping::Behaviour,
-    stream: libp2p_stream::Behaviour,
+    pub stream: libp2p_stream::Behaviour,
     mdns: mdns::tokio::Behaviour,
 }
 
 impl SwarmState {
     // TODO: error handling
     // TODO: configurable, consider using a builder pattern
-    pub async fn start_libp2p_swarm(fungi_dir: &PathBuf) -> Result<Self> {
+    pub async fn start_libp2p_swarm(
+        fungi_dir: &PathBuf,
+        apply: impl FnOnce(TSwarm) -> TSwarm,
+    ) -> Result<Self> {
         let keypair = get_keypair_from_dir(fungi_dir)?;
 
         let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
@@ -75,6 +78,8 @@ impl SwarmState {
             })?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
             .build();
+
+        swarm = apply(swarm);
 
         swarm.listen_on(
             "/ip4/0.0.0.0/tcp/0"
@@ -117,7 +122,7 @@ impl SwarmState {
                         match swarm_events {
                             SwarmEvent::NewListenAddr { address, .. } => {
                                 let addr = address.with_p2p(*swarm_lock.local_peer_id()).unwrap();
-                                log::info!("Listening on {addr:?}")
+                                println!("Listening on {addr:?}")
                             },
                             SwarmEvent::Behaviour(event) => log::info!("{event:?}"),
                             _ => {}

@@ -1,19 +1,24 @@
-use fungi_gateway::{SwarmState, SwarmWrapper};
+use fungi_gateway::{SwarmState, TSwarm};
 use fungi_util::tcp_tunneling;
 use libp2p::StreamProtocol;
 use std::time::Duration;
 
+use crate::config::FungiConfig;
+
 use super::FungiArgs;
 
-pub async fn daemon(args: &FungiArgs) {
+pub async fn daemon(args: &FungiArgs, config: &FungiConfig) {
     println!("Starting Fungi daemon...");
     let fungi_dir = args.fungi_dir();
     println!("Fungi directory: {:?}", fungi_dir);
-    let swarm = SwarmState::start_libp2p_swarm(&fungi_dir).await.unwrap();
+    let swarm = SwarmState::start_libp2p_swarm(&fungi_dir, |swarm| {
+        #[cfg(feature = "tcp-tunneling")]
+        apply_tcp_tunneling(swarm, config)
+    })
+    .await
+    .unwrap();
     let peer_id = swarm.local_peer_id();
-    println!("Local Peer ID: {:?}", peer_id);
-
-    apply_tcp_tunneling(swarm.clone()).await;
+    println!("Local Peer ID: {}", peer_id.to_string());
 
     loop {
         tokio::select! {
@@ -29,27 +34,45 @@ pub async fn daemon(args: &FungiArgs) {
     }
 }
 
-async fn apply_tcp_tunneling(mut swarm: SwarmWrapper) {
-    // test tcp port forwarding, forward local port 9001 to ${peerId} with libp2p protocol /tunnel-test
-    let target_protocol = StreamProtocol::new("/tunnel-test");
-    let stream_control = swarm.new_stream_control().await;
+fn apply_tcp_tunneling(mut swarm: TSwarm, config: &FungiConfig) -> TSwarm {
+    if config.tcp_tunneling.forwarding.enabled {
+        for rule in config.tcp_tunneling.forwarding.rules.iter() {
+            let Ok(target_peer) = rule.remote.peer_id.parse() else {
+                continue;
+            };
+            for addr in rule.remote.multiaddrs.iter() {
+                swarm.add_peer_address(target_peer, addr.clone());
+            }
 
-    // swarm.add_peer_addresses(peer_id, addrs)
-    if let Ok(target_peer) = std::env::var("TEST_TARGET_PEER") {
-        println!("Forwarding local port 9001 to peer {}", target_peer);
-        let target_peer = target_peer.parse().unwrap();
-        tokio::spawn(tcp_tunneling::forward_port_to_peer(
-            stream_control.clone(),
-            format!("127.0.0.1:9001"),
-            target_peer,
-            target_protocol.clone(),
-        ));
+            let target_protocol =
+                StreamProtocol::try_from_owned(rule.remote.protocol.clone()).unwrap(); // TODO unwrap
+            let stream_control = swarm.behaviour().stream.new_control();
+            println!(
+                "Forwarding local port {} to {}/{}",
+                rule.local_socket.port, target_peer, target_protocol
+            );
+            tokio::spawn(tcp_tunneling::forward_port_to_peer(
+                stream_control,
+                (&rule.local_socket).try_into().unwrap(), // TOOD unwrap
+                target_peer,
+                target_protocol,
+            ));
+        }
     }
 
-    // test tcp port listen, listen on libp2p protocol /tunnel-test to local port 9002
-    tokio::spawn(tcp_tunneling::listen_p2p_to_port(
-        stream_control,
-        target_protocol,
-        format!("127.0.0.1:9002").parse().unwrap(),
-    ));
+    if config.tcp_tunneling.listening.enabled {
+        for rule in config.tcp_tunneling.listening.rules.iter() {
+            let local_addr = (&rule.local_socket).try_into().unwrap(); // TODO unwrap
+            let listening_protocol =
+                StreamProtocol::try_from_owned(rule.listening_protocol.clone()).unwrap(); // TODO unwrap
+            let stream_control = swarm.behaviour().stream.new_control();
+            println!("Listening on {} for {}", local_addr, listening_protocol);
+            tokio::spawn(tcp_tunneling::listen_p2p_to_port(
+                stream_control,
+                listening_protocol,
+                local_addr,
+            ));
+        }
+    }
+    swarm
 }

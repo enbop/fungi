@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use crate::DEFAULT_CONFIG_FILE;
+
 use super::FungiArgs;
 
 pub fn init(args: &FungiArgs) {
@@ -14,7 +16,7 @@ pub fn init(args: &FungiArgs) {
     std::fs::create_dir(&fungi_dir).unwrap();
 
     // create config.toml
-    let config = fungi_dir.join("config.toml");
+    let config = fungi_dir.join(DEFAULT_CONFIG_FILE);
     std::fs::File::create(&config).unwrap();
 
     // create .keys
