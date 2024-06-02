@@ -1,12 +1,11 @@
 use std::path::PathBuf;
 
-const FUNGI_DIR: &'static str = ".fungi";
+use super::FungiArgs;
 
-pub fn init() {
+pub fn init(args: &FungiArgs) {
     println!("Initializing Fungi...");
-    let home = home::home_dir().unwrap();
-    log::debug!("Home directory: {}", home.display());
-    let fungi_dir = home.join(FUNGI_DIR);
+    let fungi_dir = args.fungi_dir();
+
     // check if the directory exists
     if fungi_dir.exists() {
         println!("Fungi is already initialized");

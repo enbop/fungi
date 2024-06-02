@@ -1,12 +1,14 @@
 use fungi_gateway::{SwarmState, SwarmWrapper};
 use fungi_util::tcp_tunneling;
-use home::home_dir;
 use libp2p::StreamProtocol;
 use std::time::Duration;
 
-pub async fn daemon() {
+use super::FungiArgs;
+
+pub async fn daemon(args: &FungiArgs) {
     println!("Starting Fungi daemon...");
-    let fungi_dir = home_dir().unwrap().join(".fungi");
+    let fungi_dir = args.fungi_dir();
+    println!("Fungi directory: {:?}", fungi_dir);
     let swarm = SwarmState::start_libp2p_swarm(&fungi_dir).await.unwrap();
     let peer_id = swarm.local_peer_id();
     println!("Local Peer ID: {:?}", peer_id);
@@ -29,16 +31,20 @@ pub async fn daemon() {
 
 async fn apply_tcp_tunneling(mut swarm: SwarmWrapper) {
     // test tcp port forwarding, forward local port 9001 to ${peerId} with libp2p protocol /tunnel-test
-    // swarm.add_peer_addresses(peer_id, addrs)
-    let target_peer = todo!();
     let target_protocol = StreamProtocol::new("/tunnel-test");
     let stream_control = swarm.new_stream_control().await;
-    tokio::spawn(tcp_tunneling::forward_port_to_peer(
-        stream_control.clone(),
-        format!("127.0.0.1:9001"),
-        target_peer,
-        target_protocol.clone(),
-    ));
+
+    // swarm.add_peer_addresses(peer_id, addrs)
+    if let Ok(target_peer) = std::env::var("TEST_TARGET_PEER") {
+        println!("Forwarding local port 9001 to peer {}", target_peer);
+        let target_peer = target_peer.parse().unwrap();
+        tokio::spawn(tcp_tunneling::forward_port_to_peer(
+            stream_control.clone(),
+            format!("127.0.0.1:9001"),
+            target_peer,
+            target_protocol.clone(),
+        ));
+    }
 
     // test tcp port listen, listen on libp2p protocol /tunnel-test to local port 9002
     tokio::spawn(tcp_tunneling::listen_p2p_to_port(

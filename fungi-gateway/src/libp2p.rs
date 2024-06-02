@@ -10,7 +10,7 @@ use anyhow::Result;
 use libp2p::{
     futures::StreamExt,
     identity::Keypair,
-    noise, ping,
+    mdns, noise, ping,
     swarm::{dial_opts::DialOpts, DialError, NetworkBehaviour, NetworkInfo, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, StreamProtocol, Swarm,
 };
@@ -47,6 +47,7 @@ pub struct SwarmState {
 struct FungiBehaviours {
     ping: ping::Behaviour,
     stream: libp2p_stream::Behaviour,
+    mdns: mdns::tokio::Behaviour,
 }
 
 impl SwarmState {
@@ -63,9 +64,14 @@ impl SwarmState {
                 yamux::Config::default,
             )?
             .with_quic()
-            .with_behaviour(|_| FungiBehaviours {
+            .with_behaviour(|key| FungiBehaviours {
                 ping: ping::Behaviour::new(ping::Config::new()),
                 stream: libp2p_stream::Behaviour::new(),
+                mdns: mdns::tokio::Behaviour::new(
+                    mdns::Config::default(),
+                    key.public().to_peer_id(),
+                )
+                .unwrap(), // TODO if-watch unwrap
             })?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
             .build();

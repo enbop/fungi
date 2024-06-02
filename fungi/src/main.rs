@@ -1,30 +1,13 @@
-use clap::{Parser, Subcommand};
-use fungi::commands;
-
-/// Fungi the world!
-#[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
-struct Args {
-    #[command(subcommand)]
-    command: Option<Commands>,
-}
-
-#[derive(Subcommand, Debug)]
-enum Commands {
-    /// Initialize Fungi
-    Init,
-
-    /// Start a Fungi daemon
-    Daemon,
-}
+use clap::Parser;
+use fungi::commands::{self, Commands, FungiArgs};
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
-    let args = Args::parse();
+    let args = FungiArgs::parse();
     match args.command {
-        Some(Commands::Init) => commands::init(),
-        Some(Commands::Daemon) => commands::daemon().await,
+        Some(Commands::Init) => commands::init(&args),
+        Some(Commands::Daemon) => commands::daemon(&args).await,
         None => println!("No command provided"),
     }
 }
