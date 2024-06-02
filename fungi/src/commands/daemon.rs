@@ -11,9 +11,11 @@ pub async fn daemon(args: &FungiArgs, config: &FungiConfig) {
     println!("Starting Fungi daemon...");
     let fungi_dir = args.fungi_dir();
     println!("Fungi directory: {:?}", fungi_dir);
-    let swarm = SwarmState::start_libp2p_swarm(&fungi_dir, |swarm| {
+    let swarm = SwarmState::start_libp2p_swarm(&fungi_dir, |mut swarm| {
+        apply_listen(&mut swarm, config);
         #[cfg(feature = "tcp-tunneling")]
-        apply_tcp_tunneling(swarm, config)
+        apply_tcp_tunneling(&mut swarm, config);
+        swarm
     })
     .await
     .unwrap();
@@ -34,7 +36,24 @@ pub async fn daemon(args: &FungiArgs, config: &FungiConfig) {
     }
 }
 
-fn apply_tcp_tunneling(mut swarm: TSwarm, config: &FungiConfig) -> TSwarm {
+fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) {
+    swarm
+        .listen_on(
+            format!("/ip4/0.0.0.0/tcp/{}", config.libp2p.listen_tcp_port)
+                .parse()
+                .expect("address should be valid"),
+        )
+        .unwrap();
+    swarm
+        .listen_on(
+            format!("/ip4/0.0.0.0/udp/{}/quic-v1", config.libp2p.listen_udp_port)
+                .parse()
+                .expect("address should be valid"),
+        )
+        .unwrap();
+}
+
+fn apply_tcp_tunneling(swarm: &mut TSwarm, config: &FungiConfig) {
     if config.tcp_tunneling.forwarding.enabled {
         for rule in config.tcp_tunneling.forwarding.rules.iter() {
             let Ok(target_peer) = rule.remote.peer_id.parse() else {
@@ -74,5 +93,4 @@ fn apply_tcp_tunneling(mut swarm: TSwarm, config: &FungiConfig) -> TSwarm {
             ));
         }
     }
-    swarm
 }

@@ -81,17 +81,6 @@ impl SwarmState {
 
         swarm = apply(swarm);
 
-        swarm.listen_on(
-            "/ip4/0.0.0.0/tcp/0"
-                .parse()
-                .expect("address should be valid"),
-        )?;
-        swarm.listen_on(
-            "/ip4/0.0.0.0/udp/0/quic-v1"
-                .parse()
-                .expect("address should be valid"),
-        )?;
-
         let local_peer_id = swarm.local_peer_id().to_owned();
         let swarm_wrapper = SwarmWrapper::new(swarm);
         let swarm_task = tokio::spawn(Self::start_swarm_task(swarm_wrapper.clone()));

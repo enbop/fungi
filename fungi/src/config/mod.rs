@@ -1,6 +1,8 @@
+mod libp2p;
 mod tcp_tunneling;
 use std::path::PathBuf;
 
+use libp2p::*;
 use serde::{Deserialize, Serialize};
 use tcp_tunneling::*;
 
@@ -10,6 +12,8 @@ use crate::DEFAULT_CONFIG_FILE;
 pub struct FungiConfig {
     #[serde(default)]
     pub tcp_tunneling: TcpTunneling,
+    #[serde(default)]
+    pub libp2p: Libp2p,
 }
 
 impl FungiConfig {
