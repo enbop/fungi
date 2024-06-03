@@ -18,6 +18,8 @@ jobs:
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --release
+    - name: Run tests
+      run: cargo test --release
     - name: copy file via ssh key
       uses: appleboy/scp-action@v0.1.7
       with:
