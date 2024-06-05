@@ -59,9 +59,11 @@ fn apply_tcp_tunneling(swarm: &mut TSwarm, config: &FungiConfig) {
             let Ok(target_peer) = rule.remote.peer_id.parse() else {
                 continue;
             };
-            for addr in rule.remote.multiaddrs.iter() {
-                swarm.add_peer_address(target_peer, addr.clone());
-            }
+
+            swarm
+                .behaviour_mut()
+                .address_book
+                .set_addresses(&target_peer, rule.remote.multiaddrs.clone());
 
             let target_protocol =
                 StreamProtocol::try_from_owned(rule.remote.protocol.clone()).unwrap(); // TODO unwrap

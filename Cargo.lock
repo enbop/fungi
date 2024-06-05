@@ -838,6 +838,7 @@ dependencies = [
  "log",
  "once_cell",
  "tokio",
+ "void",
 ]
 
 [[package]]

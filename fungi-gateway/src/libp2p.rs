@@ -1,8 +1,7 @@
 use std::{
-    collections::HashMap,
     ops::{Deref, DerefMut},
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Duration,
 };
 
@@ -16,6 +15,8 @@ use libp2p::{
 };
 use libp2p_stream::{AlreadyRegistered, IncomingStreams, OpenStreamError};
 use tokio::sync::{Mutex as TokioMutex, MutexGuard as TokioMutexGuard, Notify};
+
+use crate::address_book;
 
 pub type TSwarm = Swarm<FungiBehaviours>;
 
@@ -38,7 +39,6 @@ pub struct SwarmState {
     #[allow(dead_code)]
     swarm_task: tokio::task::JoinHandle<()>,
     local_peer_id: PeerId,
-    permanent_peers: Arc<Mutex<HashMap<PeerId, DialOpts>>>,
 
     swarm: SwarmWrapper,
 }
@@ -48,6 +48,7 @@ pub struct FungiBehaviours {
     ping: ping::Behaviour,
     pub stream: libp2p_stream::Behaviour,
     mdns: mdns::tokio::Behaviour,
+    pub address_book: address_book::Behaviour,
 }
 
 impl SwarmState {
@@ -75,6 +76,7 @@ impl SwarmState {
                     key.public().to_peer_id(),
                 )
                 .unwrap(), // TODO if-watch unwrap
+                address_book: Default::default(),
             })?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
             .build();
@@ -88,7 +90,6 @@ impl SwarmState {
         Ok(Self {
             swarm_task,
             swarm: swarm_wrapper,
-            permanent_peers: Default::default(),
             local_peer_id,
         })
     }
