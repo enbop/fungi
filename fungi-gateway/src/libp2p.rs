@@ -24,11 +24,14 @@ pub type TSwarm = Swarm<FungiBehaviours>;
 pub struct SwarmWrapper {
     ptr: Arc<TokioMutex<TSwarm>>,
     notify: Arc<Notify>,
+
+    stream_control: libp2p_stream::Control,
 }
 
 impl SwarmWrapper {
     fn new(swarm: TSwarm) -> Self {
         Self {
+            stream_control: swarm.behaviour().stream.new_control(),
             ptr: Arc::new(TokioMutex::new(swarm)),
             notify: Arc::new(Notify::new()),
         }
@@ -36,11 +39,9 @@ impl SwarmWrapper {
 }
 
 pub struct SwarmState {
-    #[allow(dead_code)]
-    swarm_task: tokio::task::JoinHandle<()>,
     local_peer_id: PeerId,
-
     swarm: SwarmWrapper,
+    swarm_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 #[derive(NetworkBehaviour)]
@@ -53,11 +54,7 @@ pub struct FungiBehaviours {
 
 impl SwarmState {
     // TODO: error handling
-    // TODO: configurable, consider using a builder pattern
-    pub async fn start_libp2p_swarm(
-        fungi_dir: &PathBuf,
-        apply: impl FnOnce(TSwarm) -> TSwarm,
-    ) -> Result<Self> {
+    pub async fn new(fungi_dir: &PathBuf, apply: impl FnOnce(TSwarm) -> TSwarm) -> Result<Self> {
         let keypair = get_keypair_from_dir(fungi_dir)?;
 
         let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
@@ -85,12 +82,11 @@ impl SwarmState {
 
         let local_peer_id = swarm.local_peer_id().to_owned();
         let swarm_wrapper = SwarmWrapper::new(swarm);
-        let swarm_task = tokio::spawn(Self::start_swarm_task(swarm_wrapper.clone()));
 
         Ok(Self {
-            swarm_task,
             swarm: swarm_wrapper,
             local_peer_id,
+            swarm_task: None,
         })
     }
 
@@ -98,10 +94,22 @@ impl SwarmState {
         &self.local_peer_id
     }
 
-    async fn start_swarm_task(swarm: SwarmWrapper) {
-        loop {
-            swarm_loop(&swarm).await;
+    pub fn is_started(&self) -> bool {
+        self.swarm_task.is_some()
+    }
+
+    pub fn start_swarm_task(&mut self) {
+        if self.is_started() {
+            return;
         }
+
+        let swarm = self.swarm.clone();
+        self.swarm_task = Some(tokio::spawn(async move {
+            loop {
+                swarm_loop(&swarm).await;
+            }
+        }));
+
         async fn swarm_loop(swarm: &SwarmWrapper) {
             let mut swarm_lock = swarm.ptr.lock().await;
             loop {
@@ -156,21 +164,15 @@ impl SwarmWrapper {
         swarm_guard.dial(opts)
     }
 
-    pub async fn new_stream_control(&mut self) -> libp2p_stream::Control {
-        let mut swarm_guard = self.require_swarm().await;
-        swarm_guard.behaviour_mut().stream.new_control()
+    pub fn new_stream_control(&mut self) -> libp2p_stream::Control {
+        self.stream_control.clone()
     }
 
-    pub async fn stream_accept(
+    pub fn stream_accept(
         &mut self,
         protocol: StreamProtocol,
     ) -> Result<IncomingStreams, AlreadyRegistered> {
-        let mut swarm_guard = self.require_swarm().await;
-        swarm_guard
-            .behaviour_mut()
-            .stream
-            .new_control()
-            .accept(protocol)
+        self.stream_control.accept(protocol)
     }
 
     pub async fn stream_open(
@@ -178,13 +180,7 @@ impl SwarmWrapper {
         peer: PeerId,
         protocol: StreamProtocol,
     ) -> Result<libp2p::Stream, OpenStreamError> {
-        let mut swarm_guard = self.require_swarm().await;
-        swarm_guard
-            .behaviour_mut()
-            .stream
-            .new_control()
-            .open_stream(peer, protocol)
-            .await
+        self.stream_control.open_stream(peer, protocol).await
     }
 }
 

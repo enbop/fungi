@@ -1,38 +1,43 @@
+use std::{path::PathBuf, sync::{Arc, Mutex}};
+
 use fungi_gateway::{SwarmState, TSwarm};
 use fungi_util::tcp_tunneling;
 use libp2p::StreamProtocol;
-use std::time::Duration;
 
 use crate::config::FungiConfig;
 
-use super::FungiArgs;
+use super::listeners::{ContainerListener, ShellListener};
 
-pub async fn daemon(args: &FungiArgs, config: &FungiConfig) {
-    println!("Starting Fungi daemon...");
-    let fungi_dir = args.fungi_dir();
-    println!("Fungi directory: {:?}", fungi_dir);
-    let swarm = SwarmState::start_libp2p_swarm(&fungi_dir, |mut swarm| {
-        apply_listen(&mut swarm, config);
-        #[cfg(feature = "tcp-tunneling")]
-        apply_tcp_tunneling(&mut swarm, config);
-        swarm
-    })
-    .await
-    .unwrap();
-    let peer_id = swarm.local_peer_id();
-    println!("Local Peer ID: {}", peer_id.to_string());
+pub struct FungiDaemon {
+    pub swarm_state: Arc<Mutex<SwarmState>>,
+    config: FungiConfig,
+    fungi_dir: PathBuf,
+    shell_listener: ShellListener,
+    container_listener: ContainerListener,
+}
 
-    loop {
-        tokio::select! {
-            _ = tokio::time::sleep(Duration::from_secs(20)) => {
-                let info = swarm.network_info().await;
-                log::debug!("Network info: {:?}", info);
-            }
-            _ = tokio::signal::ctrl_c() => {
-                println!("Shutting down Fungi daemon...");
-                break;
-            }
+impl FungiDaemon {
+    pub async fn new(fungi_dir: PathBuf, config: FungiConfig) -> Self {
+        let swarm = SwarmState::new(&fungi_dir, |mut swarm| {
+            apply_listen(&mut swarm, &config);
+            #[cfg(feature = "tcp-tunneling")]
+            apply_tcp_tunneling(&mut swarm, &config);
+            swarm
+        })
+        .await
+        .unwrap();
+
+        Self {
+            swarm_state: Arc::new(Mutex::new(swarm)),
+            config,
+            fungi_dir,
+            shell_listener: ShellListener::new(),
+            container_listener: ContainerListener::new(),
         }
+    }
+
+    pub fn start(&mut self) {
+        self.swarm_state.lock().unwrap().start_swarm_task();
     }
 }
 
@@ -53,6 +58,7 @@ fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) {
         .unwrap();
 }
 
+#[cfg(feature = "tcp-tunneling")]
 fn apply_tcp_tunneling(swarm: &mut TSwarm, config: &FungiConfig) {
     if config.tcp_tunneling.forwarding.enabled {
         for rule in config.tcp_tunneling.forwarding.rules.iter() {
