@@ -32,7 +32,7 @@ impl FungiArgs {
     pub fn fungi_dir(&self) -> PathBuf {
         self.fungi_dir
             .as_ref()
-            .map(|p| PathBuf::from(p))
+            .map(PathBuf::from)
             .unwrap_or_else(|| home::home_dir().unwrap().join(DEFAULT_FUNGI_DIR))
     }
 }

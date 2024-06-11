@@ -20,7 +20,7 @@ impl Behaviour {
         self.address_book
             .write()
             .unwrap()
-            .insert(peer_id.clone(), addrs);
+            .insert(*peer_id, addrs);
     }
 }
 

@@ -1,6 +1,6 @@
 use std::{
     ops::{Deref, DerefMut},
-    path::PathBuf,
+    path::Path,
     sync::Arc,
     time::Duration,
 };
@@ -54,7 +54,7 @@ pub struct FungiBehaviours {
 
 impl SwarmState {
     // TODO: error handling
-    pub async fn new(fungi_dir: &PathBuf, apply: impl FnOnce(TSwarm) -> TSwarm) -> Result<Self> {
+    pub async fn new(fungi_dir: &Path, apply: impl FnOnce(TSwarm) -> TSwarm) -> Result<Self> {
         let keypair = get_keypair_from_dir(fungi_dir)?;
 
         let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
@@ -198,9 +198,9 @@ impl DerefMut for SwarmState {
     }
 }
 
-fn get_keypair_from_dir(fungi_dir: &PathBuf) -> Result<Keypair> {
+fn get_keypair_from_dir(fungi_dir: &Path) -> Result<Keypair> {
     let keypair_file = fungi_dir.join(".keys").join("keypair");
-    let encoded = std::fs::read(&keypair_file)?;
+    let encoded = std::fs::read(keypair_file)?;
     let keypair = Keypair::from_protobuf_encoding(&encoded)?;
     Ok(keypair)
 }

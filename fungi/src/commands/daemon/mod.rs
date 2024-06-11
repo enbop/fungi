@@ -16,7 +16,7 @@ pub async fn daemon(args: &FungiArgs, config: &FungiConfig) {
 
     let swarm_wrapper = {
         let lock = daemon.swarm_state.lock().unwrap();
-        println!("Local Peer ID: {}", lock.local_peer_id().to_string());
+        println!("Local Peer ID: {}", lock.local_peer_id());
         lock.clone()
     };
 

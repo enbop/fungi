@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::DEFAULT_CONFIG_FILE;
 
@@ -17,7 +17,7 @@ pub fn init(args: &FungiArgs) {
 
     // create config.toml
     let config = fungi_dir.join(DEFAULT_CONFIG_FILE);
-    std::fs::File::create(&config).unwrap();
+    std::fs::File::create(config).unwrap();
 
     // create .keys
     init_keypair(&fungi_dir);
@@ -25,7 +25,7 @@ pub fn init(args: &FungiArgs) {
     println!("Fungi initialized at {}", fungi_dir.display());
 }
 
-pub fn init_keypair(fungi_dir: &PathBuf) {
+pub fn init_keypair(fungi_dir: &Path) {
     println!("Generating key pair...");
     let keypair = libp2p::identity::Keypair::generate_secp256k1();
     println!(
