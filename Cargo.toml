@@ -5,6 +5,7 @@ members = [
     "fungi",
     "fungi-gateway",
     "fungi-util",
+    "fungi-wasi",
 ]
 
 [workspace.dependencies]

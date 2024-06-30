@@ -1,5 +1,5 @@
 mod daemon;
-mod listeners;
+pub mod listeners;
 
 use std::time::Duration;
 

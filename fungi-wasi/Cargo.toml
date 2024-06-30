@@ -1,0 +1,10 @@
+[package]
+name = "fungi-wasi"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+ipc-channel = { version = "0.18", features = ["async"] }
+serde = { version = "1", features = ["derive"] }
+futures = { workspace = true }

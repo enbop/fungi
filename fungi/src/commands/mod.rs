@@ -1,10 +1,14 @@
-mod init;
-use std::path::PathBuf;
-
-pub use init::init;
 mod daemon;
-use clap::{Parser, Subcommand};
+mod init;
+mod mush;
+mod wasi;
 pub use daemon::daemon;
+pub use init::init;
+pub use mush::mush;
+pub use wasi::wasi;
+
+use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 use crate::DEFAULT_FUNGI_DIR;
 
@@ -26,6 +30,11 @@ pub enum Commands {
 
     /// Start a Fungi daemon
     Daemon,
+
+    /// Start a Fungi wasi process
+    Wasi,
+
+    Mush,
 }
 
 impl FungiArgs {

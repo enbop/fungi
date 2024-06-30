@@ -1,4 +1,7 @@
-use std::{path::PathBuf, sync::{Arc, Mutex}};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use fungi_gateway::{SwarmState, TSwarm};
 use fungi_util::tcp_tunneling;
@@ -27,18 +30,21 @@ impl FungiDaemon {
         .await
         .unwrap();
 
+        let container_listener = ContainerListener::new();
         Self {
             swarm_state: Arc::new(Mutex::new(swarm)),
             config,
             fungi_dir,
-            shell_listener: ShellListener::default(),
-            container_listener: ContainerListener::new(),
+            shell_listener: ShellListener::new(container_listener.clone()),
+            container_listener,
         }
     }
 
     pub async fn start(&mut self) {
         self.swarm_state.lock().unwrap().start_swarm_task();
-        self.shell_listener.start(todo!()).await;
+        self.shell_listener
+            .start(format!("127.0.0.1:6010").parse().unwrap())
+            .await.unwrap();
     }
 }
 
