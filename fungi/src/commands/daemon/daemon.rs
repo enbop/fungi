@@ -31,13 +31,14 @@ impl FungiDaemon {
             swarm_state: Arc::new(Mutex::new(swarm)),
             config,
             fungi_dir,
-            shell_listener: ShellListener::new(),
+            shell_listener: ShellListener::default(),
             container_listener: ContainerListener::new(),
         }
     }
 
-    pub fn start(&mut self) {
+    pub async fn start(&mut self) {
         self.swarm_state.lock().unwrap().start_swarm_task();
+        self.shell_listener.start(todo!()).await;
     }
 }
 

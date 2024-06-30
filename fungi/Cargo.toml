@@ -23,3 +23,4 @@ fungi-util = { path = "../fungi-util" }
 libp2p = { version = "0.53" , features = ["macros", "noise", "ping", "tcp", "quic", "tokio", "yamux", "serde", "secp256k1"] }
 libp2p-stream = "0.1.0-alpha"
 futures = { workspace = true }
+bincode = { workspace = true }

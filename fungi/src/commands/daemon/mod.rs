@@ -12,7 +12,7 @@ pub async fn daemon(args: &FungiArgs, config: &FungiConfig) {
     let fungi_dir = args.fungi_dir();
     println!("Fungi directory: {:?}", fungi_dir);
     let mut daemon = daemon::FungiDaemon::new(fungi_dir.clone(), config.clone()).await;
-    daemon.start();
+    daemon.start().await;
 
     let swarm_wrapper = {
         let lock = daemon.swarm_state.lock().unwrap();
