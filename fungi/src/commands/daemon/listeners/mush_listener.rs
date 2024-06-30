@@ -5,17 +5,17 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-use super::ContainerListener;
+use super::WasiListener;
 
-pub struct ShellListener {
-    container_listener: ContainerListener,
+pub struct MushListener {
+    wasi_listener: WasiListener,
     listen_task: Option<tokio::task::JoinHandle<()>>,
 }
 
-impl ShellListener {
-    pub fn new(container_listener: ContainerListener) -> Self {
+impl MushListener {
+    pub fn new(wasi_listener: WasiListener) -> Self {
         Self {
-            container_listener,
+            wasi_listener,
             listen_task: None,
         }
     }
@@ -29,12 +29,12 @@ impl ShellListener {
             return Ok(());
         }
         let listener = TcpListener::bind(listen_addr).await?;
-        let task = tokio::spawn(Self::listen_task(listener, self.container_listener.clone()));
+        let task = tokio::spawn(Self::listen_task(listener, self.wasi_listener.clone()));
         self.listen_task = Some(task);
         Ok(())
     }
 
-    async fn listen_task(listener: TcpListener, container_listener: ContainerListener) {
+    async fn listen_task(listener: TcpListener, wasi_listener: WasiListener) {
         log::info!("Listening on: {}", listener.local_addr().unwrap());
         loop {
             let Ok((stream, _)) = listener.accept().await else {
@@ -43,24 +43,24 @@ impl ShellListener {
             };
             tokio::spawn(Self::handle_request_stream(
                 stream,
-                container_listener.clone(),
+                wasi_listener.clone(),
             ));
         }
     }
 
-    async fn handle_request_stream(mut stream: TcpStream, container_listener: ContainerListener) {
+    async fn handle_request_stream(mut stream: TcpStream, wasi_listener: WasiListener) {
         log::info!("Accepted connection from: {}", stream.peer_addr().unwrap());
         let mut buf = [0; 1024];
         let n = stream.read(&mut buf).await.unwrap();
-        let Ok(msg) = bincode::deserialize::<ShellMessage>(&buf[..n]) else {
+        let Ok(msg) = bincode::deserialize::<MushMessage>(&buf[..n]) else {
             log::info!("Failed to deserialize message");
             return;
         };
         log::info!("Received message: {:?}", msg);
         match msg {
-            ShellMessage::InitRequest => {
-                let ipc_server_name = container_listener.spawn_wasi_process().await;
-                let response = ShellMessage::InitResponse(ipc_server_name);
+            MushMessage::InitRequest => {
+                let ipc_server_name = wasi_listener.spawn_wasi_process().await;
+                let response = MushMessage::InitResponse(ipc_server_name);
                 let response_bytes = bincode::serialize(&response).unwrap();
                 stream.write_all(&response_bytes).await.unwrap();
             }
@@ -72,7 +72,7 @@ impl ShellListener {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub enum ShellMessage {
+pub enum MushMessage {
     InitRequest,
     InitResponse(String),
 }

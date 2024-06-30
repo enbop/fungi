@@ -9,14 +9,14 @@ use libp2p::StreamProtocol;
 
 use crate::config::FungiConfig;
 
-use super::listeners::{ContainerListener, ShellListener};
+use super::listeners::{WasiListener, MushListener};
 
 pub struct FungiDaemon {
     pub swarm_state: Arc<Mutex<SwarmState>>,
     config: FungiConfig,
     fungi_dir: PathBuf,
-    shell_listener: ShellListener,
-    container_listener: ContainerListener,
+    mush_listener: MushListener,
+    wasi_listener: WasiListener,
 }
 
 impl FungiDaemon {
@@ -30,19 +30,19 @@ impl FungiDaemon {
         .await
         .unwrap();
 
-        let container_listener = ContainerListener::new();
+        let wasi_listener = WasiListener::new();
         Self {
             swarm_state: Arc::new(Mutex::new(swarm)),
             config,
             fungi_dir,
-            shell_listener: ShellListener::new(container_listener.clone()),
-            container_listener,
+            mush_listener: MushListener::new(wasi_listener.clone()),
+            wasi_listener,
         }
     }
 
     pub async fn start(&mut self) {
         self.swarm_state.lock().unwrap().start_swarm_task();
-        self.shell_listener
+        self.mush_listener
             .start(format!("127.0.0.1:6010").parse().unwrap())
             .await.unwrap();
     }

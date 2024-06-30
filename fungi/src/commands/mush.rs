@@ -1,18 +1,18 @@
 use fungi_wasi::IpcMessage;
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::TcpStream};
-use super::daemon::listeners::ShellMessage;
+use super::daemon::listeners::MushMessage;
 use ipc_channel::ipc;
 
 pub async fn mush() {
-    println!("Connecting to shell listener");
+    println!("Connecting to fungi daemon");
     let mut stream = TcpStream::connect(format!("127.0.0.1:6010")).await.unwrap();
-    let msg = bincode::serialize(&ShellMessage::InitRequest).unwrap();
+    let msg = bincode::serialize(&MushMessage::InitRequest).unwrap();
     stream.write_all(&msg).await.unwrap();
     let mut buf = [0; 1024];
     let n = stream.read(&mut buf).await.unwrap();
-    let response = bincode::deserialize::<ShellMessage>(&buf[..n]).unwrap();
+    let response = bincode::deserialize::<MushMessage>(&buf[..n]).unwrap();
     match response {
-        ShellMessage::InitResponse(ipc_server_name) => {
+        MushMessage::InitResponse(ipc_server_name) => {
             println!("IPC server name: {}", ipc_server_name);
             connect_to_wasi(ipc_server_name);
         }

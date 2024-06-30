@@ -7,11 +7,11 @@ use tokio::{
 };
 
 #[derive(Clone)]
-pub struct ContainerListener {
+pub struct WasiListener {
     child_process_map: Arc<Mutex<HashMap<String, Child>>>, // TODO
 }
 
-impl ContainerListener {
+impl WasiListener {
     pub fn new() -> Self {
         Self {
             child_process_map: Arc::new(Mutex::new(HashMap::new())),
