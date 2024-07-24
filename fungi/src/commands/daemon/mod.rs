@@ -14,16 +14,12 @@ pub async fn daemon(args: &FungiArgs, config: &FungiConfig) {
     let mut daemon = daemon::FungiDaemon::new(fungi_dir.clone(), config.clone()).await;
     daemon.start().await;
 
-    let swarm_wrapper = {
-        let lock = daemon.swarm_state.lock().unwrap();
-        println!("Local Peer ID: {}", lock.local_peer_id());
-        lock.clone()
-    };
+    println!("Local Peer ID: {}", daemon.swarm_state.local_peer_id());
 
     loop {
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_secs(5)) => {
-                let info = swarm_wrapper.network_info().await;
+                let info = daemon.swarm_state.network_info().await;
                 log::info!("Network info: {:?}", info);
             }
             _ = tokio::signal::ctrl_c() => {

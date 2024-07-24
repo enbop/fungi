@@ -1,13 +1,13 @@
 use std::{
     ops::{Deref, DerefMut},
     path::Path,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
 use anyhow::Result;
 use libp2p::{
-    futures::StreamExt,
+    futures::{stream, StreamExt},
     identity::Keypair,
     mdns, noise, ping,
     swarm::{dial_opts::DialOpts, DialError, NetworkBehaviour, NetworkInfo, SwarmEvent},
@@ -24,24 +24,31 @@ pub type TSwarm = Swarm<FungiBehaviours>;
 pub struct SwarmWrapper {
     ptr: Arc<TokioMutex<TSwarm>>,
     notify: Arc<Notify>,
+    local_peer_id: Arc<PeerId>,
 
     stream_control: libp2p_stream::Control,
 }
 
 impl SwarmWrapper {
     fn new(swarm: TSwarm) -> Self {
+        let peer_id = swarm.local_peer_id().to_owned();
+        let stream_control = swarm.behaviour().stream.new_control();
         Self {
-            stream_control: swarm.behaviour().stream.new_control(),
             ptr: Arc::new(TokioMutex::new(swarm)),
             notify: Arc::new(Notify::new()),
+            local_peer_id: Arc::new(peer_id),
+            stream_control,
         }
+    }
+
+    pub fn local_peer_id(&self) -> &PeerId {
+        &self.local_peer_id
     }
 }
 
 pub struct SwarmState {
-    local_peer_id: PeerId,
     swarm: SwarmWrapper,
-    swarm_task: Option<tokio::task::JoinHandle<()>>,
+    swarm_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 #[derive(NetworkBehaviour)]
@@ -54,7 +61,7 @@ pub struct FungiBehaviours {
 
 impl SwarmState {
     // TODO: error handling
-    pub async fn new(fungi_dir: &Path, apply: impl FnOnce(TSwarm) -> TSwarm) -> Result<Self> {
+    pub async fn new(fungi_dir: &Path, apply: impl FnOnce(&mut TSwarm)) -> Result<Self> {
         let keypair = get_keypair_from_dir(fungi_dir)?;
 
         let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
@@ -78,15 +85,13 @@ impl SwarmState {
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
             .build();
 
-        swarm = apply(swarm);
+        apply(&mut swarm);
 
-        let local_peer_id = swarm.local_peer_id().to_owned();
         let swarm_wrapper = SwarmWrapper::new(swarm);
 
         Ok(Self {
             swarm: swarm_wrapper,
-            local_peer_id,
-            swarm_task: None,
+            swarm_task: Default::default(),
         })
     }
 
@@ -95,16 +100,17 @@ impl SwarmState {
     }
 
     pub fn is_started(&self) -> bool {
-        self.swarm_task.is_some()
+        self.swarm_task.lock().unwrap().is_some()
     }
 
     pub fn start_swarm_task(&mut self) {
-        if self.is_started() {
+        let mut swarm_task_lock = self.swarm_task.lock().unwrap();
+        if swarm_task_lock.is_some() {
             return;
         }
 
         let swarm = self.swarm.clone();
-        self.swarm_task = Some(tokio::spawn(async move {
+        *swarm_task_lock = Some(tokio::spawn(async move {
             loop {
                 swarm_loop(&swarm).await;
             }
