@@ -1,9 +1,10 @@
 use super::FungiArgs;
-use fungi_wasi::run;
+use fungi_wasi::{run, IpcMessage};
+use ipc_channel::ipc;
 
 pub async fn wasi(args: &FungiArgs) {
-    let fungi_dir = args.fungi_dir();
-    let ipc_server_name = run(fungi_dir);
-    println!("{}", ipc_server_name);
-    std::thread::park();
+    let (server, name) = ipc::IpcOneShotServer::<IpcMessage>::new().unwrap();
+    println!("{}", name);
+    run(server, args.wasi_root_dir(), args.wasi_bin_dir()).await;
+    println!("{} finished", name);
 }

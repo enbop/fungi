@@ -34,9 +34,13 @@ impl WasiListener {
             loop {
                 let mut buf = [0; 1024];
                 let n = child.stdout.as_mut().unwrap().read(&mut buf).await.unwrap();
+                if n == 0 {
+                    break;
+                }
                 let msg = String::from_utf8_lossy(&buf[..n]);
                 println!("child msg: {}", msg);
             }
+            println!("child process exited");
         });
 
         msg.trim().to_string()

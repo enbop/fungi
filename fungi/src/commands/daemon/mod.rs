@@ -20,7 +20,7 @@ pub async fn daemon(args: &FungiArgs, config: &FungiConfig) {
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_secs(5)) => {
                 let info = daemon.swarm_state.network_info().await;
-                log::info!("Network info: {:?}", info);
+                log::debug!("Network info: {:?}", info);
             }
             _ = tokio::signal::ctrl_c() => {
                 println!("Shutting down Fungi daemon...");

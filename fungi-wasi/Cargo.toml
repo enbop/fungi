@@ -8,3 +8,5 @@ tokio = { version = "1", features = ["full"] }
 ipc-channel = { version = "0.18", features = ["async"] }
 serde = { version = "1", features = ["derive"] }
 futures = { workspace = true }
+wasmtime = "23"
+wasmtime-wasi = "23"

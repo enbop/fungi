@@ -24,5 +24,5 @@ pub async fn mush() {
 
 fn connect_to_wasi(ipc_server_name: String) {
     let wasi: ipc::IpcSender<IpcMessage> = ipc::IpcSender::connect(ipc_server_name).unwrap();
-    wasi.send(IpcMessage::Data("Hello, wasi!".to_string())).unwrap();
+    wasi.send(IpcMessage::Data("wasi.wasm".to_string())).unwrap();
 }
