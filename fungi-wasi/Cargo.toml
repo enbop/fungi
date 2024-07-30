@@ -5,8 +5,11 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-ipc-channel = { version = "0.18", features = ["async"] }
+interprocess = { version = "2.2", features = ["tokio"] }
 serde = { version = "1", features = ["derive"] }
 futures = { workspace = true }
+anyhow = { workspace = true }
+bincode = { workspace = true }
 wasmtime = "23"
 wasmtime-wasi = "23"
+rand = "0.8"
