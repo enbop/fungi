@@ -1,17 +1,19 @@
-use super::daemon::listeners::MushMessage;
+use super::{daemon::listeners::MushMessage, FungiArgs};
 use fungi_wasi::IpcMessage;
 use interprocess::local_socket::{
     tokio::{prelude::*, Stream},
-    GenericNamespaced, ToNsName,
+    GenericFilePath, GenericNamespaced,
 };
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
-};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-pub async fn mush() {
+pub async fn mush(args: &FungiArgs) {
     println!("Connecting to fungi daemon");
-    let mut stream = TcpStream::connect(format!("127.0.0.1:6010")).await.unwrap();
+
+    let name = args
+        .mush_ipc_path()
+        .to_fs_name::<GenericFilePath>()
+        .unwrap();
+    let mut stream = Stream::connect(name).await.unwrap();
     let msg = bincode::serialize(&MushMessage::InitRequest).unwrap();
     stream.write_all(&msg).await.unwrap();
     let mut buf = [0; 1024];

@@ -10,7 +10,10 @@ pub use wasi::wasi;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-use crate::{DEFAULT_FUNGI_DIR, DEFAULT_FUNGI_WASI_BIN_DIR, DEFAULT_FUNGI_WASI_ROOT_DIR};
+use crate::{
+    DEFAULT_FUNGI_DIR, DEFAULT_FUNGI_WASI_BIN_DIR_NAME, DEFAULT_FUNGI_WASI_ROOT_DIR_NAME,
+    DEFAULT_IPC_DIR_NAME, MUSH_LISTENER_ADDR,
+};
 
 /// Fungi the world!
 #[derive(Parser, Debug)]
@@ -55,13 +58,25 @@ impl FungiArgs {
         self.wasi_root_dir
             .as_ref()
             .map(PathBuf::from)
-            .unwrap_or_else(|| self.fungi_dir().join(DEFAULT_FUNGI_WASI_ROOT_DIR))
+            .unwrap_or_else(|| self.fungi_dir().join(DEFAULT_FUNGI_WASI_ROOT_DIR_NAME))
     }
 
     pub fn wasi_bin_dir(&self) -> PathBuf {
         self.wasi_bin_dir
             .as_ref()
             .map(PathBuf::from)
-            .unwrap_or_else(|| self.wasi_root_dir().join(DEFAULT_FUNGI_WASI_BIN_DIR))
+            .unwrap_or_else(|| self.wasi_root_dir().join(DEFAULT_FUNGI_WASI_BIN_DIR_NAME))
+    }
+
+    pub fn ipc_dir(&self) -> PathBuf {
+        let dir = self.fungi_dir().join(DEFAULT_IPC_DIR_NAME);
+        if !dir.exists() {
+            std::fs::create_dir(&dir).unwrap();
+        }
+        dir
+    }
+
+    pub fn mush_ipc_path(&self) -> PathBuf {
+        self.ipc_dir().join(MUSH_LISTENER_ADDR)
     }
 }

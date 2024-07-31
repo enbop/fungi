@@ -7,11 +7,11 @@ use crate::config::FungiConfig;
 
 use super::FungiArgs;
 
-pub async fn daemon(args: &FungiArgs, config: &FungiConfig) {
+pub async fn daemon(args: FungiArgs, config: &FungiConfig) {
     println!("Starting Fungi daemon...");
     let fungi_dir = args.fungi_dir();
     println!("Fungi directory: {:?}", fungi_dir);
-    let mut daemon = daemon::FungiDaemon::new(fungi_dir.clone(), config.clone()).await;
+    let mut daemon = daemon::FungiDaemon::new(args, config.clone()).await;
     daemon.start().await;
 
     println!("Local Peer ID: {}", daemon.swarm_state.local_peer_id());
