@@ -1,5 +1,6 @@
 mod wasmtime_wasi_impl;
 use anyhow::Result;
+use fungi_util::ipc;
 use interprocess::local_socket::{tokio::prelude::*, GenericNamespaced, ListenerOptions};
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
@@ -19,16 +20,13 @@ pub struct WasiProcess {
 }
 
 impl WasiProcess {
-    pub fn new(root_dir: PathBuf, bin_dir: PathBuf) -> Result<Self> {
-        let ipc_sock_name = format!(
+    pub fn new(ipc_dir: PathBuf, root_dir: PathBuf, bin_dir: PathBuf) -> Result<Self> {
+        let ipc_path = ipc_dir.join(format!(
             "fungi-wasi-{}.sock",
             Alphanumeric.sample_string(&mut rand::thread_rng(), 4)
-        );
-
-        let ipc_listener_opts =
-            ListenerOptions::new().name(ipc_sock_name.clone().to_ns_name::<GenericNamespaced>()?);
-        let ipc_listener: LocalSocketListener = ipc_listener_opts.create_tokio()?;
-
+        ));
+        let ipc_sock_name = ipc_path.to_string_lossy().to_string();
+        let ipc_listener = ipc::create_ipc_listener(&ipc_sock_name)?;
         let runtime = WasiRuntime::new(root_dir, bin_dir)?;
         Ok(Self {
             ipc_sock_name,

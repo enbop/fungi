@@ -1225,6 +1225,7 @@ name = "fungi-util"
 version = "0.1.0"
 dependencies = [
  "futures",
+ "interprocess",
  "libp2p-identity",
  "libp2p-stream",
  "libp2p-swarm",
@@ -1238,6 +1239,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "fungi-util",
  "futures",
  "interprocess",
  "rand",

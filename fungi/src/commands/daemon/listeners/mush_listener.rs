@@ -1,8 +1,6 @@
 use super::WasiListener;
-use interprocess::local_socket::{
-    tokio::{prelude::*, Stream},
-    GenericFilePath, ListenerOptions,
-};
+use fungi_util::ipc;
+use interprocess::local_socket::tokio::{prelude::*, Stream};
 use serde::{Deserialize, Serialize};
 use std::{io, path::PathBuf};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -29,14 +27,7 @@ impl MushListener {
             return Ok(());
         }
 
-        let name = ipc_listen_path
-            .clone()
-            .to_fs_name::<GenericFilePath>()
-            .unwrap();
-        let opts = ListenerOptions::new().name(name);
-
-        let listener: LocalSocketListener = opts.create_tokio()?;
-
+        let listener = ipc::create_ipc_listener(&ipc_listen_path.to_string_lossy())?;
         log::info!("Listening on: {:?}", ipc_listen_path);
         let task = tokio::spawn(Self::listen_task(listener, self.wasi_listener.clone()));
         self.listen_task = Some(task);

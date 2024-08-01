@@ -13,3 +13,4 @@ bincode = { workspace = true }
 wasmtime = "23"
 wasmtime-wasi = "23"
 rand = "0.8"
+fungi-util = { path = "../fungi-util" }
