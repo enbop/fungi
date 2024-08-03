@@ -1,8 +1,54 @@
 use anyhow::{bail, Result};
+use bytes::Bytes;
 use std::path::PathBuf;
+use tokio::sync::mpsc;
 use wasmtime::{Config, Engine, Linker, Module, Store};
 use wasmtime_wasi::preview1::{self, WasiP1Ctx};
-use wasmtime_wasi::WasiCtxBuilder;
+use wasmtime_wasi::{
+    HostOutputStream, StdoutStream, StreamError, StreamResult, Subscribe, WasiCtxBuilder,
+};
+
+#[derive(Clone)]
+pub struct StdoutChannel {
+    tx: mpsc::UnboundedSender<Bytes>,
+}
+
+impl StdoutChannel {
+    pub fn new() -> (Self, mpsc::UnboundedReceiver<Bytes>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self { tx }, rx)
+    }
+}
+
+#[async_trait::async_trait]
+impl Subscribe for StdoutChannel {
+    async fn ready(&mut self) {}
+}
+
+impl HostOutputStream for StdoutChannel {
+    fn write(&mut self, bytes: Bytes) -> StreamResult<()> {
+        self.tx.send(bytes).map_err(|e| StreamError::Trap(e.into()))
+    }
+    fn flush(&mut self) -> StreamResult<()> {
+        // This stream is always flushed
+        Ok(())
+    }
+
+    fn check_write(&mut self) -> StreamResult<usize> {
+        // This stream is always ready for writing.
+        Ok(usize::MAX)
+    }
+}
+
+impl StdoutStream for StdoutChannel {
+    fn stream(&self) -> Box<dyn HostOutputStream> {
+        Box::new(self.clone())
+    }
+
+    fn isatty(&self) -> bool {
+        false
+    }
+}
 
 pub struct WasiRuntime {
     engine: Engine,
@@ -36,7 +82,19 @@ impl WasiRuntime {
         if !bin_path.exists() {
             bail!("{:?} not found", bin_path);
         }
-        let wasi_ctx = WasiCtxBuilder::new().inherit_stdio().args(&args).build_p1();
+
+        let (stdout, mut stdout_rx) = StdoutChannel::new();
+
+        tokio::spawn(async move {
+            loop {
+                let Some(out) = stdout_rx.recv().await else {
+                    break;
+                };
+                println!("CUSTOM STDOUT: {}", String::from_utf8_lossy(&out));
+            }
+        });
+
+        let wasi_ctx = WasiCtxBuilder::new().stdout(stdout).args(&args).build_p1();
 
         let mut store = Store::new(&self.engine, wasi_ctx);
 

@@ -1238,7 +1238,9 @@ name = "fungi-wasi"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "bincode",
+ "bytes",
  "fungi-util",
  "futures",
  "interprocess",

@@ -6,6 +6,6 @@ pub async fn wasi(args: &FungiArgs) {
         WasiProcess::new(args.ipc_dir(), args.wasi_root_dir(), args.wasi_bin_dir()).unwrap();
     let ipc_sock_name = process.ipc_sock_name().to_owned();
     println!("{}", ipc_sock_name);
-    process.start_listen().await.unwrap();
+    process.start_listen().await.ok(); // TODO handle error
     println!("{} finished", ipc_sock_name);
 }

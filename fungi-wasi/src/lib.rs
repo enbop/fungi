@@ -1,7 +1,7 @@
 mod wasmtime_wasi_impl;
 use anyhow::Result;
 use fungi_util::ipc;
-use interprocess::local_socket::{tokio::prelude::*, GenericNamespaced, ListenerOptions};
+use interprocess::local_socket::tokio::prelude::*;
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
