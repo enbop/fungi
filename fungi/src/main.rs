@@ -17,7 +17,7 @@ async fn main() {
         Some(Commands::Init) => commands::init(&args),
         Some(Commands::Daemon) => commands::daemon(args, &config).await,
         Some(Commands::Wasi) => commands::wasi(&args).await,
-        Some(Commands::Mush) => commands::mush(&args).await,
+        Some(Commands::Mush { peer }) => commands::mush(&args, peer).await,
         None => println!("No command provided"),
     }
 }

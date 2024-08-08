@@ -78,7 +78,7 @@ impl SwarmState {
 pub struct SwarmDaemon {
     local_peer_id: PeerId,
     swarm_state: SwarmState,
-    stream_control: libp2p_stream::Control,
+    pub stream_control: libp2p_stream::Control,
 }
 
 #[derive(NetworkBehaviour)]

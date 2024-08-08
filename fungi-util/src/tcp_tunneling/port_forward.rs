@@ -4,7 +4,7 @@ use libp2p_identity::PeerId;
 use libp2p_stream::Control;
 use libp2p_swarm::StreamProtocol;
 
-use crate::tcp_tunneling::copy_stream;
+use crate::copy_stream;
 
 pub async fn forward_port_to_peer(
     mut stream_control: Control,

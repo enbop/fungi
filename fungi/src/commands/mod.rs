@@ -4,6 +4,7 @@ mod mush;
 mod wasi;
 pub use daemon::daemon;
 pub use init::init;
+use libp2p::PeerId;
 pub use mush::mush;
 pub use wasi::wasi;
 
@@ -43,7 +44,11 @@ pub enum Commands {
     /// Start a Fungi wasi process
     Wasi,
 
-    Mush,
+    Mush{
+        /// Connect to a remote peer
+        #[arg(short, long)]
+        peer: Option<PeerId>,
+    },
 }
 
 impl FungiArgs {

@@ -1209,6 +1209,7 @@ dependencies = [
  "libp2p",
  "libp2p-stream",
  "log",
+ "rand",
  "serde",
  "thiserror",
  "tokio",

@@ -22,13 +22,19 @@ impl FungiDaemon {
         .await
         .unwrap();
 
+        let libp2p_stream_control = swarm_daemon.stream_control.clone();
+
         let wasi_listener = WasiListener::new();
         Self {
             swarm_daemon,
             config,
-            args,
-            mush_listener: MushListener::new(wasi_listener.clone()),
+            mush_listener: MushListener::new(
+                args.ipc_dir(),
+                wasi_listener.clone(),
+                libp2p_stream_control,
+            ),
             wasi_listener,
+            args,
         }
     }
 

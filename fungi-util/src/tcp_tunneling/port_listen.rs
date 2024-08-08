@@ -4,7 +4,7 @@ use futures::StreamExt;
 use libp2p_stream::Control;
 use libp2p_swarm::{Stream, StreamProtocol};
 
-use super::copy_stream;
+use crate::copy_stream;
 
 pub async fn listen_p2p_to_port(
     mut stream_control: Control,

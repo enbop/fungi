@@ -36,3 +36,4 @@ libp2p-stream = "0.1.0-alpha"
 futures = { workspace = true }
 bincode = { workspace = true }
 interprocess = { version = "2.2", features = ["tokio"] }
+rand = { workspace = true }
