@@ -1,11 +1,7 @@
 mod daemon;
 pub mod listeners;
-
-use std::time::Duration;
-
-use crate::config::FungiConfig;
-
 use super::FungiArgs;
+use crate::config::FungiConfig;
 
 pub async fn daemon(args: FungiArgs, config: &FungiConfig) {
     println!("Starting Fungi daemon...");
@@ -14,18 +10,15 @@ pub async fn daemon(args: FungiArgs, config: &FungiConfig) {
     let mut daemon = daemon::FungiDaemon::new(args, config.clone()).await;
     daemon.start().await;
 
-    println!("Local Peer ID: {}", daemon.swarm_state.local_peer_id());
+    println!("Local Peer ID: {}", daemon.swarm_daemon.local_peer_id());
 
-    loop {
-        tokio::select! {
-            _ = tokio::time::sleep(Duration::from_secs(5)) => {
-                let info = daemon.swarm_state.network_info().await;
-                log::debug!("Network info: {:?}", info);
-            }
-            _ = tokio::signal::ctrl_c() => {
-                println!("Shutting down Fungi daemon...");
-                break;
-            }
-        }
-    }
+    let network_info = daemon
+        .swarm_daemon
+        .invoke_swarm(|swarm| swarm.network_info())
+        .await
+        .unwrap();
+    println!("Network info: {:?}", network_info);
+
+    tokio::signal::ctrl_c().await.ok();
+    println!("Shutting down Fungi daemon...");
 }

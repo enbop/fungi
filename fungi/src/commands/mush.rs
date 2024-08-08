@@ -32,7 +32,6 @@ pub async fn mush(args: &FungiArgs) {
 
 async fn connect_to_wasi(ipc_server_name: String) {
     let (rx, tx) = ipc::connect_ipc(&ipc_server_name).await.unwrap().split();
-    println!("Connected to WASI process");
     println!("Welcome to the Fungi!\n");
     tokio::select! {
         _ = forward_stdin_to_wasi(tx) => {}

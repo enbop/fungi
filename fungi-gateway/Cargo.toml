@@ -14,3 +14,4 @@ libp2p = { version = "0.53" , features = ["macros", "noise", "mdns", "ping", "tc
 libp2p-stream = "0.1.0-alpha"
 fungi-util = { path = "../fungi-util" }
 void = "1"
+async-result = "0.1.0"

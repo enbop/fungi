@@ -243,6 +243,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-result"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fa8a26dd2a84de1227b2ffc5de136b42a2981be50c2b9bee4e36cf1fcda58e8"
+dependencies = [
+ "futures-channel",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.80"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1211,6 +1220,7 @@ name = "fungi-gateway"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-result",
  "fungi-util",
  "libp2p",
  "libp2p-stream",

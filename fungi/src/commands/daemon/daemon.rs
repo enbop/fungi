@@ -1,11 +1,11 @@
 use super::listeners::{MushListener, WasiListener};
 use crate::{commands::FungiArgs, config::FungiConfig};
-use fungi_gateway::{SwarmState, TSwarm};
+use fungi_gateway::{SwarmDaemon, TSwarm};
 use fungi_util::tcp_tunneling;
 use libp2p::StreamProtocol;
 
 pub struct FungiDaemon {
-    pub swarm_state: SwarmState,
+    pub swarm_daemon: SwarmDaemon,
     config: FungiConfig,
     args: FungiArgs,
     mush_listener: MushListener,
@@ -14,7 +14,7 @@ pub struct FungiDaemon {
 
 impl FungiDaemon {
     pub async fn new(args: FungiArgs, config: FungiConfig) -> Self {
-        let swarm_state = SwarmState::new(&args.fungi_dir(), |mut swarm| {
+        let swarm_daemon = SwarmDaemon::new(&args.fungi_dir(), |mut swarm| {
             apply_listen(&mut swarm, &config);
             #[cfg(feature = "tcp-tunneling")]
             apply_tcp_tunneling(&mut swarm, &config);
@@ -24,7 +24,7 @@ impl FungiDaemon {
 
         let wasi_listener = WasiListener::new();
         Self {
-            swarm_state,
+            swarm_daemon,
             config,
             args,
             mush_listener: MushListener::new(wasi_listener.clone()),
@@ -33,7 +33,7 @@ impl FungiDaemon {
     }
 
     pub async fn start(&mut self) {
-        self.swarm_state.start_swarm_task();
+        self.swarm_daemon.start_swarm_task();
         self.mush_listener
             .start(self.args.mush_ipc_path())
             .await

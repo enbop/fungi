@@ -1,54 +1,84 @@
 use std::{
+    any::Any,
     ops::{Deref, DerefMut},
     path::Path,
-    sync::{Arc, Mutex},
     time::Duration,
 };
 
-use anyhow::Result;
+use crate::address_book;
+use anyhow::{bail, Result};
+use async_result::{AsyncResult, Completer};
 use libp2p::{
-    futures::{stream, StreamExt},
+    futures::StreamExt,
     identity::Keypair,
     mdns, noise, ping,
-    swarm::{dial_opts::DialOpts, DialError, NetworkBehaviour, NetworkInfo, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, StreamProtocol, Swarm,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux, PeerId, Swarm,
 };
-use libp2p_stream::{AlreadyRegistered, IncomingStreams, OpenStreamError};
-use tokio::sync::{Mutex as TokioMutex, MutexGuard as TokioMutexGuard, Notify};
-
-use crate::address_book;
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 pub type TSwarm = Swarm<FungiBehaviours>;
+type SwarmResponse = Box<dyn Any + Send>;
+type SwarmRequest = Box<dyn FnOnce(&mut TSwarm) -> SwarmResponse + Send + Sync>;
 
-#[derive(Clone)]
-pub struct SwarmWrapper {
-    ptr: Arc<TokioMutex<TSwarm>>,
-    notify: Arc<Notify>,
-    local_peer_id: Arc<PeerId>,
-
-    stream_control: libp2p_stream::Control,
+pub struct SwarmAsyncCall {
+    request: SwarmRequest,
+    response: Completer<SwarmResponse>,
 }
 
-impl SwarmWrapper {
-    fn new(swarm: TSwarm) -> Self {
-        let peer_id = swarm.local_peer_id().to_owned();
-        let stream_control = swarm.behaviour().stream.new_control();
+impl SwarmAsyncCall {
+    pub fn new(request: SwarmRequest, response: Completer<SwarmResponse>) -> Self {
+        Self { request, response }
+    }
+}
+
+pub struct SwarmStateRunning {
+    // TODO use tokio::task::JoinHandle<TSwarm>
+    _task: tokio::task::JoinHandle<()>,
+    swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
+}
+
+impl SwarmStateRunning {
+    pub fn new(
+        _task: tokio::task::JoinHandle<()>,
+        swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
+    ) -> Self {
         Self {
-            ptr: Arc::new(TokioMutex::new(swarm)),
-            notify: Arc::new(Notify::new()),
-            local_peer_id: Arc::new(peer_id),
-            stream_control,
+            _task,
+            swarm_caller_tx,
         }
     }
+}
 
-    pub fn local_peer_id(&self) -> &PeerId {
-        &self.local_peer_id
+impl Deref for SwarmStateRunning {
+    type Target = UnboundedSender<SwarmAsyncCall>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.swarm_caller_tx
     }
 }
 
-pub struct SwarmState {
-    swarm: SwarmWrapper,
-    swarm_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
+impl DerefMut for SwarmStateRunning {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.swarm_caller_tx
+    }
+}
+
+pub enum SwarmState {
+    Running(SwarmStateRunning),
+    Uninitialized(Option<TSwarm>),
+}
+
+impl SwarmState {
+    pub fn is_running(&self) -> bool {
+        matches!(self, SwarmState::Running(_))
+    }
+}
+
+pub struct SwarmDaemon {
+    local_peer_id: PeerId,
+    swarm_state: SwarmState,
+    stream_control: libp2p_stream::Control,
 }
 
 #[derive(NetworkBehaviour)]
@@ -59,7 +89,7 @@ pub struct FungiBehaviours {
     pub address_book: address_book::Behaviour,
 }
 
-impl SwarmState {
+impl SwarmDaemon {
     // TODO: error handling
     pub async fn new(fungi_dir: &Path, apply: impl FnOnce(&mut TSwarm)) -> Result<Self> {
         let keypair = get_keypair_from_dir(fungi_dir)?;
@@ -85,13 +115,17 @@ impl SwarmState {
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
             .build();
 
+        let local_peer_id = *swarm.local_peer_id();
+        let stream_control = swarm.behaviour().stream.new_control();
+
         apply(&mut swarm);
 
-        let swarm_wrapper = SwarmWrapper::new(swarm);
+        let swarm_state = SwarmState::Uninitialized(Some(swarm));
 
         Ok(Self {
-            swarm: swarm_wrapper,
-            swarm_task: Default::default(),
+            swarm_state,
+            local_peer_id,
+            stream_control,
         })
     }
 
@@ -100,107 +134,77 @@ impl SwarmState {
     }
 
     pub fn is_started(&self) -> bool {
-        self.swarm_task.lock().unwrap().is_some()
+        self.swarm_state.is_running()
+    }
+
+    pub async fn invoke_swarm<F, R: Any + Send>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(&mut TSwarm) -> R + Send + Sync + 'static,
+    {
+        let SwarmState::Running(swarm_state) = &self.swarm_state else {
+            bail!("Swarm not started")
+        };
+        let res = AsyncResult::with(move |completer| {
+            swarm_state
+                .send(SwarmAsyncCall::new(
+                    Box::new(|swarm| Box::new(f(swarm))),
+                    completer,
+                ))
+                .ok(); // should be ok cause the completer will be dropped if the channel is closed
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("Swarm call failed: {:?}", e))?
+        .downcast::<R>()
+        .map_err(|_| anyhow::anyhow!("Swarm call failed: downcast error"))?;
+        Ok(*res)
     }
 
     pub fn start_swarm_task(&mut self) {
-        let mut swarm_task_lock = self.swarm_task.lock().unwrap();
-        if swarm_task_lock.is_some() {
-            return;
-        }
+        let (swarm_caller_tx, swarm_caller_rx) = mpsc::unbounded_channel::<SwarmAsyncCall>();
 
-        let swarm = self.swarm.clone();
-        *swarm_task_lock = Some(tokio::spawn(async move {
-            loop {
-                swarm_loop(&swarm).await;
-            }
-        }));
+        let swarm = {
+            let SwarmState::Uninitialized(swarm) = &mut self.swarm_state else {
+                log::warn!("Swarm already started");
+                return;
+            };
+            let Some(swarm) = swarm.take() else {
+                log::warn!("Wrong swarm state"); // expected to be unreachable
+                return;
+            };
+            swarm
+        };
+        let swarm_task = tokio::spawn(swarm_loop(swarm, swarm_caller_rx));
+        self.swarm_state = SwarmState::Running(SwarmStateRunning::new(swarm_task, swarm_caller_tx));
 
-        async fn swarm_loop(swarm: &SwarmWrapper) {
-            let mut swarm_lock = swarm.ptr.lock().await;
+        async fn swarm_loop(
+            mut swarm: TSwarm,
+            mut swarm_caller_rx: UnboundedReceiver<SwarmAsyncCall>,
+        ) {
             loop {
                 tokio::select! {
-                    biased;
-                    swarm_events = swarm_lock.select_next_some() => {
+                    swarm_events = swarm.select_next_some() => {
                         log::debug!("Handle swarm event {:?}", swarm_events);
                         match swarm_events {
                             SwarmEvent::NewListenAddr { address, .. } => {
-                                let addr = address.with_p2p(*swarm_lock.local_peer_id()).unwrap();
+                                let addr = address.with_p2p(*swarm.local_peer_id()).unwrap();
                                 println!("Listening on {addr:?}")
                             },
                             SwarmEvent::Behaviour(event) => log::info!("{event:?}"),
                             _ => {}
                         }
                     },
-                    // release the lock
-                    _ = swarm.notify.notified() => {
-                        break;
-                    },
+                    invoke = swarm_caller_rx.recv() => {
+                        let Some(SwarmAsyncCall{ request, response }) = invoke else {
+                            log::debug!("Swarm caller channel closed");
+                            break;
+                        };
+                        let res = request(&mut swarm);
+                        response.complete(res);
+                    }
                 }
             }
+            log::info!("Swarm loop exited");
         }
-    }
-}
-
-impl SwarmWrapper {
-    // TODO return Result
-    async fn require_swarm(&self) -> TokioMutexGuard<'_, TSwarm> {
-        self.notify.notify_one();
-        self.ptr.lock().await
-    }
-
-    pub async fn network_info(&self) -> NetworkInfo {
-        let swarm_guard = self.require_swarm().await;
-        swarm_guard.network_info()
-    }
-
-    pub async fn add_peer_addresses(
-        &mut self,
-        peer_id: PeerId,
-        addrs: impl IntoIterator<Item = Multiaddr>,
-    ) {
-        let mut swarm_guard = self.require_swarm().await;
-        for addr in addrs {
-            swarm_guard.add_peer_address(peer_id, addr);
-        }
-    }
-
-    pub async fn dial(&mut self, opts: impl Into<DialOpts>) -> Result<(), DialError> {
-        let mut swarm_guard = self.require_swarm().await;
-        swarm_guard.dial(opts)
-    }
-
-    pub fn new_stream_control(&mut self) -> libp2p_stream::Control {
-        self.stream_control.clone()
-    }
-
-    pub fn stream_accept(
-        &mut self,
-        protocol: StreamProtocol,
-    ) -> Result<IncomingStreams, AlreadyRegistered> {
-        self.stream_control.accept(protocol)
-    }
-
-    pub async fn stream_open(
-        &mut self,
-        peer: PeerId,
-        protocol: StreamProtocol,
-    ) -> Result<libp2p::Stream, OpenStreamError> {
-        self.stream_control.open_stream(peer, protocol).await
-    }
-}
-
-impl Deref for SwarmState {
-    type Target = SwarmWrapper;
-
-    fn deref(&self) -> &Self::Target {
-        &self.swarm
-    }
-}
-
-impl DerefMut for SwarmState {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.swarm
     }
 }
 
