@@ -27,23 +27,21 @@ impl FungiDaemon {
         let wasi_listener = WasiListener::new();
         Self {
             swarm_daemon,
-            config,
             mush_listener: MushListener::new(
-                args.ipc_dir(),
+                args.clone(),
+                config.clone(),
                 wasi_listener.clone(),
                 libp2p_stream_control,
             ),
             wasi_listener,
             args,
+            config,
         }
     }
 
     pub async fn start(&mut self) {
         self.swarm_daemon.start_swarm_task();
-        self.mush_listener
-            .start(self.args.mush_ipc_path())
-            .await
-            .unwrap();
+        self.mush_listener.start().await.unwrap();
     }
 }
 

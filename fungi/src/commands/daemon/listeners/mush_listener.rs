@@ -1,35 +1,49 @@
+use crate::{commands::FungiArgs, config::FungiConfig};
+
 use super::WasiListener;
-use fungi_util::{
-    copy_stream,
-    ipc::{self, create_ipc_listener},
-};
-use interprocess::local_socket::tokio::{prelude::*, Stream};
+use fungi_util::{copy_stream, ipc};
+use futures::StreamExt;
+use interprocess::local_socket::tokio::{prelude::*, Stream as IpcStream};
 use libp2p::{PeerId, StreamProtocol};
 use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
-use std::{io, path::PathBuf};
+use std::{
+    io,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 use tokio::io::{AsyncReadExt as TAsyncReadExt, AsyncWriteExt as TAsyncWriteExt};
 
 const MUSHD_PROTOCOL: StreamProtocol = StreamProtocol::new("/fungi/mushd/0.1.0");
 
+type MushdAllowPeers = Arc<Option<Mutex<Vec<PeerId>>>>;
+
 pub struct MushListener {
-    ipc_dir: PathBuf,
+    args: FungiArgs,
     libp2p_stream_control: libp2p_stream::Control,
     wasi_listener: WasiListener,
     listen_task: Option<tokio::task::JoinHandle<()>>,
+    mushd_allow_peers: MushdAllowPeers,
 }
 
 impl MushListener {
     pub fn new(
-        ipc_dir: PathBuf,
+        args: FungiArgs,
+        config: FungiConfig,
         wasi_listener: WasiListener,
         libp2p_stream_control: libp2p_stream::Control,
     ) -> Self {
+        let mushd_allow_peers = if config.mush_daemon.allow_all_peers {
+            None
+        } else {
+            Some(config.mush_daemon.allow_peers.clone())
+        };
         Self {
-            ipc_dir,
+            args,
             libp2p_stream_control,
             wasi_listener,
             listen_task: None,
+            mushd_allow_peers: Arc::new(mushd_allow_peers.map(Mutex::new)),
         }
     }
 
@@ -37,17 +51,20 @@ impl MushListener {
         self.listen_task.is_some()
     }
 
-    pub async fn start(&mut self, ipc_listen_path: PathBuf) -> io::Result<()> {
+    pub async fn start(&mut self) -> io::Result<()> {
         if self.is_started() {
             return Ok(());
         }
 
-        let listener = ipc::create_ipc_listener(&ipc_listen_path.to_string_lossy())?;
-        log::info!("Listening on: {:?}", ipc_listen_path);
+        let local_mush_listener =
+            ipc::create_ipc_listener(&self.args.mush_ipc_path().to_string_lossy())?;
+
         let task = tokio::spawn(Self::listen_task(
-            self.ipc_dir.clone(),
-            listener,
+            self.args.ipc_dir(),
+            local_mush_listener,
             self.wasi_listener.clone(),
+            self.mushd_allow_peers.clone(),
+            self.libp2p_stream_control.accept(MUSHD_PROTOCOL).unwrap(),
             self.libp2p_stream_control.clone(),
         ));
         self.listen_task = Some(task);
@@ -56,28 +73,48 @@ impl MushListener {
 
     async fn listen_task(
         ipc_dir: PathBuf,
-        listener: LocalSocketListener,
+        local_mush_listener: LocalSocketListener,
         wasi_listener: WasiListener,
+        mushd_allow_peers: MushdAllowPeers,
+        mut remote_mushd_listener: libp2p_stream::IncomingStreams,
         libp2p_stream_control: libp2p_stream::Control,
     ) {
         loop {
-            let Ok(stream) = listener.accept().await else {
-                log::info!("Failed to accept connection");
-                break;
-            };
-            tokio::spawn(Self::handle_request_stream(
-                ipc_dir.clone(),
-                stream,
-                wasi_listener.clone(),
-                libp2p_stream_control.clone(),
-            ));
+            tokio::select! {
+                local_client = local_mush_listener.accept() => {
+                    let Ok(stream) = local_client else {
+                        log::info!("Local mush listener is closed");
+                        break;
+                    };
+                    tokio::spawn(Self::handle_local_request_stream(
+                        ipc_dir.clone(),
+                        stream,
+                        wasi_listener.clone(),
+                        libp2p_stream_control.clone(),
+                    ));
+                },
+                remote_client = remote_mushd_listener.next() => {
+                    let Some((peer_id, stream)) = remote_client else {
+                        log::info!("Remote mush listener is closed");
+                        break;
+                    };
+                    if let Some(allow_peers) = mushd_allow_peers.as_ref() {
+                        let allow_peers = allow_peers.lock().unwrap();
+                        if !allow_peers.contains(&peer_id) {
+                            log::info!("Rejecting connection from peer: {:?}", peer_id);
+                            continue;
+                        }
+                    }
+                    tokio::spawn(Self::handle_remote_request_stream(peer_id ,stream, wasi_listener.clone()));
+                }
+            }
         }
     }
 
-    async fn handle_request_stream(
+    async fn handle_local_request_stream(
         ipc_dir: PathBuf,
-        mut stream: Stream,
-        wasi_listener: WasiListener,
+        mut stream: IpcStream,
+        mut wasi_listener: WasiListener,
         mut libp2p_stream_control: libp2p_stream::Control,
     ) {
         log::info!("Accepted connection");
@@ -98,7 +135,7 @@ impl MushListener {
                         .unwrap_or_else(|e| Err(format!("Failed to open stream: {:?}", e)))
                 } else {
                     wasi_listener
-                        .spawn_wasi_process()
+                        .spawn_wasi_process(None)
                         .await
                         .map_err(|e| format!("Failed to spawn WASI process: {:?}", e))
                 };
@@ -110,6 +147,21 @@ impl MushListener {
                 log::info!("Unknown message: {:?}", msg);
             }
         }
+    }
+
+    async fn handle_remote_request_stream(
+        remote_peer_id: PeerId,
+        remote_stream: libp2p::Stream,
+        mut wasi_listener: WasiListener,
+    ) {
+        let Ok(child_wasi_ipc_name) = wasi_listener.spawn_wasi_process(Some(remote_peer_id)).await
+        else {
+            return; // TODO handle error and send to remote
+        };
+        let Ok(wasi_stream) = ipc::connect_ipc(&child_wasi_ipc_name).await else {
+            return; // TODO handle error and send to remote
+        };
+        copy_stream(remote_stream, wasi_stream).await;
     }
 }
 
@@ -126,7 +178,7 @@ fn create_forward_ipc(ipc_dir: PathBuf, libp2p_stream: libp2p::Stream) -> Result
     ));
     let ipc_sock_name = ipc_path.to_string_lossy().to_string();
 
-    let listener = create_ipc_listener(&ipc_sock_name)
+    let listener = ipc::create_ipc_listener(&ipc_sock_name)
         .map_err(|e| format!("Failed to create IPC listener: {:?}", e))?;
 
     tokio::spawn(async move {

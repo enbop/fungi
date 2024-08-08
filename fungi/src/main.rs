@@ -10,12 +10,14 @@ async fn main() {
     let args = FungiArgs::parse();
     let config = match args.command {
         Some(Commands::Init) => FungiConfig::default(),
-        _ => FungiConfig::parse_from_dir(&args.fungi_dir()).unwrap(),
+        _ => FungiConfig::apply_from_args(&args).unwrap(),
     };
 
     match args.command {
         Some(Commands::Init) => commands::init(&args),
-        Some(Commands::Daemon) => commands::daemon(args, &config).await,
+        Some(Commands::Daemon {
+            ..
+        }) => commands::daemon(args, &config).await,
         Some(Commands::Wasi) => commands::wasi(&args).await,
         Some(Commands::Mush { peer }) => commands::mush(&args, peer).await,
         None => println!("No command provided"),

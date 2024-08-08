@@ -1,13 +1,24 @@
-use futures::lock::Mutex;
-use std::{collections::HashMap, io, process::Stdio, sync::Arc};
+use libp2p::PeerId;
+use std::{
+    collections::HashMap,
+    io,
+    process::Stdio,
+    sync::{Arc, Mutex},
+};
 use tokio::{
     io::AsyncReadExt,
     process::{Child, Command},
 };
 
+struct WasiChild {
+    process: Child,
+    ipc_name: String,
+    remote_peer_id: Option<PeerId>,
+}
+
 #[derive(Clone)]
 pub struct WasiListener {
-    child_process_map: Arc<Mutex<HashMap<String, Child>>>, // TODO
+    child_process_map: Arc<Mutex<HashMap<String, WasiChild>>>, // TODO
 }
 
 impl WasiListener {
@@ -17,7 +28,10 @@ impl WasiListener {
         }
     }
 
-    pub async fn spawn_wasi_process(&self) -> io::Result<String> {
+    pub async fn spawn_wasi_process(
+        &mut self,
+        remote_peer_id: Option<PeerId>,
+    ) -> io::Result<String> {
         let self_bin = std::env::current_exe()?;
         let mut child = Command::new(self_bin)
             .arg("wasi")
@@ -26,12 +40,15 @@ impl WasiListener {
             .spawn()?;
 
         let mut buf = [0; 1024];
-        let n = child.stdout.as_mut().unwrap().read(&mut buf).await?;
+
+        let mut child_stdout = child.stdout.take().unwrap();
+        let n = child_stdout.read(&mut buf).await?;
         let msg = String::from_utf8_lossy(&buf[..n]);
+        let name = msg.trim().to_string();
         tokio::spawn(async move {
             loop {
                 let mut buf = [0; 1024];
-                let n = child.stdout.as_mut().unwrap().read(&mut buf).await.unwrap();
+                let n = child_stdout.read(&mut buf).await.unwrap();
                 if n == 0 {
                     break;
                 }
@@ -40,6 +57,14 @@ impl WasiListener {
             }
             println!("child process exited");
         });
-        Ok(msg.trim().to_string())
+        self.child_process_map.lock().unwrap().insert(
+            name.clone(),
+            WasiChild {
+                process: child,
+                ipc_name: name.clone(),
+                remote_peer_id,
+            },
+        );
+        Ok(name)
     }
 }

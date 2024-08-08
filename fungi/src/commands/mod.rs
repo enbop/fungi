@@ -17,7 +17,7 @@ use crate::{
 };
 
 /// Fungi the world!
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
 pub struct FungiArgs {
     #[command(subcommand)]
@@ -33,13 +33,16 @@ pub struct FungiArgs {
     pub wasi_bin_dir: Option<String>,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     /// Initialize Fungi
     Init,
 
     /// Start a Fungi daemon
-    Daemon,
+    Daemon {
+        #[arg(long)]
+        debug_allow_all_peers: Option<bool>,
+    },
 
     /// Start a Fungi wasi process
     Wasi,
