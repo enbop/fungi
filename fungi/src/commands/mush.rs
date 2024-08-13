@@ -27,7 +27,6 @@ pub async fn mush(args: &FungiArgs, remote_peer: Option<PeerId>) {
     let response = bincode::deserialize::<MushMessage>(&buf[..n]).unwrap();
     match response {
         MushMessage::InitResponse(Ok(ipc_server_name)) => {
-            println!("IPC server name: {}", ipc_server_name);
             connect_to_wasi(ipc_server_name).await;
         }
         MushMessage::InitResponse(Err(e)) => {

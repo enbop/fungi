@@ -1,7 +1,8 @@
 [workspace]
 resolver = "2"
 
-members = [
+members = [ 
+    "assets/hello-fungi",
     "fungi",
     "fungi-gateway",
     "fungi-util",
