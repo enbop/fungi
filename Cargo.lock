@@ -1195,7 +1195,7 @@ dependencies = [
 
 [[package]]
 name = "fungi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bincode",
  "clap",
@@ -1218,7 +1218,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-gateway"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-result",
@@ -1233,7 +1233,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-util"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "interprocess",
