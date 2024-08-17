@@ -1,0 +1,61 @@
+name: "Release"
+
+on:
+  push:
+    branches: ["main"]
+    tags:
+      - "v*"
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  release_build_and_publish:
+    name: Release build and publish
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - rust-target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - rust-target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+          - rust-target: x86_64-apple-darwin
+            os: macos-latest
+          - rust-target: aarch64-apple-darwin
+            os: macos-latest
+          - rust-target: x86_64-pc-windows-gnu
+            os: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: rustup update stable --no-self-update && rustup default stable && rustup target add ${{ matrix.rust-target }}
+
+      - name: Install Cross if needed
+        if: ${{ matrix.cross }}
+        run: cargo install cross
+
+      - name: Build
+        run: |
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.rust-target }}
+          else
+            cargo build --release --target ${{ matrix.rust-target }}
+          fi
+
+      - name: Archive
+        run: |
+          binary="fungi"
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            binary="fungi.exe"
+          fi
+          tar -czf fungi-${{ matrix.rust-target }}.tar.gz -C target/${{ matrix.rust-target }}/release $binary
+
+      - name: GH publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload -R ${{ github.repository }} --clobber ${{ github.ref_name }} fungi-${{ matrix.rust-target }}.tar.gz
