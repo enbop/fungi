@@ -7,6 +7,7 @@ static ALL_IN_ONE_BINARY: OnceCell<bool> = OnceCell::const_new();
 
 pub async fn daemon(args: DaemonArgs, all_in_one_binary: bool) {
     ALL_IN_ONE_BINARY.set(all_in_one_binary).unwrap();
+    crate::commands::init(&args).unwrap();
 
     println!("Starting Fungi daemon...");
     let mut daemon = daemon::FungiDaemon::new(args).await;

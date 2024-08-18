@@ -62,7 +62,7 @@ pub enum Commands {
     Mush(MushArgs),
 }
 
-trait FungiDir {
+pub trait FungiDir {
     fn fungi_dir(&self) -> PathBuf;
 
     fn wasi_root_dir(&self) -> PathBuf {

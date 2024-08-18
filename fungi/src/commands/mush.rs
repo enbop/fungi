@@ -11,11 +11,14 @@ use std::io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub async fn mush(args: MushArgs) {
+    crate::commands::init(&args).unwrap();
+
     println!("Connecting to fungi daemon");
 
-    let mut stream = ipc::connect_ipc(&args.mush_ipc_path().to_string_lossy())
-        .await
-        .unwrap();
+    let Ok(mut stream) = ipc::connect_ipc(&args.mush_ipc_path().to_string_lossy()).await else {
+        println!("Failed to connect to fungi daemon, is it running?");
+        return;
+    };
 
     if let Some(remote_peer) = &args.peer {
         println!("Connecting to remote peer: {:?}", remote_peer);
