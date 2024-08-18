@@ -1,26 +1,27 @@
-use super::{daemon::listeners::MushMessage, FungiArgs};
+use crate::commands::FungiDir;
+
+use super::{daemon::listeners::MushMessage, MushArgs};
 use fungi_util::ipc;
 use fungi_wasi::IpcMessage;
 use interprocess::local_socket::{
     tokio::{RecvHalf, SendHalf},
     traits::tokio::Stream as TraitStream,
 };
-use libp2p::PeerId;
 use std::io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-pub async fn mush(args: &FungiArgs, remote_peer: Option<PeerId>) {
+pub async fn mush(args: MushArgs) {
     println!("Connecting to fungi daemon");
 
     let mut stream = ipc::connect_ipc(&args.mush_ipc_path().to_string_lossy())
         .await
         .unwrap();
 
-    if let Some(remote_peer) = remote_peer {
+    if let Some(remote_peer) = &args.peer {
         println!("Connecting to remote peer: {:?}", remote_peer);
     }
 
-    let msg = bincode::serialize(&MushMessage::InitRequest(remote_peer)).unwrap();
+    let msg = bincode::serialize(&MushMessage::InitRequest(args.peer)).unwrap();
     stream.write_all(&msg).await.unwrap();
     let mut buf = [0; 1024];
     let n = stream.read(&mut buf).await.unwrap();

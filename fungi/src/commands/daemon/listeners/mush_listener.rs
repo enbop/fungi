@@ -1,4 +1,7 @@
-use crate::{commands::FungiArgs, config::FungiConfig};
+use crate::{
+    commands::{DaemonArgs, FungiDir},
+    config::FungiConfig,
+};
 
 use super::WasiListener;
 use fungi_util::{copy_stream, ipc};
@@ -19,7 +22,7 @@ const MUSHD_PROTOCOL: StreamProtocol = StreamProtocol::new("/fungi/mushd/0.1.0")
 type MushdAllowPeers = Arc<Option<Mutex<Vec<PeerId>>>>;
 
 pub struct MushListener {
-    args: FungiArgs,
+    args: DaemonArgs,
     libp2p_stream_control: libp2p_stream::Control,
     wasi_listener: WasiListener,
     listen_task: Option<tokio::task::JoinHandle<()>>,
@@ -28,7 +31,7 @@ pub struct MushListener {
 
 impl MushListener {
     pub fn new(
-        args: FungiArgs,
+        args: DaemonArgs,
         config: FungiConfig,
         wasi_listener: WasiListener,
         libp2p_stream_control: libp2p_stream::Control,

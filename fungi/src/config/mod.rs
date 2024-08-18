@@ -8,10 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tcp_tunneling::*;
 
-use crate::{
-    commands::{Commands, FungiArgs},
-    DEFAULT_CONFIG_FILE,
-};
+use crate::DEFAULT_CONFIG_FILE;
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct FungiConfig {
@@ -24,20 +21,15 @@ pub struct FungiConfig {
 }
 
 impl FungiConfig {
-    pub fn apply_from_args(args: &FungiArgs) -> Result<Self, toml::de::Error> {
-        let s = std::fs::read_to_string(args.fungi_dir().join(DEFAULT_CONFIG_FILE))
+    pub fn apply_from_dir(fungi_dir: &Path) -> Result<Self, toml::de::Error> {
+        let s = std::fs::read_to_string(fungi_dir.join(DEFAULT_CONFIG_FILE))
             .expect("Failed to read config file");
-        let mut cfg = Self::parse_toml(&s)?;
-
-        // debug allow all inbound peers
-        if let Some(Commands::Daemon {
-            debug_allow_all_peers: Some(allow),
-        }) = &args.command
-        {
-            cfg.mush_daemon.allow_all_peers = *allow;
-        }
-
+        let cfg = Self::parse_toml(&s)?;
         Ok(cfg)
+    }
+
+    pub fn set_mush_daemon_allow_all_peers(&mut self, allow: bool) {
+        self.mush_daemon.allow_all_peers = allow;
     }
 
     pub fn parse_toml(s: &str) -> Result<Self, toml::de::Error> {

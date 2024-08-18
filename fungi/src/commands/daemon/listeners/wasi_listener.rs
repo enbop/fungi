@@ -10,6 +10,8 @@ use tokio::{
     process::{Child, Command},
 };
 
+use crate::commands::daemon::ALL_IN_ONE_BINARY;
+
 struct WasiChild {
     process: Child,
     ipc_name: String,
@@ -33,11 +35,19 @@ impl WasiListener {
         remote_peer_id: Option<PeerId>,
     ) -> io::Result<String> {
         let self_bin = std::env::current_exe()?;
-        let mut child = Command::new(self_bin)
-            .arg("wasi")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()?;
+        let mut child = if *ALL_IN_ONE_BINARY.get().unwrap() {
+            Command::new(self_bin)
+                .arg("wasi")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()?
+        } else {
+            let wasi_path = self_bin.parent().unwrap().join("fungi-wasi");
+            Command::new(wasi_path)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()?
+        };
 
         let mut buf = [0; 1024];
 

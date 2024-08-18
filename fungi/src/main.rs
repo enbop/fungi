@@ -1,25 +1,15 @@
 use clap::Parser;
-use fungi::{
-    commands::{self, Commands, FungiArgs},
-    config::FungiConfig,
-};
+use fungi::commands::{self, Commands, FungiArgs};
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
-    let args = FungiArgs::parse();
-    let config = match args.command {
-        Some(Commands::Init) => FungiConfig::default(),
-        _ => FungiConfig::apply_from_args(&args).unwrap(),
-    };
+    let fungi_args = FungiArgs::parse();
 
-    match args.command {
-        Some(Commands::Init) => commands::init(&args),
-        Some(Commands::Daemon {
-            ..
-        }) => commands::daemon(args, &config).await,
-        Some(Commands::Wasi) => commands::wasi(&args).await,
-        Some(Commands::Mush { peer }) => commands::mush(&args, peer).await,
+    match fungi_args.command {
+        Some(Commands::Daemon(args)) => commands::daemon(args, true).await,
+        Some(Commands::Wasi(args)) => commands::wasi(args).await,
+        Some(Commands::Mush(args)) => commands::mush(args).await,
         None => println!("No command provided"),
     }
 }

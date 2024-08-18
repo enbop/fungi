@@ -1,5 +1,8 @@
 use super::listeners::{MushListener, WasiListener};
-use crate::{commands::FungiArgs, config::FungiConfig};
+use crate::{
+    commands::{DaemonArgs, FungiDir},
+    config::FungiConfig,
+};
 use fungi_gateway::{SwarmDaemon, TSwarm};
 use fungi_util::tcp_tunneling;
 use libp2p::StreamProtocol;
@@ -7,17 +10,25 @@ use libp2p::StreamProtocol;
 pub struct FungiDaemon {
     pub swarm_daemon: SwarmDaemon,
     config: FungiConfig,
-    args: FungiArgs,
+    args: DaemonArgs,
     mush_listener: MushListener,
     wasi_listener: WasiListener,
 }
 
 impl FungiDaemon {
-    pub async fn new(args: FungiArgs, config: FungiConfig) -> Self {
-        let swarm_daemon = SwarmDaemon::new(&args.fungi_dir(), |mut swarm| {
-            apply_listen(&mut swarm, &config);
+    pub async fn new(args: DaemonArgs) -> Self {
+        let fungi_dir = args.fungi_dir();
+        println!("Fungi directory: {:?}", fungi_dir);
+
+        let mut config = FungiConfig::apply_from_dir(&fungi_dir).unwrap();
+        if let Some(allow_all_peers) = args.debug_allow_all_peers {
+            config.set_mush_daemon_allow_all_peers(allow_all_peers);
+        }
+
+        let swarm_daemon = SwarmDaemon::new(&args.fungi_dir(), |swarm| {
+            apply_listen(swarm, &config);
             #[cfg(feature = "tcp-tunneling")]
-            apply_tcp_tunneling(&mut swarm, &config);
+            apply_tcp_tunneling(swarm, &config);
         })
         .await
         .unwrap();

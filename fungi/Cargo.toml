@@ -5,6 +5,18 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bin]]
+name = "mush"
+path = "src/bins/mush.rs"
+
+[[bin]]
+name = "fungi-daemon"
+path = "src/bins/fungi-daemon.rs"
+
+[[bin]]
+name = "fungi-wasi"
+path = "src/bins/fungi-wasi.rs"
+
 [features]
 default = ["tcp-tunneling"]
 tcp-tunneling = []

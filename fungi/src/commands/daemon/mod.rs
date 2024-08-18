@@ -1,13 +1,15 @@
 mod daemon;
 pub mod listeners;
-use super::FungiArgs;
-use crate::config::FungiConfig;
+use super::DaemonArgs;
+use tokio::sync::OnceCell;
 
-pub async fn daemon(args: FungiArgs, config: &FungiConfig) {
+static ALL_IN_ONE_BINARY: OnceCell<bool> = OnceCell::const_new();
+
+pub async fn daemon(args: DaemonArgs, all_in_one_binary: bool) {
+    ALL_IN_ONE_BINARY.set(all_in_one_binary).unwrap();
+
     println!("Starting Fungi daemon...");
-    let fungi_dir = args.fungi_dir();
-    println!("Fungi directory: {:?}", fungi_dir);
-    let mut daemon = daemon::FungiDaemon::new(args, config.clone()).await;
+    let mut daemon = daemon::FungiDaemon::new(args).await;
     daemon.start().await;
 
     println!("Local Peer ID: {}", daemon.swarm_daemon.local_peer_id());

@@ -1,26 +1,22 @@
-use std::path::Path;
-
 use crate::DEFAULT_CONFIG_FILE;
+use std::path::{Path, PathBuf};
 
-use super::FungiArgs;
-
-pub fn init(args: &FungiArgs) {
+pub fn init(fungi_dir: &PathBuf) {
     println!("Initializing Fungi...");
-    let fungi_dir = args.fungi_dir();
 
     // check if the directory exists
     if fungi_dir.exists() {
         println!("Fungi is already initialized");
         return;
     }
-    std::fs::create_dir(&fungi_dir).unwrap();
+    std::fs::create_dir(fungi_dir).unwrap();
 
     // create config.toml
     let config = fungi_dir.join(DEFAULT_CONFIG_FILE);
     std::fs::File::create(config).unwrap();
 
     // create .keys
-    init_keypair(&fungi_dir);
+    init_keypair(fungi_dir);
 
     println!("Fungi initialized at {}", fungi_dir.display());
 }
