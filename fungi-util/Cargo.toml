@@ -16,4 +16,4 @@ tokio = { version = "1", features = ["full"] }
 libp2p-swarm = "0.44"
 libp2p-stream = "0.1.0-alpha"
 libp2p-identity = "0.2"
-interprocess = { version = "2.2", features = ["tokio"] }
+interprocess = { workspace = true }

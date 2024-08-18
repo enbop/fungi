@@ -1834,8 +1834,7 @@ dependencies = [
 [[package]]
 name = "interprocess"
 version = "2.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2f4e4a06d42fab3e85ab1b419ad32b09eab58b901d40c57935ff92db3287a13"
+source = "git+https://github.com/kotauskas/interprocess?rev=db6c36d1ccf86e607490e116d15ec7dbca1500af#db6c36d1ccf86e607490e116d15ec7dbca1500af"
 dependencies = [
  "doctest-file",
  "futures-core",

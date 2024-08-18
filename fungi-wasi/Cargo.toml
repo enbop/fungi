@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-interprocess = { version = "2.2", features = ["tokio"] }
+interprocess = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 futures = { workspace = true }
 anyhow = { workspace = true }
