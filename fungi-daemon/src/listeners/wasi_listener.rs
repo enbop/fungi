@@ -11,7 +11,7 @@ use tokio::{
     process::{Child, Command},
 };
 
-use crate::commands::daemon::ALL_IN_ONE_BINARY;
+use crate::ALL_IN_ONE_BINARY;
 
 struct WasiChild {
     process: Child,

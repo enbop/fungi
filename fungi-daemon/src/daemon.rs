@@ -1,8 +1,6 @@
 use super::listeners::{MushListener, WasiListener};
-use crate::{
-    commands::{DaemonArgs, FungiDir},
-    config::FungiConfig,
-};
+use crate::DaemonArgs;
+use fungi_config::{FungiConfig, FungiDir};
 use fungi_gateway::{SwarmDaemon, TSwarm};
 use fungi_util::tcp_tunneling;
 use libp2p::StreamProtocol;
@@ -35,7 +33,10 @@ impl FungiDaemon {
 
         let libp2p_stream_control = swarm_daemon.stream_control.clone();
 
-        let wasi_bin_path = args.wasi_bin_path.as_ref().map(|path| path.parse().unwrap());
+        let wasi_bin_path = args
+            .wasi_bin_path
+            .as_ref()
+            .map(|path| path.parse().unwrap());
         let wasi_listener = WasiListener::new(fungi_dir.clone(), wasi_bin_path);
         Self {
             swarm_daemon,

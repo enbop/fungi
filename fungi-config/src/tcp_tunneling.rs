@@ -1,6 +1,6 @@
 use std::net::{AddrParseError, SocketAddr};
 
-use libp2p::Multiaddr;
+use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]

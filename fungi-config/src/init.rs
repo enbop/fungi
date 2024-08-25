@@ -1,7 +1,5 @@
-use crate::DEFAULT_CONFIG_FILE;
+use crate::{DEFAULT_CONFIG_FILE, FungiDir};
 use std::{io, path::Path};
-
-use super::FungiDir;
 
 pub fn init(dirs: &impl FungiDir) -> io::Result<()> {
     let fungi_dir = dirs.fungi_dir();
@@ -31,7 +29,7 @@ pub fn init(dirs: &impl FungiDir) -> io::Result<()> {
 
 pub fn init_keypair(fungi_dir: &Path) -> io::Result<()> {
     println!("Generating key pair...");
-    let keypair = libp2p::identity::Keypair::generate_secp256k1();
+    let keypair = libp2p_identity::Keypair::generate_secp256k1();
     println!(
         "Key pair generated {}:{:?}",
         keypair.key_type(),

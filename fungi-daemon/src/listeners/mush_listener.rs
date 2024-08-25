@@ -1,9 +1,6 @@
-use crate::{
-    commands::{DaemonArgs, FungiDir},
-    config::FungiConfig,
-};
-
 use super::WasiListener;
+use crate::DaemonArgs;
+use fungi_config::{FungiConfig, FungiDir};
 use fungi_util::{copy_stream, ipc};
 use futures::StreamExt;
 use interprocess::local_socket::tokio::{prelude::*, Stream as IpcStream};

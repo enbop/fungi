@@ -26,10 +26,11 @@ log = { workspace = true }
 env_logger = "0.11"
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
-toml = "0.8"
-serde = { version = "1", features = ["derive"] }
+serde = { workspace = true }
 home = "0.5"
 thiserror = "1.0"
+fungi-config = { path = "../fungi-config" }
+fungi-daemon = { path = "../fungi-daemon", features = ["cli"] }
 fungi-gateway = { path = "../fungi-gateway" }
 fungi-util = { path = "../fungi-util" }
 fungi-wasi = { path = "../fungi-wasi" }
@@ -44,7 +45,6 @@ libp2p = { version = "0.53", features = [
     "serde",
     "secp256k1",
 ] }
-libp2p-stream = "0.1.0-alpha"
 futures = { workspace = true }
 bincode = { workspace = true }
 interprocess = { workspace = true }

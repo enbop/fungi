@@ -1,4 +1,4 @@
-use libp2p::PeerId;
+use libp2p_identity::PeerId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]

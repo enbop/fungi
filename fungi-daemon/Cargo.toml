@@ -1,0 +1,30 @@
+[package]
+name = "fungi-daemon"
+version = "0.1.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+cli = ["clap"]
+
+[dependencies]
+fungi-config = { path = "../fungi-config" }
+fungi-gateway = { path = "../fungi-gateway" }
+fungi-util = { path = "../fungi-util" }
+log = { workspace = true }
+once_cell = { workspace = true }
+tokio = { version = "1", features = ["full"] }
+libp2p = "0.53"
+home = "0.5"
+futures = { workspace = true }
+bincode = { workspace = true }
+interprocess = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+libp2p-stream = "0.1.0-alpha"
+
+[dependencies.clap]
+version = "4"
+features = ["derive"]
+optional = true

@@ -1,14 +1,14 @@
 uniffi::include_scaffolding!("export");
 
-use std::sync::Mutex;
-
-use fungi::{self, commands::{daemon::{FungiDaemon, ALL_IN_ONE_BINARY}, init, DaemonArgs}};
+use fungi_daemon::{DaemonArgs, FungiDaemon, ALL_IN_ONE_BINARY};
 use once_cell::sync::Lazy;
+use std::sync::Mutex;
 use tokio::{runtime::Runtime, sync::oneshot};
 use uniffi::deps::log::{self, LevelFilter};
 
 static TOKIO_RUNTIME: Lazy<Runtime> = Lazy::new(|| Runtime::new().unwrap());
-static FUNGI_DAEMON_CANCEL_TX: Lazy<Mutex<Option<oneshot::Sender<()>>>> = Lazy::new(|| Default::default());
+static FUNGI_DAEMON_CANCEL_TX: Lazy<Mutex<Option<oneshot::Sender<()>>>> =
+    Lazy::new(|| Default::default());
 
 enum LogLevel {
     Off,
@@ -48,11 +48,18 @@ fn start_fungi_daemon_block(fungi_dir: String, wasi_bin_path: String) {
     FUNGI_DAEMON_CANCEL_TX.lock().unwrap().replace(tx);
     TOKIO_RUNTIME.block_on(async {
         // TODO args
-        let args = DaemonArgs { fungi_dir: Some(fungi_dir), wasi_bin_path: Some(wasi_bin_path), debug_allow_all_peers: Some(true) };
-        init(&args).unwrap();
+        let args = DaemonArgs {
+            fungi_dir: Some(fungi_dir),
+            wasi_bin_path: Some(wasi_bin_path),
+            debug_allow_all_peers: Some(true),
+        };
+        fungi_config::init(&args).unwrap();
         let mut daemon = FungiDaemon::new(args).await;
         daemon.start().await;
-        log::info!("Fungi local peer id: {:?}", daemon.swarm_daemon.local_peer_id());
+        log::info!(
+            "Fungi local peer id: {:?}",
+            daemon.swarm_daemon.local_peer_id()
+        );
         rx.await.ok();
         log::info!("Fungi daemon stopped");
     });

@@ -1,5 +1,6 @@
 use clap::Parser;
-use fungi::commands::{self, DaemonArgs};
+use fungi::commands;
+use fungi_daemon::DaemonArgs;
 
 #[tokio::main]
 async fn main() {

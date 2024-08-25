@@ -1,14 +1,8 @@
-mod daemon;
-pub use daemon::FungiDaemon;
-pub mod listeners;
-use super::DaemonArgs;
-use tokio::sync::OnceCell;
-
-pub static ALL_IN_ONE_BINARY: OnceCell<bool> = OnceCell::const_new();
+use fungi_daemon::{DaemonArgs, FungiDaemon, ALL_IN_ONE_BINARY};
 
 pub async fn daemon(args: DaemonArgs, all_in_one_binary: bool) {
     ALL_IN_ONE_BINARY.set(all_in_one_binary).unwrap();
-    crate::commands::init(&args).unwrap();
+    fungi_config::init(&args).unwrap();
 
     println!("Starting Fungi daemon...");
     let mut daemon = FungiDaemon::new(args).await;

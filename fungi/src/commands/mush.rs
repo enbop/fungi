@@ -1,6 +1,6 @@
-use crate::commands::FungiDir;
-
-use super::{daemon::listeners::MushMessage, MushArgs};
+use super::MushArgs;
+use fungi_config::FungiDir;
+use fungi_daemon::listeners::MushMessage;
 use fungi_util::ipc;
 use fungi_wasi::IpcMessage;
 use interprocess::local_socket::{
@@ -11,7 +11,7 @@ use std::io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub async fn mush(args: MushArgs) {
-    crate::commands::init(&args).unwrap();
+    fungi_config::init(&args).unwrap();
 
     println!("Connecting to fungi daemon");
 

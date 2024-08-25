@@ -1319,6 +1319,8 @@ dependencies = [
  "bincode",
  "clap",
  "env_logger 0.11.3",
+ "fungi-config",
+ "fungi-daemon",
  "fungi-gateway",
  "fungi-util",
  "fungi-wasi",
@@ -1326,13 +1328,42 @@ dependencies = [
  "home",
  "interprocess",
  "libp2p",
- "libp2p-stream",
  "log",
  "rand",
  "serde",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "fungi-config"
+version = "0.1.1"
+dependencies = [
+ "libp2p-identity",
+ "multiaddr",
+ "serde",
  "toml 0.8.13",
+]
+
+[[package]]
+name = "fungi-daemon"
+version = "0.1.1"
+dependencies = [
+ "bincode",
+ "clap",
+ "fungi-config",
+ "fungi-gateway",
+ "fungi-util",
+ "futures",
+ "home",
+ "interprocess",
+ "libp2p",
+ "libp2p-stream",
+ "log",
+ "once_cell",
+ "rand",
+ "serde",
+ "tokio",
 ]
 
 [[package]]
@@ -1357,6 +1388,8 @@ dependencies = [
  "android_logger",
  "anyhow",
  "fungi",
+ "fungi-config",
+ "fungi-daemon",
  "once_cell",
  "tokio",
  "uniffi",
