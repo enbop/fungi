@@ -1314,7 +1314,7 @@ dependencies = [
 
 [[package]]
 name = "fungi"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "bincode",
  "clap",
@@ -1337,7 +1337,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-config"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "libp2p-identity",
  "multiaddr",
@@ -1347,7 +1347,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-daemon"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "bincode",
  "clap",
@@ -1367,8 +1367,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "fungi-daemon-uniffi-binding"
+version = "0.2.0"
+dependencies = [
+ "android_logger",
+ "anyhow",
+ "fungi-config",
+ "fungi-daemon",
+ "once_cell",
+ "tokio",
+ "uniffi",
+]
+
+[[package]]
 name = "fungi-gateway"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-result",
@@ -1382,22 +1395,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "fungi-mobile-binding"
-version = "0.1.0"
-dependencies = [
- "android_logger",
- "anyhow",
- "fungi",
- "fungi-config",
- "fungi-daemon",
- "once_cell",
- "tokio",
- "uniffi",
-]
-
-[[package]]
 name = "fungi-util"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "futures",
  "interprocess",
@@ -1410,7 +1409,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-wasi"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",

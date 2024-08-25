@@ -1,6 +1,6 @@
 [package]
 name = "fungi-config"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -8,5 +8,5 @@ edition = "2021"
 [dependencies]
 serde = { workspace = true }
 toml = "0.8"
-libp2p-identity = { workspace = true }
-multiaddr = { workspace = true }
+libp2p-identity = { version = "0.2", features = ["secp256k1"]}
+multiaddr = "0.18"

@@ -7,7 +7,7 @@ enum LogLevel {
   "Trace",
 };
 
-namespace fungi_mobile_binding {
+namespace fungi_daemon_binding {
 
     string version();
 

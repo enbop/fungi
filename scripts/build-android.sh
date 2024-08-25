@@ -17,10 +17,10 @@ if [ "$1" == "debug" ]; then
     cargo ndk \
         -t $2 \
         -o dist/android-output/jniLibs build \
-        -p fungi-mobile-binding
+        -p fungi-daemon-uniffi-binding
 
     cargo run -p uniffi-bindgen generate \
-        --library target/$target_folder/debug/libfungi_mobile_binding.so \
+        --library target/$target_folder/debug/libfungi_daemon_binding.so \
         --language kotlin \
         --out-dir dist/android-binding/
 
@@ -35,9 +35,9 @@ cargo ndk \
     -t armeabi-v7a \
     -t arm64-v8a \
     -o dist/android-output/jniLibs build \
-    -p fungi-mobile-binding --release
+    -p fungi-daemon-uniffi-binding --release
 
 cargo run -p uniffi-bindgen generate \
-    --library target/i686-linux-android/release/libfungi_mobile_binding.so \
+    --library target/i686-linux-android/release/libfungi_daemon_binding.so \
     --language kotlin \
     --out-dir dist/android-binding/

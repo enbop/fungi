@@ -1,16 +1,15 @@
 [package]
-name = "fungi-mobile-binding"
-version = "0.1.0"
+name = "fungi-daemon-uniffi-binding"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
 crate_type = ["cdylib", "staticlib"]
-name = "fungi_mobile_binding"
+name = "fungi_daemon_binding"
 
 [dependencies]
-fungi ={ path = "../.." }
-fungi-config = { path = "../../../fungi-config" }
-fungi-daemon = { path = "../../../fungi-daemon" }
+fungi-config = { path = "../fungi-config" }
+fungi-daemon = { path = "../fungi-daemon" }
 uniffi = { version = "0.27" }
 anyhow = "1"
 once_cell = "1"
