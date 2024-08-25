@@ -1,4 +1,4 @@
-mod daemon;
+pub mod daemon;
 mod init;
 mod mush;
 mod wasi;
@@ -28,6 +28,9 @@ pub struct FungiArgs {
 pub struct DaemonArgs {
     #[arg(short, long)]
     pub fungi_dir: Option<String>,
+
+    #[arg(long)]
+    pub wasi_bin_path: Option<String>,
 
     /// DEBUG ONLY: Allow all inbound connections
     #[arg(long)]

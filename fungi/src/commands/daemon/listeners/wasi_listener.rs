@@ -2,6 +2,7 @@ use libp2p::PeerId;
 use std::{
     collections::HashMap,
     io,
+    path::PathBuf,
     process::Stdio,
     sync::{Arc, Mutex},
 };
@@ -21,12 +22,16 @@ struct WasiChild {
 #[derive(Clone)]
 pub struct WasiListener {
     child_process_map: Arc<Mutex<HashMap<String, WasiChild>>>, // TODO
+    wasi_bin_path: Option<PathBuf>,
+    fungi_dir: PathBuf,
 }
 
 impl WasiListener {
-    pub fn new() -> Self {
+    pub fn new(fungi_dir: PathBuf, wasi_bin_path: Option<PathBuf>) -> Self {
         Self {
             child_process_map: Arc::new(Mutex::new(HashMap::new())),
+            wasi_bin_path,
+            fungi_dir,
         }
     }
 
@@ -42,8 +47,12 @@ impl WasiListener {
                 .stdout(Stdio::piped())
                 .spawn()?
         } else {
-            let wasi_path = self_bin.parent().unwrap().join("fungi-wasi");
+            let wasi_path = match self.wasi_bin_path {
+                Some(ref path) => path.clone(),
+                None => self_bin.parent().unwrap().join("fungi-wasi"),
+            };
             Command::new(wasi_path)
+                .args(["--fungi-dir", self.fungi_dir.to_str().unwrap()])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .spawn()?
@@ -63,9 +72,9 @@ impl WasiListener {
                     break;
                 }
                 let msg = String::from_utf8_lossy(&buf[..n]);
-                println!("child msg: {}", msg);
+                log::debug!("child msg: {}", msg);
             }
-            println!("child process exited");
+            log::debug!("child process exited");
         });
         self.child_process_map.lock().unwrap().insert(
             name.clone(),

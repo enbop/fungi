@@ -25,7 +25,7 @@ impl FungiDaemon {
             config.set_mush_daemon_allow_all_peers(allow_all_peers);
         }
 
-        let swarm_daemon = SwarmDaemon::new(&args.fungi_dir(), |swarm| {
+        let swarm_daemon = SwarmDaemon::new(&fungi_dir, |swarm| {
             apply_listen(swarm, &config);
             #[cfg(feature = "tcp-tunneling")]
             apply_tcp_tunneling(swarm, &config);
@@ -35,7 +35,8 @@ impl FungiDaemon {
 
         let libp2p_stream_control = swarm_daemon.stream_control.clone();
 
-        let wasi_listener = WasiListener::new();
+        let wasi_bin_path = args.wasi_bin_path.as_ref().map(|path| path.parse().unwrap());
+        let wasi_listener = WasiListener::new(fungi_dir.clone(), wasi_bin_path);
         Self {
             swarm_daemon,
             mush_listener: MushListener::new(

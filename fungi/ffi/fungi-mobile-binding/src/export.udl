@@ -1,0 +1,19 @@
+enum LogLevel {
+  "Off",
+  "Error",
+  "Warn",
+  "Info",
+  "Debug",
+  "Trace",
+};
+
+namespace fungi_mobile_binding {
+
+    string version();
+
+    void init_logger(LogLevel level);
+
+    void start_fungi_daemon_block(string config_path, string wasi_bin_path);
+
+    void stop_fungi_daemon();
+};

@@ -101,6 +101,7 @@ impl MushListener {
                         log::info!("Remote mush listener is closed");
                         break;
                     };
+                    log::info!("Remote mush listener accepted connection from peer: {:?}", peer_id);
                     if let Some(allow_peers) = mushd_allow_peers.as_ref() {
                         let allow_peers = allow_peers.lock().unwrap();
                         if !allow_peers.contains(&peer_id) {
@@ -157,13 +158,21 @@ impl MushListener {
         remote_stream: libp2p::Stream,
         mut wasi_listener: WasiListener,
     ) {
-        let Ok(child_wasi_ipc_name) = wasi_listener.spawn_wasi_process(Some(remote_peer_id)).await
-        else {
-            return; // TODO handle error and send to remote
+        let child_wasi_ipc_name = match wasi_listener.spawn_wasi_process(Some(remote_peer_id)).await
+        {
+            Ok(name) => name,
+            Err(e) => {
+                log::error!("Failed to spawn WASI process: {:?}", e);
+                return;
+            }
         };
+
+        log::info!("Connecting to WASI process {}", child_wasi_ipc_name);
         let Ok(wasi_stream) = ipc::connect_ipc(&child_wasi_ipc_name).await else {
+            log::error!("Failed to connect to WASI process");
             return; // TODO handle error and send to remote
         };
+        log::info!("Connected to WASI process");
         copy_stream(remote_stream, wasi_stream).await;
     }
 }
