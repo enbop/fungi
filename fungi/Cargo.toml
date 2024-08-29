@@ -6,20 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [[bin]]
-name = "mush"
-path = "src/bins/mush.rs"
-
-[[bin]]
 name = "fungi-daemon"
 path = "src/bins/fungi-daemon.rs"
 
-[[bin]]
-name = "fungi-wasi"
-path = "src/bins/fungi-wasi.rs"
-
 [features]
-default = ["tcp-tunneling"]
+default = ["tcp-tunneling", "daemon"]
 tcp-tunneling = []
+daemon = ["fungi-daemon"]
 
 [dependencies]
 log = { workspace = true }
@@ -30,7 +23,7 @@ serde = { workspace = true }
 home = "0.5"
 thiserror = "1.0"
 fungi-config = { path = "../fungi-config" }
-fungi-daemon = { path = "../fungi-daemon", features = ["cli"] }
+fungi-daemon = { path = "../fungi-daemon", features = ["cli"], optional = true }
 fungi-gateway = { path = "../fungi-gateway" }
 fungi-util = { path = "../fungi-util" }
 fungi-wasi = { path = "../fungi-wasi" }

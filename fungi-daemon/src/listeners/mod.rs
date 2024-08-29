@@ -1,5 +1,3 @@
-mod wasi_listener;
-mod mush_listener;
+mod fungi_remote_access;
 
-pub use wasi_listener::WasiListener;
-pub use mush_listener::{MushListener, MushMessage};
+pub use fungi_remote_access::{local_listener::FRALocalListener, peer_listener::FRAPeerListener};

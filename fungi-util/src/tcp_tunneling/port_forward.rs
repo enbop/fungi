@@ -1,10 +1,8 @@
 use std::net::SocketAddr;
-
 use libp2p_identity::PeerId;
 use libp2p_stream::Control;
 use libp2p_swarm::StreamProtocol;
-
-use crate::copy_stream;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 pub async fn forward_port_to_peer(
     mut stream_control: Control,
@@ -18,7 +16,7 @@ pub async fn forward_port_to_peer(
         listener.local_addr().unwrap()
     );
     loop {
-        let (tcp_stream, _) = listener.accept().await.unwrap();
+        let (mut tcp_stream, _) = listener.accept().await.unwrap();
         let libp2p_stream = stream_control
             .open_stream(target_peer, target_protocol.clone())
             .await
@@ -29,7 +27,7 @@ pub async fn forward_port_to_peer(
                 tcp_stream.peer_addr().unwrap(),
                 target_peer
             );
-            copy_stream(libp2p_stream, tcp_stream).await;
+            tokio::io::copy_bidirectional(&mut libp2p_stream.compat(), &mut tcp_stream).await.ok();
             println!("sub stream closed");
         });
     }

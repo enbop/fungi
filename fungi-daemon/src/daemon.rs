@@ -1,16 +1,20 @@
-use super::listeners::{MushListener, WasiListener};
-use crate::DaemonArgs;
+use crate::{
+    listeners::{FRALocalListener, FRAPeerListener},
+    DaemonArgs,
+};
 use fungi_config::{FungiConfig, FungiDir};
 use fungi_gateway::{SwarmDaemon, TSwarm};
-use fungi_util::tcp_tunneling;
-use libp2p::StreamProtocol;
+use std::path::PathBuf;
+use tokio::sync::OnceCell;
+
+static FUNGI_BIN_PATH: OnceCell<PathBuf> = OnceCell::const_new();
 
 pub struct FungiDaemon {
     pub swarm_daemon: SwarmDaemon,
     config: FungiConfig,
     args: DaemonArgs,
-    mush_listener: MushListener,
-    wasi_listener: WasiListener,
+    fra_local_listener: FRALocalListener,
+    fra_remote_listener: FRAPeerListener,
 }
 
 impl FungiDaemon {
@@ -18,9 +22,11 @@ impl FungiDaemon {
         let fungi_dir = args.fungi_dir();
         println!("Fungi directory: {:?}", fungi_dir);
 
+        FungiDaemon::init_fungi_bin_path(&args);
+
         let mut config = FungiConfig::apply_from_dir(&fungi_dir).unwrap();
         if let Some(allow_all_peers) = args.debug_allow_all_peers {
-            config.set_mush_daemon_allow_all_peers(allow_all_peers);
+            config.set_fra_allow_all_peers(allow_all_peers);
         }
 
         let swarm_daemon = SwarmDaemon::new(&fungi_dir, |swarm| {
@@ -33,28 +39,49 @@ impl FungiDaemon {
 
         let libp2p_stream_control = swarm_daemon.stream_control.clone();
 
-        let wasi_bin_path = args
-            .wasi_bin_path
-            .as_ref()
-            .map(|path| path.parse().unwrap());
-        let wasi_listener = WasiListener::new(fungi_dir.clone(), wasi_bin_path);
         Self {
             swarm_daemon,
-            mush_listener: MushListener::new(
+            fra_local_listener: FRALocalListener::new(args.clone(), libp2p_stream_control.clone()),
+            fra_remote_listener: FRAPeerListener::new(
                 args.clone(),
                 config.clone(),
-                wasi_listener.clone(),
                 libp2p_stream_control,
             ),
-            wasi_listener,
             args,
             config,
         }
     }
 
+    #[allow(unused_variables)]
+    fn init_fungi_bin_path(args: &DaemonArgs) {
+        let fungi_bin_path = args.fungi_bin_path.clone().map(PathBuf::from);
+        if let Some(fungi_bin_path) = fungi_bin_path {
+            FUNGI_BIN_PATH.set(fungi_bin_path).unwrap();
+            return;
+        }
+
+        #[cfg(feature = "daemon")]
+        let all_in_one_bin = true;
+        #[cfg(not(feature = "daemon"))]
+        let all_in_one_bin = false;
+
+        let self_bin = std::env::current_exe().unwrap();
+        let fungi_bin_path = if all_in_one_bin {
+            self_bin
+        } else {
+            self_bin.parent().unwrap().join("fungi")
+        };
+        FUNGI_BIN_PATH.set(fungi_bin_path).unwrap();
+    }
+
+    pub fn get_fungi_bin_path_unchecked() -> PathBuf {
+        FUNGI_BIN_PATH.get().unwrap().clone()
+    }
+
     pub async fn start(&mut self) {
         self.swarm_daemon.start_swarm_task();
-        self.mush_listener.start().await.unwrap();
+        self.fra_local_listener.start().await.unwrap();
+        self.fra_remote_listener.start().await.unwrap();
     }
 }
 

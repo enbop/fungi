@@ -1,6 +1,6 @@
 uniffi::include_scaffolding!("export");
 
-use fungi_daemon::{DaemonArgs, FungiDaemon, ALL_IN_ONE_BINARY};
+use fungi_daemon::{DaemonArgs, FungiDaemon};
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
 use tokio::{runtime::Runtime, sync::oneshot};
@@ -42,15 +42,14 @@ fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-fn start_fungi_daemon_block(fungi_dir: String, wasi_bin_path: String) {
-    ALL_IN_ONE_BINARY.set(false).unwrap();
+fn start_fungi_daemon_block(fungi_dir: String, fungi_bin_path: String) {
     let (tx, rx) = oneshot::channel();
     FUNGI_DAEMON_CANCEL_TX.lock().unwrap().replace(tx);
     TOKIO_RUNTIME.block_on(async {
         // TODO args
         let args = DaemonArgs {
             fungi_dir: Some(fungi_dir),
-            wasi_bin_path: Some(wasi_bin_path),
+            fungi_bin_path: Some(fungi_bin_path),
             debug_allow_all_peers: Some(true),
         };
         fungi_config::init(&args).unwrap();

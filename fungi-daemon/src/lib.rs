@@ -3,11 +3,8 @@ pub use daemon::FungiDaemon;
 use std::path::PathBuf;
 pub mod listeners;
 use fungi_config::{FungiDir, DEFAULT_FUNGI_DIR};
-use tokio::sync::OnceCell;
 #[cfg(feature = "cli")]
 use clap::Parser;
-
-pub static ALL_IN_ONE_BINARY: OnceCell<bool> = OnceCell::const_new();
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "cli", derive(Parser))]
@@ -16,12 +13,16 @@ pub struct DaemonArgs {
     pub fungi_dir: Option<String>,
 
     #[cfg_attr(feature = "cli", arg(long))]
-    pub wasi_bin_path: Option<String>,
+    pub fungi_bin_path: Option<String>,
 
     /// DEBUG ONLY: Allow all inbound connections
     #[cfg_attr(feature = "cli", arg(long))]
     pub debug_allow_all_peers: Option<bool>,
 }
+
+impl DaemonArgs {
+}
+
 
 impl FungiDir for DaemonArgs {
     fn fungi_dir(&self) -> PathBuf {

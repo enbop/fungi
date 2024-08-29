@@ -1,12 +1,12 @@
 mod libp2p;
-mod mushd;
+mod fra;
 mod tcp_tunneling;
 mod init;
 
 pub use init::init;
 
 use libp2p::*;
-use mushd::*;
+use fra::*;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tcp_tunneling::*;
@@ -16,7 +16,7 @@ pub const DEFAULT_FUNGI_DIR: &str = ".fungi";
 pub const DEFAULT_FUNGI_WASI_ROOT_DIR_NAME: &str = "root";
 pub const DEFAULT_FUNGI_WASI_BIN_DIR_NAME: &str = "bin";
 pub const DEFAULT_IPC_DIR_NAME: &str = ".ipc";
-pub const MUSH_LISTENER_ADDR: &str = ".fungi_mush.sock";
+pub const FRA_LISTENER_ADDR: &str = ".fungi_ra.sock"; // FRA: Fungi Remote Access
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct FungiConfig {
@@ -25,7 +25,7 @@ pub struct FungiConfig {
     #[serde(default)]
     pub libp2p: Libp2p,
     #[serde(default)]
-    pub mush_daemon: MushDaemon,
+    pub fungi_remote_access: FungiRemoteAccess,
 }
 
 impl FungiConfig {
@@ -36,8 +36,8 @@ impl FungiConfig {
         Ok(cfg)
     }
 
-    pub fn set_mush_daemon_allow_all_peers(&mut self, allow: bool) {
-        self.mush_daemon.allow_all_peers = allow;
+    pub fn set_fra_allow_all_peers(&mut self, allow: bool) {
+        self.fungi_remote_access.allow_all_peers = allow;
     }
 
     pub fn parse_toml(s: &str) -> Result<Self, toml::de::Error> {
@@ -64,7 +64,8 @@ pub trait FungiDir {
         dir
     }
 
-    fn mush_ipc_path(&self) -> PathBuf {
-        self.ipc_dir().join(MUSH_LISTENER_ADDR)
+    // FRA: Fungi Remote Access
+    fn fra_ipc_path(&self) -> PathBuf {
+        self.ipc_dir().join(FRA_LISTENER_ADDR)
     }
 }

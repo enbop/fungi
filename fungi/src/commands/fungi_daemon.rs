@@ -1,7 +1,7 @@
-use fungi_daemon::{DaemonArgs, FungiDaemon, ALL_IN_ONE_BINARY};
+pub use fungi_daemon::DaemonArgs;
+use fungi_daemon::FungiDaemon;
 
-pub async fn daemon(args: DaemonArgs, all_in_one_binary: bool) {
-    ALL_IN_ONE_BINARY.set(all_in_one_binary).unwrap();
+pub async fn run(args: DaemonArgs, all_in_one_binary: bool) {
     fungi_config::init(&args).unwrap();
 
     println!("Starting Fungi daemon...");

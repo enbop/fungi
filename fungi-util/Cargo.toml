@@ -17,3 +17,5 @@ libp2p-swarm = "0.44"
 libp2p-stream = "0.1.0-alpha"
 libp2p-identity = "0.2"
 interprocess = { workspace = true }
+tokio-util = { version = "0.7", features = ["compat"] }
+serde = { workspace = true }

@@ -1,3 +1,5 @@
+pub mod messages;
+
 use interprocess::local_socket::{
     self,
     tokio::{prelude::*, Stream},

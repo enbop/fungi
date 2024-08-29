@@ -43,7 +43,11 @@ impl WasiRuntime {
         })
     }
 
-    pub async fn command(&mut self, args: Vec<String>, stdio: StdioImpl) -> Result<WasiCommand> {
+    pub async fn command(
+        &mut self,
+        args: Vec<String>,
+        stdio: Option<StdioImpl>,
+    ) -> Result<WasiCommand> {
         let bin = &args[0];
         // find bin in bin_dir
         let bin_path = self.bin_dir.join(bin);
@@ -51,12 +55,20 @@ impl WasiRuntime {
             bail!("`{}` not found", bin);
         }
 
-        let wasi_ctx = WasiCtxBuilder::new()
-            .stdin(stdio.stdin) // TODO
-            .stdout(stdio.stdout)
-            .stderr(stdio.stderr)
-            .args(&args)
-            .build_p1();
+        let wasi_ctx = match stdio {
+            Some(stdio) => WasiCtxBuilder::new()
+                .stdin(stdio.stdin)
+                .stdout(stdio.stdout)
+                .stderr(stdio.stderr)
+                .args(&args)
+                .build_p1(),
+            None => WasiCtxBuilder::new()
+                .stdin(wasmtime_wasi::stdin())
+                .stdout(wasmtime_wasi::stdout())
+                .stderr(wasmtime_wasi::stderr())
+                .args(&args)
+                .build_p1(),
+        };
 
         let mut store: Store<WasiP1Ctx> = Store::new(&self.engine, wasi_ctx);
 
