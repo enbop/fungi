@@ -7,7 +7,7 @@ members = [
     "fungi-config",
     "fungi-daemon",
     "fungi-daemon-uniffi-binding",
-    "fungi-gateway",
+    "fungi-swarm",
     "fungi-util",
     "fungi-wasi",
     "uniffi-bindgen",
@@ -24,4 +24,3 @@ interprocess = { git = "https://github.com/kotauskas/interprocess", rev = "db6c3
     "tokio",
 ] }
 serde = { version = "1", features = ["derive"] }
-

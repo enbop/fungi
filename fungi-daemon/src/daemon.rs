@@ -3,7 +3,7 @@ use crate::{
     DaemonArgs,
 };
 use fungi_config::{FungiConfig, FungiDir};
-use fungi_gateway::{SwarmDaemon, TSwarm};
+use fungi_swarm::{SwarmDaemon, TSwarm};
 use std::path::PathBuf;
 use tokio::sync::OnceCell;
 

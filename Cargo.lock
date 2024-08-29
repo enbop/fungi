@@ -1321,7 +1321,7 @@ dependencies = [
  "env_logger 0.11.3",
  "fungi-config",
  "fungi-daemon",
- "fungi-gateway",
+ "fungi-swarm",
  "fungi-util",
  "fungi-wasi",
  "futures",
@@ -1352,7 +1352,7 @@ dependencies = [
  "bincode",
  "clap",
  "fungi-config",
- "fungi-gateway",
+ "fungi-swarm",
  "fungi-util",
  "futures",
  "home",
@@ -1381,7 +1381,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "fungi-gateway"
+name = "fungi-swarm"
 version = "0.2.0"
 dependencies = [
  "anyhow",
