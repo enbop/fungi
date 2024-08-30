@@ -1,7 +1,7 @@
 pub use fungi_daemon::DaemonArgs;
 use fungi_daemon::FungiDaemon;
 
-pub async fn run(args: DaemonArgs, all_in_one_binary: bool) {
+pub async fn run(args: DaemonArgs) {
     fungi_config::init(&args).unwrap();
 
     println!("Starting Fungi daemon...");

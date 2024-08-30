@@ -13,6 +13,7 @@ use std::{io::Write, process::exit};
 use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
 pub async fn run(args: FungiArgs) {
+    fungi_config::init(&args).unwrap();
     println!("Connecting to fungi daemon");
 
     let daemon_ipc_stream = ipc::connect_ipc(&args.fra_ipc_path().to_string_lossy()).await;

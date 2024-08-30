@@ -7,7 +7,7 @@ async fn main() {
 
     env_logger::init();
     let args = DaemonArgs::parse();
-    commands::fungi_daemon::run(args, false).await;
+    commands::fungi_daemon::run(args).await;
 }
 
 #[cfg(not(feature = "daemon"))]
