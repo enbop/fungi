@@ -1,0 +1,38 @@
+name: "Android Release"
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    tags:
+      - "v*"
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  android-release_build_and_publish:
+    name: Android release build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26d
+          add-to-path: false
+
+      - name: Install Rust
+        run: rustup update stable --no-self-update && rustup default stable && rustup target add x86_64-linux-android aarch64-linux-android
+
+      - run: cargo install cargo-ndk
+
+      - name: Build
+        run: ./scripts/build-android.sh
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      - name: GH publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload -R ${{ github.repository }} --clobber ${{ github.ref_name }} dist/fungi-android.tar.gz

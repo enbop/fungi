@@ -10,8 +10,7 @@ name = "fungi-daemon"
 path = "src/bins/fungi-daemon.rs"
 
 [features]
-default = ["tcp-tunneling", "daemon"]
-tcp-tunneling = []
+default = ["daemon"]
 daemon = ["fungi-daemon"]
 
 [dependencies]
