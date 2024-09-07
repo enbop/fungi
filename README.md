@@ -116,6 +116,8 @@ fungi -p ${PEER_ID_FROM_DEVICE_A}
 | iOS      | 💤     |
 | Web      | 💤     |
 
+*only support 64-bit, see: [Cranelift supports](https://docs.wasmtime.dev/stability-platform-support.html#compiler-support)
+
 ## Roadmap
 
 TODO

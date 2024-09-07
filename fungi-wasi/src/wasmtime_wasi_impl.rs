@@ -33,6 +33,7 @@ impl WasiRuntime {
         let mut config = Config::new();
         config.async_support(true);
         // TODO load from file
+        #[cfg(not(target_os = "android"))]
         config.cache_config_load_default().unwrap();
         let engine = Engine::new(&config).context("failed to create engine")?;
 

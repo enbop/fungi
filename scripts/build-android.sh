@@ -22,7 +22,7 @@ if [ "$1" == "debug" ]; then
 
     cargo ndk -t $2 build -p fungi --no-default-features
 
-    cp target/$target_folder/debug/fungi dist/android-output/jniLibs/$2/libfungi.so
+    cp target/$target_folder/debug/fungi dist/android-output/jniLibs/$2/fungi.so
 
     exit 0
 fi
@@ -46,7 +46,7 @@ cargo ndk \
     build \
     -p fungi --no-default-features --release
 
-cp target/x86_64-linux-android/release/fungi dist/android-output/jniLibs/x86_64/libfungi.so
-cp target/aarch64-linux-android/release/fungi dist/android-output/jniLibs/arm64-v8a/libfungi.so
+cp target/x86_64-linux-android/release/fungi dist/android-output/jniLibs/x86_64/fungi.so
+cp target/aarch64-linux-android/release/fungi dist/android-output/jniLibs/arm64-v8a/fungi.so
 
 tar -czvf dist/fungi-android.tar.gz dist/android-output dist/android-binding
