@@ -1,11 +1,4 @@
-use std::{
-    any::Any,
-    ops::{Deref, DerefMut},
-    path::Path,
-    time::Duration,
-};
-
-use crate::address_book;
+use crate::behaviours::address_book;
 use anyhow::{bail, Result};
 use async_result::{AsyncResult, Completer};
 use libp2p::{
@@ -14,6 +7,12 @@ use libp2p::{
     mdns, noise, ping,
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, PeerId, Swarm,
+};
+use std::{
+    any::Any,
+    ops::{Deref, DerefMut},
+    path::Path,
+    time::Duration,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
@@ -91,9 +90,7 @@ pub struct FungiBehaviours {
 
 impl SwarmDaemon {
     // TODO: error handling
-    pub async fn new(fungi_dir: &Path, apply: impl FnOnce(&mut TSwarm)) -> Result<Self> {
-        let keypair = get_keypair_from_dir(fungi_dir)?;
-
+    pub async fn new(keypair: Keypair, apply: impl FnOnce(&mut TSwarm)) -> Result<Self> {
         let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
             .with_tcp(
@@ -208,9 +205,3 @@ impl SwarmDaemon {
     }
 }
 
-fn get_keypair_from_dir(fungi_dir: &Path) -> Result<Keypair> {
-    let keypair_file = fungi_dir.join(".keys").join("keypair");
-    let encoded = std::fs::read(keypair_file)?;
-    let keypair = Keypair::from_protobuf_encoding(&encoded)?;
-    Ok(keypair)
-}

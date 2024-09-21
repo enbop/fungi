@@ -26,7 +26,7 @@ rand = { workspace = true }
 serde = { workspace = true }
 libp2p-stream = "0.1.0-alpha"
 tokio-util = { version = "0.7", features = ["compat"] }
-
+anyhow = { workspace = true }
 
 [dependencies.clap]
 version = "4"

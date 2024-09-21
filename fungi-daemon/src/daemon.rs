@@ -4,7 +4,8 @@ use crate::{
 };
 use fungi_config::{FungiConfig, FungiDir};
 use fungi_swarm::{SwarmDaemon, TSwarm};
-use std::path::PathBuf;
+use libp2p::identity::Keypair;
+use std::path::{Path, PathBuf};
 use tokio::sync::OnceCell;
 
 static FUNGI_BIN_PATH: OnceCell<PathBuf> = OnceCell::const_new();
@@ -29,7 +30,8 @@ impl FungiDaemon {
             config.set_fra_allow_all_peers(allow_all_peers);
         }
 
-        let swarm_daemon = SwarmDaemon::new(&fungi_dir, |swarm| {
+        let keypair = get_keypair_from_dir(&fungi_dir).unwrap();
+        let swarm_daemon = SwarmDaemon::new(keypair, |swarm| {
             apply_listen(swarm, &config);
             #[cfg(feature = "tcp-tunneling")]
             apply_tcp_tunneling(swarm, &config);
@@ -145,4 +147,11 @@ fn apply_tcp_tunneling(swarm: &mut TSwarm, config: &FungiConfig) {
             ));
         }
     }
+}
+
+fn get_keypair_from_dir(fungi_dir: &Path) -> anyhow::Result<Keypair> {
+    let keypair_file = fungi_dir.join(".keys").join("keypair");
+    let encoded = std::fs::read(keypair_file)?;
+    let keypair = Keypair::from_protobuf_encoding(&encoded)?;
+    Ok(keypair)
 }
