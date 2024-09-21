@@ -14,6 +14,8 @@ jobs:
   android-release_build_and_publish:
     name: Android release build and publish
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: nttld/setup-ndk@v1
