@@ -3,7 +3,7 @@ use crate::{
     DaemonArgs,
 };
 use fungi_config::{FungiConfig, FungiDir};
-use fungi_swarm::{SwarmDaemon, TSwarm};
+use fungi_swarm::{FungiSwarm, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
 use std::path::{Path, PathBuf};
 use tokio::sync::OnceCell;
@@ -11,7 +11,7 @@ use tokio::sync::OnceCell;
 static FUNGI_BIN_PATH: OnceCell<PathBuf> = OnceCell::const_new();
 
 pub struct FungiDaemon {
-    pub swarm_daemon: SwarmDaemon,
+    pub fungi_swarm: FungiSwarm,
     config: FungiConfig,
     args: DaemonArgs,
     fra_local_listener: FRALocalListener,
@@ -31,7 +31,7 @@ impl FungiDaemon {
         }
 
         let keypair = get_keypair_from_dir(&fungi_dir).unwrap();
-        let swarm_daemon = SwarmDaemon::new(keypair, |swarm| {
+        let fungi_swarm = FungiSwarm::new(keypair, |swarm| {
             apply_listen(swarm, &config);
             #[cfg(feature = "tcp-tunneling")]
             apply_tcp_tunneling(swarm, &config);
@@ -39,10 +39,10 @@ impl FungiDaemon {
         .await
         .unwrap();
 
-        let libp2p_stream_control = swarm_daemon.stream_control.clone();
+        let libp2p_stream_control = fungi_swarm.stream_control.clone();
 
         Self {
-            swarm_daemon,
+            fungi_swarm,
             fra_local_listener: FRALocalListener::new(args.clone(), libp2p_stream_control.clone()),
             fra_remote_listener: FRAPeerListener::new(
                 args.clone(),
@@ -81,7 +81,7 @@ impl FungiDaemon {
     }
 
     pub async fn start(&mut self) {
-        self.swarm_daemon.start_swarm_task();
+        self.fungi_swarm.start_swarm_task();
         self.fra_local_listener.start().await.unwrap();
         self.fra_remote_listener.start().await.unwrap();
     }

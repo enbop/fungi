@@ -10,7 +10,23 @@ log = { workspace = true }
 once_cell = { workspace = true }
 anyhow = { workspace = true }
 tokio = { version = "1", features = ["full"] }
-libp2p = { version = "0.53" , features = ["macros", "noise", "mdns", "ping", "tcp", "quic", "tokio", "yamux", "serde"] }
+libp2p = { version = "0.53", features = [
+    "macros",
+    "noise",
+    "mdns",
+    "ping",
+    "tcp",
+    "quic",
+    "tokio",
+    "yamux",
+    "serde",
+    "identify",
+    "relay",
+    "dcutr",
+    "rsa",
+    "secp256k1",
+    "ed25519",
+] }
 libp2p-stream = "0.1.0-alpha"
 fungi-util = { path = "../fungi-util" }
 void = "1"

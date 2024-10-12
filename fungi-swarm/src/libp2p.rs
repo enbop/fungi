@@ -1,12 +1,9 @@
-use crate::behaviours::address_book;
+use crate::behaviours::FungiBehaviours;
 use anyhow::{bail, Result};
 use async_result::{AsyncResult, Completer};
 use libp2p::{
-    futures::StreamExt,
-    identity::Keypair,
-    mdns, noise, ping,
-    swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, PeerId, Swarm,
+    futures::StreamExt, identity::Keypair, mdns, noise, swarm::SwarmEvent, tcp, yamux, PeerId,
+    Swarm,
 };
 use std::{
     any::Any,
@@ -73,23 +70,17 @@ impl SwarmState {
     }
 }
 
-pub struct SwarmDaemon {
+pub struct FungiSwarm {
     local_peer_id: PeerId,
     swarm_state: SwarmState,
     pub stream_control: libp2p_stream::Control,
 }
 
-#[derive(NetworkBehaviour)]
-pub struct FungiBehaviours {
-    ping: ping::Behaviour,
-    pub stream: libp2p_stream::Behaviour,
-    mdns: mdns::tokio::Behaviour,
-    pub address_book: address_book::Behaviour,
-}
-
-impl SwarmDaemon {
-    // TODO: error handling
+impl FungiSwarm {
     pub async fn new(keypair: Keypair, apply: impl FnOnce(&mut TSwarm)) -> Result<Self> {
+        let mdns =
+            mdns::tokio::Behaviour::new(mdns::Config::default(), keypair.public().to_peer_id())?;
+
         let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
             .with_tcp(
@@ -98,17 +89,9 @@ impl SwarmDaemon {
                 yamux::Config::default,
             )?
             .with_quic()
-            .with_behaviour(|key| FungiBehaviours {
-                ping: ping::Behaviour::new(ping::Config::new()),
-                stream: libp2p_stream::Behaviour::new(),
-                mdns: mdns::tokio::Behaviour::new(
-                    mdns::Config::default(),
-                    key.public().to_peer_id(),
-                )
-                .unwrap(), // TODO if-watch unwrap
-                address_book: Default::default(),
-            })?
-            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
+            .with_relay_client(noise::Config::new, yamux::Config::default)?
+            .with_behaviour(|keypair, relay| FungiBehaviours::new(keypair, relay, mdns))?
+            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
 
         let local_peer_id = *swarm.local_peer_id();

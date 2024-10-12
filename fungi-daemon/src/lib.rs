@@ -2,9 +2,9 @@ mod daemon;
 pub use daemon::FungiDaemon;
 use std::path::PathBuf;
 pub mod listeners;
-use fungi_config::{FungiDir, DEFAULT_FUNGI_DIR};
 #[cfg(feature = "cli")]
 use clap::Parser;
+use fungi_config::{FungiDir, DEFAULT_FUNGI_DIR};
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "cli", derive(Parser))]
@@ -20,9 +20,7 @@ pub struct DaemonArgs {
     pub debug_allow_all_peers: Option<bool>,
 }
 
-impl DaemonArgs {
-}
-
+impl DaemonArgs {}
 
 impl FungiDir for DaemonArgs {
     fn fungi_dir(&self) -> PathBuf {
