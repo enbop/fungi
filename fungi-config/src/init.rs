@@ -15,7 +15,7 @@ pub fn init(dirs: &impl FungiDir) -> io::Result<()> {
     std::fs::File::create(config)?;
 
     // create .keys
-    init_keypair(&fungi_dir)?;
+    fungi_util::keypair::init_keypair(&fungi_dir)?;
 
     // create wasi root and bin
     let wasi_root = dirs.wasi_root_dir();
@@ -24,21 +24,5 @@ pub fn init(dirs: &impl FungiDir) -> io::Result<()> {
     std::fs::create_dir(&wasi_bin)?;
 
     println!("Fungi initialized at {}", fungi_dir.display());
-    Ok(())
-}
-
-pub fn init_keypair(fungi_dir: &Path) -> io::Result<()> {
-    println!("Generating key pair...");
-    let keypair = libp2p_identity::Keypair::generate_secp256k1();
-    println!(
-        "Key pair generated {}:{:?}",
-        keypair.key_type(),
-        keypair.public()
-    );
-    let encoded = keypair.to_protobuf_encoding().unwrap();
-    std::fs::create_dir(fungi_dir.join(".keys"))?;
-    let keypair_file = fungi_dir.join(".keys").join("keypair");
-    std::fs::write(&keypair_file, encoded)?;
-    println!("Key pair saved at {}", keypair_file.display());
     Ok(())
 }

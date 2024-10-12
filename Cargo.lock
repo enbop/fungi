@@ -1339,6 +1339,7 @@ dependencies = [
 name = "fungi-config"
 version = "0.2.0"
 dependencies = [
+ "fungi-util",
  "libp2p-identity",
  "multiaddr",
  "serde",
@@ -1400,6 +1401,7 @@ dependencies = [
 name = "fungi-util"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
  "futures",
  "interprocess",
  "libp2p-identity",

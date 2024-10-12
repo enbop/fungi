@@ -11,7 +11,6 @@ use libp2p::{
 use std::{
     any::Any,
     ops::{Deref, DerefMut},
-    path::Path,
     time::Duration,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -204,4 +203,3 @@ impl SwarmDaemon {
         }
     }
 }
-
