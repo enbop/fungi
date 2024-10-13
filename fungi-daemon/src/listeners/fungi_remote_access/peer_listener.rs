@@ -1,6 +1,6 @@
 use crate::{DaemonArgs, FungiDaemon};
 use fungi_config::{FungiConfig, FungiDir};
-use fungi_util::ipc::messages::ForwardStdioMessage;
+use fungi_util::{ipc::messages::ForwardStdioMessage, protocols::FUNGI_REMOTE_ACCESS_PROTOCOL};
 use futures::{AsyncReadExt as _, AsyncWriteExt as _, StreamExt};
 use libp2p::PeerId;
 use std::{
@@ -15,7 +15,6 @@ use tokio::{
     process::{Child, Command},
 };
 
-use super::FUNGI_REMOTE_ACCESS_PROTOCOL;
 type AllowedPeers = Arc<Option<Mutex<Vec<PeerId>>>>;
 type ChildProcesses = Arc<Mutex<HashMap<PeerId, Vec<Child>>>>;
 

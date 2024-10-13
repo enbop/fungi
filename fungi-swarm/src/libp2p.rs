@@ -1,9 +1,15 @@
 use crate::behaviours::FungiBehaviours;
 use anyhow::{bail, Result};
 use async_result::{AsyncResult, Completer};
+use fungi_util::protocols::FUNGI_RELAY_HANDSHAKE_PROTOCOL;
 use libp2p::{
-    futures::StreamExt, identity::Keypair, mdns, noise, swarm::SwarmEvent, tcp, yamux, PeerId,
-    Swarm,
+    futures::{AsyncReadExt, StreamExt},
+    identity::Keypair,
+    mdns,
+    multiaddr::Protocol,
+    noise,
+    swarm::SwarmEvent,
+    tcp, yamux, Multiaddr, PeerId, Swarm,
 };
 use std::{
     any::Any,
@@ -184,5 +190,56 @@ impl FungiSwarm {
             }
             log::info!("Swarm loop exited");
         }
+    }
+
+    pub async fn listen_relay(&mut self, relay_addr: Multiaddr) -> Result<()> {
+        if !self.is_started() {
+            bail!("Swarm not started");
+        }
+        let relay_peer = relay_addr
+            .iter()
+            .find_map(|p| {
+                if let Protocol::P2p(peer_id) = p {
+                    Some(peer_id)
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| anyhow::anyhow!("Invalid relay address"))?;
+
+        // 1. handshake with relay
+        // https://github.com/libp2p/rust-libp2p/blob/9a45db3f82b760c93099e66ec77a7a772d1f6cd3/examples/dcutr/src/main.rs#L139
+        // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
+        // our local public address and (b) enable a freshly started relay to learn its public address.
+        let relay_addr_cl = relay_addr.clone();
+        self.invoke_swarm(|swarm| swarm.dial(relay_addr_cl))
+            .await??;
+        let Ok(stream_result) = tokio::time::timeout(
+            Duration::from_secs(3),
+            self.stream_control
+                .open_stream(relay_peer, FUNGI_RELAY_HANDSHAKE_PROTOCOL),
+        )
+        .await
+        else {
+            bail!("Handshake timeout")
+        };
+        let mut stream = match stream_result {
+            Ok(stream) => stream,
+            Err(e) => bail!("Handshake failed: {:?}", e),
+        };
+        let mut buf = [0u8; 32];
+        // TODO
+        // implement a proper handshake protocol, currently just read the response to make sure both sides are reachable
+        let n = stream.read(&mut buf).await?;
+        if n < 1 {
+            bail!("Handshake failed: empty response");
+        };
+
+        // 2. listen on relay
+        self.invoke_swarm(|swarm| {
+            swarm.listen_on(relay_addr.with(libp2p::multiaddr::Protocol::P2pCircuit))
+        })
+        .await??;
+        Ok(())
     }
 }

@@ -1,6 +1,9 @@
-use crate::{listeners::fungi_remote_access::FUNGI_REMOTE_ACCESS_PROTOCOL, DaemonArgs};
+use crate::DaemonArgs;
 use fungi_config::FungiDir;
-use fungi_util::ipc::{self, messages::DaemonMessage};
+use fungi_util::{
+    ipc::{self, messages::DaemonMessage},
+    protocols::FUNGI_REMOTE_ACCESS_PROTOCOL,
+};
 use interprocess::local_socket::tokio::{prelude::*, Stream as IpcStream};
 use rand::distributions::{Alphanumeric, DistString};
 use std::{io, path::PathBuf};
