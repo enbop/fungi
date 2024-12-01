@@ -1,9 +1,24 @@
 use crate::stdio_impl::StdioImpl;
 use anyhow::{bail, Context, Result};
 use std::path::PathBuf;
-use wasmtime::{Config, Engine, Linker, Module, Store, TypedFunc};
-use wasmtime_wasi::preview1::{self, WasiP1Ctx};
-use wasmtime_wasi::WasiCtxBuilder;
+use wasmtime::component::TypedFunc;
+use wasmtime::{Config, Engine, Store};
+use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiView};
+
+pub struct State {
+    wasi_ctx: WasiCtx,
+    wasi_table: ResourceTable,
+}
+
+impl WasiView for State {
+    fn table(&mut self) -> &mut ResourceTable {
+        &mut self.wasi_table
+    }
+
+    fn ctx(&mut self) -> &mut WasiCtx {
+        &mut self.wasi_ctx
+    }
+}
 
 pub struct WasiRuntime {
     engine: Engine,
@@ -14,7 +29,7 @@ pub struct WasiRuntime {
 
 pub struct WasiCommand {
     func: TypedFunc<(), ()>,
-    store: Store<WasiP1Ctx>,
+    store: Store<State>,
 }
 
 impl WasiCommand {
@@ -44,11 +59,7 @@ impl WasiRuntime {
         })
     }
 
-    pub async fn command(
-        &mut self,
-        args: Vec<String>,
-        stdio: Option<StdioImpl>,
-    ) -> Result<WasiCommand> {
+    pub async fn run(&mut self, args: Vec<String>, stdio: Option<StdioImpl>) -> Result<()> {
         let bin = &args[0];
         // find bin in bin_dir
         let bin_path = self.bin_dir.join(bin);
@@ -56,38 +67,50 @@ impl WasiRuntime {
             bail!("`{}` not found", bin);
         }
 
-        let wasi_ctx = match stdio {
-            Some(stdio) => WasiCtxBuilder::new()
+        let mut wasi_ctx_builder = WasiCtxBuilder::new();
+        match stdio {
+            Some(stdio) => wasi_ctx_builder
                 .stdin(stdio.stdin)
                 .stdout(stdio.stdout)
-                .stderr(stdio.stderr)
-                .args(&args)
-                .build_p1(),
-            None => WasiCtxBuilder::new()
+                .stderr(stdio.stderr),
+            None => wasi_ctx_builder
                 .stdin(wasmtime_wasi::stdin())
                 .stdout(wasmtime_wasi::stdout())
-                .stderr(wasmtime_wasi::stderr())
-                .args(&args)
-                .build_p1(),
+                .stderr(wasmtime_wasi::stderr()),
         };
 
-        let mut store: Store<WasiP1Ctx> = Store::new(&self.engine, wasi_ctx);
+        // TODO set permissions
+        let wasi_ctx = wasi_ctx_builder
+            .args(&args)
+            .inherit_network()
+            .allow_ip_name_lookup(true)
+            .allow_tcp(true)
+            .allow_udp(true)
+            .build();
 
-        let module =
-            Module::from_file(&self.engine, bin_path).context("failed to create module")?;
+        let state = State {
+            wasi_ctx,
+            wasi_table: ResourceTable::new(),
+        };
+        let mut store: Store<State> = Store::new(&self.engine, state);
 
-        let mut linker: Linker<WasiP1Ctx> = Linker::new(&self.engine);
-        preview1::add_to_linker_async(&mut linker, |t| t).context("failed to add linker")?;
+        let component_file = wasmtime::component::Component::from_file(&self.engine, bin_path)
+            .context("failed to load module")?;
+        let mut linker = wasmtime::component::Linker::new(&self.engine);
+        wasmtime_wasi::add_to_linker_async(&mut linker).unwrap();
 
-        let func = linker
-            .module_async(&mut store, "", &module)
-            .await
-            .context("failed to link module")?
-            .get_default(&mut store, "")
-            .context("failed to get default function")?
-            .typed::<(), ()>(&store)
-            .context("failed to get typed function")?;
-
-        Ok(WasiCommand { func, store })
+        let res = wasmtime_wasi::bindings::Command::instantiate_async(
+            &mut store,
+            &component_file,
+            &linker,
+        )
+        .await?
+        .wasi_cli_run()
+        .call_run(&mut store)
+        .await?;
+        if let Err(_) = res {
+            bail!("failed to call run");
+        }
+        Ok(())
     }
 }

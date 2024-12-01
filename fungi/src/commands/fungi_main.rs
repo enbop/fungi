@@ -61,15 +61,7 @@ async fn run_local(args: FungiArgs) -> io::Result<()> {
         }
 
         // run cmd
-        let cmd = match wasi_rt.command(args, None).await {
-            Ok(cmd) => cmd,
-            Err(e) => {
-                eprintln!("{:?}", e);
-                continue;
-            }
-        };
-
-        if let Err(e) = cmd.run().await {
+        if let Err(e) = wasi_rt.run(args, None).await {
             eprintln!("{:?}", e);
         }
     }
