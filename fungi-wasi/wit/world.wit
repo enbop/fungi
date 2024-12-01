@@ -1,0 +1,7 @@
+package fungi:ext@0.1.0;
+
+world bindings {
+    import swarm: interface {
+        peer-id: func() -> string;    
+    }
+}

@@ -1,3 +1,4 @@
+use crate::ext::FungiExt;
 use crate::stdio_impl::StdioImpl;
 use anyhow::{bail, Context, Result};
 use std::path::PathBuf;
@@ -8,6 +9,8 @@ use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiView};
 pub struct State {
     wasi_ctx: WasiCtx,
     wasi_table: ResourceTable,
+
+    fungi_ext: FungiExt,
 }
 
 impl WasiView for State {
@@ -84,13 +87,12 @@ impl WasiRuntime {
             .args(&args)
             .inherit_network()
             .allow_ip_name_lookup(true)
-            .allow_tcp(true)
-            .allow_udp(true)
             .build();
 
         let state = State {
             wasi_ctx,
             wasi_table: ResourceTable::new(),
+            fungi_ext: FungiExt::new(),
         };
         let mut store: Store<State> = Store::new(&self.engine, state);
 
@@ -98,6 +100,10 @@ impl WasiRuntime {
             .context("failed to load module")?;
         let mut linker = wasmtime::component::Linker::new(&self.engine);
         wasmtime_wasi::add_to_linker_async(&mut linker).unwrap();
+
+        // fungi ext
+        crate::ext::swarm::add_to_linker(&mut linker, |t: &mut State| &mut t.fungi_ext.swarm)
+            .unwrap();
 
         let res = wasmtime_wasi::bindings::Command::instantiate_async(
             &mut store,
