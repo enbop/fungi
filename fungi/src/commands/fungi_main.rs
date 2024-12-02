@@ -1,5 +1,6 @@
 use super::FungiArgs;
 use fungi_config::FungiDir;
+use fungi_daemon::listeners::FungiDaemonRpcClient;
 use fungi_util::ipc::{
     self,
     messages::{DaemonMessage, ForwardStdioMessage},
@@ -10,19 +11,29 @@ use interprocess::local_socket::{
 };
 use libp2p::PeerId;
 use std::{io::Write, process::exit};
+use tarpc::{
+    serde_transport, tokio_serde::formats::Bincode, tokio_util::codec::LengthDelimitedCodec,
+};
 use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
 pub async fn run(args: FungiArgs) {
     fungi_config::init(&args).unwrap();
     println!("Connecting to fungi daemon");
 
-    let daemon_ipc_stream = ipc::connect_ipc(&args.fra_ipc_path().to_string_lossy()).await;
-    if daemon_ipc_stream.is_err() {
+    // TODO remove fra local listener, use the daemon rpc to send control messages
+    let fra_stream = ipc::connect_ipc(&args.fra_ipc_path().to_string_lossy()).await;
+
+    let daemon_rpc_stream = ipc::connect_ipc(&args.daemon_rpc_path().to_string_lossy()).await;
+    if daemon_rpc_stream.is_err() {
         println!("Failed to connect to fungi daemon, is it running?");
     };
 
+    let daemon_rpc_client = daemon_rpc_stream
+        .ok()
+        .map(|stream| connect_daemon_rpc(stream));
+
     if let Some(remote_peer) = args.peer {
-        let Ok(daemon_ipc_stream) = daemon_ipc_stream else {
+        let Ok(daemon_ipc_stream) = fra_stream else {
             eprintln!("You cannot connect to a remote peer without a running daemon, run `fungi daemon` first");
             exit(1);
         };
@@ -30,12 +41,15 @@ pub async fn run(args: FungiArgs) {
         run_remote(daemon_ipc_stream, remote_peer).await;
     } else {
         println!("Starting Fungi...");
-        run_local(args).await.unwrap();
+        run_local(args, daemon_rpc_client).await.unwrap();
         println!("Fungi finished");
     }
 }
 
-async fn run_local(args: FungiArgs) -> io::Result<()> {
+async fn run_local(
+    args: FungiArgs,
+    daemon_rpc_client: Option<FungiDaemonRpcClient>,
+) -> io::Result<()> {
     let mut wasi_rt =
         fungi_wasi::WasiRuntime::new(args.wasi_root_dir(), args.wasi_bin_dir()).unwrap();
 
@@ -61,7 +75,7 @@ async fn run_local(args: FungiArgs) -> io::Result<()> {
         }
 
         // run cmd
-        if let Err(e) = wasi_rt.run(args, None).await {
+        if let Err(e) = wasi_rt.run(args, None, daemon_rpc_client.clone()).await {
             eprintln!("{:?}", e);
         }
     }
@@ -136,4 +150,10 @@ async fn fowrard_remote_to_stdout(mut remote_rx: RecvHalf) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+fn connect_daemon_rpc(stream: Stream) -> FungiDaemonRpcClient {
+    let codec_builder = LengthDelimitedCodec::builder();
+    let transport = serde_transport::new(codec_builder.new_framed(stream), Bincode::default());
+    FungiDaemonRpcClient::new(Default::default(), transport).spawn()
 }

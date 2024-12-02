@@ -14,5 +14,7 @@ wasmtime = "27"
 wasmtime-wasi = "27"
 rand = { workspace = true }
 fungi-util = { path = "../fungi-util" }
+fungi-daemon = { path = "../fungi-daemon" } # TODO any possible to remove this dep?
 async-trait = "0.1"
 bytes = "1"
+tarpc = { workspace = true }

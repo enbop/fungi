@@ -1,6 +1,7 @@
 use crate::ext::FungiExt;
 use crate::stdio_impl::StdioImpl;
 use anyhow::{bail, Context, Result};
+use fungi_daemon::listeners::FungiDaemonRpcClient;
 use std::path::PathBuf;
 use wasmtime::component::TypedFunc;
 use wasmtime::{Config, Engine, Store};
@@ -62,7 +63,12 @@ impl WasiRuntime {
         })
     }
 
-    pub async fn run(&mut self, args: Vec<String>, stdio: Option<StdioImpl>) -> Result<()> {
+    pub async fn run(
+        &mut self,
+        args: Vec<String>,
+        stdio: Option<StdioImpl>,
+        daemon_rpc_client: Option<FungiDaemonRpcClient>,
+    ) -> Result<()> {
         let bin = &args[0];
         // find bin in bin_dir
         let bin_path = self.bin_dir.join(bin);
@@ -92,7 +98,7 @@ impl WasiRuntime {
         let state = State {
             wasi_ctx,
             wasi_table: ResourceTable::new(),
-            fungi_ext: FungiExt::new(),
+            fungi_ext: FungiExt::new(daemon_rpc_client),
         };
         let mut store: Store<State> = Store::new(&self.engine, state);
 
