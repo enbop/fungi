@@ -1,25 +1,34 @@
 use crate::{
-    listeners::{FRALocalListener, FRAPeerListener},
+    listeners::{FRALocalListener, FRAPeerListener, FungiDaemonRpcServer},
     DaemonArgs,
 };
+use anyhow::Result;
 use fungi_config::{FungiConfig, FungiDir};
-use fungi_swarm::{FungiSwarm, TSwarm};
+use fungi_swarm::{FungiSwarm, SwarmController, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
-use std::path::{Path, PathBuf};
-use tokio::sync::OnceCell;
+use std::path::PathBuf;
+use tokio::{sync::OnceCell, task::JoinHandle};
 
 static FUNGI_BIN_PATH: OnceCell<PathBuf> = OnceCell::const_new();
 
+struct TaskHandles {
+    swarm_task: JoinHandle<()>,
+    fra_local_listener_task: JoinHandle<()>,
+    fra_remote_listener_task: JoinHandle<()>,
+    daemon_rpc_task: JoinHandle<()>,
+}
+
 pub struct FungiDaemon {
-    pub fungi_swarm: FungiSwarm,
     config: FungiConfig,
     args: DaemonArgs,
-    fra_local_listener: FRALocalListener,
-    fra_remote_listener: FRAPeerListener,
+
+    pub swarm_controller: SwarmController,
+
+    task_handles: TaskHandles,
 }
 
 impl FungiDaemon {
-    pub async fn new(args: DaemonArgs) -> Self {
+    pub async fn start(args: DaemonArgs) -> Result<Self> {
         let fungi_dir = args.fungi_dir();
         println!("Fungi directory: {:?}", fungi_dir);
 
@@ -31,26 +40,50 @@ impl FungiDaemon {
         }
 
         let keypair = get_keypair_from_dir(&fungi_dir).unwrap();
-        let fungi_swarm = FungiSwarm::new(keypair, |swarm| {
+        let (swarm_controller, swarm_task) = FungiSwarm::start_swarm(keypair, |swarm| {
             apply_listen(swarm, &config);
             #[cfg(feature = "tcp-tunneling")]
             apply_tcp_tunneling(swarm, &config);
         })
-        .await
-        .unwrap();
+        .await?;
 
-        let libp2p_stream_control = fungi_swarm.stream_control.clone();
+        let stream_control = swarm_controller.stream_control.clone();
 
-        Self {
-            fungi_swarm,
-            fra_local_listener: FRALocalListener::new(args.clone(), libp2p_stream_control.clone()),
-            fra_remote_listener: FRAPeerListener::new(
-                args.clone(),
-                config.clone(),
-                libp2p_stream_control,
-            ),
-            args,
+        let fra_local_listener_task =
+            FRALocalListener::start(args.clone(), stream_control.clone())?;
+        let fra_remote_listener_task =
+            FRAPeerListener::start(args.clone(), config.clone(), stream_control)?;
+
+        let daemon_rpc_task = FungiDaemonRpcServer::start(args.clone(), swarm_controller.clone())?;
+
+        let task_handles = TaskHandles {
+            swarm_task,
+            fra_local_listener_task,
+            fra_remote_listener_task,
+            daemon_rpc_task,
+        };
+        Ok(Self {
             config,
+            args,
+            swarm_controller,
+            task_handles,
+        })
+    }
+
+    pub async fn wait_all(self) {
+        tokio::select! {
+            _ = self.task_handles.swarm_task => {
+                println!("Swarm task is closed");
+            },
+            _ = self.task_handles.fra_local_listener_task => {
+                println!("FRA local listener task is closed");
+            },
+            _ = self.task_handles.fra_remote_listener_task => {
+                println!("FRA remote listener task is closed");
+            },
+            _ = self.task_handles.daemon_rpc_task => {
+                println!("Daemon RPC task is closed");
+            },
         }
     }
 
@@ -78,12 +111,6 @@ impl FungiDaemon {
 
     pub fn get_fungi_bin_path_unchecked() -> PathBuf {
         FUNGI_BIN_PATH.get().unwrap().clone()
-    }
-
-    pub async fn start(&mut self) {
-        self.fungi_swarm.start_swarm_task();
-        self.fra_local_listener.start().await.unwrap();
-        self.fra_remote_listener.start().await.unwrap();
     }
 }
 

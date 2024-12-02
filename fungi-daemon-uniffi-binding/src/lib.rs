@@ -53,11 +53,10 @@ fn start_fungi_daemon_block(fungi_dir: String, fungi_bin_path: String) {
             debug_allow_all_peers: Some(true),
         };
         fungi_config::init(&args).unwrap();
-        let mut daemon = FungiDaemon::new(args).await;
-        daemon.start().await;
+        let daemon = FungiDaemon::start(args).await.unwrap(); // TODO handle error
         log::info!(
             "Fungi local peer id: {:?}",
-            daemon.fungi_swarm.local_peer_id()
+            daemon.swarm_controller.local_peer_id()
         );
         rx.await.ok();
         log::info!("Fungi daemon stopped");

@@ -1,32 +1,39 @@
+use anyhow::Result;
 pub use fungi_daemon::DaemonArgs;
 use fungi_daemon::FungiDaemon;
 use libp2p::{multiaddr::Protocol, Multiaddr, PeerId};
 
-pub async fn run(args: DaemonArgs) {
+pub async fn run(args: DaemonArgs) -> Result<()> {
     fungi_config::init(&args).unwrap();
 
     println!("Starting Fungi daemon...");
-    let mut daemon = FungiDaemon::new(args).await;
-    daemon.start().await;
 
-    println!("Local Peer ID: {}", daemon.fungi_swarm.local_peer_id());
+    let daemon = FungiDaemon::start(args).await?;
 
-    let network_info = daemon
-        .fungi_swarm
+    let swarm_controller = daemon.swarm_controller.clone();
+    println!("Local Peer ID: {}", swarm_controller.local_peer_id());
+
+    let network_info = swarm_controller
         .invoke_swarm(|swarm| swarm.network_info())
         .await
         .unwrap();
     println!("Network info: {:?}", network_info);
 
-    if let Err(e) = daemon
-        .fungi_swarm
+    if let Err(e) = swarm_controller
         .listen_relay(get_default_relay_addr())
         .await
     {
         eprintln!("Failed to listen on relay: {:?}", e);
     };
-    tokio::signal::ctrl_c().await.ok();
-    println!("Shutting down Fungi daemon...");
+
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {
+            println!("Shutting down Fungi daemon...");
+        },
+        _ = daemon.wait_all() => {},
+    }
+
+    Ok(())
 }
 
 pub(crate) fn get_default_relay_addr() -> Multiaddr {

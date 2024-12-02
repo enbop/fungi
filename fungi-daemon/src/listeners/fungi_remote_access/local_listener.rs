@@ -10,39 +10,22 @@ use std::{io, path::PathBuf};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 
-pub struct FRALocalListener {
-    args: DaemonArgs,
-    libp2p_stream_control: libp2p_stream::Control,
-    listen_task: Option<tokio::task::JoinHandle<()>>,
-}
+pub struct FRALocalListener;
 
 impl FRALocalListener {
-    pub fn new(args: DaemonArgs, libp2p_stream_control: libp2p_stream::Control) -> Self {
-        Self {
-            args,
-            libp2p_stream_control,
-            listen_task: None,
-        }
-    }
-
-    pub fn is_started(&self) -> bool {
-        self.listen_task.is_some()
-    }
-
-    pub async fn start(&mut self) -> io::Result<()> {
-        if self.is_started() {
-            return Ok(());
-        }
-
-        let ipc_listener = ipc::create_ipc_listener(&self.args.fra_ipc_path().to_string_lossy())?;
+    pub fn start(
+        args: DaemonArgs,
+        libp2p_stream_control: libp2p_stream::Control,
+    ) -> io::Result<tokio::task::JoinHandle<()>> {
+        let ipc_listener = ipc::create_ipc_listener(&args.fra_ipc_path().to_string_lossy())?;
 
         let task = tokio::spawn(Self::listen_task(
-            self.args.clone(),
+            args.clone(),
             ipc_listener,
-            self.libp2p_stream_control.clone(),
+            libp2p_stream_control.clone(),
         ));
-        self.listen_task = Some(task);
-        Ok(())
+
+        Ok(task)
     }
 
     async fn listen_task(

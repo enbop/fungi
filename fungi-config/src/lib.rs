@@ -16,6 +16,7 @@ pub const DEFAULT_FUNGI_DIR: &str = ".fungi";
 pub const DEFAULT_FUNGI_WASI_ROOT_DIR_NAME: &str = "root";
 pub const DEFAULT_FUNGI_WASI_BIN_DIR_NAME: &str = "bin";
 pub const DEFAULT_IPC_DIR_NAME: &str = ".ipc";
+pub const DEFAULT_DAEMON_RPC_NAME: &str = ".fungi_daemon.sock";
 pub const FRA_LISTENER_ADDR: &str = ".fungi_ra.sock"; // FRA: Fungi Remote Access
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -62,6 +63,10 @@ pub trait FungiDir {
             std::fs::create_dir(&dir).unwrap();
         }
         dir
+    }
+
+    fn daemon_rpc_path(&self) -> PathBuf {
+        self.ipc_dir().join(DEFAULT_DAEMON_RPC_NAME)
     }
 
     // FRA: Fungi Remote Access

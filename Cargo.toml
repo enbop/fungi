@@ -24,3 +24,4 @@ interprocess = { git = "https://github.com/kotauskas/interprocess", rev = "db6c3
     "tokio",
 ] }
 serde = { version = "1", features = ["derive"] }
+tarpc = { version= "0.35", features = ["full"] }

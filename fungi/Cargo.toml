@@ -41,3 +41,4 @@ futures = { workspace = true }
 bincode = { workspace = true }
 interprocess = { workspace = true }
 rand = { workspace = true }
+anyhow = { workspace = true }
