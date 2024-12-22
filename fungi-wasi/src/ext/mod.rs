@@ -7,6 +7,9 @@ bindgen!({
     path: "./wit",
     world: "bindings",
     async: true,
+    with: {
+        "fungi:ext/swarm/stream-control": swarm_binding::StreamControl,
+    }
 });
 
 pub struct FungiExt {

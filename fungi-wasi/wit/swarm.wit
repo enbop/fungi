@@ -1,0 +1,18 @@
+interface swarm {
+    use wasi:io/streams@0.2.2.{input-stream, output-stream};
+    use wasi:io/poll@0.2.2.{pollable};
+
+    peer-id: func() -> string;    
+    
+    create-stream-control: func() -> stream-control;    
+
+    // resource incoming-streams {
+    //     // return (peer-id, input-stream, output-stream)
+    //     next: func() -> result<tuple<string, input-stream, output-stream>, string>;
+    //     subscribe: func() -> pollable;
+    // }
+
+    resource stream-control {
+        // accept: func(protocol: string) -> result<string, string>;
+    }
+}

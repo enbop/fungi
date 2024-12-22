@@ -108,8 +108,10 @@ impl WasiRuntime {
         wasmtime_wasi::add_to_linker_async(&mut linker).unwrap();
 
         // fungi ext
-        crate::ext::swarm::add_to_linker(&mut linker, |t: &mut State| &mut t.fungi_ext.swarm)
-            .unwrap();
+        crate::ext::fungi::ext::swarm::add_to_linker(&mut linker, |t: &mut State| {
+            &mut t.fungi_ext.swarm
+        })
+        .unwrap();
 
         let res = wasmtime_wasi::bindings::Command::instantiate_async(
             &mut store,
