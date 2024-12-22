@@ -4,15 +4,11 @@ interface swarm {
 
     peer-id: func() -> string;    
     
-    create-stream-control: func() -> stream-control;    
+    accept-stream: func(protocol: string) -> incoming-streams;    
 
-    // resource incoming-streams {
-    //     // return (peer-id, input-stream, output-stream)
-    //     next: func() -> result<tuple<string, input-stream, output-stream>, string>;
-    //     subscribe: func() -> pollable;
-    // }
-
-    resource stream-control {
-        // accept: func(protocol: string) -> result<string, string>;
+    resource incoming-streams {
+        // return (peer-id, input-stream, output-stream)
+        next: func() -> result<tuple<string, input-stream, output-stream>, string>;
+        subscribe: func() -> pollable;
     }
 }

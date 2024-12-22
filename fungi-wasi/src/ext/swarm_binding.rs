@@ -1,4 +1,7 @@
-use super::fungi::ext::swarm;
+use super::{
+    fungi::ext::swarm::{self, Pollable},
+    wasi::io::streams::{InputStream, OutputStream},
+};
 use fungi_daemon::listeners::FungiDaemonRpcClient;
 use wasmtime::component::Resource;
 
@@ -12,17 +15,22 @@ impl SwarmBinding {
     }
 }
 
-pub struct StreamControl {}
-
-// impl StreamControl {
-//     fn accept(protocol: String) -> Result<String, String> {
-//         todo!()
-//     }
-// }
+pub struct IncomingStreams {}
 
 #[async_trait::async_trait]
-impl swarm::HostStreamControl for SwarmBinding {
-    async fn drop(&mut self, this: Resource<StreamControl>) -> Result<(), anyhow::Error> {
+impl swarm::HostIncomingStreams for SwarmBinding {
+    async fn next(
+        &mut self,
+        this: Resource<IncomingStreams>,
+    ) -> Result<(String, Resource<InputStream>, Resource<OutputStream>), String> {
+        todo!()
+    }
+
+    fn subscribe(&mut self, this: Resource<IncomingStreams>) -> Resource<Pollable> {
+        todo!()
+    }
+
+    fn drop(&mut self, this: Resource<IncomingStreams>) -> Result<(), anyhow::Error> {
         drop(this);
         Ok(())
     }
@@ -40,7 +48,7 @@ impl swarm::Host for SwarmBinding {
         }
     }
 
-    async fn create_stream_control(&mut self) -> Resource<StreamControl> {
+    async fn accept_stream(&mut self, protocol: String) -> Resource<IncomingStreams> {
         todo!()
     }
 }

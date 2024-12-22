@@ -6,9 +6,15 @@ use wasmtime::component::bindgen;
 bindgen!({
     path: "./wit",
     world: "bindings",
-    async: true,
+    async: {
+        only_imports: [
+            "peer-id",
+            "accept-stream",
+            "[method]incoming-streams.next",
+        ]
+    },
     with: {
-        "fungi:ext/swarm/stream-control": swarm_binding::StreamControl,
+        "fungi:ext/swarm/incoming-streams": swarm_binding::IncomingStreams,
     }
 });
 
