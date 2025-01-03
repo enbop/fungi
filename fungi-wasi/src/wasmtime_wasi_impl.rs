@@ -68,6 +68,7 @@ impl WasiRuntime {
         args: Vec<String>,
         stdio: Option<StdioImpl>,
         daemon_rpc_client: Option<FungiDaemonRpcClient>,
+        ipc_dir: PathBuf,
     ) -> Result<()> {
         let bin = &args[0];
         // find bin in bin_dir
@@ -98,7 +99,7 @@ impl WasiRuntime {
         let state = State {
             wasi_ctx,
             wasi_table: ResourceTable::new(),
-            fungi_ext: FungiExt::new(daemon_rpc_client),
+            fungi_ext: FungiExt::new(daemon_rpc_client, ipc_dir),
         };
         let mut store: Store<State> = Store::new(&self.engine, state);
 

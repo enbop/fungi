@@ -69,13 +69,16 @@ async fn run_local(
             break;
         }
 
-        let args: Vec<String> = line.split_whitespace().map(|s| s.to_string()).collect();
-        if args.is_empty() {
+        let child_args: Vec<String> = line.split_whitespace().map(|s| s.to_string()).collect();
+        if child_args.is_empty() {
             continue;
         }
 
         // run cmd
-        if let Err(e) = wasi_rt.run(args, None, daemon_rpc_client.clone()).await {
+        if let Err(e) = wasi_rt
+            .run(child_args, None, daemon_rpc_client.clone(), args.ipc_dir())
+            .await
+        {
             eprintln!("{:?}", e);
         }
     }

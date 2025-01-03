@@ -1,4 +1,6 @@
 mod swarm_binding;
+use std::path::PathBuf;
+
 use fungi_daemon::listeners::FungiDaemonRpcClient;
 use swarm_binding::SwarmBinding;
 use wasmtime::component::bindgen;
@@ -11,6 +13,7 @@ bindgen!({
             "peer-id",
             "accept-stream",
             "[method]incoming-streams.next",
+            "[drop]incoming-streams",
         ]
     },
     with: {
@@ -23,9 +26,9 @@ pub struct FungiExt {
 }
 
 impl FungiExt {
-    pub fn new(daemon_rpc_client: Option<FungiDaemonRpcClient>) -> Self {
+    pub fn new(daemon_rpc_client: Option<FungiDaemonRpcClient>, ipc_dir: PathBuf) -> Self {
         Self {
-            swarm: SwarmBinding::new(daemon_rpc_client),
+            swarm: SwarmBinding::new(daemon_rpc_client, ipc_dir),
         }
     }
 }
