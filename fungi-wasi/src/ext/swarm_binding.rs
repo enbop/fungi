@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use wasmtime::component::Resource;
-use wasmtime_wasi::ResourceTable;
+use wasmtime_wasi::{ResourceTable, Subscribe};
 
 pub struct SwarmBinding {
     table: ResourceTable,
@@ -33,6 +33,15 @@ impl SwarmBinding {
 pub struct IncomingStreams {
     protocol: String,
     listener: Listener,
+    pending_stream: Option<todo!()>,
+}
+
+#[async_trait::async_trait]
+impl Subscribe for IncomingStreams {
+    async fn ready(&mut self) {
+        self.listener;
+        // TODO
+    }
 }
 
 #[async_trait::async_trait]
@@ -45,7 +54,7 @@ impl swarm::HostIncomingStreams for SwarmBinding {
     }
 
     fn subscribe(&mut self, this: Resource<IncomingStreams>) -> Resource<Pollable> {
-        todo!()
+        wasmtime_wasi::subscribe(&mut self.table, this).unwrap() // TODO
     }
 
     async fn drop(&mut self, this: Resource<IncomingStreams>) -> Result<(), anyhow::Error> {

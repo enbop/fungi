@@ -18,6 +18,7 @@ bindgen!({
     },
     with: {
         "fungi:ext/swarm/incoming-streams": swarm_binding::IncomingStreams,
+        "wasi:io/poll/pollable": wasmtime_wasi::Pollable,
     }
 });
 
