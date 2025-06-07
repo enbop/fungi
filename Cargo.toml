@@ -18,8 +18,27 @@ once_cell = "1"
 anyhow = "1"
 bincode = "1.3"
 rand = "0.8"
-interprocess = { git = "https://github.com/kotauskas/interprocess", rev = "db6c36d1ccf86e607490e116d15ec7dbca1500af", features = [
-    "tokio",
-] }
+interprocess = { version = "2.2.3", features = ["tokio"] }
 serde = { version = "1", features = ["derive"] }
 tarpc = { version = "0.35", features = ["full"] }
+thiserror = "2.0"
+libp2p = { version = "0.55", features = [
+    "macros",
+    "noise",
+    "mdns",
+    "ping",
+    "tcp",
+    "quic",
+    "tokio",
+    "yamux",
+    "serde",
+    "identify",
+    "relay",
+    "dcutr",
+    "rsa",
+    "secp256k1",
+    "ed25519",
+] }
+libp2p-stream = "0.3.0-alpha"
+libp2p-identity = { version = "0.2", features = ["secp256k1"] }
+libp2p-swarm = "0.46"

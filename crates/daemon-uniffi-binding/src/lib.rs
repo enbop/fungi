@@ -1,10 +1,10 @@
 uniffi::include_scaffolding!("export");
 
 use fungi_daemon::{DaemonArgs, FungiDaemon};
+use log::{self, LevelFilter};
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
 use tokio::{runtime::Runtime, sync::oneshot};
-use uniffi::deps::log::{self, LevelFilter};
 
 static TOKIO_RUNTIME: Lazy<Runtime> = Lazy::new(|| Runtime::new().unwrap());
 static FUNGI_DAEMON_CANCEL_TX: Lazy<Mutex<Option<oneshot::Sender<()>>>> =

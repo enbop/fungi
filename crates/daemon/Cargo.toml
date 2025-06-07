@@ -1,7 +1,7 @@
 [package]
 name = "fungi-daemon"
 version = "0.3.0"
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -17,14 +17,14 @@ fungi-util = { path = "../util" }
 log = { workspace = true }
 once_cell = { workspace = true }
 tokio = { version = "1", features = ["full"] }
-libp2p = "0.53"
+libp2p = { workspace = true }
 home = "0.5"
 futures = { workspace = true }
 bincode = { workspace = true }
 interprocess = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
-libp2p-stream = "0.1.0-alpha"
+libp2p-stream = { workspace = true }
 tokio-util = { version = "0.7", features = ["compat"] }
 anyhow = { workspace = true }
 tarpc = { workspace = true }

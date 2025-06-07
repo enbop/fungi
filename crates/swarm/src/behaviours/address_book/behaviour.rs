@@ -5,7 +5,7 @@ use std::{
 };
 
 use libp2p::{
-    core::Endpoint,
+    core::{transport::PortUse, Endpoint},
     swarm::{dummy, ConnectionDenied, ConnectionId, NetworkBehaviour},
     Multiaddr, PeerId,
 };
@@ -17,10 +17,7 @@ pub struct Behaviour {
 
 impl Behaviour {
     pub fn set_addresses(&mut self, peer_id: &PeerId, addrs: Vec<Multiaddr>) {
-        self.address_book
-            .write()
-            .unwrap()
-            .insert(*peer_id, addrs);
+        self.address_book.write().unwrap().insert(*peer_id, addrs);
     }
 }
 
@@ -63,6 +60,7 @@ impl NetworkBehaviour for Behaviour {
         _peer: PeerId,
         _addr: &Multiaddr,
         _role_override: libp2p::core::Endpoint,
+        _port_user: PortUse,
     ) -> Result<libp2p::swarm::THandler<Self>, libp2p::swarm::ConnectionDenied> {
         Ok(dummy::ConnectionHandler)
     }
@@ -73,9 +71,8 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _peer_id: PeerId,
         _connection_id: libp2p::swarm::ConnectionId,
-        ev: libp2p::swarm::THandlerOutEvent<Self>,
+        _ev: libp2p::swarm::THandlerOutEvent<Self>,
     ) {
-        void::unreachable(ev)
     }
 
     fn poll(

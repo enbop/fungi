@@ -1,13 +1,13 @@
 [package]
 name = "fungi-config"
 version = "0.3.0"
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 serde = { workspace = true }
 toml = "0.8"
-libp2p-identity = { version = "0.2", features = ["secp256k1"] }
+libp2p-identity = { workspace = true }
 multiaddr = "0.18"
 fungi-util = { path = "../util" }
