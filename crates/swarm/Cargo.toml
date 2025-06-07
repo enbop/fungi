@@ -28,6 +28,6 @@ libp2p = { version = "0.53", features = [
     "ed25519",
 ] }
 libp2p-stream = "0.1.0-alpha"
-fungi-util = { path = "../fungi-util" }
+fungi-util = { path = "../util" }
 void = "1"
 async-result = "0.1.0"

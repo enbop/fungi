@@ -8,8 +8,8 @@ crate_type = ["cdylib", "staticlib"]
 name = "fungi_daemon_binding"
 
 [dependencies]
-fungi-config = { path = "../fungi-config" }
-fungi-daemon = { path = "../fungi-daemon" }
+fungi-config = { path = "../config" }
+fungi-daemon = { path = "../daemon" }
 uniffi = { version = "0.27" }
 anyhow = "1"
 once_cell = "1"

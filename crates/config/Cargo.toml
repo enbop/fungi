@@ -10,4 +10,4 @@ serde = { workspace = true }
 toml = "0.8"
 libp2p-identity = { version = "0.2", features = ["secp256k1"] }
 multiaddr = "0.18"
-fungi-util = { path = "../fungi-util" }
+fungi-util = { path = "../util" }

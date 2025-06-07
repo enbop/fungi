@@ -3,12 +3,12 @@ resolver = "2"
 
 members = [
     "fungi",
-    "fungi-config",
-    "fungi-daemon",
-    "fungi-daemon-uniffi-binding",
-    "fungi-swarm",
-    "fungi-util",
-    "uniffi-bindgen",
+    "crates/config",
+    "crates/daemon",
+    "crates/daemon-uniffi-binding",
+    "crates/swarm",
+    "crates/util",
+    "crates/uniffi-bindgen",
 ]
 
 [workspace.dependencies]
