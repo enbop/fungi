@@ -3,3 +3,4 @@
 /.cargo
 /.vscode
 /dist
+.DS_Store

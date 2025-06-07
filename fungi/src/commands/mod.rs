@@ -15,10 +15,6 @@ pub struct FungiArgs {
 
     #[arg(short, long)]
     pub fungi_dir: Option<String>,
-
-    /// Connect to a remote peer
-    #[arg(short, long)]
-    pub peer: Option<PeerId>,
 }
 
 #[derive(Subcommand, Debug, Clone)]

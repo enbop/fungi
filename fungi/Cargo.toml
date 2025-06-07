@@ -1,6 +1,6 @@
 [package]
 name = "fungi"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -25,7 +25,6 @@ fungi-config = { path = "../fungi-config" }
 fungi-daemon = { path = "../fungi-daemon", features = ["cli"], optional = true }
 fungi-swarm = { path = "../fungi-swarm" }
 fungi-util = { path = "../fungi-util" }
-fungi-wasi = { path = "../fungi-wasi" }
 libp2p = { version = "0.53", features = [
     "macros",
     "noise",
