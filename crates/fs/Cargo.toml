@@ -8,3 +8,5 @@ unftp-sbe-fs = "0.3.0"
 cap-std = "3.4"
 libunftp = "0.21"
 serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["full"] }

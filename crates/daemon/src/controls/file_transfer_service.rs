@@ -6,6 +6,7 @@ use std::{
 };
 
 use fungi_config::file_transfer::FileTransferService as FileTransferServiceConfig;
+use fungi_fs::Result;
 use fungi_util::protocols::FUNGI_FILE_TRANSFER_PROTOCOL;
 use futures::StreamExt;
 use libp2p::PeerId;
@@ -29,8 +30,47 @@ pub struct FileTransferRpcService {
 }
 
 impl super::FileTransferRpc for FileTransferRpcService {
-    async fn metadata(self, _context: Context, path: PathBuf) -> fungi_fs::Metadata {
+    async fn metadata(self, _context: Context, path: PathBuf) -> Result<fungi_fs::Metadata> {
         self.fs.metadata(&path).await
+    }
+
+    async fn list(self, _context: Context, path: PathBuf) -> Result<Vec<fungi_fs::FileInfo>> {
+        self.fs.list(&path).await
+    }
+
+    async fn get(self, _context: Context, path: PathBuf, start_pos: u64) -> Result<Vec<u8>> {
+        self.fs.get(&path, start_pos).await
+    }
+
+    async fn put(
+        self,
+        _context: Context,
+        bytes: Vec<u8>,
+        path: PathBuf,
+        start_pos: u64,
+    ) -> Result<u64> {
+        let reader = std::io::Cursor::new(bytes);
+        self.fs.put(reader, &path, start_pos).await
+    }
+
+    async fn del(self, _context: Context, path: PathBuf) -> Result<()> {
+        self.fs.del(&path).await
+    }
+
+    async fn rmd(self, _context: Context, path: PathBuf) -> Result<()> {
+        self.fs.rmd(&path).await
+    }
+
+    async fn mkd(self, _context: Context, path: PathBuf) -> Result<()> {
+        self.fs.mkd(&path).await
+    }
+
+    async fn rename(self, _context: Context, from: PathBuf, to: PathBuf) -> Result<()> {
+        self.fs.rename(&from, &to).await
+    }
+
+    async fn cwd(self, _context: Context, path: PathBuf) -> Result<()> {
+        self.fs.cwd(&path).await
     }
 }
 

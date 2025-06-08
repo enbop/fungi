@@ -15,6 +15,7 @@ pub struct FileTransfer {
 pub struct FileTransferClient {
     pub target_peer: PeerId,
 
+    pub proxy_ftp_host: String,
     pub proxy_ftp_port: u16,
 }
 

@@ -1375,6 +1375,7 @@ name = "fungi-daemon"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "bincode",
  "clap",
  "fungi-config",
@@ -1386,11 +1387,13 @@ dependencies = [
  "interprocess",
  "libp2p",
  "libp2p-stream",
+ "libunftp",
  "log",
  "once_cell",
  "rand 0.8.5",
  "serde",
  "tarpc",
+ "thiserror 2.0.12",
  "tokio",
  "tokio-util",
 ]
@@ -1416,6 +1419,8 @@ dependencies = [
  "cap-std",
  "libunftp",
  "serde",
+ "thiserror 2.0.12",
+ "tokio",
  "unftp-sbe-fs",
 ]
 

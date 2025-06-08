@@ -29,6 +29,9 @@ tokio-util = { version = "0.7", features = ["compat"] }
 anyhow = { workspace = true }
 tarpc = { workspace = true }
 fungi-fs = { path = "../fs" }
+thiserror = { workspace = true }
+async-trait = "0.1"
+libunftp = "0.21"
 
 [dependencies.clap]
 version = "4"
