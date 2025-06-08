@@ -1,12 +1,13 @@
 use crate::{
     DaemonArgs,
-    controls::FileTransferServiceControl,
-    listeners::{
-        FRALocalListener, FRAPeerListener, FileTransferLocalListener, FungiDaemonRpcServer,
-    },
+    controls::{FileTransferClientControl, FileTransferServiceControl},
+    listeners::{FRALocalListener, FRAPeerListener, FungiDaemonRpcServer},
 };
 use anyhow::Result;
-use fungi_config::{FungiConfig, FungiDir, file_transfer::FileTransferService as FTSConfig};
+use fungi_config::{
+    FungiConfig, FungiDir, file_transfer::FileTransferClient as FTCConfig,
+    file_transfer::FileTransferService as FTSConfig,
+};
 use fungi_swarm::{FungiSwarm, SwarmControl, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
 use std::path::PathBuf;
@@ -61,20 +62,8 @@ impl FungiDaemon {
         let fts_control = FileTransferServiceControl::new(stream_control.clone());
         Self::init_fts(config.file_transfer.server.clone(), &fts_control);
 
-        let stream_control = swarm_control.stream_control.clone();
-        let file_transfer_client_config = config.file_transfer.client.clone();
-        if file_transfer_client_config.len() > 0 {
-            let peer_id = file_transfer_client_config[0].target_peer;
-
-            swarm_control
-                .invoke_swarm(move |swarm| swarm.dial(peer_id))
-                .await
-                .unwrap();
-        }
-
-        tokio::spawn(async move {
-            FileTransferLocalListener::start(file_transfer_client_config, stream_control).await;
-        });
+        let ftc_control = FileTransferClientControl::new(swarm_control.clone());
+        Self::init_ftc(config.file_transfer.client.clone(), &ftc_control);
 
         let daemon_rpc_task = FungiDaemonRpcServer::start(args.clone(), swarm_control.clone())?;
 
@@ -141,6 +130,12 @@ impl FungiDaemon {
             if let Err(e) = fts_control.add_service(config) {
                 log::warn!("Failed to add file transfer service: {}", e);
             }
+        }
+    }
+
+    fn init_ftc(clients: Vec<FTCConfig>, ftc_control: &FileTransferClientControl) {
+        for client in clients {
+            ftc_control.start_client(client);
         }
     }
 }

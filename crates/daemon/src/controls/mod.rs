@@ -1,5 +1,7 @@
+mod file_transfer_client;
 mod file_transfer_service;
 
+pub use file_transfer_client::FileTransferClientControl;
 pub use file_transfer_service::FileTransferServiceControl;
 
 use std::path::PathBuf;
