@@ -9,6 +9,7 @@ members = [
     "crates/swarm",
     "crates/util",
     "crates/uniffi-bindgen",
+    "crates/fs",
 ]
 
 [workspace.dependencies]

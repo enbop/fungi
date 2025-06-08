@@ -1,6 +1,9 @@
 use crate::{
-    listeners::{FRALocalListener, FRAPeerListener, FungiDaemonRpcServer},
     DaemonArgs,
+    listeners::{
+        FRALocalListener, FRAPeerListener, FileTransferLocalListener, FileTransferRpcServer,
+        FungiDaemonRpcServer,
+    },
 };
 use anyhow::Result;
 use fungi_config::{FungiConfig, FungiDir};
@@ -15,6 +18,7 @@ struct TaskHandles {
     swarm_task: JoinHandle<()>,
     fra_local_listener_task: JoinHandle<()>,
     fra_remote_listener_task: JoinHandle<()>,
+    file_transfer_server_task: JoinHandle<()>,
     daemon_rpc_task: JoinHandle<()>,
 }
 
@@ -54,12 +58,38 @@ impl FungiDaemon {
         let fra_remote_listener_task =
             FRAPeerListener::start(args.clone(), config.clone(), stream_control)?;
 
+        // TODO refactor: use a file_transfer control
+        let stream_control = swarm_controller.stream_control.clone();
+        let file_transfer_server_config = config.file_transfer.server.clone();
+        let file_transfer_server_task = tokio::spawn(async move {
+            if file_transfer_server_config.enable {
+                let server = FileTransferRpcServer::new(file_transfer_server_config);
+                server.listen_from_libp2p_stream(stream_control).await;
+            }
+        });
+
+        let stream_control = swarm_controller.stream_control.clone();
+        let file_transfer_client_config = config.file_transfer.client.clone();
+        if file_transfer_client_config.len() > 0 {
+            let peer_id = file_transfer_client_config[0].target_peer;
+
+            swarm_controller
+                .invoke_swarm(move |swarm| swarm.dial(peer_id))
+                .await
+                .unwrap();
+        }
+
+        tokio::spawn(async move {
+            FileTransferLocalListener::start(file_transfer_client_config, stream_control).await;
+        });
+
         let daemon_rpc_task = FungiDaemonRpcServer::start(args.clone(), swarm_controller.clone())?;
 
         let task_handles = TaskHandles {
             swarm_task,
             fra_local_listener_task,
             fra_remote_listener_task,
+            file_transfer_server_task,
             daemon_rpc_task,
         };
         Ok(Self {

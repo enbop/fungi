@@ -28,6 +28,7 @@ libp2p-stream = { workspace = true }
 tokio-util = { version = "0.7", features = ["compat"] }
 anyhow = { workspace = true }
 tarpc = { workspace = true }
+fungi-fs = { path = "../fs" }
 
 [dependencies.clap]
 version = "4"

@@ -1,0 +1,10 @@
+[package]
+name = "fungi-fs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+unftp-sbe-fs = "0.3.0"
+cap-std = "3.4"
+libunftp = "0.21"
+serde = { workspace = true }
