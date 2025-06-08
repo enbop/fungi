@@ -7,7 +7,7 @@ use libp2p_stream::Control;
 use tarpc::{context, serde_transport, tokio_serde::formats::Bincode};
 use tokio_util::{codec::LengthDelimitedCodec, compat::FuturesAsyncReadCompatExt as _};
 
-use crate::listeners::file_transfer::FileTransferRpcClient;
+use crate::controls::FileTransferRpcClient;
 
 // TODO state management
 pub struct FileTransferLocalListener {

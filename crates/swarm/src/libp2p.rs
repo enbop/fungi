@@ -1,15 +1,16 @@
 use crate::behaviours::FungiBehaviours;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use async_result::{AsyncResult, Completer};
 use fungi_util::protocols::FUNGI_RELAY_HANDSHAKE_PROTOCOL;
 use libp2p::{
+    Multiaddr, PeerId, Swarm,
     futures::{AsyncReadExt, StreamExt},
     identity::Keypair,
     mdns,
     multiaddr::Protocol,
     noise,
     swarm::SwarmEvent,
-    tcp, yamux, Multiaddr, PeerId, Swarm,
+    tcp, yamux,
 };
 use std::{
     any::Any,
@@ -37,7 +38,7 @@ impl SwarmAsyncCall {
     }
 }
 
-impl Deref for SwarmController {
+impl Deref for SwarmControl {
     type Target = UnboundedSender<SwarmAsyncCall>;
 
     fn deref(&self) -> &Self::Target {
@@ -46,13 +47,13 @@ impl Deref for SwarmController {
 }
 
 #[derive(Clone)]
-pub struct SwarmController {
+pub struct SwarmControl {
     pub local_peer_id: Arc<PeerId>,
     pub swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
     pub stream_control: libp2p_stream::Control,
 }
 
-impl SwarmController {
+impl SwarmControl {
     pub fn local_peer_id(&self) -> PeerId {
         *self.local_peer_id
     }
@@ -131,7 +132,7 @@ impl FungiSwarm {
     pub async fn start_swarm(
         keypair: Keypair,
         apply: impl FnOnce(&mut TSwarm),
-    ) -> Result<(SwarmController, JoinHandle<()>)> {
+    ) -> Result<(SwarmControl, JoinHandle<()>)> {
         let mdns =
             mdns::tokio::Behaviour::new(mdns::Config::default(), keypair.public().to_peer_id())?;
 
@@ -158,7 +159,7 @@ impl FungiSwarm {
         let task_handle = Self::spawn_swarm(swarm, swarm_caller_rx);
 
         Ok((
-            SwarmController {
+            SwarmControl {
                 local_peer_id: Arc::new(local_peer_id),
                 swarm_caller_tx,
                 stream_control,

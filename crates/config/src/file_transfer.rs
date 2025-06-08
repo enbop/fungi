@@ -8,7 +8,7 @@ pub struct FileTransfer {
     #[serde(default)]
     pub client: Vec<FileTransferClient>,
     #[serde(default)]
-    pub server: FileTransferServer,
+    pub server: FileTransferService,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -19,9 +19,9 @@ pub struct FileTransferClient {
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct FileTransferServer {
+pub struct FileTransferService {
     #[serde(default)]
-    pub enable: bool,
+    pub enabled: bool,
     #[serde(default)]
     pub allowed_peers: Vec<PeerId>,
     #[serde(default)]

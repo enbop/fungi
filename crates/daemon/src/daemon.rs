@@ -1,13 +1,13 @@
 use crate::{
     DaemonArgs,
+    controls::FileTransferServiceControl,
     listeners::{
-        FRALocalListener, FRAPeerListener, FileTransferLocalListener, FileTransferRpcServer,
-        FungiDaemonRpcServer,
+        FRALocalListener, FRAPeerListener, FileTransferLocalListener, FungiDaemonRpcServer,
     },
 };
 use anyhow::Result;
-use fungi_config::{FungiConfig, FungiDir};
-use fungi_swarm::{FungiSwarm, SwarmController, TSwarm};
+use fungi_config::{FungiConfig, FungiDir, file_transfer::FileTransferService as FTSConfig};
+use fungi_swarm::{FungiSwarm, SwarmControl, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
 use std::path::PathBuf;
 use tokio::{sync::OnceCell, task::JoinHandle};
@@ -18,7 +18,6 @@ struct TaskHandles {
     swarm_task: JoinHandle<()>,
     fra_local_listener_task: JoinHandle<()>,
     fra_remote_listener_task: JoinHandle<()>,
-    file_transfer_server_task: JoinHandle<()>,
     daemon_rpc_task: JoinHandle<()>,
 }
 
@@ -26,7 +25,8 @@ pub struct FungiDaemon {
     config: FungiConfig,
     args: DaemonArgs,
 
-    pub swarm_controller: SwarmController,
+    pub swarm_control: SwarmControl,
+    pub fts_control: FileTransferServiceControl,
 
     task_handles: TaskHandles,
 }
@@ -44,36 +44,29 @@ impl FungiDaemon {
         }
 
         let keypair = get_keypair_from_dir(&fungi_dir).unwrap();
-        let (swarm_controller, swarm_task) = FungiSwarm::start_swarm(keypair, |swarm| {
+        let (swarm_control, swarm_task) = FungiSwarm::start_swarm(keypair, |swarm| {
             apply_listen(swarm, &config);
             #[cfg(feature = "tcp-tunneling")]
             apply_tcp_tunneling(swarm, &config);
         })
         .await?;
 
-        let stream_control = swarm_controller.stream_control.clone();
+        let stream_control = swarm_control.stream_control.clone();
 
         let fra_local_listener_task =
             FRALocalListener::start(args.clone(), stream_control.clone())?;
         let fra_remote_listener_task =
-            FRAPeerListener::start(args.clone(), config.clone(), stream_control)?;
+            FRAPeerListener::start(args.clone(), config.clone(), stream_control.clone())?;
 
-        // TODO refactor: use a file_transfer control
-        let stream_control = swarm_controller.stream_control.clone();
-        let file_transfer_server_config = config.file_transfer.server.clone();
-        let file_transfer_server_task = tokio::spawn(async move {
-            if file_transfer_server_config.enable {
-                let server = FileTransferRpcServer::new(file_transfer_server_config);
-                server.listen_from_libp2p_stream(stream_control).await;
-            }
-        });
+        let fts_control = FileTransferServiceControl::new(stream_control.clone());
+        Self::init_fts(config.file_transfer.server.clone(), &fts_control);
 
-        let stream_control = swarm_controller.stream_control.clone();
+        let stream_control = swarm_control.stream_control.clone();
         let file_transfer_client_config = config.file_transfer.client.clone();
         if file_transfer_client_config.len() > 0 {
             let peer_id = file_transfer_client_config[0].target_peer;
 
-            swarm_controller
+            swarm_control
                 .invoke_swarm(move |swarm| swarm.dial(peer_id))
                 .await
                 .unwrap();
@@ -83,19 +76,19 @@ impl FungiDaemon {
             FileTransferLocalListener::start(file_transfer_client_config, stream_control).await;
         });
 
-        let daemon_rpc_task = FungiDaemonRpcServer::start(args.clone(), swarm_controller.clone())?;
+        let daemon_rpc_task = FungiDaemonRpcServer::start(args.clone(), swarm_control.clone())?;
 
         let task_handles = TaskHandles {
             swarm_task,
             fra_local_listener_task,
             fra_remote_listener_task,
-            file_transfer_server_task,
             daemon_rpc_task,
         };
         Ok(Self {
             config,
             args,
-            swarm_controller,
+            swarm_control,
+            fts_control,
             task_handles,
         })
     }
@@ -141,6 +134,14 @@ impl FungiDaemon {
 
     pub fn get_fungi_bin_path_unchecked() -> PathBuf {
         FUNGI_BIN_PATH.get().unwrap().clone()
+    }
+
+    fn init_fts(config: FTSConfig, fts_control: &FileTransferServiceControl) {
+        if config.enabled {
+            if let Err(e) = fts_control.add_service(config) {
+                log::warn!("Failed to add file transfer service: {}", e);
+            }
+        }
     }
 }
 

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{io, path::PathBuf};
 
 use libunftp::{
     auth::DefaultUser,
@@ -41,8 +41,15 @@ impl From<unftp_sbe_fs::Meta> for Metadata {
 pub struct FileSystemWrapper(Filesystem);
 
 impl FileSystemWrapper {
-    pub fn new(path: PathBuf) -> Self {
-        Self(Filesystem::new(path).unwrap())
+    pub fn new(path: PathBuf) -> io::Result<Self> {
+        if !path.exists() {
+            return Err(io::ErrorKind::NotFound.into());
+        }
+        if !path.is_dir() {
+            return Err(io::ErrorKind::NotADirectory.into());
+        }
+        let inner = Filesystem::new(path)?;
+        Ok(Self(inner))
     }
 
     pub async fn metadata(&self, path: &PathBuf) -> Metadata {

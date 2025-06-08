@@ -56,7 +56,7 @@ fn start_fungi_daemon_block(fungi_dir: String, fungi_bin_path: String) {
         let daemon = FungiDaemon::start(args).await.unwrap(); // TODO handle error
         log::info!(
             "Fungi local peer id: {:?}",
-            daemon.swarm_controller.local_peer_id()
+            daemon.swarm_control.local_peer_id()
         );
         rx.await.ok();
         log::info!("Fungi daemon stopped");
