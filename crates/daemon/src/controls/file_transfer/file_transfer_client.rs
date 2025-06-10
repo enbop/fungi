@@ -17,7 +17,7 @@ use tarpc::{context, serde_transport, tokio_serde::formats::Bincode};
 use tokio::task::JoinHandle;
 use tokio_util::{codec::LengthDelimitedCodec, compat::FuturesAsyncReadCompatExt as _};
 
-use crate::controls::FileTransferRpcClient;
+use super::FileTransferRpcClient;
 
 #[async_trait]
 impl<User: UserDetail> StorageBackend<User> for FileTransferRpcClient {

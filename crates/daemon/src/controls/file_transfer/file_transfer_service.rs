@@ -20,7 +20,7 @@ use tarpc::{
 use tokio::task::JoinHandle;
 use tokio_util::{codec::LengthDelimitedCodec, compat::FuturesAsyncReadCompatExt as _};
 
-use crate::controls::FileTransferRpc as _;
+use super::FileTransferRpc as _;
 
 #[derive(Clone)]
 pub struct FileTransferRpcService {
