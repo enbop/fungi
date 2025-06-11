@@ -1,14 +1,19 @@
 use std::{
     collections::HashMap,
+    convert::Infallible,
     sync::{Arc, Mutex},
     time::Duration,
 };
 
+use dav_server::DavHandler;
 use fungi_config::file_transfer::FileTransferClient as FileTransferClientConfig;
 use fungi_swarm::SwarmControl;
 use fungi_util::protocols::FUNGI_FILE_TRANSFER_PROTOCOL;
+use hyper::{server::conn::http1, service::service_fn};
+use hyper_util::rt::TokioIo;
 use libp2p::{PeerId, Stream};
 use tarpc::{serde_transport, tokio_serde::formats::Bincode};
+use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio_util::{codec::LengthDelimitedCodec, compat::FuturesAsyncReadCompatExt as _};
 
@@ -78,6 +83,12 @@ async fn start_file_transfer_client(
             continue;
         };
         let client = connect_file_transfer_rpc(stream);
+
+        tokio::spawn(start_webdav_proxy_service(
+            "0.0.0.0".into(),
+            9005,
+            client.clone(),
+        ));
         start_ftp_proxy_service(config.proxy_ftp_host.clone(), config.proxy_ftp_port, client).await;
     }
 }
@@ -101,5 +112,49 @@ async fn start_ftp_proxy_service(host: String, port: u16, client: FileTransferRp
         }
 
         tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+}
+
+async fn start_webdav_proxy_service(
+    host: String,
+    port: u16,
+    client: FileTransferRpcClient,
+) -> JoinHandle<()> {
+    let dav_server = DavHandler::builder()
+        .filesystem(Box::new(client))
+        .build_handler();
+
+    let addr = format!("{}:{}", host, port);
+    println!("Listening webdav on {addr}");
+    let listener = TcpListener::bind(addr).await.unwrap();
+
+    // We start a loop to continuously accept incoming connections
+    loop {
+        let (stream, _) = listener.accept().await.unwrap();
+        let dav_server = dav_server.clone();
+
+        // Use an adapter to access something implementing `tokio::io` traits as if they implement
+        // `hyper::rt` IO traits.
+        let io = TokioIo::new(stream);
+
+        // Spawn a tokio task to serve multiple connections concurrently
+        tokio::task::spawn(async move {
+            // Finally, we bind the incoming connection to our `hello` service
+            if let Err(err) = http1::Builder::new()
+                // `service_fn` converts our function in a `Service`
+                .serve_connection(
+                    io,
+                    service_fn({
+                        move |req| {
+                            let dav_server = dav_server.clone();
+                            async move { Ok::<_, Infallible>(dav_server.handle(req).await) }
+                        }
+                    }),
+                )
+                .await
+            {
+                eprintln!("Failed serving: {err:?}");
+            }
+        });
     }
 }
