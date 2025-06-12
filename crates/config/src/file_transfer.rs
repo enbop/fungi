@@ -9,14 +9,17 @@ pub struct FileTransfer {
     pub client: Vec<FileTransferClient>,
     #[serde(default)]
     pub server: FileTransferService,
+    #[serde(default)]
+    pub proxy_ftp: ProxyFtp,
+    #[serde(default)]
+    pub proxy_webdav: ProxyWebdav,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct FileTransferClient {
-    pub target_peer: PeerId,
-
-    pub proxy_ftp_host: String,
-    pub proxy_ftp_port: u16,
+    #[serde(default)]
+    pub name: Option<String>,
+    pub peer_id: PeerId,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -27,4 +30,24 @@ pub struct FileTransferService {
     pub allowed_peers: Vec<PeerId>,
     #[serde(default)]
     pub shared_root_dir: PathBuf,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct ProxyFtp {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub host: String,
+    #[serde(default)]
+    pub port: u16,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct ProxyWebdav {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub host: String,
+    #[serde(default)]
+    pub port: u16,
 }

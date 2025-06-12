@@ -1,10 +1,12 @@
 use std::{
     collections::HashMap,
     convert::Infallible,
+    path::PathBuf,
     sync::{Arc, Mutex},
     time::Duration,
 };
 
+use anyhow::bail;
 use dav_server::DavHandler;
 use fungi_config::file_transfer::FileTransferClient as FileTransferClientConfig;
 use fungi_swarm::SwarmControl;
@@ -12,17 +14,30 @@ use fungi_util::protocols::FUNGI_FILE_TRANSFER_PROTOCOL;
 use hyper::{server::conn::http1, service::service_fn};
 use hyper_util::rt::TokioIo;
 use libp2p::{PeerId, Stream};
-use tarpc::{serde_transport, tokio_serde::formats::Bincode};
+use tarpc::{context, serde_transport, tokio_serde::formats::Bincode};
 use tokio::net::TcpListener;
-use tokio::task::JoinHandle;
 use tokio_util::{codec::LengthDelimitedCodec, compat::FuturesAsyncReadCompatExt as _};
 
-use crate::controls::file_transfer::FileTransferRpcClient;
+use crate::controls::file_transfer::{FileTransferRpc, FileTransferRpcClient};
+
+#[derive(Debug, Clone)]
+struct FileClient {
+    peer_id: Arc<PeerId>,
+    is_windows: Option<bool>,
+    rpc_client: Option<FileTransferRpcClient>,
+}
 
 #[derive(Clone)]
 pub struct FileTransferClientControl {
     swarm_control: SwarmControl,
-    clients: Arc<Mutex<HashMap<PeerId, JoinHandle<()>>>>,
+    clients: Arc<Mutex<HashMap<String, FileClient>>>,
+}
+
+impl std::fmt::Debug for FileTransferClientControl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // only print name "FileTransferClientControl"
+        f.debug_struct("FileTransferClientControl").finish()
+    }
 }
 
 impl FileTransferClientControl {
@@ -33,15 +48,86 @@ impl FileTransferClientControl {
         }
     }
 
-    pub fn start_client(&self, config: FileTransferClientConfig) {
-        let client_handle = tokio::spawn(start_file_transfer_client(
-            config.clone(),
-            self.swarm_control.clone(),
-        ));
-        self.clients
-            .lock()
-            .unwrap()
-            .insert(config.target_peer, client_handle);
+    // TODO add callback on_client_broken
+
+    pub fn add_client(&self, config: FileTransferClientConfig) {
+        let key = if config.name.is_some() {
+            config.name.clone().unwrap()
+        } else {
+            config.peer_id.to_string()
+        };
+        log::info!(
+            "Adding file transfer client: {} with peer_id: {}",
+            key,
+            config.peer_id
+        );
+        self.clients.lock().unwrap().insert(
+            key,
+            FileClient {
+                peer_id: Arc::new(config.peer_id),
+                rpc_client: None,
+                is_windows: None,
+            },
+        );
+    }
+
+    async fn connect_client(&self, peer_id: PeerId) -> anyhow::Result<FileTransferRpcClient> {
+        let mut dial_success = false;
+        let mut retry = 5;
+        while retry > 0 {
+            // TODO: add a method to connect to a peer explicitly
+            if let Err(e) = self
+                .swarm_control
+                .invoke_swarm(move |swarm| swarm.dial(peer_id.clone()))
+                .await
+                .unwrap()
+            {
+                log::error!(
+                    "Failed to dial peer {}: {}. Retrying in 3 seconds...",
+                    peer_id,
+                    e
+                );
+                tokio::time::sleep(Duration::from_secs(3)).await;
+            } else {
+                dial_success = true;
+                break;
+            }
+            retry -= 1;
+        }
+        if !dial_success {
+            bail!("Failed to dial peer {} after multiple attempts", peer_id);
+        }
+        let mut stream_control = self.swarm_control.stream_control.clone();
+        let Ok(stream) = stream_control
+            .open_stream(peer_id.clone(), FUNGI_FILE_TRANSFER_PROTOCOL)
+            .await
+        else {
+            bail!("Failed to open stream to peer {}", peer_id);
+        };
+        let client = connect_file_transfer_rpc(stream);
+
+        Ok(client)
+    }
+
+    pub async fn get_client(&self, name: &str) -> anyhow::Result<FileTransferRpcClient> {
+        let Some(mut fc) = self.clients.lock().unwrap().get(name).cloned() else {
+            bail!("File transfer client with name '{}' not found", name);
+        };
+        if fc.rpc_client.is_none() {
+            let client = self.connect_client(*fc.peer_id).await?;
+            let is_windows = client.is_windows(context::current()).await?;
+            fc.is_windows = Some(is_windows);
+            fc.rpc_client = Some(client);
+            // update the client in the map
+            self.clients
+                .lock()
+                .unwrap()
+                .insert(name.to_string(), fc.clone());
+        }
+        if fc.rpc_client.is_none() {
+            bail!("File transfer client with name '{}' is not connected", name);
+        }
+        Ok(fc.rpc_client.unwrap())
     }
 }
 
@@ -53,47 +139,289 @@ fn connect_file_transfer_rpc(stream: Stream) -> FileTransferRpcClient {
     );
     FileTransferRpcClient::new(Default::default(), transport).spawn()
 }
+impl FileTransferClientControl {
+    async fn extract_client_and_path(
+        &self,
+        path: PathBuf,
+    ) -> anyhow::Result<(FileTransferRpcClient, PathBuf)> {
+        let path_str = path.to_string_lossy().to_string();
+        let clean_path = path_str
+            .trim_start_matches("./")
+            .trim_start_matches("/")
+            .to_string();
 
-async fn start_file_transfer_client(
-    config: FileTransferClientConfig,
-    mut swarm_control: SwarmControl,
-) {
-    loop {
-        if let Err(e) = swarm_control
-            .invoke_swarm(move |swarm| swarm.dial(config.target_peer))
+        if clean_path.is_empty() || clean_path == "." {
+            bail!("Cannot perform operation on root directory. Please specify a client directory.");
+        }
+
+        let parts: Vec<&str> = clean_path.split('/').collect();
+        let client_name = parts[0];
+
+        let client = self.get_client(client_name).await?;
+
+        let mut remaining_path = PathBuf::new();
+        if parts.len() > 1 {
+            for part in &parts[1..] {
+                remaining_path.push(part);
+            }
+        } else {
+            remaining_path.push(".");
+        }
+
+        Ok((client, remaining_path))
+    }
+
+    // TODO better way to check root path
+    pub async fn metadata(&self, path: PathBuf) -> fungi_fs::Result<fungi_fs::Metadata> {
+        let path_str = path.to_string_lossy();
+        if path_str == "." || path_str == "./" || path_str == "/" {
+            return Ok(fungi_fs::Metadata {
+                is_dir: true,
+                is_file: false,
+                len: 0,
+                modified: Some(std::time::SystemTime::now()),
+                is_symlink: false,
+                gid: 0,
+                uid: 0,
+                links: 1,
+                permissions: 0o555,
+                readlink: None,
+            });
+        }
+
+        let (client, remaining_path) = match self.extract_client_and_path(path).await {
+            Ok(result) => result,
+            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+        };
+
+        client
+            .metadata(context::current(), remaining_path)
             .await
-            .unwrap()
+            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+    }
+
+    pub async fn list(&self, path: PathBuf) -> fungi_fs::Result<Vec<fungi_fs::FileInfo>> {
+        let path_str = path.to_string_lossy();
+        if path_str == "." || path_str == "./" || path_str == "/" {
+            let clients = self.clients.lock().unwrap();
+            let mut result = Vec::new();
+
+            for client_name in clients.keys() {
+                result.push(fungi_fs::FileInfo {
+                    path: PathBuf::from(client_name),
+                    metadata: fungi_fs::Metadata {
+                        is_dir: true,
+                        is_file: false,
+                        len: 0,
+                        modified: Some(std::time::SystemTime::now()),
+                        is_symlink: false,
+                        gid: 0,
+                        uid: 0,
+                        links: 1,
+                        permissions: 0o555,
+                        readlink: None,
+                    },
+                });
+            }
+
+            return Ok(result);
+        }
+
+        let (client, remaining_path) = match self.extract_client_and_path(path).await {
+            Ok(result) => result,
+            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+        };
+
+        client
+            .list(context::current(), remaining_path)
+            .await
+            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+    }
+
+    pub async fn get(&self, path: PathBuf, start_pos: u64) -> fungi_fs::Result<Vec<u8>> {
+        let path_str = path.to_string_lossy();
+        if path_str == "." || path_str == "./" || path_str == "/" {
+            return Err(fungi_fs::FileTransferError::Other(
+                "Cannot read from root directory".to_string(),
+            ));
+        }
+
+        let (client, remaining_path) = match self.extract_client_and_path(path).await {
+            Ok(result) => result,
+            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+        };
+
+        client
+            .get(context::current(), remaining_path, start_pos)
+            .await
+            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+    }
+
+    pub async fn put(
+        &self,
+        bytes: Vec<u8>,
+        path: PathBuf,
+        start_pos: u64,
+    ) -> fungi_fs::Result<u64> {
+        let path_str = path.to_string_lossy();
+        if path_str == "." || path_str == "./" || path_str == "/" {
+            return Err(fungi_fs::FileTransferError::Other(
+                "Cannot write to root directory".to_string(),
+            ));
+        }
+
+        let (client, remaining_path) = match self.extract_client_and_path(path).await {
+            Ok(result) => result,
+            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+        };
+
+        client
+            .put(context::current(), bytes, remaining_path, start_pos)
+            .await
+            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+    }
+
+    pub async fn del(&self, path: PathBuf) -> fungi_fs::Result<()> {
+        let path_str = path.to_string_lossy();
+        if path_str == "." || path_str == "./" || path_str == "/" {
+            return Err(fungi_fs::FileTransferError::Other(
+                "Cannot delete root directory".to_string(),
+            ));
+        }
+
+        let (client, remaining_path) = match self.extract_client_and_path(path).await {
+            Ok(result) => result,
+            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+        };
+
+        if remaining_path.to_string_lossy() == "." {
+            return Err(fungi_fs::FileTransferError::Other(
+                "Cannot delete client root directory".to_string(),
+            ));
+        }
+
+        client
+            .del(context::current(), remaining_path)
+            .await
+            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+    }
+
+    pub async fn rmd(&self, path: PathBuf) -> fungi_fs::Result<()> {
+        let path_str = path.to_string_lossy();
+        if path_str == "." || path_str == "./" || path_str == "/" {
+            return Err(fungi_fs::FileTransferError::Other(
+                "Cannot remove root directory".to_string(),
+            ));
+        }
+
+        let (client, remaining_path) = match self.extract_client_and_path(path).await {
+            Ok(result) => result,
+            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+        };
+
+        if remaining_path.to_string_lossy() == "." {
+            return Err(fungi_fs::FileTransferError::Other(
+                "Cannot remove client root directory".to_string(),
+            ));
+        }
+
+        client
+            .rmd(context::current(), remaining_path)
+            .await
+            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+    }
+
+    pub async fn mkd(&self, path: PathBuf) -> fungi_fs::Result<()> {
+        let path_str = path.to_string_lossy();
+        if path_str == "." || path_str == "./" || path_str == "/" {
+            return Err(fungi_fs::FileTransferError::Other(
+                "Cannot create directory in root".to_string(),
+            ));
+        }
+
+        let (client, remaining_path) = match self.extract_client_and_path(path).await {
+            Ok(result) => result,
+            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+        };
+
+        client
+            .mkd(context::current(), remaining_path)
+            .await
+            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+    }
+    pub async fn rename(&self, from: PathBuf, to: PathBuf) -> fungi_fs::Result<()> {
+        let from_str = from.to_string_lossy();
+        let to_str = to.to_string_lossy();
+
+        if from_str == "."
+            || from_str == "./"
+            || from_str == "/"
+            || to_str == "."
+            || to_str == "./"
+            || to_str == "/"
         {
-            log::error!(
-                "Failed to dial peer {}: {}. Retrying in 5 seconds...",
-                config.target_peer,
-                e
-            );
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            continue;
+            return Err(fungi_fs::FileTransferError::Other(
+                "Cannot rename root directory".to_string(),
+            ));
+        }
+
+        let from_clean = from_str.trim_start_matches("./").to_string();
+        let to_clean = to_str.trim_start_matches("./").to_string();
+
+        if !from_clean.contains('/') || !to_clean.contains('/') {
+            return Err(fungi_fs::FileTransferError::Other(
+                "Cannot rename client directories at the top level".to_string(),
+            ));
+        }
+
+        let (from_client, from_remaining_path) =
+            match self.extract_client_and_path(from.clone()).await {
+                Ok(result) => result,
+                Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+            };
+
+        let (to_client, to_remaining_path) = match self.extract_client_and_path(to.clone()).await {
+            Ok(result) => result,
+            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
         };
 
-        let Ok(stream) = swarm_control
-            .stream_control
-            .open_stream(config.target_peer, FUNGI_FILE_TRANSFER_PROTOCOL)
+        if from.components().next() != to.components().next() {
+            return Err(fungi_fs::FileTransferError::Other(
+                "Cannot rename across different clients".to_string(),
+            ));
+        }
+
+        if from_remaining_path.to_string_lossy() == "." {
+            return Err(fungi_fs::FileTransferError::Other(
+                "Cannot rename client root directory".to_string(),
+            ));
+        }
+
+        from_client
+            .rename(context::current(), from_remaining_path, to_remaining_path)
             .await
-        else {
-            log::error!("Failed to open stream to peer {}", config.target_peer);
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            continue;
-        };
-        let client = connect_file_transfer_rpc(stream);
+            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+    }
 
-        tokio::spawn(start_webdav_proxy_service(
-            "0.0.0.0".into(),
-            9005,
-            client.clone(),
-        ));
-        start_ftp_proxy_service(config.proxy_ftp_host.clone(), config.proxy_ftp_port, client).await;
+    pub async fn cwd(&self, path: PathBuf) -> fungi_fs::Result<()> {
+        let path_str = path.to_string_lossy();
+        if path_str == "." || path_str == "./" || path_str == "/" {
+            return Ok(());
+        }
+
+        let (client, remaining_path) = match self.extract_client_and_path(path).await {
+            Ok(result) => result,
+            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+        };
+
+        client
+            .cwd(context::current(), remaining_path)
+            .await
+            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
     }
 }
 
-async fn start_ftp_proxy_service(host: String, port: u16, client: FileTransferRpcClient) {
+pub async fn start_ftp_proxy_service(host: String, port: u16, client: FileTransferClientControl) {
     loop {
         let client_cl = client.clone();
         let server = libunftp::ServerBuilder::new(Box::new(move || client_cl.clone()))
@@ -115,11 +443,11 @@ async fn start_ftp_proxy_service(host: String, port: u16, client: FileTransferRp
     }
 }
 
-async fn start_webdav_proxy_service(
+pub async fn start_webdav_proxy_service(
     host: String,
     port: u16,
-    client: FileTransferRpcClient,
-) -> JoinHandle<()> {
+    client: FileTransferClientControl,
+) {
     let dav_server = DavHandler::builder()
         .filesystem(Box::new(client))
         .build_handler();

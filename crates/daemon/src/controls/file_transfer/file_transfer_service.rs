@@ -72,6 +72,17 @@ impl super::FileTransferRpc for FileTransferRpcService {
     async fn cwd(self, _context: Context, path: PathBuf) -> Result<()> {
         self.fs.cwd(&path).await
     }
+
+    async fn is_windows(self, _context: Context) -> bool {
+        #[cfg(target_os = "windows")]
+        {
+            true
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            false
+        }
+    }
 }
 
 impl FileTransferRpcService {

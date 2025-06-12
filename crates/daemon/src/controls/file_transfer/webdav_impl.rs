@@ -9,9 +9,8 @@ use dav_server::{
 };
 use futures::{FutureExt, Stream, StreamExt, stream};
 use libp2p::bytes::Bytes;
-use tarpc::context;
 
-use super::FileTransferRpcClient;
+use super::FileTransferClientControl;
 
 #[derive(Debug, Clone)]
 struct DavMetaDataImpl(fungi_fs::Metadata);
@@ -35,23 +34,20 @@ impl DavMetaData for DavMetaDataImpl {
 #[derive(Debug)]
 struct DavFileImpl {
     path: PathBuf,
-    client: FileTransferRpcClient,
+    client: FileTransferClientControl,
     position: u64,
     data: Option<Vec<u8>>,
     options: OpenOptions,
 }
-
-// TODO: handle errors properly
 
 impl DavFile for DavFileImpl {
     fn metadata(&mut self) -> FsFuture<Box<dyn DavMetaData>> {
         async move {
             let meta = self
                 .client
-                .metadata(context::current(), self.path.clone())
+                .metadata(self.path.clone())
                 .await
-                .unwrap()
-                .unwrap();
+                .map_err(map_error)?;
             Ok(Box::new(DavMetaDataImpl(meta)) as Box<dyn DavMetaData>)
         }
         .boxed()
@@ -62,15 +58,9 @@ impl DavFile for DavFileImpl {
             let bytes = buf.chunk().to_vec();
             let _ = self
                 .client
-                .put(
-                    context::current(),
-                    bytes.clone(),
-                    self.path.clone(),
-                    self.position,
-                )
+                .put(bytes.clone(), self.path.clone(), self.position)
                 .await
-                .unwrap()
-                .unwrap();
+                .map_err(map_error)?;
             self.position += bytes.len() as u64;
             Ok(())
         }
@@ -82,10 +72,9 @@ impl DavFile for DavFileImpl {
             let bytes = buf.to_vec();
             let _ = self
                 .client
-                .put(context::current(), bytes, self.path.clone(), self.position)
+                .put(bytes, self.path.clone(), self.position)
                 .await
-                .unwrap()
-                .unwrap();
+                .map_err(map_error)?;
             self.position += buf.len() as u64;
             Ok(())
         }
@@ -98,10 +87,9 @@ impl DavFile for DavFileImpl {
             if self.data.is_none() {
                 let data = self
                     .client
-                    .get(context::current(), self.path.clone(), self.position)
+                    .get(self.path.clone(), self.position)
                     .await
-                    .unwrap()
-                    .unwrap();
+                    .map_err(map_error)?;
                 self.data = Some(data);
             }
 
@@ -150,10 +138,9 @@ impl DavFile for DavFileImpl {
                 SeekFrom::End(_) => {
                     let meta = self
                         .client
-                        .metadata(context::current(), self.path.clone())
+                        .metadata(self.path.clone())
                         .await
-                        .unwrap()
-                        .unwrap();
+                        .map_err(map_error)?;
 
                     if let SeekFrom::End(offset) = pos {
                         if offset >= 0 {
@@ -199,7 +186,7 @@ impl DavDirEntry for DavDirEntryImpl {
     }
 }
 
-impl DavFileSystem for FileTransferRpcClient {
+impl DavFileSystem for FileTransferClientControl {
     fn open<'a>(
         &'a self,
         path: &'a DavPath,
@@ -216,7 +203,7 @@ impl DavFileSystem for FileTransferRpcClient {
         );
         async move {
             if !options.write && !options.create {
-                let meta_result = client.metadata(context::current(), path_buf.clone()).await;
+                let meta_result = client.metadata(path_buf.clone()).await;
 
                 if let Err(_) = meta_result {
                     return Err(FsError::NotFound);
@@ -249,9 +236,8 @@ impl DavFileSystem for FileTransferRpcClient {
         log::info!("Reading directory: {}", path_buf.display());
         async move {
             let entries = client
-                .list(context::current(), path_buf.clone())
+                .list(path_buf.clone())
                 .await
-                .map_err(|_| FsError::NotFound)?
                 .map_err(|_| FsError::NotFound)?;
 
             let stream = stream::iter(entries).map(|entry| {
@@ -287,13 +273,25 @@ impl DavFileSystem for FileTransferRpcClient {
         log::info!("Getting metadata for path: {} {}", path, path_buf.display());
         async move {
             let meta = client
-                .metadata(context::current(), path_buf)
+                .metadata(path_buf)
                 .await
-                .unwrap()
                 .map_err(|_| FsError::NotFound)?;
 
             Ok(Box::new(DavMetaDataImpl(meta)) as Box<dyn DavMetaData>)
         }
         .boxed()
+    }
+}
+
+fn map_error(err: fungi_fs::FileTransferError) -> FsError {
+    use fungi_fs::FileTransferError;
+    match err {
+        FileTransferError::NotFound => FsError::NotFound,
+        FileTransferError::PermissionDenied => FsError::Forbidden,
+        FileTransferError::ConnectionBroken => FsError::GeneralFailure,
+        FileTransferError::Other(msg) => {
+            log::error!("File transfer error: {}", msg);
+            FsError::GeneralFailure
+        }
     }
 }

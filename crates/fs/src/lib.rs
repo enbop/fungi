@@ -17,6 +17,8 @@ pub enum FileTransferError {
     NotFound,
     #[error("Permission Denied")]
     PermissionDenied,
+    #[error("Connection Broken")]
+    ConnectionBroken,
     #[error("Other: {0}")]
     Other(String),
 }

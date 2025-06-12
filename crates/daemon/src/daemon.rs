@@ -20,6 +20,8 @@ struct TaskHandles {
     fra_local_listener_task: JoinHandle<()>,
     fra_remote_listener_task: JoinHandle<()>,
     daemon_rpc_task: JoinHandle<()>,
+    proxy_ftp_task: Option<JoinHandle<()>>,
+    proxy_webdav_task: Option<JoinHandle<()>>,
 }
 
 pub struct FungiDaemon {
@@ -65,6 +67,26 @@ impl FungiDaemon {
         let ftc_control = FileTransferClientControl::new(swarm_control.clone());
         Self::init_ftc(config.file_transfer.client.clone(), &ftc_control);
 
+        let proxy_ftp_task = if config.file_transfer.proxy_ftp.enabled {
+            Some(tokio::spawn(crate::controls::start_ftp_proxy_service(
+                config.file_transfer.proxy_ftp.host.clone(),
+                config.file_transfer.proxy_ftp.port,
+                ftc_control.clone(),
+            )))
+        } else {
+            None
+        };
+
+        let proxy_webdav_task = if config.file_transfer.proxy_webdav.enabled {
+            Some(tokio::spawn(crate::controls::start_webdav_proxy_service(
+                config.file_transfer.proxy_webdav.host.clone(),
+                config.file_transfer.proxy_webdav.port,
+                ftc_control.clone(),
+            )))
+        } else {
+            None
+        };
+
         let daemon_rpc_task = FungiDaemonRpcServer::start(args.clone(), swarm_control.clone())?;
 
         let task_handles = TaskHandles {
@@ -72,6 +94,8 @@ impl FungiDaemon {
             fra_local_listener_task,
             fra_remote_listener_task,
             daemon_rpc_task,
+            proxy_ftp_task,
+            proxy_webdav_task,
         };
         Ok(Self {
             config,
@@ -135,7 +159,7 @@ impl FungiDaemon {
 
     fn init_ftc(clients: Vec<FTCConfig>, ftc_control: &FileTransferClientControl) {
         for client in clients {
-            ftc_control.start_client(client);
+            ftc_control.add_client(client);
         }
     }
 }

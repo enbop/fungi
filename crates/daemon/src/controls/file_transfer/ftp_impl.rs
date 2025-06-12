@@ -2,12 +2,11 @@ use std::fmt::Debug;
 
 use async_trait::async_trait;
 use libunftp::{auth::UserDetail, storage::StorageBackend};
-use tarpc::context;
 
-use super::FileTransferRpcClient;
+use super::FileTransferClientControl;
 
 #[async_trait]
-impl<User: UserDetail> StorageBackend<User> for FileTransferRpcClient {
+impl<User: UserDetail> StorageBackend<User> for FileTransferClientControl {
     type Metadata = fungi_fs::Metadata;
 
     fn supported_features(&self) -> u32 {
@@ -20,11 +19,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferRpcClient {
         path: P,
     ) -> libunftp::storage::Result<Self::Metadata> {
         let path = path.as_ref().to_path_buf();
-        // TODO handle errors properly
-        self.metadata(context::current(), path)
-            .await
-            .unwrap()
-            .map_err(|e| map_error(e))
+        self.metadata(path).await.map_err(|e| map_error(e))
     }
 
     async fn list<P: AsRef<std::path::Path> + Send + Debug>(
@@ -35,11 +30,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferRpcClient {
         Vec<libunftp::storage::Fileinfo<std::path::PathBuf, Self::Metadata>>,
     > {
         let path = path.as_ref().to_path_buf();
-        let file_infos = self
-            .list(context::current(), path)
-            .await
-            .unwrap()
-            .map_err(|e| map_error(e))?;
+        let file_infos = self.list(path).await.map_err(|e| map_error(e))?;
 
         Ok(file_infos
             .into_iter()
@@ -57,11 +48,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferRpcClient {
         start_pos: u64,
     ) -> libunftp::storage::Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
         let path = path.as_ref().to_path_buf();
-        let bytes = self
-            .get(context::current(), path, start_pos)
-            .await
-            .unwrap()
-            .map_err(|e| map_error(e))?;
+        let bytes = self.get(path, start_pos).await.map_err(|e| map_error(e))?;
 
         let cursor = std::io::Cursor::new(bytes);
         Ok(Box::new(cursor) as Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>)
@@ -86,9 +73,8 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferRpcClient {
                 libunftp::storage::Error::new(libunftp::storage::ErrorKind::LocalError, e)
             })?;
 
-        self.put(context::current(), buffer, path, start_pos)
+        self.put(buffer, path, start_pos)
             .await
-            .unwrap()
             .map_err(|e| map_error(e))
     }
 
@@ -98,10 +84,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferRpcClient {
         path: P,
     ) -> libunftp::storage::Result<()> {
         let path = path.as_ref().to_path_buf();
-        self.del(context::current(), path)
-            .await
-            .unwrap()
-            .map_err(|e| map_error(e))
+        self.del(path).await.map_err(|e| map_error(e))
     }
 
     async fn rmd<P: AsRef<std::path::Path> + Send + Debug>(
@@ -110,10 +93,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferRpcClient {
         path: P,
     ) -> libunftp::storage::Result<()> {
         let path = path.as_ref().to_path_buf();
-        self.rmd(context::current(), path)
-            .await
-            .unwrap()
-            .map_err(|e| map_error(e))
+        self.rmd(path).await.map_err(|e| map_error(e))
     }
 
     async fn mkd<P: AsRef<std::path::Path> + Send + Debug>(
@@ -122,10 +102,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferRpcClient {
         path: P,
     ) -> libunftp::storage::Result<()> {
         let path = path.as_ref().to_path_buf();
-        self.mkd(context::current(), path)
-            .await
-            .unwrap()
-            .map_err(|e| map_error(e))
+        self.mkd(path).await.map_err(|e| map_error(e))
     }
 
     async fn rename<P: AsRef<std::path::Path> + Send + Debug>(
@@ -136,10 +113,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferRpcClient {
     ) -> libunftp::storage::Result<()> {
         let from = from.as_ref().to_path_buf();
         let to = to.as_ref().to_path_buf();
-        self.rename(context::current(), from, to)
-            .await
-            .unwrap()
-            .map_err(|e| map_error(e))
+        self.rename(from, to).await.map_err(|e| map_error(e))
     }
 
     async fn cwd<P: AsRef<std::path::Path> + Send + Debug>(
@@ -148,10 +122,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferRpcClient {
         path: P,
     ) -> libunftp::storage::Result<()> {
         let path = path.as_ref().to_path_buf();
-        self.cwd(context::current(), path)
-            .await
-            .unwrap()
-            .map_err(|e| map_error(e))
+        self.cwd(path).await.map_err(|e| map_error(e))
     }
 }
 
@@ -162,6 +133,7 @@ fn map_error(err: fungi_fs::FileTransferError) -> libunftp::storage::Error {
     match err {
         FileTransferError::NotFound => ErrorKind::PermanentFileNotAvailable.into(),
         FileTransferError::PermissionDenied => ErrorKind::PermissionDenied.into(),
+        FileTransferError::ConnectionBroken => ErrorKind::ConnectionClosed.into(),
         FileTransferError::Other(msg) => {
             log::error!("File transfer error: {}", msg);
             ErrorKind::LocalError.into()
