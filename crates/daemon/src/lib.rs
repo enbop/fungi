@@ -1,10 +1,12 @@
+mod controls;
 mod daemon;
-pub use daemon::FungiDaemon;
-use std::path::PathBuf;
 pub mod listeners;
+
 #[cfg(feature = "cli")]
 use clap::Parser;
-use fungi_config::{FungiDir, DEFAULT_FUNGI_DIR};
+pub use daemon::FungiDaemon;
+use fungi_config::{DEFAULT_FUNGI_DIR, FungiDir};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "cli", derive(Parser))]

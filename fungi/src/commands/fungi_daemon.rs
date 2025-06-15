@@ -10,16 +10,16 @@ pub async fn run(args: DaemonArgs) -> Result<()> {
 
     let daemon = FungiDaemon::start(args).await?;
 
-    let swarm_controller = daemon.swarm_controller.clone();
-    println!("Local Peer ID: {}", swarm_controller.local_peer_id());
+    let swarm_control = daemon.swarm_control.clone();
+    println!("Local Peer ID: {}", swarm_control.local_peer_id());
 
-    let network_info = swarm_controller
+    let network_info = swarm_control
         .invoke_swarm(|swarm| swarm.network_info())
         .await
         .unwrap();
     println!("Network info: {:?}", network_info);
 
-    if let Err(e) = swarm_controller
+    if let Err(e) = swarm_control
         .listen_relay(get_default_relay_addr())
         .await
     {

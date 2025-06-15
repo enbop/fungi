@@ -1,9 +1,10 @@
-use crate::{FungiDir, DEFAULT_CONFIG_FILE};
+use crate::{DEFAULT_CONFIG_FILE, FungiDir};
 use std::{io, path::Path};
 
 pub fn init(dirs: &impl FungiDir) -> io::Result<()> {
     let fungi_dir = dirs.fungi_dir();
     // check if the directory exists
+    // TODO also check if the directory is empty
     if fungi_dir.exists() {
         return Ok(());
     }

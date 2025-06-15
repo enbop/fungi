@@ -1,3 +1,4 @@
+pub mod file_transfer;
 mod fra;
 mod init;
 mod libp2p;
@@ -10,6 +11,8 @@ use libp2p::*;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tcp_tunneling::*;
+
+use crate::file_transfer::FileTransfer;
 
 pub const DEFAULT_CONFIG_FILE: &str = "config.toml";
 pub const DEFAULT_FUNGI_DIR: &str = ".fungi";
@@ -25,6 +28,8 @@ pub struct FungiConfig {
     pub libp2p: Libp2p,
     #[serde(default)]
     pub fungi_remote_access: FungiRemoteAccess,
+    #[serde(default)]
+    pub file_transfer: FileTransfer,
 }
 
 impl FungiConfig {

@@ -1,5 +1,5 @@
 use fungi_config::FungiDir;
-use fungi_swarm::SwarmController;
+use fungi_swarm::SwarmControl;
 use fungi_util::ipc;
 use futures::StreamExt;
 use interprocess::local_socket::tokio::prelude::*;
@@ -32,20 +32,17 @@ pub trait FungiDaemonRpc {
 
 #[derive(Clone)]
 pub struct FungiDaemonRpcServer {
-    swarm_controller: SwarmController,
+    swarm_control: SwarmControl,
 
     accept_streams: Arc<Mutex<HashMap<StreamProtocol, JoinHandle<()>>>>,
 }
 
 impl FungiDaemonRpcServer {
-    pub fn start(
-        args: DaemonArgs,
-        swarm_controller: SwarmController,
-    ) -> io::Result<JoinHandle<()>> {
+    pub fn start(args: DaemonArgs, swarm_control: SwarmControl) -> io::Result<JoinHandle<()>> {
         let ipc_listener = ipc::create_ipc_listener(&args.daemon_rpc_path().to_string_lossy())?;
         let task_handle = tokio::spawn(Self::listen_from_ipc(
             Self {
-                swarm_controller,
+                swarm_control,
                 accept_streams: Default::default(),
             },
             ipc_listener,
@@ -56,7 +53,7 @@ impl FungiDaemonRpcServer {
 
 impl FungiDaemonRpc for FungiDaemonRpcServer {
     async fn peer_id(self, _: Context) -> PeerId {
-        self.swarm_controller.local_peer_id()
+        self.swarm_control.local_peer_id()
     }
 
     async fn accept_stream(
@@ -73,7 +70,7 @@ impl FungiDaemonRpc for FungiDaemonRpcServer {
         }
 
         let mut incoming_streams = self
-            .swarm_controller
+            .swarm_control
             .stream_control
             .accept(protocol.clone())
             .map_err(|e| e.to_string())?;

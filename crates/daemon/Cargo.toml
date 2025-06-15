@@ -28,6 +28,13 @@ libp2p-stream = { workspace = true }
 tokio-util = { version = "0.7", features = ["compat"] }
 anyhow = { workspace = true }
 tarpc = { workspace = true }
+fungi-fs = { path = "../fs" }
+thiserror = { workspace = true }
+async-trait = "0.1"
+libunftp = "0.21"
+dav-server = { version = "0.8", default-features = false }
+hyper = { version = "1.1.0", features = ["http1", "server"] }
+hyper-util = { version = "0.1.2", features = ["tokio"] }
 
 [dependencies.clap]
 version = "4"
