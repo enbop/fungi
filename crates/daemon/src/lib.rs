@@ -32,3 +32,7 @@ impl FungiDir for DaemonArgs {
             .unwrap_or_else(|| home::home_dir().unwrap().join(DEFAULT_FUNGI_DIR))
     }
 }
+
+pub fn greet() -> String {
+    "Greetings from the Fungi Daemon!".to_string()
+}
