@@ -6,5 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-String greet({required String name}) =>
-    RustLib.instance.api.crateApiSimpleGreet(name: name);
+Future<void> startFungiDaemon() =>
+    RustLib.instance.api.crateApiFungiStartFungiDaemon();
+
+Future<String?> peerId() => RustLib.instance.api.crateApiFungiPeerId();
