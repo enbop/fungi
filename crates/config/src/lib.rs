@@ -6,11 +6,13 @@ mod tcp_tunneling;
 
 pub use init::init;
 
+use anyhow::Result;
 use fra::*;
 use libp2p::*;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tcp_tunneling::*;
+use toml_edit::DocumentMut;
 
 use crate::file_transfer::FileTransfer;
 
@@ -30,13 +32,20 @@ pub struct FungiConfig {
     pub fungi_remote_access: FungiRemoteAccess,
     #[serde(default)]
     pub file_transfer: FileTransfer,
+
+    #[serde(skip)]
+    config_file: PathBuf,
+    #[serde(skip)]
+    document: DocumentMut,
 }
 
 impl FungiConfig {
-    pub fn apply_from_dir(fungi_dir: &Path) -> Result<Self, toml::de::Error> {
-        let s = std::fs::read_to_string(fungi_dir.join(DEFAULT_CONFIG_FILE))
-            .expect("Failed to read config file");
-        let cfg = Self::parse_toml(&s)?;
+    pub fn apply_from_dir(fungi_dir: &Path) -> Result<Self> {
+        let config_file = fungi_dir.join(DEFAULT_CONFIG_FILE);
+        println!("Loading Fungi config from: {:?}", config_file);
+        let s = std::fs::read_to_string(&config_file)?;
+        let mut cfg = Self::parse_toml(&s)?;
+        cfg.config_file = config_file;
         Ok(cfg)
     }
 
@@ -44,8 +53,11 @@ impl FungiConfig {
         self.fungi_remote_access.allow_all_peers = allow;
     }
 
-    pub fn parse_toml(s: &str) -> Result<Self, toml::de::Error> {
-        toml::from_str(s)
+    pub fn parse_toml(s: &str) -> Result<Self> {
+        let document: DocumentMut = s.parse()?;
+        let mut config: Self = toml::from_str(s)?;
+        config.document = document;
+        Ok(config)
     }
 }
 

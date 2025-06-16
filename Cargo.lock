@@ -1522,11 +1522,13 @@ dependencies = [
 name = "fungi-config"
 version = "0.3.0"
 dependencies = [
+ "anyhow",
  "fungi-util",
  "libp2p-identity",
  "multiaddr",
  "serde",
  "toml 0.8.13",
+ "toml_edit",
 ]
 
 [[package]]
@@ -3969,8 +3971,13 @@ dependencies = [
 name = "rust_lib_flutter_app"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "env_logger 0.11.3",
  "flutter_rust_bridge",
+ "fungi-config",
  "fungi-daemon",
+ "log",
+ "once_cell",
 ]
 
 [[package]]

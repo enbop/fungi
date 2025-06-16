@@ -8,6 +8,8 @@ edition = "2024"
 [dependencies]
 serde = { workspace = true }
 toml = "0.8"
+toml_edit = "0.22"
 libp2p-identity = { workspace = true }
 multiaddr = "0.18"
 fungi-util = { path = "../util" }
+anyhow = { workspace = true }
