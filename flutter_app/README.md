@@ -1,4 +1,4 @@
-# flutter_app
+# fungi_app
 
 A new Flutter project.
 

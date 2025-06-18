@@ -1,4 +1,4 @@
-name: flutter_app
+name: fungi_app
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -34,7 +34,7 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  rust_lib_flutter_app:
+  rust_lib_fungi_app:
     path: rust_builder
   flutter_rust_bridge: 2.10.0
   get: ^4.7.2

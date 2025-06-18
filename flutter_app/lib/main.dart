@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_app/app/controllers/fungi_controller.dart';
-import 'package:flutter_app/app/routes/app_pages.dart';
-import 'package:flutter_app/src/rust/frb_generated.dart';
-import 'package:flutter_app/ui/pages/theme/app_theme.dart';
+import 'package:fungi_app/app/controllers/fungi_controller.dart';
+import 'package:fungi_app/app/routes/app_pages.dart';
+import 'package:fungi_app/src/rust/frb_generated.dart';
+import 'package:fungi_app/ui/pages/theme/app_theme.dart';
 import 'package:get/get.dart';
 
 void main() async {

@@ -1,4 +1,4 @@
-package com.example.flutter_app
+package com.enbop.fungi_app
 
 import io.flutter.embedding.android.FlutterActivity
 

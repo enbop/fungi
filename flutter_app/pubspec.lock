@@ -218,7 +218,7 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.0.3"
-  rust_lib_flutter_app:
+  rust_lib_fungi_app:
     dependency: "direct main"
     description:
       path: rust_builder

@@ -1,6 +1,6 @@
 {
-    "name": "flutter_app",
-    "short_name": "flutter_app",
+    "name": "fungi_app",
+    "short_name": "fungi_app",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

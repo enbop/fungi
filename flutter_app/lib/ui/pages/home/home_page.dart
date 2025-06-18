@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:flutter_app/app/controllers/fungi_controller.dart';
+import 'package:fungi_app/app/controllers/fungi_controller.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});

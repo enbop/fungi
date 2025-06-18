@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:flutter_app/src/rust/api/fungi.dart' as fungi;
+import 'package:fungi_app/src/rust/api/fungi.dart' as fungi;
 
 class HomeBinding implements Bindings {
   @override

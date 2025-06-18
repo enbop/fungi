@@ -3968,7 +3968,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust_lib_flutter_app"
+name = "rust_lib_fungi_app"
 version = "0.1.0"
 dependencies = [
  "anyhow",
