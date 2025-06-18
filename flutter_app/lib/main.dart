@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_app/src/rust/api/fungi.dart';
+import 'package:flutter_app/app/controllers/fungi_controller.dart';
+import 'package:flutter_app/app/routes/app_pages.dart';
 import 'package:flutter_app/src/rust/frb_generated.dart';
+import 'package:flutter_app/ui/pages/theme/app_theme.dart';
+import 'package:get/get.dart';
 
-Future<void> main() async {
+void main() async {
   await RustLib.init();
-  await startFungiDaemon();
-  debugPrint('Fungi Daemon started');
-  String? id = await peerId();
-  debugPrint('Peer ID: $id');
-
   runApp(const MyApp());
 }
 
@@ -17,11 +15,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
-        body: Center(child: Text('')),
-      ),
+    return GetMaterialApp(
+      title: 'Fungi App',
+      theme: appTheme,
+      initialBinding: HomeBinding(),
+      initialRoute: AppPages.initial,
+      getPages: AppPages.routes,
     );
   }
 }

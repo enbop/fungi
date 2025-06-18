@@ -1,7 +1,7 @@
 use crate::{
     DaemonArgs,
     controls::{FileTransferClientControl, FileTransferServiceControl},
-    listeners::{FRALocalListener, FRAPeerListener, FungiDaemonRpcServer},
+    listeners::FungiDaemonRpcServer,
 };
 use anyhow::Result;
 use fungi_config::{
@@ -17,8 +17,6 @@ static FUNGI_BIN_PATH: OnceCell<PathBuf> = OnceCell::const_new();
 
 struct TaskHandles {
     swarm_task: JoinHandle<()>,
-    fra_local_listener_task: JoinHandle<()>,
-    fra_remote_listener_task: JoinHandle<()>,
     daemon_rpc_task: JoinHandle<()>,
     proxy_ftp_task: Option<JoinHandle<()>>,
     proxy_webdav_task: Option<JoinHandle<()>>,
@@ -56,11 +54,6 @@ impl FungiDaemon {
 
         let stream_control = swarm_control.stream_control.clone();
 
-        let fra_local_listener_task =
-            FRALocalListener::start(args.clone(), stream_control.clone())?;
-        let fra_remote_listener_task =
-            FRAPeerListener::start(args.clone(), config.clone(), stream_control.clone())?;
-
         let fts_control = FileTransferServiceControl::new(stream_control.clone());
         Self::init_fts(config.file_transfer.server.clone(), &fts_control);
 
@@ -91,8 +84,6 @@ impl FungiDaemon {
 
         let task_handles = TaskHandles {
             swarm_task,
-            fra_local_listener_task,
-            fra_remote_listener_task,
             daemon_rpc_task,
             proxy_ftp_task,
             proxy_webdav_task,
@@ -110,12 +101,6 @@ impl FungiDaemon {
         tokio::select! {
             _ = self.task_handles.swarm_task => {
                 println!("Swarm task is closed");
-            },
-            _ = self.task_handles.fra_local_listener_task => {
-                println!("FRA local listener task is closed");
-            },
-            _ = self.task_handles.fra_remote_listener_task => {
-                println!("FRA remote listener task is closed");
             },
             _ = self.task_handles.daemon_rpc_task => {
                 println!("Daemon RPC task is closed");
