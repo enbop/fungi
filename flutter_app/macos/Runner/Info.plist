@@ -28,5 +28,24 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	
+	<key>NSLocalNetworkUsageDescription</key>
+    <string>Fungi needs to access your local network to discover and connect to devices.</string>
+    <key>NSBonjourServices</key>
+    <array>
+    <string>_fungi._tcp</string>
+    <string>_fungi._udp</string>
+    </array>
+
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
 </dict>
 </plist>
