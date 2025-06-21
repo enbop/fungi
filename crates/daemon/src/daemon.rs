@@ -8,7 +8,7 @@ use fungi_config::{
     FungiConfig, FungiDir, file_transfer::FileTransferClient as FTCConfig,
     file_transfer::FileTransferService as FTSConfig,
 };
-use fungi_swarm::{FungiSwarm, SwarmControl, TSwarm};
+use fungi_swarm::{FungiSwarm, State, SwarmControl, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
 use tokio::task::JoinHandle;
 
@@ -36,8 +36,17 @@ impl FungiDaemon {
 
         let config = FungiConfig::apply_from_dir(&fungi_dir).unwrap();
 
+        let state = State::new(
+            config
+                .libp2p
+                .incoming_allowed_peers
+                .clone()
+                .into_iter()
+                .collect(),
+        );
+
         let keypair = get_keypair_from_dir(&fungi_dir).unwrap();
-        let (swarm_control, swarm_task) = FungiSwarm::start_swarm(keypair, |swarm| {
+        let (swarm_control, swarm_task) = FungiSwarm::start_swarm(keypair, state, |swarm| {
             apply_listen(swarm, &config);
             #[cfg(feature = "tcp-tunneling")]
             apply_tcp_tunneling(swarm, &config);

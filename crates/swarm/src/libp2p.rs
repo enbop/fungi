@@ -37,6 +37,14 @@ pub struct State {
 }
 
 impl State {
+    pub fn new(incoming_allowed_peers: HashSet<PeerId>) -> Self {
+        Self {
+            dial_callback: Arc::new(Mutex::new(HashMap::new())),
+            connected_peers: Arc::new(Mutex::new(HashMap::new())),
+            incoming_allowed_peers: Arc::new(RwLock::new(incoming_allowed_peers)),
+        }
+    }
+
     pub fn dial_callback(
         &self,
     ) -> Arc<Mutex<HashMap<PeerId, Completer<std::result::Result<(), DialError>>>>> {
@@ -246,10 +254,9 @@ pub struct FungiSwarm;
 impl FungiSwarm {
     pub async fn start_swarm(
         keypair: Keypair,
+        state: State,
         apply: impl FnOnce(&mut TSwarm),
     ) -> Result<(SwarmControl, JoinHandle<()>)> {
-        let state = State::default();
-
         let mdns =
             mdns::tokio::Behaviour::new(mdns::Config::default(), keypair.public().to_peer_id())?;
 
