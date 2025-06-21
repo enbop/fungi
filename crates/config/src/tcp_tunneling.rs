@@ -37,14 +37,11 @@ pub struct ForwardingRule {
 // [[tcp-tunneling.listening.rules]]
 // local_socket = { host = "127.0.0.1", port = 9002 }
 // listening_protocol = ""
-// allow_all_peers = false
 // allowed_peers = []
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ListeningRule {
     pub local_socket: LocalSocket,
     pub listening_protocol: String,
-    #[serde(default)]
-    pub allow_all_peers: bool,
     #[serde(default)]
     pub allowed_peers: Vec<String>,
 }

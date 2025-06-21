@@ -1,5 +1,4 @@
 pub mod file_transfer;
-mod fra;
 mod init;
 mod libp2p;
 mod tcp_tunneling;
@@ -7,7 +6,6 @@ mod tcp_tunneling;
 pub use init::init;
 
 use anyhow::Result;
-use fra::*;
 use libp2p::*;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -29,8 +27,6 @@ pub struct FungiConfig {
     #[serde(default)]
     pub libp2p: Libp2p,
     #[serde(default)]
-    pub fungi_remote_access: FungiRemoteAccess,
-    #[serde(default)]
     pub file_transfer: FileTransfer,
 
     #[serde(skip)]
@@ -47,10 +43,6 @@ impl FungiConfig {
         let mut cfg = Self::parse_toml(&s)?;
         cfg.config_file = config_file;
         Ok(cfg)
-    }
-
-    pub fn set_fra_allow_all_peers(&mut self, allow: bool) {
-        self.fungi_remote_access.allow_all_peers = allow;
     }
 
     pub fn parse_toml(s: &str) -> Result<Self> {

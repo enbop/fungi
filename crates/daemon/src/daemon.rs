@@ -10,10 +10,7 @@ use fungi_config::{
 };
 use fungi_swarm::{FungiSwarm, SwarmControl, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
-use std::path::PathBuf;
-use tokio::{sync::OnceCell, task::JoinHandle};
-
-static FUNGI_BIN_PATH: OnceCell<PathBuf> = OnceCell::const_new();
+use tokio::task::JoinHandle;
 
 struct TaskHandles {
     swarm_task: JoinHandle<()>,
@@ -37,12 +34,7 @@ impl FungiDaemon {
         let fungi_dir = args.fungi_dir();
         println!("Fungi directory: {:?}", fungi_dir);
 
-        FungiDaemon::init_fungi_bin_path(&args);
-
-        let mut config = FungiConfig::apply_from_dir(&fungi_dir).unwrap();
-        if let Some(allow_all_peers) = args.debug_allow_all_peers {
-            config.set_fra_allow_all_peers(allow_all_peers);
-        }
+        let config = FungiConfig::apply_from_dir(&fungi_dir).unwrap();
 
         let keypair = get_keypair_from_dir(&fungi_dir).unwrap();
         let (swarm_control, swarm_task) = FungiSwarm::start_swarm(keypair, |swarm| {
@@ -106,32 +98,6 @@ impl FungiDaemon {
             //     println!("Daemon RPC task is closed");
             // },
         }
-    }
-
-    #[allow(unused_variables)]
-    fn init_fungi_bin_path(args: &DaemonArgs) {
-        let fungi_bin_path = args.fungi_bin_path.clone().map(PathBuf::from);
-        if let Some(fungi_bin_path) = fungi_bin_path {
-            FUNGI_BIN_PATH.set(fungi_bin_path).unwrap();
-            return;
-        }
-
-        #[cfg(feature = "daemon")]
-        let all_in_one_bin = true;
-        #[cfg(not(feature = "daemon"))]
-        let all_in_one_bin = false;
-
-        let self_bin = std::env::current_exe().unwrap();
-        let fungi_bin_path = if all_in_one_bin {
-            self_bin
-        } else {
-            self_bin.parent().unwrap().join("fungi")
-        };
-        FUNGI_BIN_PATH.set(fungi_bin_path).unwrap();
-    }
-
-    pub fn get_fungi_bin_path_unchecked() -> PathBuf {
-        FUNGI_BIN_PATH.get().unwrap().clone()
     }
 
     fn init_fts(config: FTSConfig, fts_control: &FileTransferServiceControl) {

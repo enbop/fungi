@@ -6,13 +6,7 @@ default-run = "fungi"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[[bin]]
-name = "fungi-daemon"
-path = "src/bins/fungi-daemon.rs"
-
 [features]
-default = ["daemon"]
-daemon = ["fungi-daemon"]
 
 [dependencies]
 log = { workspace = true }
@@ -23,9 +17,7 @@ serde = { workspace = true }
 home = "0.5"
 thiserror = { workspace = true }
 fungi-config = { path = "../crates/config" }
-fungi-daemon = { path = "../crates/daemon", features = [
-    "cli",
-], optional = true }
+fungi-daemon = { path = "../crates/daemon" }
 fungi-swarm = { path = "../crates/swarm" }
 fungi-util = { path = "../crates/util" }
 libp2p = { workspace = true }

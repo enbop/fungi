@@ -1,9 +1,7 @@
-#[cfg(feature = "daemon")]
 pub mod fungi_daemon;
 pub mod fungi_main;
 use clap::{Parser, Subcommand};
-use fungi_config::{FungiDir, DEFAULT_FUNGI_DIR};
-use libp2p::PeerId;
+use fungi_config::{DEFAULT_FUNGI_DIR, FungiDir};
 use std::path::PathBuf;
 
 /// Fungi the world!
@@ -20,7 +18,6 @@ pub struct FungiArgs {
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     /// Start a Fungi daemon
-    #[cfg(feature = "daemon")]
     Daemon(fungi_daemon::DaemonArgs),
 }
 

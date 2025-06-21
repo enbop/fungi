@@ -5,10 +5,8 @@ members = [
     "fungi",
     "crates/config",
     "crates/daemon",
-    "crates/daemon-uniffi-binding",
     "crates/swarm",
     "crates/util",
-    "crates/uniffi-bindgen",
     "crates/fs",
     "flutter_app/rust",
 ]
