@@ -102,9 +102,9 @@ impl FungiDaemon {
             _ = self.task_handles.swarm_task => {
                 println!("Swarm task is closed");
             },
-            _ = self.task_handles.daemon_rpc_task => {
-                println!("Daemon RPC task is closed");
-            },
+            // _ = self.task_handles.daemon_rpc_task => {
+            //     println!("Daemon RPC task is closed");
+            // },
         }
     }
 

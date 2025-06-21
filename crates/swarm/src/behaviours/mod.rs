@@ -1,12 +1,27 @@
 pub mod address_book;
+pub mod state;
 
-use libp2p::{dcutr, identify, identity::Keypair, mdns, ping, relay, swarm::NetworkBehaviour};
+use std::collections::HashMap;
+
+use async_result::Completer;
+use libp2p::{
+    Multiaddr, PeerId, dcutr, identify,
+    identity::Keypair,
+    mdns, ping, relay,
+    swarm::{DialError, NetworkBehaviour},
+};
 
 // default identify protocol name for libp2p
 const IDENTIFY_PROTOCOL: &str = "/ipfs/id/1.0.0";
 
 fn identify_user_agent() -> String {
     format!("fungi/{}", env!("CARGO_PKG_VERSION"))
+}
+
+#[derive(Default)]
+pub struct State {
+    pub dial_callback: HashMap<PeerId, Completer<std::result::Result<(), DialError>>>,
+    pub connected_peers: HashMap<PeerId, Multiaddr>,
 }
 
 #[derive(NetworkBehaviour)]
@@ -19,6 +34,7 @@ pub struct FungiBehaviours {
     dcutr: dcutr::Behaviour,
 
     pub address_book: address_book::Behaviour,
+    pub state: state::Behaviour<State>,
 }
 
 impl FungiBehaviours {
@@ -44,6 +60,7 @@ impl FungiBehaviours {
             relay,
             dcutr: dcutr::Behaviour::new(peer_id),
             address_book: Default::default(),
+            state: state::Behaviour::new(State::default()),
         }
     }
 }

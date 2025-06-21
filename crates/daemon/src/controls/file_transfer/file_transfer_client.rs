@@ -72,31 +72,7 @@ impl FileTransferClientControl {
     }
 
     async fn connect_client(&self, peer_id: PeerId) -> anyhow::Result<FileTransferRpcClient> {
-        let mut dial_success = false;
-        let mut retry = 5;
-        while retry > 0 {
-            // TODO: add a method to connect to a peer explicitly
-            if let Err(e) = self
-                .swarm_control
-                .invoke_swarm(move |swarm| swarm.dial(peer_id.clone()))
-                .await
-                .unwrap()
-            {
-                log::error!(
-                    "Failed to dial peer {}: {}. Retrying in 3 seconds...",
-                    peer_id,
-                    e
-                );
-                tokio::time::sleep(Duration::from_secs(3)).await;
-            } else {
-                dial_success = true;
-                break;
-            }
-            retry -= 1;
-        }
-        if !dial_success {
-            bail!("Failed to dial peer {} after multiple attempts", peer_id);
-        }
+        self.swarm_control.connect(peer_id).await?;
         let mut stream_control = self.swarm_control.stream_control.clone();
         let Ok(stream) = stream_control
             .open_stream(peer_id.clone(), FUNGI_FILE_TRANSFER_PROTOCOL)

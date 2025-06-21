@@ -1,23 +1,18 @@
-use crate::behaviours::FungiBehaviours;
-use anyhow::{Result, bail};
+use crate::{behaviours::FungiBehaviours, peer_handshake::PeerHandshakePayload};
+use anyhow::{Context, Result, bail};
 use async_result::{AsyncResult, Completer};
-use fungi_util::protocols::FUNGI_RELAY_HANDSHAKE_PROTOCOL;
+use fungi_util::protocols::{FUNGI_PEER_HANDSHAKE_PROTOCOL, FUNGI_RELAY_HANDSHAKE_PROTOCOL};
 use libp2p::{
     Multiaddr, PeerId, Swarm,
-    futures::{AsyncReadExt, StreamExt},
+    futures::{AsyncReadExt, AsyncWriteExt, StreamExt},
     identity::Keypair,
     mdns,
     multiaddr::Protocol,
     noise,
-    swarm::SwarmEvent,
+    swarm::{DialError, SwarmEvent},
     tcp, yamux,
 };
-use std::{
-    any::Any,
-    ops::{Deref, DerefMut},
-    sync::Arc,
-    time::Duration,
-};
+use std::{any::Any, ops::Deref, sync::Arc, time::Duration};
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
@@ -56,6 +51,81 @@ pub struct SwarmControl {
 impl SwarmControl {
     pub fn local_peer_id(&self) -> PeerId {
         *self.local_peer_id
+    }
+
+    async fn handshake(&self, peer_id: PeerId) -> Result<()> {
+        let mut stream = self
+            .stream_control
+            .clone()
+            .open_stream(peer_id, FUNGI_PEER_HANDSHAKE_PROTOCOL)
+            .await
+            .context(format!("Failed to open handshake stream to {}", peer_id))?;
+        stream
+            .write_all(&PeerHandshakePayload::new().to_bytes())
+            .await?;
+        let mut buf = [0; 512];
+        let n = tokio::time::timeout(Duration::from_secs(5), stream.read(&mut buf)).await??;
+        let handshake_res = PeerHandshakePayload::from_bytes(&buf[..n])?;
+        // TODO handle remote host_name
+        log::info!(
+            "Connected to {} - {}",
+            handshake_res.host_name().unwrap_or_default(),
+            peer_id
+        );
+
+        Ok(())
+    }
+
+    // connect and handshake
+    // TODO add a timeout
+    // TODO handle error
+    pub async fn connect(&self, peer_id: PeerId) -> std::result::Result<(), DialError> {
+        let (completer, res) = AsyncResult::new_split::<std::result::Result<(), DialError>>();
+
+        let dial: std::result::Result<(), DialError> = self
+            .invoke_swarm(move |swarm| {
+                if swarm
+                    .behaviour()
+                    .state
+                    .get()
+                    .connected_peers
+                    .contains_key(&peer_id)
+                {
+                    return Ok(());
+                }
+
+                if swarm
+                    .behaviour()
+                    .state
+                    .get()
+                    .dial_callback
+                    .contains_key(&peer_id)
+                {
+                    // TODO correct error type
+                    return Err(DialError::Aborted);
+                }
+
+                swarm.dial(peer_id.clone())?;
+                swarm
+                    .behaviour_mut()
+                    .state
+                    .get_mut()
+                    .dial_callback
+                    .insert(peer_id, completer);
+                Ok(())
+            })
+            .await
+            .map_err(|e| {
+                log::warn!("Failed to invoke swarm for dial: {:?}", e);
+                DialError::Aborted
+            })?;
+        dial?;
+        res.await.map_err(|_| DialError::Aborted)??;
+
+        self.handshake(peer_id)
+            .await
+            .map_err(|_| DialError::Aborted)?;
+        Ok(())
     }
 
     pub async fn invoke_swarm<F, R: Any + Send>(&self, f: F) -> Result<R>
@@ -181,13 +251,36 @@ impl FungiSwarm {
             loop {
                 tokio::select! {
                     swarm_events = swarm.select_next_some() => {
-                        log::debug!("Handle swarm event {:?}", swarm_events);
                         match swarm_events {
                             SwarmEvent::NewListenAddr { address, .. } => {
                                 let addr = address.with_p2p(*swarm.local_peer_id()).unwrap();
                                 println!("Listening on {addr:?}")
                             },
-                            SwarmEvent::Behaviour(event) => log::info!("{event:?}"),
+                            SwarmEvent::ConnectionEstablished { peer_id, endpoint,.. } => {
+                                log::info!("Connection established with {peer_id:?} at {endpoint:?}");
+                                // check dial callback
+                                if let Some(completer) = swarm.behaviour_mut().state.get_mut().dial_callback.remove(&peer_id) {
+                                    completer.complete(Ok(()));
+                                }
+                                // add peer to connected peers
+                                swarm.behaviour_mut().state.get_mut().connected_peers.insert(peer_id, endpoint.get_remote_address().clone());
+                            },
+                            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                                log::info!("Outgoing connection error with {peer_id:?}: {error:?}");
+                                // check dial callback
+                                let Some(peer_id) = peer_id else {
+                                    continue;
+                                };
+                                if let Some(completer) = swarm.behaviour_mut().state.get_mut().dial_callback.remove(&peer_id) {
+                                    completer.complete(Err(error));
+                                }
+                            },
+                            SwarmEvent::ConnectionClosed { peer_id, cause, .. } => {
+                                log::info!("Connection closed with {peer_id:?}: {:?}", cause);
+                                // update connected peers
+                                swarm.behaviour_mut().state.get_mut().connected_peers.remove(&peer_id);
+                            },
+                            // SwarmEvent::Behaviour(event) => log::info!("{event:?}"),
                             _ => {}
                         }
                     },
