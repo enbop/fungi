@@ -1,5 +1,7 @@
 use std::{
     convert::Infallible,
+    fmt,
+    ops::Deref,
     task::{Context, Poll},
 };
 
@@ -12,35 +14,55 @@ use libp2p::{
     },
 };
 
-pub struct Behaviour<T> {
-    state: T,
+use crate::State;
+
+/// [`libp2p::allow_block_list`]
+#[derive(Debug)]
+pub struct NotAllowed {
+    peer: PeerId,
 }
 
-impl<T> Behaviour<T> {
-    pub fn new(state: T) -> Self {
-        Self { state }
+impl fmt::Display for NotAllowed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "peer {} is not in the allow list", self.peer)
     }
+}
 
-    pub fn get_mut(&mut self) -> &mut T {
-        &mut self.state
-    }
+impl std::error::Error for NotAllowed {}
 
-    pub fn get(&self) -> &T {
+pub struct Behaviour {
+    state: State,
+}
+
+impl Deref for Behaviour {
+    type Target = State;
+
+    fn deref(&self) -> &Self::Target {
         &self.state
     }
 }
 
-impl<T: 'static> NetworkBehaviour for Behaviour<T> {
+impl Behaviour {
+    pub fn new(state: State) -> Self {
+        Self { state }
+    }
+}
+
+impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
     type ToSwarm = Infallible;
 
     fn handle_established_inbound_connection(
         &mut self,
         _: ConnectionId,
-        _: PeerId,
+        peer: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        if !self.incoming_allowed_peers().read().contains(&peer) {
+            return Err(ConnectionDenied::new(NotAllowed { peer }));
+        }
+
         Ok(dummy::ConnectionHandler)
     }
 

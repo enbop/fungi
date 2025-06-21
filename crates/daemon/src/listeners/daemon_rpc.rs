@@ -72,7 +72,7 @@ impl FungiDaemonRpc for FungiDaemonRpcServer {
 
         let mut incoming_streams = self
             .swarm_control
-            .stream_control
+            .stream_control_mut()
             .accept(protocol.clone())
             .map_err(|e| e.to_string())?;
 

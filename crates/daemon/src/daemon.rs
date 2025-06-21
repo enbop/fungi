@@ -44,7 +44,7 @@ impl FungiDaemon {
         })
         .await?;
 
-        let stream_control = swarm_control.stream_control.clone();
+        let stream_control = swarm_control.stream_control().clone();
 
         let fts_control = FileTransferServiceControl::new(stream_control.clone());
         Self::init_fts(config.file_transfer.server.clone(), &fts_control);
@@ -139,11 +139,6 @@ fn apply_tcp_tunneling(swarm: &mut TSwarm, config: &FungiConfig) {
             let Ok(target_peer) = rule.remote.peer_id.parse() else {
                 continue;
             };
-
-            swarm
-                .behaviour_mut()
-                .address_book
-                .set_addresses(&target_peer, rule.remote.multiaddrs.clone());
 
             let target_protocol =
                 libp2p::StreamProtocol::try_from_owned(rule.remote.protocol.clone()).unwrap(); // TODO unwrap

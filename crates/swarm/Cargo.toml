@@ -17,3 +17,4 @@ void = "1"
 async-result = "0.1.0"
 bincode = "1.3"
 serde = { version = "1", features = ["derive"] }
+parking_lot = { workspace = true }

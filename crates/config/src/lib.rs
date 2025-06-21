@@ -18,7 +18,6 @@ pub const DEFAULT_CONFIG_FILE: &str = "config.toml";
 pub const DEFAULT_FUNGI_DIR: &str = ".fungi";
 pub const DEFAULT_IPC_DIR_NAME: &str = ".ipc";
 pub const DEFAULT_DAEMON_RPC_NAME: &str = ".fungi_daemon.sock";
-pub const FRA_LISTENER_ADDR: &str = ".fungi_ra.sock"; // FRA: Fungi Remote Access
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct FungiConfig {
@@ -66,10 +65,5 @@ pub trait FungiDir {
 
     fn daemon_rpc_path(&self) -> PathBuf {
         self.ipc_dir().join(DEFAULT_DAEMON_RPC_NAME)
-    }
-
-    // FRA: Fungi Remote Access
-    fn fra_ipc_path(&self) -> PathBuf {
-        self.ipc_dir().join(FRA_LISTENER_ADDR)
     }
 }

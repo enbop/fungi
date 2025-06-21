@@ -1,27 +1,16 @@
-pub mod address_book;
-pub mod state;
+pub mod ext;
 
-use std::collections::HashMap;
+use std::ops::Deref;
 
-use async_result::Completer;
-use libp2p::{
-    Multiaddr, PeerId, dcutr, identify,
-    identity::Keypair,
-    mdns, ping, relay,
-    swarm::{DialError, NetworkBehaviour},
-};
+use libp2p::{dcutr, identify, identity::Keypair, mdns, ping, relay, swarm::NetworkBehaviour};
+
+use crate::State;
 
 // default identify protocol name for libp2p
 const IDENTIFY_PROTOCOL: &str = "/ipfs/id/1.0.0";
 
 fn identify_user_agent() -> String {
     format!("fungi/{}", env!("CARGO_PKG_VERSION"))
-}
-
-#[derive(Default)]
-pub struct State {
-    pub dial_callback: HashMap<PeerId, Completer<std::result::Result<(), DialError>>>,
-    pub connected_peers: HashMap<PeerId, Multiaddr>,
 }
 
 #[derive(NetworkBehaviour)]
@@ -33,8 +22,15 @@ pub struct FungiBehaviours {
     relay: relay::client::Behaviour,
     dcutr: dcutr::Behaviour,
 
-    pub address_book: address_book::Behaviour,
-    pub state: state::Behaviour<State>,
+    pub fungi_ext: ext::Behaviour,
+}
+
+impl Deref for FungiBehaviours {
+    type Target = ext::Behaviour;
+
+    fn deref(&self) -> &Self::Target {
+        &self.fungi_ext
+    }
 }
 
 impl FungiBehaviours {
@@ -42,6 +38,7 @@ impl FungiBehaviours {
         keypair: &Keypair,
         relay: relay::client::Behaviour,
         mdns: mdns::tokio::Behaviour,
+        state: State,
     ) -> Self {
         let peer_id = keypair.public().to_peer_id();
 
@@ -59,8 +56,7 @@ impl FungiBehaviours {
             identify,
             relay,
             dcutr: dcutr::Behaviour::new(peer_id),
-            address_book: Default::default(),
-            state: state::Behaviour::new(State::default()),
+            fungi_ext: ext::Behaviour::new(state),
         }
     }
 }

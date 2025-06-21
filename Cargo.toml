@@ -42,6 +42,7 @@ libp2p = { version = "0.55", features = [
 libp2p-stream = "0.3.0-alpha"
 libp2p-identity = { version = "0.2", features = ["secp256k1"] }
 libp2p-swarm = "0.46"
+parking_lot = "0.12"
 
 [patch.crates-io]
 # workaround for fixing the build error on macOS

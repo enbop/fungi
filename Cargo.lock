@@ -1488,6 +1488,7 @@ dependencies = [
  "libp2p-stream",
  "log",
  "once_cell",
+ "parking_lot",
  "serde",
  "tokio",
  "void",
