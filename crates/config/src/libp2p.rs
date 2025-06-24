@@ -2,7 +2,7 @@ use libp2p_identity::PeerId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct Libp2p {
+pub struct Network {
     #[serde(default)]
     pub listen_tcp_port: u16,
     #[serde(default)]

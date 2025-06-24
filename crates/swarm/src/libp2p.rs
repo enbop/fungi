@@ -29,10 +29,36 @@ pub type TSwarm = Swarm<FungiBehaviours>;
 type SwarmResponse = Box<dyn Any + Send>;
 type SwarmRequest = Box<dyn FnOnce(&mut TSwarm) -> SwarmResponse + Send + Sync>;
 
+pub struct ConnectedPeer {
+    handshake: Option<PeerHandshakePayload>,
+    multiaddr: Multiaddr,
+}
+
+impl ConnectedPeer {
+    pub fn with_multiaddr(multiaddr: Multiaddr) -> Self {
+        Self {
+            handshake: None,
+            multiaddr,
+        }
+    }
+
+    pub fn update_handshake(&mut self, handshake: PeerHandshakePayload) {
+        self.handshake = Some(handshake);
+    }
+
+    pub fn host_name(&self) -> Option<String> {
+        self.handshake.as_ref().and_then(|h| h.host_name())
+    }
+
+    pub fn multiaddr(&self) -> &Multiaddr {
+        &self.multiaddr
+    }
+}
+
 #[derive(Default, Clone)]
 pub struct State {
     dial_callback: Arc<Mutex<HashMap<PeerId, Completer<std::result::Result<(), DialError>>>>>,
-    connected_peers: Arc<Mutex<HashMap<PeerId, Multiaddr>>>,
+    connected_peers: Arc<Mutex<HashMap<PeerId, ConnectedPeer>>>,
     incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
 }
 
@@ -51,12 +77,16 @@ impl State {
         self.dial_callback.clone()
     }
 
-    pub fn connected_peers(&self) -> Arc<Mutex<HashMap<PeerId, Multiaddr>>> {
+    pub fn connected_peers(&self) -> Arc<Mutex<HashMap<PeerId, ConnectedPeer>>> {
         self.connected_peers.clone()
     }
 
     pub fn incoming_allowed_peers(&self) -> Arc<RwLock<HashSet<PeerId>>> {
         self.incoming_allowed_peers.clone()
+    }
+
+    pub fn get_incoming_allowed_peers_list(&self) -> Vec<PeerId> {
+        self.incoming_allowed_peers.read().iter().cloned().collect()
     }
 }
 
@@ -132,12 +162,17 @@ impl SwarmControl {
         let mut buf = [0; 512];
         let n = tokio::time::timeout(Duration::from_secs(5), stream.read(&mut buf)).await??;
         let handshake_res = PeerHandshakePayload::from_bytes(&buf[..n])?;
-        // TODO handle remote host_name
         log::info!(
             "Connected to {} - {}",
             handshake_res.host_name().unwrap_or_default(),
             peer_id
         );
+        self.state
+            .connected_peers
+            .lock()
+            .get_mut(&peer_id)
+            .expect("Peer should be connected")
+            .update_handshake(handshake_res);
 
         Ok(())
     }
@@ -146,8 +181,6 @@ impl SwarmControl {
     // TODO add a timeout
     // TODO handle error
     pub async fn connect(&self, peer_id: PeerId) -> std::result::Result<(), DialError> {
-        let (completer, res) = AsyncResult::new_split::<std::result::Result<(), DialError>>();
-
         if self.state.connected_peers.lock().contains_key(&peer_id) {
             return Ok(());
         }
@@ -156,6 +189,8 @@ impl SwarmControl {
             // TODO correct error type
             return Err(DialError::Aborted);
         }
+
+        let (completer, res) = AsyncResult::new_split::<std::result::Result<(), DialError>>();
 
         let dial: std::result::Result<(), DialError> = self
             .invoke_swarm(move |swarm| {
@@ -320,7 +355,10 @@ impl FungiSwarm {
                                     completer.complete(Ok(()));
                                 }
                                 // add peer to connected peers
-                                swarm.behaviour().connected_peers.lock().insert(peer_id, endpoint.get_remote_address().clone());
+                                swarm.behaviour().connected_peers.lock().insert(peer_id,
+                                    ConnectedPeer::with_multiaddr(
+                                        endpoint.get_remote_address().clone()
+                                    ));
                             },
                             SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
                                 log::info!("Outgoing connection error with {peer_id:?}: {error:?}");

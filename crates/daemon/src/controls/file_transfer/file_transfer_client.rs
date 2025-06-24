@@ -1,10 +1,4 @@
-use std::{
-    collections::HashMap,
-    convert::Infallible,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{collections::HashMap, convert::Infallible, path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::bail;
 use dav_server::DavHandler;
@@ -14,6 +8,7 @@ use fungi_util::protocols::FUNGI_FILE_TRANSFER_PROTOCOL;
 use hyper::{server::conn::http1, service::service_fn};
 use hyper_util::rt::TokioIo;
 use libp2p::{PeerId, Stream};
+use parking_lot::Mutex;
 use tarpc::{context, serde_transport, tokio_serde::formats::Bincode};
 use tokio::net::TcpListener;
 use tokio_util::{codec::LengthDelimitedCodec, compat::FuturesAsyncReadCompatExt as _};
@@ -48,7 +43,30 @@ impl FileTransferClientControl {
         }
     }
 
+    pub async fn connect_and_get_host_name(
+        &self,
+        peer_id: PeerId,
+    ) -> anyhow::Result<Option<String>> {
+        self.swarm_control.connect(peer_id).await?;
+        let host_name = self
+            .swarm_control
+            .state()
+            .connected_peers()
+            .lock()
+            .get(&peer_id)
+            .expect("Peer should be connected.")
+            .host_name();
+        Ok(host_name)
+    }
+
     // TODO add callback on_client_broken
+
+    pub fn has_client(&self, peer_id: &PeerId) -> bool {
+        self.clients
+            .lock()
+            .values()
+            .any(|fc| fc.peer_id.as_ref() == peer_id)
+    }
 
     pub fn add_client(&self, config: FileTransferClientConfig) {
         let key = if config.name.is_some() {
@@ -61,7 +79,7 @@ impl FileTransferClientControl {
             key,
             config.peer_id
         );
-        self.clients.lock().unwrap().insert(
+        self.clients.lock().insert(
             key,
             FileClient {
                 peer_id: Arc::new(config.peer_id),
@@ -69,6 +87,13 @@ impl FileTransferClientControl {
                 is_windows: None,
             },
         );
+    }
+
+    pub fn remove_client(&self, peer_id: &PeerId) {
+        log::info!("Removing file transfer client with peer_id: {}", peer_id);
+        self.clients
+            .lock()
+            .retain(|_, fc| !fc.peer_id.as_ref().eq(peer_id));
     }
 
     async fn connect_client(&self, peer_id: PeerId) -> anyhow::Result<FileTransferRpcClient> {
@@ -86,7 +111,7 @@ impl FileTransferClientControl {
     }
 
     pub async fn get_client(&self, name: &str) -> anyhow::Result<FileTransferRpcClient> {
-        let Some(mut fc) = self.clients.lock().unwrap().get(name).cloned() else {
+        let Some(mut fc) = self.clients.lock().get(name).cloned() else {
             bail!("File transfer client with name '{}' not found", name);
         };
         if fc.rpc_client.is_none() {
@@ -95,10 +120,7 @@ impl FileTransferClientControl {
             fc.is_windows = Some(is_windows);
             fc.rpc_client = Some(client);
             // update the client in the map
-            self.clients
-                .lock()
-                .unwrap()
-                .insert(name.to_string(), fc.clone());
+            self.clients.lock().insert(name.to_string(), fc.clone());
         }
         if fc.rpc_client.is_none() {
             bail!("File transfer client with name '{}' is not connected", name);
@@ -179,7 +201,7 @@ impl FileTransferClientControl {
     pub async fn list(&self, path: PathBuf) -> fungi_fs::Result<Vec<fungi_fs::FileInfo>> {
         let path_str = path.to_string_lossy();
         if path_str == "." || path_str == "./" || path_str == "/" {
-            let clients = self.clients.lock().unwrap();
+            let clients = self.clients.lock();
             let mut result = Vec::new();
 
             for client_name in clients.keys() {

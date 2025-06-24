@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     io,
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -11,6 +11,7 @@ use fungi_util::protocols::FUNGI_FILE_TRANSFER_PROTOCOL;
 use futures::StreamExt;
 use libp2p::PeerId;
 use libp2p_stream::Control;
+use parking_lot::RwLock;
 use tarpc::{
     context::Context,
     serde_transport,
@@ -25,7 +26,7 @@ use super::FileTransferRpc as _;
 #[derive(Clone)]
 pub struct FileTransferRpcService {
     root_dir: Arc<PathBuf>,
-    allowed_peers: Arc<Vec<PeerId>>,
+    allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
     fs: Arc<fungi_fs::FileSystemWrapper>,
 }
 
@@ -86,12 +87,15 @@ impl super::FileTransferRpc for FileTransferRpcService {
 }
 
 impl FileTransferRpcService {
-    pub fn new(config: FileTransferServiceConfig) -> io::Result<Self> {
+    pub fn new(
+        config: FileTransferServiceConfig,
+        allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
+    ) -> io::Result<Self> {
         let fs = fungi_fs::FileSystemWrapper::new(config.shared_root_dir.clone())?;
         Ok(Self {
             fs: Arc::new(fs),
             root_dir: Arc::new(PathBuf::from(config.shared_root_dir)),
-            allowed_peers: Arc::new(config.allowed_peers),
+            allowed_peers,
         })
     }
 
@@ -110,7 +114,7 @@ impl FileTransferRpcService {
 
         loop {
             let (peer_id, stream) = incoming_streams.next().await.unwrap();
-            if !self.allowed_peers.contains(&peer_id) {
+            if !self.allowed_peers.read().contains(&peer_id) {
                 log::warn!("Deny connection from disallowed peer: {}.", peer_id);
                 continue;
             }
@@ -132,13 +136,18 @@ impl FileTransferRpcService {
 pub struct FileTransferServiceControl {
     stream_control: Control,
     services: Arc<Mutex<HashMap<PathBuf, JoinHandle<()>>>>,
+    incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
 }
 
 impl FileTransferServiceControl {
-    pub fn new(stream_control: Control) -> Self {
+    pub fn new(
+        stream_control: Control,
+        incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
+    ) -> Self {
         Self {
             stream_control,
             services: Arc::new(Mutex::new(HashMap::new())),
+            incoming_allowed_peers,
         }
     }
 
@@ -152,7 +161,7 @@ impl FileTransferServiceControl {
         }
 
         let service_path = config.shared_root_dir.clone();
-        let service = FileTransferRpcService::new(config)?;
+        let service = FileTransferRpcService::new(config, self.incoming_allowed_peers.clone())?;
         let stream_control = self.stream_control.clone();
         let handle = tokio::spawn(async move {
             service.listen_from_libp2p_stream(stream_control).await;
@@ -165,6 +174,18 @@ impl FileTransferServiceControl {
     pub fn remove_service(&self, path: &PathBuf) {
         let mut services = self.services.lock().unwrap();
         if let Some(handle) = services.remove(path) {
+            handle.abort();
+        }
+    }
+
+    pub fn has_service(&self, path: &PathBuf) -> bool {
+        self.services.lock().unwrap().contains_key(path)
+    }
+
+    pub fn stop_all(&self) {
+        let mut services = self.services.lock().unwrap();
+        for (path, handle) in services.drain() {
+            log::info!("Stopping file transfer service at: {:?}", path);
             handle.abort();
         }
     }

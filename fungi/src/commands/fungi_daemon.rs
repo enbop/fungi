@@ -1,7 +1,7 @@
 use anyhow::Result;
 pub use fungi_daemon::DaemonArgs;
 use fungi_daemon::FungiDaemon;
-use libp2p::{multiaddr::Protocol, Multiaddr, PeerId};
+use libp2p::{Multiaddr, PeerId, multiaddr::Protocol};
 
 pub async fn run(args: DaemonArgs) -> Result<()> {
     fungi_config::init(&args).unwrap();
@@ -10,7 +10,7 @@ pub async fn run(args: DaemonArgs) -> Result<()> {
 
     let daemon = FungiDaemon::start(args).await?;
 
-    let swarm_control = daemon.swarm_control.clone();
+    let swarm_control = daemon.swarm_control().clone();
     println!("Local Peer ID: {}", swarm_control.local_peer_id());
 
     let network_info = swarm_control
@@ -19,10 +19,7 @@ pub async fn run(args: DaemonArgs) -> Result<()> {
         .unwrap();
     println!("Network info: {:?}", network_info);
 
-    if let Err(e) = swarm_control
-        .listen_relay(get_default_relay_addr())
-        .await
-    {
+    if let Err(e) = swarm_control.listen_relay(get_default_relay_addr()).await {
         eprintln!("Failed to listen on relay: {:?}", e);
     };
 

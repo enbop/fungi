@@ -18,6 +18,8 @@ pub struct FileTransfer {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct FileTransferClient {
     #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
     pub name: Option<String>,
     pub peer_id: PeerId,
 }
@@ -26,8 +28,8 @@ pub struct FileTransferClient {
 pub struct FileTransferService {
     #[serde(default)]
     pub enabled: bool,
-    #[serde(default)]
-    pub allowed_peers: Vec<PeerId>,
+    // #[serde(default)]
+    // pub allowed_peers: Vec<PeerId>,
     #[serde(default)]
     pub shared_root_dir: PathBuf,
 }

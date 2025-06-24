@@ -1,3 +1,5 @@
+use std::{sync::Arc, time::Duration};
+
 use crate::{
     DaemonArgs,
     controls::{FileTransferClientControl, FileTransferServiceControl},
@@ -10,6 +12,8 @@ use fungi_config::{
 };
 use fungi_swarm::{FungiSwarm, State, SwarmControl, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
+use libp2p::PeerId;
+use parking_lot::Mutex;
 use tokio::task::JoinHandle;
 
 struct TaskHandles {
@@ -20,16 +24,33 @@ struct TaskHandles {
 }
 
 pub struct FungiDaemon {
-    config: FungiConfig,
+    config: Arc<Mutex<FungiConfig>>,
     args: DaemonArgs,
 
-    pub swarm_control: SwarmControl,
-    pub fts_control: FileTransferServiceControl,
+    swarm_control: SwarmControl,
+    fts_control: FileTransferServiceControl,
+    ftc_control: FileTransferClientControl,
 
     task_handles: TaskHandles,
 }
 
 impl FungiDaemon {
+    pub fn config(&self) -> Arc<Mutex<FungiConfig>> {
+        self.config.clone()
+    }
+
+    pub fn swarm_control(&self) -> &SwarmControl {
+        &self.swarm_control
+    }
+
+    pub fn fts_control(&self) -> &FileTransferServiceControl {
+        &self.fts_control
+    }
+
+    pub fn ftc_control(&self) -> &FileTransferClientControl {
+        &self.ftc_control
+    }
+
     pub async fn start(args: DaemonArgs) -> Result<Self> {
         let fungi_dir = args.fungi_dir();
         println!("Fungi directory: {:?}", fungi_dir);
@@ -38,7 +59,7 @@ impl FungiDaemon {
 
         let state = State::new(
             config
-                .libp2p
+                .network
                 .incoming_allowed_peers
                 .clone()
                 .into_iter()
@@ -46,20 +67,24 @@ impl FungiDaemon {
         );
 
         let keypair = get_keypair_from_dir(&fungi_dir).unwrap();
-        let (swarm_control, swarm_task) = FungiSwarm::start_swarm(keypair, state, |swarm| {
-            apply_listen(swarm, &config);
-            #[cfg(feature = "tcp-tunneling")]
-            apply_tcp_tunneling(swarm, &config);
-        })
-        .await?;
+        let (swarm_control, swarm_task) =
+            FungiSwarm::start_swarm(keypair, state.clone(), |swarm| {
+                apply_listen(swarm, &config);
+                #[cfg(feature = "tcp-tunneling")]
+                apply_tcp_tunneling(swarm, &config);
+            })
+            .await?;
 
         let stream_control = swarm_control.stream_control().clone();
 
-        let fts_control = FileTransferServiceControl::new(stream_control.clone());
+        let fts_control = FileTransferServiceControl::new(
+            stream_control.clone(),
+            state.incoming_allowed_peers().clone(),
+        );
         Self::init_fts(config.file_transfer.server.clone(), &fts_control);
 
         let ftc_control = FileTransferClientControl::new(swarm_control.clone());
-        Self::init_ftc(config.file_transfer.client.clone(), &ftc_control);
+        Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
 
         let proxy_ftp_task = if config.file_transfer.proxy_ftp.enabled {
             Some(tokio::spawn(crate::controls::start_ftp_proxy_service(
@@ -90,10 +115,11 @@ impl FungiDaemon {
             proxy_webdav_task,
         };
         Ok(Self {
-            config,
+            config: Arc::new(Mutex::new(config)),
             args,
             swarm_control,
             fts_control,
+            ftc_control,
             task_handles,
         })
     }
@@ -117,26 +143,43 @@ impl FungiDaemon {
         }
     }
 
-    fn init_ftc(clients: Vec<FTCConfig>, ftc_control: &FileTransferClientControl) {
-        for client in clients {
-            ftc_control.add_client(client);
-        }
+    fn init_ftc(clients: Vec<FTCConfig>, ftc_control: FileTransferClientControl) {
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            for mut client in clients {
+                if !client.enabled {
+                    continue;
+                }
+                if client.name.is_none() {
+                    if let Ok(remote_host_name) = ftc_control
+                        .connect_and_get_host_name(client.peer_id.clone())
+                        .await
+                    {
+                        client.name = remote_host_name
+                    }
+                }
+                ftc_control.add_client(client);
+            }
+        });
     }
 }
 
 fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) {
     swarm
         .listen_on(
-            format!("/ip4/0.0.0.0/tcp/{}", config.libp2p.listen_tcp_port)
+            format!("/ip4/0.0.0.0/tcp/{}", config.network.listen_tcp_port)
                 .parse()
                 .expect("address should be valid"),
         )
         .unwrap();
     swarm
         .listen_on(
-            format!("/ip4/0.0.0.0/udp/{}/quic-v1", config.libp2p.listen_udp_port)
-                .parse()
-                .expect("address should be valid"),
+            format!(
+                "/ip4/0.0.0.0/udp/{}/quic-v1",
+                config.network.listen_udp_port
+            )
+            .parse()
+            .expect("address should be valid"),
         )
         .unwrap();
 }

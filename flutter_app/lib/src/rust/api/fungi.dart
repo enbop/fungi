@@ -9,4 +9,47 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 Future<void> startFungiDaemon() =>
     RustLib.instance.api.crateApiFungiStartFungiDaemon();
 
-Future<String?> peerId() => RustLib.instance.api.crateApiFungiPeerId();
+String? hostName() => RustLib.instance.api.crateApiFungiHostName();
+
+String peerId() => RustLib.instance.api.crateApiFungiPeerId();
+
+String configFilePath() => RustLib.instance.api.crateApiFungiConfigFilePath();
+
+List<String> getIncomingAllowedPeersList() =>
+    RustLib.instance.api.crateApiFungiGetIncomingAllowedPeersList();
+
+void addIncomingAllowedPeer({required String peerId}) =>
+    RustLib.instance.api.crateApiFungiAddIncomingAllowedPeer(peerId: peerId);
+
+void removeIncomingAllowedPeer({required String peerId}) =>
+    RustLib.instance.api.crateApiFungiRemoveIncomingAllowedPeer(peerId: peerId);
+
+String getFileTransferServiceRootDir() =>
+    RustLib.instance.api.crateApiFungiGetFileTransferServiceRootDir();
+
+void startFileTransferService({required String rootDir}) => RustLib.instance.api
+    .crateApiFungiStartFileTransferService(rootDir: rootDir);
+
+void stopFileTransferService() =>
+    RustLib.instance.api.crateApiFungiStopFileTransferService();
+
+Future<void> addFileTransferClient({
+  required bool enabled,
+  String? name,
+  required String peerId,
+}) => RustLib.instance.api.crateApiFungiAddFileTransferClient(
+  enabled: enabled,
+  name: name,
+  peerId: peerId,
+);
+
+void removeFileTransferClient({required String peerId}) =>
+    RustLib.instance.api.crateApiFungiRemoveFileTransferClient(peerId: peerId);
+
+Future<void> enableFileTransferClient({
+  required String peerId,
+  required bool enabled,
+}) => RustLib.instance.api.crateApiFungiEnableFileTransferClient(
+  peerId: peerId,
+  enabled: enabled,
+);

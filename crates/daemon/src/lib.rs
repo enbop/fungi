@@ -1,3 +1,4 @@
+mod api;
 mod controls;
 mod daemon;
 pub mod listeners;
