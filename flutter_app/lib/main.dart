@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 
 void main() async {
   await RustLib.init();
+  Get.put(ThemeManager());
   runApp(const MyApp());
 }
 
@@ -17,7 +18,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return GetMaterialApp(
       title: 'Fungi App',
-      theme: appTheme,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.system,
       initialBinding: HomeBinding(),
       initialRoute: AppPages.initial,
       getPages: AppPages.routes,

@@ -12,7 +12,6 @@ class HomeBinding implements Bindings {
 class FungiController extends GetxController {
   var isServiceRunning = false.obs;
   var peerId = ''.obs;
-  var isLoading = true.obs;
 
   @override
   void onInit() {
@@ -21,26 +20,18 @@ class FungiController extends GetxController {
   }
 
   Future<void> initFungi() async {
-    isLoading.value = true;
-
     try {
       await fungi.startFungiDaemon();
       isServiceRunning.value = true;
       debugPrint('Fungi Daemon started');
 
-      String? id = await fungi.peerId();
-      if (id != null) {
-        peerId.value = id;
-        debugPrint('Peer ID: $id');
-      } else {
-        peerId.value = 'error';
-      }
+      String id = fungi.peerId();
+      peerId.value = id;
+      debugPrint('Peer ID: $id');
     } catch (e) {
       isServiceRunning.value = false;
       peerId.value = 'error';
       debugPrint('Failed to init, error: $e');
-    } finally {
-      isLoading.value = false;
     }
   }
 }
