@@ -1,13 +1,10 @@
-import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:get/get.dart';
 import 'package:fungi_app/ui/pages/home/home_page.dart';
 
 class AppPages {
   static const initial = Routes.home;
 
-  static final routes = [
-    GetPage(name: Routes.home, page: () => HomePage(), binding: HomeBinding()),
-  ];
+  static final routes = [GetPage(name: Routes.home, page: () => HomePage())];
 }
 
 abstract class Routes {

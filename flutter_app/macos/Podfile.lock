@@ -1,20 +1,27 @@
 PODS:
   - FlutterMacOS (1.0.0)
+  - path_provider_foundation (0.0.1):
+    - Flutter
+    - FlutterMacOS
   - rust_lib_fungi_app (0.0.1):
     - FlutterMacOS
 
 DEPENDENCIES:
   - FlutterMacOS (from `Flutter/ephemeral`)
+  - path_provider_foundation (from `Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin`)
   - rust_lib_fungi_app (from `Flutter/ephemeral/.symlinks/plugins/rust_lib_fungi_app/macos`)
 
 EXTERNAL SOURCES:
   FlutterMacOS:
     :path: Flutter/ephemeral
+  path_provider_foundation:
+    :path: Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin
   rust_lib_fungi_app:
     :path: Flutter/ephemeral/.symlinks/plugins/rust_lib_fungi_app/macos
 
 SPEC CHECKSUMS:
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
+  path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
   rust_lib_fungi_app: 0c9d28c838afdd9e59da72f9c8e992e4ccdd26b1
 
 PODFILE CHECKSUM: 7eb978b976557c8c1cd717d8185ec483fd090a82

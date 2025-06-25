@@ -38,6 +38,8 @@ dependencies:
     path: rust_builder
   flutter_rust_bridge: 2.10.0
   get: ^4.7.2
+  settings_ui: ^2.0.2
+  get_storage: ^2.1.1
 
 dev_dependencies:
   flutter_test:

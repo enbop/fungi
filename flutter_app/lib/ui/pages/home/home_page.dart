@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart';
+import 'package:fungi_app/ui/pages/settings/settings.dart';
 import 'package:fungi_app/ui/pages/theme/app_theme.dart';
 import 'package:get/get.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
@@ -95,12 +96,11 @@ class LabeledText extends StatelessWidget {
   }
 }
 
-class HomeHeader extends StatelessWidget {
+class HomeHeader extends GetView<FungiController> {
   const HomeHeader({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.find<FungiController>();
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
@@ -187,21 +187,22 @@ class HomePage extends StatelessWidget {
           const HomeHeader(),
           Expanded(
             child: DefaultTabController(
-              initialIndex: 1,
+              initialIndex: 0,
               length: 3,
               child: Scaffold(
                 backgroundColor: Colors.transparent,
                 appBar: PreferredSize(
-                  preferredSize: const Size.fromHeight(kToolbarHeight),
+                  preferredSize: const Size.fromHeight(
+                    kMinInteractiveDimension,
+                  ),
                   child: AppBar(
                     backgroundColor: colorScheme.primaryContainer,
-                    elevation: 0,
                     automaticallyImplyLeading: false,
                     bottom: TabBar(
                       tabs: const <Widget>[
-                        Tab(icon: Icon(Icons.cloud_outlined)),
-                        Tab(icon: Icon(Icons.beach_access_sharp)),
-                        Tab(icon: Icon(Icons.brightness_5_sharp)),
+                        Tab(text: "Fungi Drive"),
+                        Tab(text: "Data Tunnel"),
+                        Tab(text: "Settings"),
                       ],
                       indicatorColor: colorScheme.primary,
                     ),
@@ -210,21 +211,14 @@ class HomePage extends StatelessWidget {
                 body: const TabBarView(
                   children: <Widget>[
                     Center(child: Text("It's cloudy here")),
-                    Center(child: Text("It's rainy here")),
-                    Center(child: Text("It's sunny here")),
+                    Center(child: Text("Coming soon...")),
+                    Settings(),
                   ],
                 ),
               ),
             ),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          final themeManager = Get.find<ThemeManager>();
-          themeManager.toggleTheme();
-        },
-        child: const Icon(Icons.brightness_6),
       ),
     );
   }

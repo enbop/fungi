@@ -80,17 +80,3 @@ class AppTheme {
     colorScheme: darkColorScheme,
   );
 }
-
-class ThemeManager extends GetxController {
-  final _isDarkMode = false.obs;
-
-  bool get isDarkMode => _isDarkMode.value;
-
-  void toggleTheme() {
-    _isDarkMode.value = !_isDarkMode.value;
-    Get.changeThemeMode(_isDarkMode.value ? ThemeMode.dark : ThemeMode.light);
-  }
-
-  ColorScheme get colorScheme =>
-      _isDarkMode.value ? AppTheme.darkColorScheme : AppTheme.lightColorScheme;
-}

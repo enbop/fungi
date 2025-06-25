@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::{bail, Result};
 use flutter_rust_bridge::frb;
 use fungi_daemon::FungiDaemon;
+use libp2p_identity::PeerId;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 
@@ -15,6 +16,12 @@ macro_rules! with_daemon {
         };
         daemon
     }};
+}
+
+fn parse_peer_id(peer_id: String) -> Result<PeerId> {
+    peer_id
+        .parse::<PeerId>()
+        .map_err(|_| anyhow::anyhow!("WrongPeerId"))
 }
 
 pub async fn start_fungi_daemon() -> Result<()> {
@@ -62,13 +69,13 @@ pub fn get_incoming_allowed_peers_list() -> Result<Vec<String>> {
 #[frb(sync)]
 pub fn add_incoming_allowed_peer(peer_id: String) -> Result<()> {
     let daemon = with_daemon!();
-    daemon.add_incoming_allowed_peer(peer_id.parse()?)
+    daemon.add_incoming_allowed_peer(parse_peer_id(peer_id)?)
 }
 
 #[frb(sync)]
 pub fn remove_incoming_allowed_peer(peer_id: String) -> Result<()> {
     let daemon = with_daemon!();
-    daemon.remove_incoming_allowed_peer(peer_id.parse()?)
+    daemon.remove_incoming_allowed_peer(parse_peer_id(peer_id)?)
 }
 
 #[frb(sync)]
@@ -99,20 +106,20 @@ pub async fn add_file_transfer_client(
 ) -> Result<()> {
     let daemon = with_daemon!();
     daemon
-        .add_file_transfer_client(enabled, name, peer_id.parse()?)
+        .add_file_transfer_client(enabled, name, parse_peer_id(peer_id)?)
         .await
 }
 
 #[frb(sync)]
 pub fn remove_file_transfer_client(peer_id: String) -> Result<()> {
     let daemon = with_daemon!();
-    daemon.remove_file_transfer_client(peer_id.parse()?)
+    daemon.remove_file_transfer_client(parse_peer_id(peer_id)?)
 }
 
 pub async fn enable_file_transfer_client(peer_id: String, enabled: bool) -> Result<()> {
     let daemon = with_daemon!();
     daemon
-        .enable_file_transfer_client(peer_id.parse()?, enabled)
+        .enable_file_transfer_client(parse_peer_id(peer_id)?, enabled)
         .await
 }
 
