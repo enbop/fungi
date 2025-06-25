@@ -7,6 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `parse_peer_id`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`
 
 Future<void> startFungiDaemon() =>
     RustLib.instance.api.crateApiFungiStartFungiDaemon();
@@ -25,6 +26,9 @@ void addIncomingAllowedPeer({required String peerId}) =>
 
 void removeIncomingAllowedPeer({required String peerId}) =>
     RustLib.instance.api.crateApiFungiRemoveIncomingAllowedPeer(peerId: peerId);
+
+bool getFileTransferServiceEnabled() =>
+    RustLib.instance.api.crateApiFungiGetFileTransferServiceEnabled();
 
 String getFileTransferServiceRootDir() =>
     RustLib.instance.api.crateApiFungiGetFileTransferServiceRootDir();
@@ -55,3 +59,30 @@ Future<void> enableFileTransferClient({
   peerId: peerId,
   enabled: enabled,
 );
+
+Future<List<FileTransferClient>> getAllFileTransferClients() =>
+    RustLib.instance.api.crateApiFungiGetAllFileTransferClients();
+
+class FileTransferClient {
+  final bool enabled;
+  final String? name;
+  final String peerId;
+
+  const FileTransferClient({
+    required this.enabled,
+    this.name,
+    required this.peerId,
+  });
+
+  @override
+  int get hashCode => enabled.hashCode ^ name.hashCode ^ peerId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FileTransferClient &&
+          runtimeType == other.runtimeType &&
+          enabled == other.enabled &&
+          name == other.name &&
+          peerId == other.peerId;
+}

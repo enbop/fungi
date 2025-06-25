@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
+import 'package:fungi_app/ui/pages/widgets/dialog.dart';
 import 'package:get/get.dart';
 import 'package:settings_ui/settings_ui.dart';
 
@@ -147,68 +148,15 @@ class Settings extends GetView<FungiController> {
           ),
           actions: [
             TextButton(
-              onPressed: () => _showAddPeerDialog(context),
+              onPressed: () => showAddPeerDialog(
+                context,
+                (String text) => controller.addIncomingAllowedPeer(text),
+              ),
               child: const Text('Add Peer'),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showAddPeerDialog(BuildContext context) {
-    final textController = TextEditingController();
-    final errorMessage = RxString('');
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Add Peer'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: textController,
-                decoration: const InputDecoration(
-                  labelText: 'Peer ID',
-                  hintText: 'Enter peer ID',
-                ),
-                autofocus: true,
-              ),
-              Obx(
-                () => errorMessage.isNotEmpty
-                    ? Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: Text(
-                          errorMessage.value,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (textController.text.isNotEmpty) {
-                  try {
-                    controller.addIncomingAllowedPeer(textController.text);
-                    Navigator.pop(context);
-                  } catch (e) {
-                    errorMessage.value = 'Failed to add peer: $e';
-                  }
-                }
-              },
-              child: const Text('Add'),
             ),
           ],
         );

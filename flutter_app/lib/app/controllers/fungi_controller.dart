@@ -29,6 +29,26 @@ extension ThemeOptionExtension on ThemeOption {
   }
 }
 
+class FileTransferServerState {
+  bool enabled;
+  String? error;
+  String? rootDir;
+
+  FileTransferServerState({required this.enabled, this.error, this.rootDir});
+}
+
+class FileTransferClientState {
+  bool enabled;
+  String peerId;
+  String? name;
+
+  FileTransferClientState({
+    required this.enabled,
+    required this.peerId,
+    this.name,
+  });
+}
+
 class FungiController extends GetxController {
   final isServiceRunning = false.obs;
   final peerId = ''.obs;
@@ -37,9 +57,10 @@ class FungiController extends GetxController {
   final _storage = GetStorage();
   final _themeKey = 'theme_option';
 
-  final Rx<ThemeOption> currentTheme = ThemeOption.system.obs;
-
+  final currentTheme = ThemeOption.system.obs;
   final incomingAllowdPeers = <String>[].obs;
+  final fileTransferServerState = FileTransferServerState(enabled: false).obs;
+  final fileTransferClients = <FileTransferClientState>[].obs;
 
   @override
   void onInit() {
@@ -75,6 +96,63 @@ class FungiController extends GetxController {
     updateIncomingAllowedPeers();
   }
 
+  void startFileTransferServer(String rootDir) {
+    try {
+      fungi.startFileTransferService(rootDir: rootDir);
+      fileTransferServerState.value.enabled = true;
+      fileTransferServerState.value.error = null;
+      debugPrint('File Transfer Server started');
+    } catch (e) {
+      fileTransferServerState.value.enabled = false;
+      fileTransferServerState.value.error = e.toString();
+      debugPrint('Failed to start File Transfer Server: $e');
+    }
+  }
+
+  void stopFileTransferServer() {
+    try {
+      fungi.stopFileTransferService();
+      fileTransferServerState.value.enabled = false;
+      fileTransferServerState.value.error = null;
+      debugPrint('File Transfer Server stopped');
+    } catch (e) {
+      fileTransferServerState.value.error = e.toString();
+      debugPrint('Failed to stop File Transfer Server: $e');
+    }
+  }
+
+  Future<void> addFileTransferClient({
+    required bool enabled,
+    String? name,
+    required String peerId,
+  }) async {
+    await fungi.addFileTransferClient(
+      enabled: enabled,
+      name: name,
+      peerId: peerId,
+    );
+    fileTransferClients.add(
+      FileTransferClientState(enabled: enabled, peerId: peerId, name: name),
+    );
+  }
+
+  Future<void> enableFileTransferClient({
+    required FileTransferClientState client,
+    required bool enabled,
+  }) async {
+    await fungi.enableFileTransferClient(
+      peerId: client.peerId,
+      enabled: enabled,
+    );
+    client.enabled = enabled;
+    fileTransferClients.refresh();
+  }
+
+  void removeFileTransferClient(String peerId) {
+    fungi.removeFileTransferClient(peerId: peerId);
+    fileTransferClients.removeWhere((client) => client.peerId == peerId);
+  }
+
   Future<void> initFungi() async {
     try {
       await fungi.startFungiDaemon();
@@ -86,6 +164,29 @@ class FungiController extends GetxController {
       debugPrint('Peer ID: $id');
 
       configFilePath.value = fungi.configFilePath();
+
+      try {
+        fileTransferServerState.value.enabled = fungi
+            .getFileTransferServiceEnabled();
+        fileTransferServerState.value.rootDir = fungi
+            .getFileTransferServiceRootDir();
+      } catch (e) {
+        debugPrint('Failed to get file transfer server state: $e');
+        fileTransferServerState.value.error = e.toString();
+      }
+
+      try {
+        final clients = await fungi.getAllFileTransferClients();
+        fileTransferClients.value = clients.map((client) {
+          return FileTransferClientState(
+            enabled: client.enabled,
+            peerId: client.peerId,
+          );
+        }).toList();
+      } catch (e) {
+        debugPrint('Failed to get file transfer clients: $e');
+        fileTransferClients.value = [];
+      }
 
       updateIncomingAllowedPeers();
     } catch (e) {

@@ -110,7 +110,7 @@ impl FileTransferClientControl {
         Ok(client)
     }
 
-    pub async fn get_client(&self, name: &str) -> anyhow::Result<FileTransferRpcClient> {
+    async fn get_client(&self, name: &str) -> anyhow::Result<FileTransferRpcClient> {
         let Some(mut fc) = self.clients.lock().get(name).cloned() else {
             bail!("File transfer client with name '{}' not found", name);
         };

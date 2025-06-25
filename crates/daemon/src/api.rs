@@ -59,6 +59,10 @@ impl FungiDaemon {
         Ok(())
     }
 
+    pub fn get_file_transfer_service_enabled(&self) -> bool {
+        self.config().lock().file_transfer.server.enabled
+    }
+
     pub fn get_file_transfer_service_root_dir(&self) -> PathBuf {
         self.config()
             .lock()
@@ -175,5 +179,9 @@ impl FungiDaemon {
         }
 
         Ok(())
+    }
+
+    pub fn get_all_file_transfer_clients(&self) -> Vec<FileTransferClient> {
+        self.config().lock().file_transfer.client.clone()
     }
 }

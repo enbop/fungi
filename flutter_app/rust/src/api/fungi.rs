@@ -9,6 +9,22 @@ use parking_lot::Mutex;
 
 static FUNGI_DAEMON: Lazy<Mutex<Option<Arc<FungiDaemon>>>> = Lazy::new(|| Default::default());
 
+pub struct FileTransferClient {
+    pub enabled: bool,
+    pub name: Option<String>,
+    pub peer_id: String,
+}
+
+impl From<fungi_config::file_transfer::FileTransferClient> for FileTransferClient {
+    fn from(client: fungi_config::file_transfer::FileTransferClient) -> Self {
+        Self {
+            enabled: client.enabled,
+            name: client.name,
+            peer_id: client.peer_id.to_string(),
+        }
+    }
+}
+
 macro_rules! with_daemon {
     () => {{
         let Some(daemon) = FUNGI_DAEMON.lock().clone() else {
@@ -79,6 +95,12 @@ pub fn remove_incoming_allowed_peer(peer_id: String) -> Result<()> {
 }
 
 #[frb(sync)]
+pub fn get_file_transfer_service_enabled() -> Result<bool> {
+    let daemon = with_daemon!();
+    Ok(daemon.get_file_transfer_service_enabled())
+}
+
+#[frb(sync)]
 pub fn get_file_transfer_service_root_dir() -> Result<String> {
     let daemon = with_daemon!();
     Ok(daemon
@@ -121,6 +143,15 @@ pub async fn enable_file_transfer_client(peer_id: String, enabled: bool) -> Resu
     daemon
         .enable_file_transfer_client(parse_peer_id(peer_id)?, enabled)
         .await
+}
+
+pub fn get_all_file_transfer_clients() -> Result<Vec<FileTransferClient>> {
+    let daemon = with_daemon!();
+    Ok(daemon
+        .get_all_file_transfer_clients()
+        .into_iter()
+        .map(FileTransferClient::from)
+        .collect())
 }
 
 #[flutter_rust_bridge::frb(init)]

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart';
+import 'package:fungi_app/ui/pages/home/drive_page.dart';
 import 'package:fungi_app/ui/pages/settings/settings.dart';
-import 'package:fungi_app/ui/pages/theme/app_theme.dart';
 import 'package:get/get.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:flutter/services.dart';
@@ -200,7 +200,7 @@ class HomePage extends StatelessWidget {
                     automaticallyImplyLeading: false,
                     bottom: TabBar(
                       tabs: const <Widget>[
-                        Tab(text: "Fungi Drive"),
+                        Tab(text: "File Transfer"),
                         Tab(text: "Data Tunnel"),
                         Tab(text: "Settings"),
                       ],
@@ -210,7 +210,7 @@ class HomePage extends StatelessWidget {
                 ),
                 body: const TabBarView(
                   children: <Widget>[
-                    Center(child: Text("It's cloudy here")),
+                    FileTransferPage(),
                     Center(child: Text("Coming soon...")),
                     Settings(),
                   ],
