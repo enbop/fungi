@@ -106,6 +106,12 @@ class RemoteFileAccess extends GetView<FungiController> {
                             client.peerId,
                             overflow: TextOverflow.ellipsis,
                             maxLines: 1,
+                            style: Theme.of(context).textTheme.bodySmall?.apply(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withAlpha(150),
+                              fontSizeDelta: -2,
+                            ),
                           ),
                         ),
                         trailing: Row(

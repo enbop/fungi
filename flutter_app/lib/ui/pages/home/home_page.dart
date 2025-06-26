@@ -210,7 +210,7 @@ class HomePage extends StatelessWidget {
                 ),
                 body: const TabBarView(
                   children: <Widget>[
-                    FileTransferPage(),
+                    SingleChildScrollView(child: FileTransferPage()),
                     Center(child: Text("Coming soon...")),
                     Settings(),
                   ],
