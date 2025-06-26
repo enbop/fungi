@@ -40,6 +40,7 @@ dependencies:
   get: ^4.7.2
   settings_ui: ^2.0.2
   get_storage: ^2.1.1
+  file_picker: ^10.2.0
 
 dev_dependencies:
   flutter_test:

@@ -89,9 +89,9 @@ class FungiController extends GetxController {
     updateIncomingAllowedPeers();
   }
 
-  void startFileTransferServer(String rootDir) {
+  Future<void> startFileTransferServer(String rootDir) async {
     try {
-      fungi.startFileTransferService(rootDir: rootDir);
+      await fungi.startFileTransferService(rootDir: rootDir);
       fileTransferServerState.value.enabled = true;
       fileTransferServerState.value.error = null;
       debugPrint('File Transfer Server started');
@@ -100,6 +100,7 @@ class FungiController extends GetxController {
       fileTransferServerState.value.error = e.toString();
       debugPrint('Failed to start File Transfer Server: $e');
     }
+    fileTransferServerState.refresh();
   }
 
   void stopFileTransferServer() {
@@ -112,6 +113,7 @@ class FungiController extends GetxController {
       fileTransferServerState.value.error = e.toString();
       debugPrint('Failed to stop File Transfer Server: $e');
     }
+    fileTransferServerState.refresh();
   }
 
   Future<void> addFileTransferClient({
@@ -174,12 +176,17 @@ class FungiController extends GetxController {
       try {
         fileTransferServerState.value.enabled = fungi
             .getFileTransferServiceEnabled();
-        fileTransferServerState.value.rootDir = fungi
-            .getFileTransferServiceRootDir();
+        final dir = fungi.getFileTransferServiceRootDir();
+        if (dir.isNotEmpty) {
+          fileTransferServerState.value.rootDir = dir;
+        } else {
+          fileTransferServerState.value.rootDir = null;
+        }
       } catch (e) {
         debugPrint('Failed to get file transfer server state: $e');
         fileTransferServerState.value.error = e.toString();
       }
+      fileTransferServerState.refresh();
 
       try {
         final clients = fungi.getAllFileTransferClients();

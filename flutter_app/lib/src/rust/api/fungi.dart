@@ -33,7 +33,9 @@ bool getFileTransferServiceEnabled() =>
 String getFileTransferServiceRootDir() =>
     RustLib.instance.api.crateApiFungiGetFileTransferServiceRootDir();
 
-void startFileTransferService({required String rootDir}) => RustLib.instance.api
+Future<void> startFileTransferService({required String rootDir}) => RustLib
+    .instance
+    .api
     .crateApiFungiStartFileTransferService(rootDir: rootDir);
 
 void stopFileTransferService() =>

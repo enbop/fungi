@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:fungi_app/ui/pages/home/home_page.dart';
@@ -17,11 +18,13 @@ class RemoteFileAccess extends GetView<FungiController> {
         children: [
           Text(
             "Remote File Access",
-            style: Theme.of(context).textTheme.headlineSmall,
+            style: Theme.of(context).textTheme.bodyLarge,
           ),
           Text(
-            "Connect to remote devices to access and manage files.",
-            style: Theme.of(context).textTheme.bodySmall,
+            "Map remote device folders as local FTP/WebDAV drives. \nAccess remote folders at the addresses below.",
+            style: Theme.of(context).textTheme.labelSmall?.apply(
+              color: Theme.of(context).colorScheme.onSurface.withAlpha(150),
+            ),
           ),
           SizedBox(height: 10),
           LabeledText(
@@ -148,9 +151,104 @@ class FileServer extends GetView<FungiController> {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      'File Server',
-      style: Theme.of(context).textTheme.headlineSmall,
+    return Padding(
+      padding: EdgeInsets.all(16),
+      child: Obx(
+        () => Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("File Server", style: Theme.of(context).textTheme.bodyLarge),
+            Text(
+              "Share files to other devices.",
+              style: Theme.of(context).textTheme.labelSmall?.apply(
+                color: Theme.of(context).colorScheme.onSurface.withAlpha(150),
+              ),
+            ),
+            SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text("State", style: Theme.of(context).textTheme.bodyMedium),
+                SizedBox(width: 5),
+                IconButton(
+                  onPressed: () async {
+                    if (controller.fileTransferServerState.value.enabled) {
+                      controller.stopFileTransferServer();
+                    } else {
+                      if (controller.fileTransferServerState.value.rootDir ==
+                          null) {
+                        debugPrint(
+                          'Root directory not set. Please select a directory first.',
+                        );
+                        return;
+                      }
+                      await controller.startFileTransferServer(
+                        controller.fileTransferServerState.value.rootDir!,
+                      );
+                    }
+                  },
+                  icon: controller.fileTransferServerState.value.enabled
+                      ? Icon(Icons.toggle_on, color: Colors.green)
+                      : Icon(Icons.toggle_off),
+                ),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  "Shared Directory: ",
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                SizedBox(width: 5),
+                SelectableText(
+                  controller.fileTransferServerState.value.rootDir != null
+                      ? controller.fileTransferServerState.value.rootDir!
+                      : "Not set",
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                IconButton(
+                  onPressed: () async {
+                    String? selectedDirectory = await FilePicker.platform
+                        .getDirectoryPath();
+                    if (selectedDirectory == null) {
+                      // User canceled the picker
+                      return;
+                    }
+                    debugPrint('Selected directory: $selectedDirectory');
+                    await controller.startFileTransferServer(selectedDirectory);
+                  },
+                  icon: Icon(Icons.edit, size: 15),
+                ),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  "Incoming Allowed Peers: ",
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                SizedBox(width: 5),
+                SelectableText(
+                  "${controller.incomingAllowdPeers.length}",
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                IconButton(
+                  onPressed: () {
+                    showAllowedPeersList(context);
+                  },
+                  icon: Icon(Icons.edit, size: 15),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

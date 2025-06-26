@@ -72,7 +72,7 @@ impl FungiDaemon {
             .clone()
     }
 
-    pub fn start_file_transfer_service(&self, root_dir: String) -> Result<()> {
+    pub async fn start_file_transfer_service(&self, root_dir: String) -> Result<()> {
         if self.get_file_transfer_service_root_dir().to_str() == Some(&root_dir)
             && self
                 .fts_control()
@@ -92,7 +92,9 @@ impl FungiDaemon {
 
         self.fts_control().stop_all();
         self.fts_control()
+            .clone()
             .add_service(config)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to start file transfer service: {}", e))?;
         Ok(())
     }

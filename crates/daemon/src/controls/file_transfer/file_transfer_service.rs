@@ -151,7 +151,8 @@ impl FileTransferServiceControl {
         }
     }
 
-    pub fn add_service(&self, config: FileTransferServiceConfig) -> io::Result<()> {
+    // async is necessary for the tokio::spawn
+    pub async fn add_service(&self, config: FileTransferServiceConfig) -> io::Result<()> {
         let mut services = self.services.lock().unwrap();
         if services.contains_key(&config.shared_root_dir) {
             return Err(io::Error::new(

@@ -112,7 +112,7 @@ abstract class RustLibApi extends BaseApi {
 
   void crateApiFungiRemoveIncomingAllowedPeer({required String peerId});
 
-  void crateApiFungiStartFileTransferService({required String rootDir});
+  Future<void> crateApiFungiStartFileTransferService({required String rootDir});
 
   Future<void> crateApiFungiStartFungiDaemon();
 
@@ -527,13 +527,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  void crateApiFungiStartFileTransferService({required String rootDir}) {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
+  Future<void> crateApiFungiStartFileTransferService({
+    required String rootDir,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(rootDir, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 16)!;
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 16,
+            port: port_,
+          );
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,

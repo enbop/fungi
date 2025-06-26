@@ -537,15 +537,16 @@ fn wire__crate__api__fungi__remove_incoming_allowed_peer_impl(
     )
 }
 fn wire__crate__api__fungi__start_file_transfer_service_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "start_file_transfer_service",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -559,12 +560,16 @@ fn wire__crate__api__fungi__start_file_transfer_service_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_root_dir = <String>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                (move || {
-                    let output_ok = crate::api::fungi::start_file_transfer_service(api_root_dir)?;
-                    Ok(output_ok)
-                })(),
-            )
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::fungi::start_file_transfer_service(api_root_dir).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
         },
     )
 }
@@ -869,6 +874,12 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         12 => wire__crate__api__fungi__init_app_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__fungi__start_file_transfer_service_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
         17 => wire__crate__api__fungi__start_fungi_daemon_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
@@ -911,9 +922,6 @@ fn pde_ffi_dispatcher_sync_impl(
         }
         15 => {
             wire__crate__api__fungi__remove_incoming_allowed_peer_impl(ptr, rust_vec_len, data_len)
-        }
-        16 => {
-            wire__crate__api__fungi__start_file_transfer_service_impl(ptr, rust_vec_len, data_len)
         }
         18 => wire__crate__api__fungi__stop_file_transfer_service_impl(ptr, rust_vec_len, data_len),
         19 => wire__crate__api__fungi__update_ftp_proxy_impl(ptr, rust_vec_len, data_len),

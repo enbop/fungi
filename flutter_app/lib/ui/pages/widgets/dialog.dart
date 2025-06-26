@@ -1,5 +1,69 @@
 import 'package:flutter/material.dart';
+import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:get/get.dart';
+
+void showAllowedPeersList(BuildContext context) {
+  final controller = Get.find<FungiController>();
+  showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('Incoming Allowed Peers'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Obx(() {
+            if (controller.incomingAllowdPeers.isEmpty) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text('No peers allowed'),
+                ),
+              );
+            }
+
+            return ListView.builder(
+              shrinkWrap: true,
+              itemCount: controller.incomingAllowdPeers.length,
+              itemBuilder: (context, index) {
+                final peerId = controller.incomingAllowdPeers[index];
+                return ListTile(
+                  title: SelectableText(
+                    peerId,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(
+                      Icons.remove_circle_outline,
+                      color: Colors.red,
+                      size: 20,
+                    ),
+                    onPressed: () {
+                      controller.removeIncomingAllowedPeer(peerId);
+                    },
+                  ),
+                  dense: true,
+                );
+              },
+            );
+          }),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => showAddPeerDialog(
+              context,
+              (String text) => controller.addIncomingAllowedPeer(text),
+            ),
+            child: const Text('Add Peer'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      );
+    },
+  );
+}
 
 void showAddPeerDialog(BuildContext context, void Function(String) onAddPeer) {
   final textController = TextEditingController();

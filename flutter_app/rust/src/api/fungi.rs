@@ -121,10 +121,9 @@ pub fn get_file_transfer_service_root_dir() -> Result<String> {
         .to_string())
 }
 
-#[frb(sync)]
-pub fn start_file_transfer_service(root_dir: String) -> Result<()> {
+pub async fn start_file_transfer_service(root_dir: String) -> Result<()> {
     let daemon = with_daemon!();
-    daemon.start_file_transfer_service(root_dir)
+    daemon.start_file_transfer_service(root_dir).await
 }
 
 #[frb(sync)]

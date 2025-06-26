@@ -57,7 +57,7 @@ class Settings extends GetView<FungiController> {
                 () => Text('${controller.incomingAllowdPeers.length} peers'),
               ),
               onPressed: (context) {
-                _showAllowedPeersList(context);
+                showAllowedPeersList(context);
               },
             ),
           ],
@@ -98,65 +98,6 @@ class Settings extends GetView<FungiController> {
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text('Cancel'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showAllowedPeersList(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Incoming Allowed Peers'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Obx(() {
-              if (controller.incomingAllowdPeers.isEmpty) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text('No peers allowed'),
-                  ),
-                );
-              }
-
-              return ListView.builder(
-                shrinkWrap: true,
-                itemCount: controller.incomingAllowdPeers.length,
-                itemBuilder: (context, index) {
-                  final peerId = controller.incomingAllowdPeers[index];
-                  return ListTile(
-                    title: Text(peerId, style: const TextStyle(fontSize: 14)),
-                    trailing: IconButton(
-                      icon: const Icon(
-                        Icons.remove_circle_outline,
-                        color: Colors.red,
-                        size: 20,
-                      ),
-                      onPressed: () {
-                        controller.removeIncomingAllowedPeer(peerId);
-                      },
-                    ),
-                    dense: true,
-                  );
-                },
-              );
-            }),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => showAddPeerDialog(
-                context,
-                (String text) => controller.addIncomingAllowedPeer(text),
-              ),
-              child: const Text('Add Peer'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
             ),
           ],
         );

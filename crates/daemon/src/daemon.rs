@@ -85,7 +85,7 @@ impl FungiDaemon {
             stream_control.clone(),
             state.incoming_allowed_peers().clone(),
         );
-        Self::init_fts(config.file_transfer.server.clone(), &fts_control);
+        Self::init_fts(config.file_transfer.server.clone(), &fts_control).await;
 
         let ftc_control = FileTransferClientControl::new(swarm_control.clone());
         Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
@@ -139,9 +139,9 @@ impl FungiDaemon {
         }
     }
 
-    fn init_fts(config: FTSConfig, fts_control: &FileTransferServiceControl) {
+    async fn init_fts(config: FTSConfig, fts_control: &FileTransferServiceControl) {
         if config.enabled {
-            if let Err(e) = fts_control.add_service(config) {
+            if let Err(e) = fts_control.add_service(config).await {
                 log::warn!("Failed to add file transfer service: {}", e);
             }
         }
