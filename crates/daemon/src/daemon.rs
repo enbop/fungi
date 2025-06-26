@@ -1,4 +1,8 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    time::Duration,
+};
 
 use crate::{
     DaemonArgs,
@@ -19,8 +23,8 @@ use tokio::task::JoinHandle;
 struct TaskHandles {
     swarm_task: JoinHandle<()>,
     daemon_rpc_task: JoinHandle<()>,
-    proxy_ftp_task: Option<JoinHandle<()>>,
-    proxy_webdav_task: Option<JoinHandle<()>>,
+    proxy_ftp_task: Arc<Mutex<Option<JoinHandle<()>>>>,
+    proxy_webdav_task: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 pub struct FungiDaemon {
@@ -111,8 +115,8 @@ impl FungiDaemon {
         let task_handles = TaskHandles {
             swarm_task,
             daemon_rpc_task,
-            proxy_ftp_task,
-            proxy_webdav_task,
+            proxy_ftp_task: Arc::new(Mutex::new(proxy_ftp_task)),
+            proxy_webdav_task: Arc::new(Mutex::new(proxy_webdav_task)),
         };
         Ok(Self {
             config: Arc::new(Mutex::new(config)),
@@ -161,6 +165,56 @@ impl FungiDaemon {
                 ftc_control.add_client(client);
             }
         });
+    }
+
+    pub(crate) fn update_ftp_proxy_task(
+        &self,
+        enabled: bool,
+        host: IpAddr,
+        port: u16,
+    ) -> Result<()> {
+        if port == 0 {
+            return Err(anyhow::anyhow!("Port must be greater than 0"));
+        }
+        if let Some(old_task) = self.task_handles.proxy_ftp_task.lock().take() {
+            if !old_task.is_finished() {
+                old_task.abort();
+            }
+        }
+        if enabled {
+            let task = tokio::spawn(crate::controls::start_ftp_proxy_service(
+                host,
+                port,
+                self.ftc_control.clone(),
+            ));
+            self.task_handles.proxy_ftp_task.lock().replace(task);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn update_webdav_proxy_task(
+        &self,
+        enabled: bool,
+        host: IpAddr,
+        port: u16,
+    ) -> Result<()> {
+        if port == 0 {
+            return Err(anyhow::anyhow!("Port must be greater than 0"));
+        }
+        if let Some(old_task) = self.task_handles.proxy_webdav_task.lock().take() {
+            if !old_task.is_finished() {
+                old_task.abort();
+            }
+        }
+        if enabled {
+            let task = tokio::spawn(crate::controls::start_webdav_proxy_service(
+                host,
+                port,
+                self.ftc_control.clone(),
+            ));
+            self.task_handles.proxy_webdav_task.lock().replace(task);
+        }
+        Ok(())
     }
 }
 

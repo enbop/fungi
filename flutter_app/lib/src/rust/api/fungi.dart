@@ -60,8 +60,33 @@ Future<void> enableFileTransferClient({
   enabled: enabled,
 );
 
-Future<List<FileTransferClient>> getAllFileTransferClients() =>
+List<FileTransferClient> getAllFileTransferClients() =>
     RustLib.instance.api.crateApiFungiGetAllFileTransferClients();
+
+FtpProxy getFtpProxy() => RustLib.instance.api.crateApiFungiGetFtpProxy();
+
+void updateFtpProxy({
+  required bool enabled,
+  required String host,
+  required int port,
+}) => RustLib.instance.api.crateApiFungiUpdateFtpProxy(
+  enabled: enabled,
+  host: host,
+  port: port,
+);
+
+WebdavProxy getWebdavProxy() =>
+    RustLib.instance.api.crateApiFungiGetWebdavProxy();
+
+void updateWebdavProxy({
+  required bool enabled,
+  required String host,
+  required int port,
+}) => RustLib.instance.api.crateApiFungiUpdateWebdavProxy(
+  enabled: enabled,
+  host: host,
+  port: port,
+);
 
 class FileTransferClient {
   final bool enabled;
@@ -85,4 +110,52 @@ class FileTransferClient {
           enabled == other.enabled &&
           name == other.name &&
           peerId == other.peerId;
+}
+
+class FtpProxy {
+  final bool enabled;
+  final String host;
+  final int port;
+
+  const FtpProxy({
+    required this.enabled,
+    required this.host,
+    required this.port,
+  });
+
+  @override
+  int get hashCode => enabled.hashCode ^ host.hashCode ^ port.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FtpProxy &&
+          runtimeType == other.runtimeType &&
+          enabled == other.enabled &&
+          host == other.host &&
+          port == other.port;
+}
+
+class WebdavProxy {
+  final bool enabled;
+  final String host;
+  final int port;
+
+  const WebdavProxy({
+    required this.enabled,
+    required this.host,
+    required this.port,
+  });
+
+  @override
+  int get hashCode => enabled.hashCode ^ host.hashCode ^ port.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WebdavProxy &&
+          runtimeType == other.runtimeType &&
+          enabled == other.enabled &&
+          host == other.host &&
+          port == other.port;
 }

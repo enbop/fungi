@@ -1,4 +1,7 @@
-use std::{collections::HashMap, convert::Infallible, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap, convert::Infallible, net::IpAddr, path::PathBuf, sync::Arc,
+    time::Duration,
+};
 
 use anyhow::bail;
 use dav_server::DavHandler;
@@ -419,7 +422,7 @@ impl FileTransferClientControl {
     }
 }
 
-pub async fn start_ftp_proxy_service(host: String, port: u16, client: FileTransferClientControl) {
+pub async fn start_ftp_proxy_service(host: IpAddr, port: u16, client: FileTransferClientControl) {
     loop {
         let client_cl = client.clone();
         let server = libunftp::ServerBuilder::new(Box::new(move || client_cl.clone()))
@@ -442,7 +445,7 @@ pub async fn start_ftp_proxy_service(host: String, port: u16, client: FileTransf
 }
 
 pub async fn start_webdav_proxy_service(
-    host: String,
+    host: IpAddr,
     port: u16,
     client: FileTransferClientControl,
 ) {

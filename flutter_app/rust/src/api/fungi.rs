@@ -15,6 +15,18 @@ pub struct FileTransferClient {
     pub peer_id: String,
 }
 
+pub struct FtpProxy {
+    pub enabled: bool,
+    pub host: String,
+    pub port: u16,
+}
+
+pub struct WebdavProxy {
+    pub enabled: bool,
+    pub host: String,
+    pub port: u16,
+}
+
 impl From<fungi_config::file_transfer::FileTransferClient> for FileTransferClient {
     fn from(client: fungi_config::file_transfer::FileTransferClient) -> Self {
         Self {
@@ -145,6 +157,7 @@ pub async fn enable_file_transfer_client(peer_id: String, enabled: bool) -> Resu
         .await
 }
 
+#[frb(sync)]
 pub fn get_all_file_transfer_clients() -> Result<Vec<FileTransferClient>> {
     let daemon = with_daemon!();
     Ok(daemon
@@ -152,6 +165,40 @@ pub fn get_all_file_transfer_clients() -> Result<Vec<FileTransferClient>> {
         .into_iter()
         .map(FileTransferClient::from)
         .collect())
+}
+
+#[frb(sync)]
+pub fn get_ftp_proxy() -> Result<FtpProxy> {
+    let daemon = with_daemon!();
+    let proxy = daemon.get_ftp_proxy();
+    Ok(FtpProxy {
+        enabled: proxy.enabled,
+        host: proxy.host.to_string(),
+        port: proxy.port,
+    })
+}
+
+#[frb(sync)]
+pub fn update_ftp_proxy(enabled: bool, host: String, port: u16) -> Result<()> {
+    let daemon = with_daemon!();
+    daemon.update_ftp_proxy(enabled, host.parse()?, port)
+}
+
+#[frb(sync)]
+pub fn get_webdav_proxy() -> Result<WebdavProxy> {
+    let daemon = with_daemon!();
+    let proxy = daemon.get_webdav_proxy();
+    Ok(WebdavProxy {
+        enabled: proxy.enabled,
+        host: proxy.host.to_string(),
+        port: proxy.port,
+    })
+}
+
+#[frb(sync)]
+pub fn update_webdav_proxy(enabled: bool, host: String, port: u16) -> Result<()> {
+    let daemon = with_daemon!();
+    daemon.update_webdav_proxy(enabled, host.parse()?, port)
 }
 
 #[flutter_rust_bridge::frb(init)]

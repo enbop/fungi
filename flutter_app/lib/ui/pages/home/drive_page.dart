@@ -27,13 +27,38 @@ class RemoteFileAccess extends GetView<FungiController> {
           LabeledText(
             label: "- FTP Server",
             labelStyle: Theme.of(context).textTheme.labelSmall,
-            value: "ftp://localhost:2121",
-            style: Theme.of(context).textTheme.bodySmall,
+            value: "",
+            valueWidget: Obx(
+              () => controller.ftpProxy.value.enabled
+                  ? SelectableText(
+                      "ftp://${controller.ftpProxy.value.host}:${controller.ftpProxy.value.port}",
+                      style: Theme.of(context).textTheme.bodySmall,
+                    )
+                  : Text(
+                      "Disabled",
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.apply(color: Colors.red),
+                    ),
+            ),
           ),
           LabeledText(
             label: "- WebDAV Server",
             labelStyle: Theme.of(context).textTheme.labelSmall,
-            value: "http://localhost:4141",
+            value: "",
+            valueWidget: Obx(
+              () => controller.webdavProxy.value.enabled
+                  ? SelectableText(
+                      "http://${controller.webdavProxy.value.host}:${controller.webdavProxy.value.port}",
+                      style: Theme.of(context).textTheme.bodySmall,
+                    )
+                  : Text(
+                      "Disabled",
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.apply(color: Colors.red),
+                    ),
+            ),
             style: Theme.of(context).textTheme.bodySmall,
           ),
           SizedBox(height: 10),

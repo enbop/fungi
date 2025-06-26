@@ -11,6 +11,7 @@ use libp2p_identity::PeerId;
 use serde::{Deserialize, Serialize};
 use std::{
     io,
+    net::IpAddr,
     path::{Path, PathBuf},
 };
 use tcp_tunneling::*;
@@ -226,6 +227,30 @@ impl FungiConfig {
         }
         self.save()?;
         Ok(Some(client))
+    }
+
+    pub fn update_ftp_proxy(&mut self, enabled: bool, host: IpAddr, port: u16) -> Result<()> {
+        self.file_transfer.proxy_ftp.enabled = enabled;
+        self.file_transfer.proxy_ftp.host = host;
+        self.file_transfer.proxy_ftp.port = port;
+
+        self.document["file_transfer"]["proxy_ftp"]["enabled"] = toml_edit::value(enabled);
+        self.document["file_transfer"]["proxy_ftp"]["host"] = toml_edit::value(host.to_string());
+        self.document["file_transfer"]["proxy_ftp"]["port"] = toml_edit::value(port as i64);
+        self.save()?;
+        Ok(())
+    }
+
+    pub fn update_webdav_proxy(&mut self, enabled: bool, host: IpAddr, port: u16) -> Result<()> {
+        self.file_transfer.proxy_webdav.enabled = enabled;
+        self.file_transfer.proxy_webdav.host = host;
+        self.file_transfer.proxy_webdav.port = port;
+
+        self.document["file_transfer"]["proxy_webdav"]["enabled"] = toml_edit::value(enabled);
+        self.document["file_transfer"]["proxy_webdav"]["host"] = toml_edit::value(host.to_string());
+        self.document["file_transfer"]["proxy_webdav"]["port"] = toml_edit::value(port as i64);
+        self.save()?;
+        Ok(())
     }
 }
 

@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.10.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1571620079;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1873293357;
 
 // Section: executor
 
@@ -193,16 +193,15 @@ fn wire__crate__api__fungi__enable_file_transfer_client_impl(
     )
 }
 fn wire__crate__api__fungi__get_all_file_transfer_clients_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "get_all_file_transfer_clients",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
         },
         move || {
             let message = unsafe {
@@ -215,14 +214,12 @@ fn wire__crate__api__fungi__get_all_file_transfer_clients_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             deserializer.end();
-            move |context| {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || {
-                        let output_ok = crate::api::fungi::get_all_file_transfer_clients()?;
-                        Ok(output_ok)
-                    })(),
-                )
-            }
+            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                (move || {
+                    let output_ok = crate::api::fungi::get_all_file_transfer_clients()?;
+                    Ok(output_ok)
+                })(),
+            )
         },
     )
 }
@@ -288,6 +285,37 @@ fn wire__crate__api__fungi__get_file_transfer_service_root_dir_impl(
         },
     )
 }
+fn wire__crate__api__fungi__get_ftp_proxy_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_ftp_proxy",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                (move || {
+                    let output_ok = crate::api::fungi::get_ftp_proxy()?;
+                    Ok(output_ok)
+                })(),
+            )
+        },
+    )
+}
 fn wire__crate__api__fungi__get_incoming_allowed_peers_list_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -313,6 +341,37 @@ fn wire__crate__api__fungi__get_incoming_allowed_peers_list_impl(
             transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                 (move || {
                     let output_ok = crate::api::fungi::get_incoming_allowed_peers_list()?;
+                    Ok(output_ok)
+                })(),
+            )
+        },
+    )
+}
+fn wire__crate__api__fungi__get_webdav_proxy_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_webdav_proxy",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                (move || {
+                    let output_ok = crate::api::fungi::get_webdav_proxy()?;
                     Ok(output_ok)
                 })(),
             )
@@ -575,6 +634,76 @@ fn wire__crate__api__fungi__stop_file_transfer_service_impl(
         },
     )
 }
+fn wire__crate__api__fungi__update_ftp_proxy_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "update_ftp_proxy",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_enabled = <bool>::sse_decode(&mut deserializer);
+            let api_host = <String>::sse_decode(&mut deserializer);
+            let api_port = <u16>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                (move || {
+                    let output_ok =
+                        crate::api::fungi::update_ftp_proxy(api_enabled, api_host, api_port)?;
+                    Ok(output_ok)
+                })(),
+            )
+        },
+    )
+}
+fn wire__crate__api__fungi__update_webdav_proxy_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "update_webdav_proxy",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_enabled = <bool>::sse_decode(&mut deserializer);
+            let api_host = <String>::sse_decode(&mut deserializer);
+            let api_port = <u16>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                (move || {
+                    let output_ok =
+                        crate::api::fungi::update_webdav_proxy(api_enabled, api_host, api_port)?;
+                    Ok(output_ok)
+                })(),
+            )
+        },
+    )
+}
 
 // Section: dart2rust
 
@@ -611,6 +740,20 @@ impl SseDecode for crate::api::fungi::FileTransferClient {
             enabled: var_enabled,
             name: var_name,
             peer_id: var_peerId,
+        };
+    }
+}
+
+impl SseDecode for crate::api::fungi::FtpProxy {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_enabled = <bool>::sse_decode(deserializer);
+        let mut var_host = <String>::sse_decode(deserializer);
+        let mut var_port = <u16>::sse_decode(deserializer);
+        return crate::api::fungi::FtpProxy {
+            enabled: var_enabled,
+            host: var_host,
+            port: var_port,
         };
     }
 }
@@ -664,6 +807,13 @@ impl SseDecode for Option<String> {
     }
 }
 
+impl SseDecode for u16 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u16::<NativeEndian>().unwrap()
+    }
+}
+
 impl SseDecode for u8 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -674,6 +824,20 @@ impl SseDecode for u8 {
 impl SseDecode for () {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {}
+}
+
+impl SseDecode for crate::api::fungi::WebdavProxy {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_enabled = <bool>::sse_decode(deserializer);
+        let mut var_host = <String>::sse_decode(deserializer);
+        let mut var_port = <u16>::sse_decode(deserializer);
+        return crate::api::fungi::WebdavProxy {
+            enabled: var_enabled,
+            host: var_host,
+            port: var_port,
+        };
+    }
 }
 
 impl SseDecode for i32 {
@@ -704,14 +868,8 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        5 => wire__crate__api__fungi__get_all_file_transfer_clients_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        10 => wire__crate__api__fungi__init_app_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__fungi__start_fungi_daemon_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__fungi__init_app_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__fungi__start_fungi_daemon_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -726,6 +884,9 @@ fn pde_ffi_dispatcher_sync_impl(
     match func_id {
         2 => wire__crate__api__fungi__add_incoming_allowed_peer_impl(ptr, rust_vec_len, data_len),
         3 => wire__crate__api__fungi__config_file_path_impl(ptr, rust_vec_len, data_len),
+        5 => {
+            wire__crate__api__fungi__get_all_file_transfer_clients_impl(ptr, rust_vec_len, data_len)
+        }
         6 => wire__crate__api__fungi__get_file_transfer_service_enabled_impl(
             ptr,
             rust_vec_len,
@@ -736,23 +897,27 @@ fn pde_ffi_dispatcher_sync_impl(
             rust_vec_len,
             data_len,
         ),
-        8 => wire__crate__api__fungi__get_incoming_allowed_peers_list_impl(
+        8 => wire__crate__api__fungi__get_ftp_proxy_impl(ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__fungi__get_incoming_allowed_peers_list_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        9 => wire__crate__api__fungi__host_name_impl(ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__fungi__peer_id_impl(ptr, rust_vec_len, data_len),
-        12 => {
+        10 => wire__crate__api__fungi__get_webdav_proxy_impl(ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__fungi__host_name_impl(ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__fungi__peer_id_impl(ptr, rust_vec_len, data_len),
+        14 => {
             wire__crate__api__fungi__remove_file_transfer_client_impl(ptr, rust_vec_len, data_len)
         }
-        13 => {
+        15 => {
             wire__crate__api__fungi__remove_incoming_allowed_peer_impl(ptr, rust_vec_len, data_len)
         }
-        14 => {
+        16 => {
             wire__crate__api__fungi__start_file_transfer_service_impl(ptr, rust_vec_len, data_len)
         }
-        16 => wire__crate__api__fungi__stop_file_transfer_service_impl(ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__fungi__stop_file_transfer_service_impl(ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__fungi__update_ftp_proxy_impl(ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__fungi__update_webdav_proxy_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -778,6 +943,47 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::fungi::FileTransferClient>
     for crate::api::fungi::FileTransferClient
 {
     fn into_into_dart(self) -> crate::api::fungi::FileTransferClient {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::fungi::FtpProxy {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.enabled.into_into_dart().into_dart(),
+            self.host.into_into_dart().into_dart(),
+            self.port.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::fungi::FtpProxy {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::fungi::FtpProxy>
+    for crate::api::fungi::FtpProxy
+{
+    fn into_into_dart(self) -> crate::api::fungi::FtpProxy {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::fungi::WebdavProxy {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.enabled.into_into_dart().into_dart(),
+            self.host.into_into_dart().into_dart(),
+            self.port.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::fungi::WebdavProxy
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::fungi::WebdavProxy>
+    for crate::api::fungi::WebdavProxy
+{
+    fn into_into_dart(self) -> crate::api::fungi::WebdavProxy {
         self
     }
 }
@@ -809,6 +1015,15 @@ impl SseEncode for crate::api::fungi::FileTransferClient {
         <bool>::sse_encode(self.enabled, serializer);
         <Option<String>>::sse_encode(self.name, serializer);
         <String>::sse_encode(self.peer_id, serializer);
+    }
+}
+
+impl SseEncode for crate::api::fungi::FtpProxy {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.enabled, serializer);
+        <String>::sse_encode(self.host, serializer);
+        <u16>::sse_encode(self.port, serializer);
     }
 }
 
@@ -852,6 +1067,13 @@ impl SseEncode for Option<String> {
     }
 }
 
+impl SseEncode for u16 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u16::<NativeEndian>(self).unwrap();
+    }
+}
+
 impl SseEncode for u8 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -862,6 +1084,15 @@ impl SseEncode for u8 {
 impl SseEncode for () {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {}
+}
+
+impl SseEncode for crate::api::fungi::WebdavProxy {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.enabled, serializer);
+        <String>::sse_encode(self.host, serializer);
+        <u16>::sse_encode(self.port, serializer);
+    }
 }
 
 impl SseEncode for i32 {

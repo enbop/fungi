@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:fungi_app/src/rust/api/fungi.dart';
 import 'package:get/get.dart';
+import 'package:get/get_connect/http/src/utils/utils.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart' as fungi;
 
@@ -37,18 +39,6 @@ class FileTransferServerState {
   FileTransferServerState({required this.enabled, this.error, this.rootDir});
 }
 
-class FileTransferClientState {
-  bool enabled;
-  String peerId;
-  String? name;
-
-  FileTransferClientState({
-    required this.enabled,
-    required this.peerId,
-    this.name,
-  });
-}
-
 class FungiController extends GetxController {
   final isServiceRunning = false.obs;
   final peerId = ''.obs;
@@ -60,7 +50,10 @@ class FungiController extends GetxController {
   final currentTheme = ThemeOption.system.obs;
   final incomingAllowdPeers = <String>[].obs;
   final fileTransferServerState = FileTransferServerState(enabled: false).obs;
-  final fileTransferClients = <FileTransferClientState>[].obs;
+  final fileTransferClients = <FileTransferClient>[].obs;
+
+  final ftpProxy = FtpProxy(enabled: false, host: "", port: 0).obs;
+  final webdavProxy = WebdavProxy(enabled: false, host: "", port: 0).obs;
 
   @override
   void onInit() {
@@ -132,19 +125,32 @@ class FungiController extends GetxController {
       peerId: peerId,
     );
     fileTransferClients.add(
-      FileTransferClientState(enabled: enabled, peerId: peerId, name: name),
+      FileTransferClient(enabled: enabled, peerId: peerId, name: name),
     );
   }
 
   Future<void> enableFileTransferClient({
-    required FileTransferClientState client,
+    required FileTransferClient client,
     required bool enabled,
   }) async {
     await fungi.enableFileTransferClient(
       peerId: client.peerId,
       enabled: enabled,
     );
-    client.enabled = enabled;
+
+    final newClient = FileTransferClient(
+      enabled: enabled,
+      peerId: client.peerId,
+      name: client.name,
+    );
+
+    final index = fileTransferClients.indexWhere(
+      (c) => c.peerId == client.peerId,
+    );
+    if (index != -1) {
+      fileTransferClients[index] = newClient;
+    }
+    debugPrint('File Transfer Client ${client.peerId} enabled: $enabled');
     fileTransferClients.refresh();
   }
 
@@ -176,16 +182,18 @@ class FungiController extends GetxController {
       }
 
       try {
-        final clients = await fungi.getAllFileTransferClients();
-        fileTransferClients.value = clients.map((client) {
-          return FileTransferClientState(
-            enabled: client.enabled,
-            peerId: client.peerId,
-          );
-        }).toList();
+        final clients = fungi.getAllFileTransferClients();
+        fileTransferClients.value = clients.toList();
       } catch (e) {
         debugPrint('Failed to get file transfer clients: $e');
         fileTransferClients.value = [];
+      }
+
+      try {
+        ftpProxy.value = fungi.getFtpProxy();
+        webdavProxy.value = fungi.getWebdavProxy();
+      } catch (e) {
+        debugPrint('Failed to get proxy infos: $e');
       }
 
       updateIncomingAllowedPeers();

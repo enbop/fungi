@@ -1,7 +1,7 @@
-use std::path::PathBuf;
+use std::{net::IpAddr, path::PathBuf};
 
 use anyhow::{Result, bail};
-use fungi_config::file_transfer::FileTransferClient;
+use fungi_config::file_transfer::{FileTransferClient, FtpProxy, WebdavProxy};
 use libp2p::PeerId;
 
 use crate::FungiDaemon;
@@ -183,5 +183,31 @@ impl FungiDaemon {
 
     pub fn get_all_file_transfer_clients(&self) -> Vec<FileTransferClient> {
         self.config().lock().file_transfer.client.clone()
+    }
+
+    pub fn get_ftp_proxy(&self) -> FtpProxy {
+        self.config().lock().file_transfer.proxy_ftp.clone()
+    }
+
+    pub fn update_ftp_proxy(&self, enabled: bool, host: IpAddr, port: u16) -> Result<()> {
+        if port == 0 {
+            bail!("Port must be greater than 0");
+        }
+        self.config().lock().update_ftp_proxy(enabled, host, port)?;
+        self.update_ftp_proxy_task(enabled, host, port)
+    }
+
+    pub fn get_webdav_proxy(&self) -> WebdavProxy {
+        self.config().lock().file_transfer.proxy_webdav.clone()
+    }
+
+    pub fn update_webdav_proxy(&self, enabled: bool, host: IpAddr, port: u16) -> Result<()> {
+        if port == 0 {
+            bail!("Port must be greater than 0");
+        }
+        self.config()
+            .lock()
+            .update_webdav_proxy(enabled, host, port)?;
+        self.update_webdav_proxy_task(enabled, host, port)
     }
 }
