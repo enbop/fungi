@@ -4,7 +4,7 @@ mod ftp_impl;
 mod webdav_impl;
 
 pub use file_transfer_client::{
-    FileTransferClientControl, start_ftp_proxy_service, start_webdav_proxy_service,
+    FileTransferClientsControl, start_ftp_proxy_service, start_webdav_proxy_service,
 };
 pub use file_transfer_service::FileTransferServiceControl;
 use fungi_fs::{FileInfo, Metadata, Result};

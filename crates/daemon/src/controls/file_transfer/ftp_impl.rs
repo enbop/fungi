@@ -3,10 +3,10 @@ use std::fmt::Debug;
 use async_trait::async_trait;
 use libunftp::{auth::UserDetail, storage::StorageBackend};
 
-use super::FileTransferClientControl;
+use super::FileTransferClientsControl;
 
 #[async_trait]
-impl<User: UserDetail> StorageBackend<User> for FileTransferClientControl {
+impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
     type Metadata = fungi_fs::Metadata;
 
     fn supported_features(&self) -> u32 {

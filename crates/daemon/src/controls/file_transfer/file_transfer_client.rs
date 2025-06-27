@@ -26,19 +26,19 @@ struct FileClient {
 }
 
 #[derive(Clone)]
-pub struct FileTransferClientControl {
+pub struct FileTransferClientsControl {
     swarm_control: SwarmControl,
     clients: Arc<Mutex<HashMap<String, FileClient>>>,
 }
 
-impl std::fmt::Debug for FileTransferClientControl {
+impl std::fmt::Debug for FileTransferClientsControl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // only print name "FileTransferClientControl"
         f.debug_struct("FileTransferClientControl").finish()
     }
 }
 
-impl FileTransferClientControl {
+impl FileTransferClientsControl {
     pub fn new(swarm_control: SwarmControl) -> Self {
         Self {
             swarm_control,
@@ -140,7 +140,7 @@ fn connect_file_transfer_rpc(stream: Stream) -> FileTransferRpcClient {
     );
     FileTransferRpcClient::new(Default::default(), transport).spawn()
 }
-impl FileTransferClientControl {
+impl FileTransferClientsControl {
     async fn extract_client_and_path(
         &self,
         path: PathBuf,
@@ -168,6 +168,11 @@ impl FileTransferClientControl {
         } else {
             remaining_path.push(".");
         }
+        log::debug!(
+            "Extracted client: {} and remaining path: {}",
+            client_name,
+            remaining_path.display()
+        );
 
         Ok((client, remaining_path))
     }
@@ -422,7 +427,7 @@ impl FileTransferClientControl {
     }
 }
 
-pub async fn start_ftp_proxy_service(host: IpAddr, port: u16, client: FileTransferClientControl) {
+pub async fn start_ftp_proxy_service(host: IpAddr, port: u16, client: FileTransferClientsControl) {
     loop {
         let client_cl = client.clone();
         let server = libunftp::ServerBuilder::new(Box::new(move || client_cl.clone()))
@@ -447,7 +452,7 @@ pub async fn start_ftp_proxy_service(host: IpAddr, port: u16, client: FileTransf
 pub async fn start_webdav_proxy_service(
     host: IpAddr,
     port: u16,
-    client: FileTransferClientControl,
+    client: FileTransferClientsControl,
 ) {
     let dav_server = DavHandler::builder()
         .filesystem(Box::new(client))

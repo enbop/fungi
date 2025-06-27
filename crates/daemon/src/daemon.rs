@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     DaemonArgs,
-    controls::{FileTransferClientControl, FileTransferServiceControl},
+    controls::{FileTransferClientsControl, FileTransferServiceControl},
     listeners::FungiDaemonRpcServer,
 };
 use anyhow::Result;
@@ -33,7 +33,7 @@ pub struct FungiDaemon {
 
     swarm_control: SwarmControl,
     fts_control: FileTransferServiceControl,
-    ftc_control: FileTransferClientControl,
+    ftc_control: FileTransferClientsControl,
 
     task_handles: TaskHandles,
 }
@@ -51,7 +51,7 @@ impl FungiDaemon {
         &self.fts_control
     }
 
-    pub fn ftc_control(&self) -> &FileTransferClientControl {
+    pub fn ftc_control(&self) -> &FileTransferClientsControl {
         &self.ftc_control
     }
 
@@ -87,7 +87,7 @@ impl FungiDaemon {
         );
         Self::init_fts(config.file_transfer.server.clone(), &fts_control).await;
 
-        let ftc_control = FileTransferClientControl::new(swarm_control.clone());
+        let ftc_control = FileTransferClientsControl::new(swarm_control.clone());
         Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
 
         let proxy_ftp_task = if config.file_transfer.proxy_ftp.enabled {
@@ -147,7 +147,7 @@ impl FungiDaemon {
         }
     }
 
-    fn init_ftc(clients: Vec<FTCConfig>, ftc_control: FileTransferClientControl) {
+    fn init_ftc(clients: Vec<FTCConfig>, ftc_control: FileTransferClientsControl) {
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_secs(2)).await;
             for mut client in clients {

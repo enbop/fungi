@@ -10,7 +10,7 @@ use dav_server::{
 use futures::{FutureExt, Stream, StreamExt, stream};
 use libp2p::bytes::Bytes;
 
-use super::FileTransferClientControl;
+use super::FileTransferClientsControl;
 
 #[derive(Debug, Clone)]
 struct DavMetaDataImpl(fungi_fs::Metadata);
@@ -34,7 +34,7 @@ impl DavMetaData for DavMetaDataImpl {
 #[derive(Debug)]
 struct DavFileImpl {
     path: PathBuf,
-    client: FileTransferClientControl,
+    clients_ctrl: FileTransferClientsControl,
     position: u64,
     data: Option<Vec<u8>>,
     options: OpenOptions,
@@ -44,7 +44,7 @@ impl DavFile for DavFileImpl {
     fn metadata(&mut self) -> FsFuture<Box<dyn DavMetaData>> {
         async move {
             let meta = self
-                .client
+                .clients_ctrl
                 .metadata(self.path.clone())
                 .await
                 .map_err(map_error)?;
@@ -57,7 +57,7 @@ impl DavFile for DavFileImpl {
         async move {
             let bytes = buf.chunk().to_vec();
             let _ = self
-                .client
+                .clients_ctrl
                 .put(bytes.clone(), self.path.clone(), self.position)
                 .await
                 .map_err(map_error)?;
@@ -71,7 +71,7 @@ impl DavFile for DavFileImpl {
         async move {
             let bytes = buf.to_vec();
             let _ = self
-                .client
+                .clients_ctrl
                 .put(bytes, self.path.clone(), self.position)
                 .await
                 .map_err(map_error)?;
@@ -86,7 +86,7 @@ impl DavFile for DavFileImpl {
             // TODO don't clone
             if self.data.is_none() {
                 let data = self
-                    .client
+                    .clients_ctrl
                     .get(self.path.clone(), self.position)
                     .await
                     .map_err(map_error)?;
@@ -137,7 +137,7 @@ impl DavFile for DavFileImpl {
                 }
                 SeekFrom::End(_) => {
                     let meta = self
-                        .client
+                        .clients_ctrl
                         .metadata(self.path.clone())
                         .await
                         .map_err(map_error)?;
@@ -186,7 +186,7 @@ impl DavDirEntry for DavDirEntryImpl {
     }
 }
 
-impl DavFileSystem for FileTransferClientControl {
+impl DavFileSystem for FileTransferClientsControl {
     fn open<'a>(
         &'a self,
         path: &'a DavPath,
@@ -194,7 +194,7 @@ impl DavFileSystem for FileTransferClientControl {
     ) -> FsFuture<'a, Box<dyn DavFile>> {
         let path_str = path.as_rel_ospath();
         let path_buf = PathBuf::from(path_str.to_string_lossy().to_string());
-        let client = self.clone();
+        let clients_ctrl = self.clone();
 
         log::info!(
             "Opening file: {} with options: {:?}",
@@ -203,16 +203,15 @@ impl DavFileSystem for FileTransferClientControl {
         );
         async move {
             if !options.write && !options.create {
-                let meta_result = client.metadata(path_buf.clone()).await;
-
-                if let Err(_) = meta_result {
-                    return Err(FsError::NotFound);
-                }
+                let meta_result = clients_ctrl
+                    .metadata(path_buf.clone())
+                    .await
+                    .map_err(map_error)?;
             }
 
             let file = DavFileImpl {
                 path: path_buf,
-                client,
+                clients_ctrl,
                 position: 0,
                 data: None,
                 options,
@@ -235,10 +234,7 @@ impl DavFileSystem for FileTransferClientControl {
 
         log::info!("Reading directory: {}", path_buf.display());
         async move {
-            let entries = client
-                .list(path_buf.clone())
-                .await
-                .map_err(|_| FsError::NotFound)?;
+            let entries = client.list(path_buf.clone()).await.map_err(map_error)?;
 
             let stream = stream::iter(entries).map(|entry| {
                 let name = entry
@@ -265,17 +261,14 @@ impl DavFileSystem for FileTransferClientControl {
     }
 
     fn metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
-        let client = self.clone();
+        let client_ctrl = self.clone();
 
         let mut path_buf = PathBuf::from(".");
         path_buf.push(path.as_rel_ospath());
 
         log::info!("Getting metadata for path: {} {}", path, path_buf.display());
         async move {
-            let meta = client
-                .metadata(path_buf)
-                .await
-                .map_err(|_| FsError::NotFound)?;
+            let meta = client_ctrl.metadata(path_buf).await.map_err(map_error)?;
 
             Ok(Box::new(DavMetaDataImpl(meta)) as Box<dyn DavMetaData>)
         }
@@ -285,6 +278,7 @@ impl DavFileSystem for FileTransferClientControl {
 
 fn map_error(err: fungi_fs::FileTransferError) -> FsError {
     use fungi_fs::FileTransferError;
+    log::warn!("DavFile transfer error: {:?}", err);
     match err {
         FileTransferError::NotFound => FsError::NotFound,
         FileTransferError::PermissionDenied => FsError::Forbidden,
