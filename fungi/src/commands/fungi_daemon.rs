@@ -19,7 +19,10 @@ pub async fn run(args: DaemonArgs) -> Result<()> {
         .unwrap();
     println!("Network info: {:?}", network_info);
 
-    if let Err(e) = swarm_control.listen_relay(get_default_relay_addr()).await {
+    if let Err(e) = swarm_control
+        .listen_relay_and_rendezvous(get_default_relay_addr())
+        .await
+    {
         eprintln!("Failed to listen on relay: {:?}", e);
     };
 

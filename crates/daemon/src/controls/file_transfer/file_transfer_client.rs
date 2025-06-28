@@ -1,6 +1,11 @@
 use std::{
-    collections::HashMap, convert::Infallible, net::IpAddr, path::PathBuf, sync::Arc,
-    time::Duration,
+    collections::HashMap,
+    convert::Infallible,
+    net::IpAddr,
+    ops::{Deref, DerefMut},
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, SystemTime},
 };
 
 use anyhow::bail;
@@ -19,16 +24,44 @@ use tokio_util::{codec::LengthDelimitedCodec, compat::FuturesAsyncReadCompatExt 
 use crate::controls::file_transfer::{FileTransferRpc, FileTransferRpcClient};
 
 #[derive(Debug, Clone)]
-struct FileClient {
+struct ConnectedClient {
     peer_id: Arc<PeerId>,
-    is_windows: Option<bool>,
-    rpc_client: Option<FileTransferRpcClient>,
+    is_windows: bool,
+    rpc_client: FileTransferRpcClient,
 }
+
+impl Deref for ConnectedClient {
+    type Target = FileTransferRpcClient;
+
+    fn deref(&self) -> &Self::Target {
+        &self.rpc_client
+    }
+}
+
+impl DerefMut for ConnectedClient {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.rpc_client
+    }
+}
+
+#[derive(Debug, Clone)]
+enum FileClientState {
+    Connected(ConnectedClient),
+    Disconnected,           // TODO add retry count
+    Connecting(SystemTime), // start time of connection attempt
+}
+
+// #[derive(Debug, Clone)]
+// struct FileClient {
+//     peer_id: Arc<PeerId>,
+//     is_windows: bool,
+//     rpc_client: FileTransferRpcClient,
+// }
 
 #[derive(Clone)]
 pub struct FileTransferClientsControl {
     swarm_control: SwarmControl,
-    clients: Arc<Mutex<HashMap<String, FileClient>>>,
+    clients: Arc<Mutex<HashMap<String, (PeerId, FileClientState)>>>,
 }
 
 impl std::fmt::Debug for FileTransferClientsControl {
@@ -62,13 +95,8 @@ impl FileTransferClientsControl {
         Ok(host_name)
     }
 
-    // TODO add callback on_client_broken
-
     pub fn has_client(&self, peer_id: &PeerId) -> bool {
-        self.clients
-            .lock()
-            .values()
-            .any(|fc| fc.peer_id.as_ref() == peer_id)
+        self.clients.lock().values().any(|(id, _)| id == peer_id)
     }
 
     pub fn add_client(&self, config: FileTransferClientConfig) {
@@ -84,19 +112,16 @@ impl FileTransferClientsControl {
         );
         self.clients.lock().insert(
             key,
-            FileClient {
-                peer_id: Arc::new(config.peer_id),
-                rpc_client: None,
-                is_windows: None,
-            },
+            (
+                config.peer_id,
+                FileClientState::Disconnected, // start with disconnected state
+            ),
         );
     }
 
     pub fn remove_client(&self, peer_id: &PeerId) {
         log::info!("Removing file transfer client with peer_id: {}", peer_id);
-        self.clients
-            .lock()
-            .retain(|_, fc| !fc.peer_id.as_ref().eq(peer_id));
+        self.clients.lock().retain(|_, (id, _)| id != peer_id);
     }
 
     async fn connect_client(&self, peer_id: PeerId) -> anyhow::Result<FileTransferRpcClient> {
@@ -113,22 +138,65 @@ impl FileTransferClientsControl {
         Ok(client)
     }
 
-    async fn get_client(&self, name: &str) -> anyhow::Result<FileTransferRpcClient> {
-        let Some(mut fc) = self.clients.lock().get(name).cloned() else {
+    async fn get_client(&self, name: &str) -> anyhow::Result<ConnectedClient> {
+        let Some((peer_id, fc)) = self.clients.lock().get(name).cloned() else {
             bail!("File transfer client with name '{}' not found", name);
         };
-        if fc.rpc_client.is_none() {
-            let client = self.connect_client(*fc.peer_id).await?;
-            let is_windows = client.is_windows(context::current()).await?;
-            fc.is_windows = Some(is_windows);
-            fc.rpc_client = Some(client);
-            // update the client in the map
-            self.clients.lock().insert(name.to_string(), fc.clone());
+        match fc {
+            FileClientState::Connected(client) => {
+                return Ok(client);
+            }
+            FileClientState::Disconnected => {
+                // set the state to connecting
+                let start_time = SystemTime::now();
+                self.clients.lock().insert(
+                    name.to_string(),
+                    (peer_id.clone(), FileClientState::Connecting(start_time)),
+                );
+                // try to connect
+                let client = match self.connect_client(peer_id.clone()).await {
+                    Ok(client) => client,
+                    Err(e) => {
+                        self.clients.lock().insert(
+                            name.to_string(),
+                            (peer_id.clone(), FileClientState::Disconnected),
+                        );
+                        bail!(
+                            "Failed to connect to file transfer client '{}': {}",
+                            name,
+                            e
+                        );
+                    }
+                };
+                let Ok(is_windows) = client.is_windows(context::current()).await else {
+                    self.clients.lock().insert(
+                        name.to_string(),
+                        (peer_id.clone(), FileClientState::Disconnected),
+                    );
+                    bail!("Failed to check if client '{}' is Windows", name);
+                };
+                let connected_client = ConnectedClient {
+                    peer_id: Arc::new(peer_id.clone()),
+                    is_windows,
+                    rpc_client: client,
+                };
+                // update the client state to connected
+                self.clients.lock().insert(
+                    name.to_string(),
+                    (
+                        peer_id.clone(),
+                        FileClientState::Connected(connected_client.clone()),
+                    ),
+                );
+                return Ok(connected_client);
+            }
+            FileClientState::Connecting(_start_time) => {
+                bail!(
+                    "File transfer client with name '{}' is currently connecting",
+                    name
+                );
+            }
         }
-        if fc.rpc_client.is_none() {
-            bail!("File transfer client with name '{}' is not connected", name);
-        }
-        Ok(fc.rpc_client.unwrap())
     }
 }
 
@@ -141,10 +209,21 @@ fn connect_file_transfer_rpc(stream: Stream) -> FileTransferRpcClient {
     FileTransferRpcClient::new(Default::default(), transport).spawn()
 }
 impl FileTransferClientsControl {
+    fn map_rpc_error(&self, peer_id: &PeerId) -> fungi_fs::FileTransferError {
+        log::warn!("Client {} disconnected", peer_id);
+        let mut lock = self.clients.lock();
+        for (_key, (id, state)) in lock.iter_mut() {
+            if id == peer_id {
+                *state = FileClientState::Disconnected;
+            }
+        }
+        fungi_fs::FileTransferError::ConnectionBroken
+    }
+
     async fn extract_client_and_path(
         &self,
         path: PathBuf,
-    ) -> anyhow::Result<(FileTransferRpcClient, PathBuf)> {
+    ) -> anyhow::Result<(ConnectedClient, PathBuf)> {
         let path_str = path.to_string_lossy().to_string();
         let clean_path = path_str
             .trim_start_matches("./")
@@ -201,9 +280,10 @@ impl FileTransferClientsControl {
         };
 
         client
+            .rpc_client
             .metadata(context::current(), remaining_path)
             .await
-            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+            .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
     pub async fn list(&self, path: PathBuf) -> fungi_fs::Result<Vec<fungi_fs::FileInfo>> {
@@ -241,7 +321,7 @@ impl FileTransferClientsControl {
         client
             .list(context::current(), remaining_path)
             .await
-            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+            .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
     pub async fn get(&self, path: PathBuf, start_pos: u64) -> fungi_fs::Result<Vec<u8>> {
@@ -260,7 +340,7 @@ impl FileTransferClientsControl {
         client
             .get(context::current(), remaining_path, start_pos)
             .await
-            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+            .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
     pub async fn put(
@@ -284,7 +364,7 @@ impl FileTransferClientsControl {
         client
             .put(context::current(), bytes, remaining_path, start_pos)
             .await
-            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+            .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
     pub async fn del(&self, path: PathBuf) -> fungi_fs::Result<()> {
@@ -309,7 +389,7 @@ impl FileTransferClientsControl {
         client
             .del(context::current(), remaining_path)
             .await
-            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+            .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
     pub async fn rmd(&self, path: PathBuf) -> fungi_fs::Result<()> {
@@ -334,7 +414,7 @@ impl FileTransferClientsControl {
         client
             .rmd(context::current(), remaining_path)
             .await
-            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+            .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
     pub async fn mkd(&self, path: PathBuf) -> fungi_fs::Result<()> {
@@ -353,8 +433,9 @@ impl FileTransferClientsControl {
         client
             .mkd(context::current(), remaining_path)
             .await
-            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+            .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
+
     pub async fn rename(&self, from: PathBuf, to: PathBuf) -> fungi_fs::Result<()> {
         let from_str = from.to_string_lossy();
         let to_str = to.to_string_lossy();
@@ -406,7 +487,7 @@ impl FileTransferClientsControl {
         from_client
             .rename(context::current(), from_remaining_path, to_remaining_path)
             .await
-            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+            .map_err(|_| self.map_rpc_error(&from_client.peer_id))?
     }
 
     pub async fn cwd(&self, path: PathBuf) -> fungi_fs::Result<()> {
@@ -423,7 +504,7 @@ impl FileTransferClientsControl {
         client
             .cwd(context::current(), remaining_path)
             .await
-            .map_err(|_| fungi_fs::FileTransferError::ConnectionBroken)?
+            .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 }
 

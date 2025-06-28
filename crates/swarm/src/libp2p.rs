@@ -1,4 +1,7 @@
-use crate::{behaviours::FungiBehaviours, peer_handshake::PeerHandshakePayload};
+use crate::{
+    behaviours::{FungiBehaviours, FungiBehavioursEvent},
+    peer_handshake::PeerHandshakePayload,
+};
 use anyhow::{Context, Result, bail};
 use async_result::{AsyncResult, Completer};
 use fungi_util::protocols::{FUNGI_PEER_HANDSHAKE_PROTOCOL, FUNGI_RELAY_HANDSHAKE_PROTOCOL};
@@ -8,7 +11,7 @@ use libp2p::{
     identity::Keypair,
     mdns,
     multiaddr::Protocol,
-    noise,
+    noise, rendezvous,
     swarm::{DialError, SwarmEvent},
     tcp, yamux,
 };
@@ -234,7 +237,7 @@ impl SwarmControl {
         Ok(*res)
     }
 
-    pub async fn listen_relay(&self, relay_addr: Multiaddr) -> Result<()> {
+    pub async fn listen_relay_and_rendezvous(&self, relay_addr: Multiaddr) -> Result<()> {
         let relay_peer = relay_addr
             .iter()
             .find_map(|p| {
@@ -275,11 +278,41 @@ impl SwarmControl {
             bail!("Handshake failed: empty response");
         };
 
+        let addr = relay_addr
+            .with(Protocol::P2pCircuit)
+            .with(Protocol::P2p(self.local_peer_id()));
+        let addr_clone = addr.clone();
         // 2. listen on relay
-        self.invoke_swarm(|swarm| {
-            swarm.listen_on(relay_addr.with(libp2p::multiaddr::Protocol::P2pCircuit))
-        })
-        .await??;
+        self.invoke_swarm(|swarm| swarm.listen_on(addr_clone))
+            .await??;
+
+        // 3. register rendezvous point
+        let this = self.clone();
+        tokio::spawn(async move {
+            // wait for external address to be added
+            tokio::time::sleep(Duration::from_secs(2)).await;
+
+            log::info!("Registering rendezvous point at {}", relay_peer);
+            let register_res = this
+                .invoke_swarm(move |swarm| {
+                    swarm.add_external_address(addr);
+                    swarm.behaviour_mut().rendezvous.register(
+                        rendezvous::Namespace::from_static("rendezvous"),
+                        relay_peer,
+                        None,
+                    )
+                })
+                .await
+                .unwrap(); // TODO handle error
+            if let Err(error) = register_res {
+                log::error!("Failed to register: {error}");
+            }
+            log::info!(
+                "Connection established with rendezvous point {}",
+                relay_peer
+            );
+        });
+
         Ok(())
     }
 }
@@ -335,7 +368,6 @@ impl FungiSwarm {
         swarm_caller_rx: UnboundedReceiver<SwarmAsyncCall>,
     ) -> JoinHandle<()> {
         let swarm_task = tokio::spawn(swarm_loop(swarm, swarm_caller_rx));
-
         async fn swarm_loop(
             mut swarm: TSwarm,
             mut swarm_caller_rx: UnboundedReceiver<SwarmAsyncCall>,
@@ -376,6 +408,35 @@ impl FungiSwarm {
                                 swarm.behaviour().connected_peers.lock().remove(&peer_id);
                             },
                             // SwarmEvent::Behaviour(event) => log::info!("{event:?}"),
+                            SwarmEvent::Behaviour(FungiBehavioursEvent::Rendezvous(
+                                rendezvous::client::Event::Registered {
+                                    namespace,
+                                    ttl,
+                                    rendezvous_node,
+                                },
+                            )) => {
+                                log::info!(
+                                    "Registered for namespace '{}' at rendezvous point {} for the next {} seconds",
+                                    namespace,
+                                    rendezvous_node,
+                                    ttl
+                                );
+                            }
+                            SwarmEvent::Behaviour(FungiBehavioursEvent::Rendezvous(
+                                rendezvous::client::Event::RegisterFailed {
+                                    rendezvous_node,
+                                    namespace,
+                                    error,
+                                },
+                                )) => {
+                                log::error!(
+                                    "Failed to register: rendezvous_node={}, namespace={}, error_code={:?}",
+                                    rendezvous_node,
+                                    namespace,
+                                    error
+                                );
+                                return;
+                            }
                             _ => {}
                         }
                     },

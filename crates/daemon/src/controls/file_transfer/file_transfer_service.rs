@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     io,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use fungi_config::file_transfer::FileTransferService as FileTransferServiceConfig;
@@ -11,7 +11,7 @@ use fungi_util::protocols::FUNGI_FILE_TRANSFER_PROTOCOL;
 use futures::StreamExt;
 use libp2p::PeerId;
 use libp2p_stream::Control;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use tarpc::{
     context::Context,
     serde_transport,
@@ -153,7 +153,7 @@ impl FileTransferServiceControl {
 
     // async is necessary for the tokio::spawn
     pub async fn add_service(&self, config: FileTransferServiceConfig) -> io::Result<()> {
-        let mut services = self.services.lock().unwrap();
+        let mut services = self.services.lock();
         if services.contains_key(&config.shared_root_dir) {
             return Err(io::Error::new(
                 io::ErrorKind::AlreadyExists,
@@ -173,18 +173,18 @@ impl FileTransferServiceControl {
     }
 
     pub fn remove_service(&self, path: &PathBuf) {
-        let mut services = self.services.lock().unwrap();
+        let mut services = self.services.lock();
         if let Some(handle) = services.remove(path) {
             handle.abort();
         }
     }
 
     pub fn has_service(&self, path: &PathBuf) -> bool {
-        self.services.lock().unwrap().contains_key(path)
+        self.services.lock().contains_key(path)
     }
 
     pub fn stop_all(&self) {
-        let mut services = self.services.lock().unwrap();
+        let mut services = self.services.lock();
         for (path, handle) in services.drain() {
             log::info!("Stopping file transfer service at: {:?}", path);
             handle.abort();

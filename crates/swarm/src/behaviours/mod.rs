@@ -2,12 +2,14 @@ pub mod ext;
 
 use std::ops::Deref;
 
-use libp2p::{dcutr, identify, identity::Keypair, mdns, ping, relay, swarm::NetworkBehaviour};
+use libp2p::{
+    dcutr, identify, identity::Keypair, mdns, ping, relay, rendezvous, swarm::NetworkBehaviour,
+};
 
 use crate::State;
 
 // default identify protocol name for libp2p
-const IDENTIFY_PROTOCOL: &str = "/ipfs/id/1.0.0";
+const IDENTIFY_PROTOCOL: &str = "/fungi/id/0.1.0";
 
 fn identify_user_agent() -> String {
     format!("fungi/{}", env!("CARGO_PKG_VERSION"))
@@ -21,6 +23,7 @@ pub struct FungiBehaviours {
     identify: identify::Behaviour,
     relay: relay::client::Behaviour,
     dcutr: dcutr::Behaviour,
+    pub rendezvous: rendezvous::client::Behaviour,
 
     pub fungi_ext: ext::Behaviour,
 }
@@ -56,6 +59,7 @@ impl FungiBehaviours {
             identify,
             relay,
             dcutr: dcutr::Behaviour::new(peer_id),
+            rendezvous: rendezvous::client::Behaviour::new(keypair.clone()),
             fungi_ext: ext::Behaviour::new(state),
         }
     }
