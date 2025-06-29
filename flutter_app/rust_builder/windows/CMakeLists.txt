@@ -8,13 +8,20 @@ cmake_minimum_required(VERSION 3.14)
 set(PROJECT_NAME "rust_lib_fungi_app")
 project(${PROJECT_NAME} LANGUAGES CXX)
 
-include("../cargokit/cmake/cargokit.cmake")
-apply_cargokit(${PROJECT_NAME} ../../../../../../rust rust_lib_fungi_app "")
+# skip cargokit to fix windows cmake build failure
+# make sure run "cargo build --release" before "flutter run"
+# include("../cargokit/cmake/cargokit.cmake")
+# apply_cargokit(${PROJECT_NAME} ../../../../../../rust rust_lib_fungi_app "")
+set(PREBUILT_DLL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../target/release/rust_lib_fungi_app.dll")
+if(NOT EXISTS ${PREBUILT_DLL_PATH})
+    message(FATAL_ERROR "Prebuilt DLL not found at: ${PREBUILT_DLL_PATH}")
+endif()
 
 # List of absolute paths to libraries that should be bundled with the plugin.
 # This list could contain prebuilt libraries, or libraries created by an
 # external build triggered from this build file.
 set(rust_lib_fungi_app_bundled_libraries
-  "${${PROJECT_NAME}_cargokit_lib}"
+  # "${${PROJECT_NAME}_cargokit_lib}"
+  ${PREBUILT_DLL_PATH}
   PARENT_SCOPE
 )
