@@ -1449,6 +1449,7 @@ dependencies = [
  "bincode",
  "clap",
  "dav-server",
+ "env_logger 0.11.3",
  "fungi-config",
  "fungi-fs",
  "fungi-swarm",

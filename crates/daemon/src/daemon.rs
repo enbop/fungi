@@ -15,14 +15,14 @@ use fungi_config::{
     file_transfer::FileTransferService as FTSConfig,
 };
 use fungi_swarm::{FungiSwarm, State, SwarmControl, TSwarm};
-use fungi_util::keypair::get_keypair_from_dir;
-use libp2p::PeerId;
+use fungi_util::keypair::{self, get_keypair_from_dir};
+use libp2p::{PeerId, identity::Keypair};
 use parking_lot::Mutex;
 use tokio::task::JoinHandle;
 
 struct TaskHandles {
     swarm_task: JoinHandle<()>,
-    daemon_rpc_task: JoinHandle<()>,
+    daemon_rpc_task: Arc<Mutex<Option<JoinHandle<()>>>>,
     proxy_ftp_task: Arc<Mutex<Option<JoinHandle<()>>>>,
     proxy_webdav_task: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
@@ -59,8 +59,17 @@ impl FungiDaemon {
         let fungi_dir = args.fungi_dir();
         println!("Fungi directory: {:?}", fungi_dir);
 
-        let config = FungiConfig::apply_from_dir(&fungi_dir).unwrap();
+        let config = FungiConfig::apply_from_dir(&fungi_dir)?;
+        let keypair = get_keypair_from_dir(&fungi_dir)?;
 
+        Self::start_with(args, config, keypair).await
+    }
+
+    pub async fn start_with(
+        args: DaemonArgs,
+        config: FungiConfig,
+        keypair: Keypair,
+    ) -> Result<Self> {
         let state = State::new(
             config
                 .network
@@ -70,7 +79,6 @@ impl FungiDaemon {
                 .collect(),
         );
 
-        let keypair = get_keypair_from_dir(&fungi_dir).unwrap();
         let (swarm_control, swarm_task) =
             FungiSwarm::start_swarm(keypair, state.clone(), |swarm| {
                 apply_listen(swarm, &config);
@@ -114,7 +122,7 @@ impl FungiDaemon {
 
         let task_handles = TaskHandles {
             swarm_task,
-            daemon_rpc_task,
+            daemon_rpc_task: Arc::new(Mutex::new(Some(daemon_rpc_task))),
             proxy_ftp_task: Arc::new(Mutex::new(proxy_ftp_task)),
             proxy_webdav_task: Arc::new(Mutex::new(proxy_webdav_task)),
         };

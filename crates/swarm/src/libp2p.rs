@@ -237,7 +237,7 @@ impl SwarmControl {
         Ok(*res)
     }
 
-    pub async fn listen_relay_and_rendezvous(&self, relay_addr: Multiaddr) -> Result<()> {
+    pub async fn listen_relay(&self, relay_addr: Multiaddr) -> Result<()> {
         let relay_peer = relay_addr
             .iter()
             .find_map(|p| {
