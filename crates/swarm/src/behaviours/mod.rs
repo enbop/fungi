@@ -2,9 +2,7 @@ pub mod ext;
 
 use std::ops::Deref;
 
-use libp2p::{
-    dcutr, identify, identity::Keypair, mdns, ping, relay, rendezvous, swarm::NetworkBehaviour,
-};
+use libp2p::{dcutr, identify, identity::Keypair, mdns, ping, relay, swarm::NetworkBehaviour};
 
 use crate::State;
 
@@ -23,7 +21,6 @@ pub struct FungiBehaviours {
     identify: identify::Behaviour,
     relay: relay::client::Behaviour,
     dcutr: dcutr::Behaviour,
-    pub rendezvous: rendezvous::client::Behaviour,
 
     pub fungi_ext: ext::Behaviour,
 }
@@ -59,7 +56,6 @@ impl FungiBehaviours {
             identify,
             relay,
             dcutr: dcutr::Behaviour::new(peer_id),
-            rendezvous: rendezvous::client::Behaviour::new(keypair.clone()),
             fungi_ext: ext::Behaviour::new(state),
         }
     }

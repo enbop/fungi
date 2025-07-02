@@ -37,7 +37,6 @@ libp2p = { version = "0.55", features = [
     "dcutr",
     "rsa",
     "secp256k1",
-    "rendezvous",
     "ed25519",
 ] }
 libp2p-stream = "0.3.0-alpha"

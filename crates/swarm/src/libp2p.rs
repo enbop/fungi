@@ -11,7 +11,7 @@ use libp2p::{
     identity::Keypair,
     mdns,
     multiaddr::Protocol,
-    noise, rendezvous,
+    noise,
     swarm::{DialError, SwarmEvent},
     tcp, yamux,
 };
@@ -286,33 +286,6 @@ impl SwarmControl {
         self.invoke_swarm(|swarm| swarm.listen_on(addr_clone))
             .await??;
 
-        // 3. register rendezvous point
-        let this = self.clone();
-        tokio::spawn(async move {
-            // wait for external address to be added
-            tokio::time::sleep(Duration::from_secs(2)).await;
-
-            log::info!("Registering rendezvous point at {}", relay_peer);
-            let register_res = this
-                .invoke_swarm(move |swarm| {
-                    swarm.add_external_address(addr);
-                    swarm.behaviour_mut().rendezvous.register(
-                        rendezvous::Namespace::from_static("rendezvous"),
-                        relay_peer,
-                        None,
-                    )
-                })
-                .await
-                .unwrap(); // TODO handle error
-            if let Err(error) = register_res {
-                log::error!("Failed to register: {error}");
-            }
-            log::info!(
-                "Connection established with rendezvous point {}",
-                relay_peer
-            );
-        });
-
         Ok(())
     }
 }
@@ -377,8 +350,10 @@ impl FungiSwarm {
                     swarm_events = swarm.select_next_some() => {
                         match swarm_events {
                             SwarmEvent::NewListenAddr { address, .. } => {
-                                let addr = address.with_p2p(*swarm.local_peer_id()).unwrap();
-                                println!("Listening on {addr:?}")
+                                println!("Listening on {address:?}");
+                            },
+                            SwarmEvent::NewExternalAddrCandidate { address, .. } => {
+                                log::info!("New external address candidate: {address:?}");
                             },
                             SwarmEvent::ConnectionEstablished { peer_id, endpoint,.. } => {
                                 log::info!("Connection established with {peer_id:?} at {endpoint:?}");
@@ -407,36 +382,6 @@ impl FungiSwarm {
                                 // update connected peers
                                 swarm.behaviour().connected_peers.lock().remove(&peer_id);
                             },
-                            // SwarmEvent::Behaviour(event) => log::info!("{event:?}"),
-                            SwarmEvent::Behaviour(FungiBehavioursEvent::Rendezvous(
-                                rendezvous::client::Event::Registered {
-                                    namespace,
-                                    ttl,
-                                    rendezvous_node,
-                                },
-                            )) => {
-                                log::info!(
-                                    "Registered for namespace '{}' at rendezvous point {} for the next {} seconds",
-                                    namespace,
-                                    rendezvous_node,
-                                    ttl
-                                );
-                            }
-                            SwarmEvent::Behaviour(FungiBehavioursEvent::Rendezvous(
-                                rendezvous::client::Event::RegisterFailed {
-                                    rendezvous_node,
-                                    namespace,
-                                    error,
-                                },
-                                )) => {
-                                log::error!(
-                                    "Failed to register: rendezvous_node={}, namespace={}, error_code={:?}",
-                                    rendezvous_node,
-                                    namespace,
-                                    error
-                                );
-                                return;
-                            }
                             _ => {}
                         }
                     },
