@@ -27,6 +27,8 @@ async fn create_daemons() -> (FungiDaemon, FungiDaemon) {
     server_config.file_transfer.proxy_webdav.enabled = false;
 
     let mut client_config = FungiConfig::default();
+    client_config.file_transfer.proxy_webdav.host = "0.0.0.0".parse().unwrap();
+    client_config.file_transfer.proxy_ftp.host = "0.0.0.0".parse().unwrap();
     client_config
         .file_transfer
         .client

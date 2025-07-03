@@ -3,6 +3,10 @@ name = "fungi-fs"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+libunftp = []
+
 [dependencies]
 unftp-sbe-fs = "0.3.0"
 cap-std = "3.4"

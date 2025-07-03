@@ -27,7 +27,7 @@ libp2p-stream = { workspace = true }
 tokio-util = { version = "0.7", features = ["compat"] }
 anyhow = { workspace = true }
 tarpc = { workspace = true }
-fungi-fs = { path = "../fs" }
+fungi-fs = { path = "../fs", features = ["libunftp"] }
 thiserror = { workspace = true }
 async-trait = "0.1"
 libunftp = "0.21"

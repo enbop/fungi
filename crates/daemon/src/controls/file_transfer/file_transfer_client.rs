@@ -9,7 +9,7 @@ use std::{
 };
 
 use anyhow::bail;
-use dav_server::DavHandler;
+use dav_server::{DavHandler, fakels::FakeLs};
 use fungi_config::file_transfer::FileTransferClient as FileTransferClientConfig;
 use fungi_swarm::SwarmControl;
 use fungi_util::protocols::FUNGI_FILE_TRANSFER_PROTOCOL;
@@ -21,7 +21,7 @@ use tarpc::{context, serde_transport, tokio_serde::formats::Bincode};
 use tokio::net::TcpListener;
 use tokio_util::{codec::LengthDelimitedCodec, compat::FuturesAsyncReadCompatExt as _};
 
-use crate::controls::file_transfer::{FileTransferRpc, FileTransferRpcClient};
+use crate::controls::file_transfer::FileTransferRpcClient;
 
 #[derive(Debug, Clone)]
 struct ConnectedClient {
@@ -209,7 +209,7 @@ fn connect_file_transfer_rpc(stream: Stream) -> FileTransferRpcClient {
     FileTransferRpcClient::new(Default::default(), transport).spawn()
 }
 impl FileTransferClientsControl {
-    fn map_rpc_error(&self, peer_id: &PeerId) -> fungi_fs::FileTransferError {
+    fn map_rpc_error(&self, peer_id: &PeerId) -> fungi_fs::FileSystemError {
         log::warn!("Client {} disconnected", peer_id);
         let mut lock = self.clients.lock();
         for (_key, (id, state)) in lock.iter_mut() {
@@ -217,7 +217,7 @@ impl FileTransferClientsControl {
                 *state = FileClientState::Disconnected;
             }
         }
-        fungi_fs::FileTransferError::ConnectionBroken
+        fungi_fs::FileSystemError::ConnectionBroken
     }
 
     async fn extract_client_and_path(
@@ -265,6 +265,8 @@ impl FileTransferClientsControl {
                 is_file: false,
                 len: 0,
                 modified: Some(std::time::SystemTime::now()),
+                created: None,
+                accessed: None,
                 is_symlink: false,
                 gid: 0,
                 uid: 0,
@@ -276,7 +278,11 @@ impl FileTransferClientsControl {
 
         let (client, remaining_path) = match self.extract_client_and_path(path).await {
             Ok(result) => result,
-            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+            Err(e) => {
+                return Err(fungi_fs::FileSystemError::Other {
+                    message: e.to_string(),
+                });
+            }
         };
 
         client
@@ -286,20 +292,23 @@ impl FileTransferClientsControl {
             .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
-    pub async fn list(&self, path: PathBuf) -> fungi_fs::Result<Vec<fungi_fs::FileInfo>> {
+    pub async fn list(&self, path: PathBuf) -> fungi_fs::Result<Vec<fungi_fs::DirEntry>> {
         let path_str = path.to_string_lossy();
         if path_str == "." || path_str == "./" || path_str == "/" {
             let clients = self.clients.lock();
             let mut result = Vec::new();
 
             for client_name in clients.keys() {
-                result.push(fungi_fs::FileInfo {
+                result.push(fungi_fs::DirEntry {
+                    name: client_name.clone(),
                     path: PathBuf::from(client_name),
                     metadata: fungi_fs::Metadata {
                         is_dir: true,
                         is_file: false,
                         len: 0,
                         modified: Some(std::time::SystemTime::now()),
+                        created: None,
+                        accessed: None,
                         is_symlink: false,
                         gid: 0,
                         uid: 0,
@@ -315,7 +324,11 @@ impl FileTransferClientsControl {
 
         let (client, remaining_path) = match self.extract_client_and_path(path).await {
             Ok(result) => result,
-            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+            Err(e) => {
+                return Err(fungi_fs::FileSystemError::Other {
+                    message: e.to_string(),
+                });
+            }
         };
 
         client
@@ -327,14 +340,18 @@ impl FileTransferClientsControl {
     pub async fn get(&self, path: PathBuf, start_pos: u64) -> fungi_fs::Result<Vec<u8>> {
         let path_str = path.to_string_lossy();
         if path_str == "." || path_str == "./" || path_str == "/" {
-            return Err(fungi_fs::FileTransferError::Other(
-                "Cannot read from root directory".to_string(),
-            ));
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot read from root directory".to_string(),
+            });
         }
 
         let (client, remaining_path) = match self.extract_client_and_path(path).await {
             Ok(result) => result,
-            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+            Err(e) => {
+                return Err(fungi_fs::FileSystemError::Other {
+                    message: e.to_string(),
+                });
+            }
         };
 
         client
@@ -351,14 +368,18 @@ impl FileTransferClientsControl {
     ) -> fungi_fs::Result<u64> {
         let path_str = path.to_string_lossy();
         if path_str == "." || path_str == "./" || path_str == "/" {
-            return Err(fungi_fs::FileTransferError::Other(
-                "Cannot write to root directory".to_string(),
-            ));
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot write to root directory".to_string(),
+            });
         }
 
         let (client, remaining_path) = match self.extract_client_and_path(path).await {
             Ok(result) => result,
-            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+            Err(e) => {
+                return Err(fungi_fs::FileSystemError::Other {
+                    message: e.to_string(),
+                });
+            }
         };
 
         client
@@ -370,20 +391,24 @@ impl FileTransferClientsControl {
     pub async fn del(&self, path: PathBuf) -> fungi_fs::Result<()> {
         let path_str = path.to_string_lossy();
         if path_str == "." || path_str == "./" || path_str == "/" {
-            return Err(fungi_fs::FileTransferError::Other(
-                "Cannot delete root directory".to_string(),
-            ));
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot delete root directory".to_string(),
+            });
         }
 
         let (client, remaining_path) = match self.extract_client_and_path(path).await {
             Ok(result) => result,
-            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+            Err(e) => {
+                return Err(fungi_fs::FileSystemError::Other {
+                    message: e.to_string(),
+                });
+            }
         };
 
         if remaining_path.to_string_lossy() == "." {
-            return Err(fungi_fs::FileTransferError::Other(
-                "Cannot delete client root directory".to_string(),
-            ));
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot delete client root directory".to_string(),
+            });
         }
 
         client
@@ -395,20 +420,24 @@ impl FileTransferClientsControl {
     pub async fn rmd(&self, path: PathBuf) -> fungi_fs::Result<()> {
         let path_str = path.to_string_lossy();
         if path_str == "." || path_str == "./" || path_str == "/" {
-            return Err(fungi_fs::FileTransferError::Other(
-                "Cannot remove root directory".to_string(),
-            ));
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot remove root directory".to_string(),
+            });
         }
 
         let (client, remaining_path) = match self.extract_client_and_path(path).await {
             Ok(result) => result,
-            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+            Err(e) => {
+                return Err(fungi_fs::FileSystemError::Other {
+                    message: e.to_string(),
+                });
+            }
         };
 
         if remaining_path.to_string_lossy() == "." {
-            return Err(fungi_fs::FileTransferError::Other(
-                "Cannot remove client root directory".to_string(),
-            ));
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot remove client root directory".to_string(),
+            });
         }
 
         client
@@ -420,14 +449,18 @@ impl FileTransferClientsControl {
     pub async fn mkd(&self, path: PathBuf) -> fungi_fs::Result<()> {
         let path_str = path.to_string_lossy();
         if path_str == "." || path_str == "./" || path_str == "/" {
-            return Err(fungi_fs::FileTransferError::Other(
-                "Cannot create directory in root".to_string(),
-            ));
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot create directory in root".to_string(),
+            });
         }
 
         let (client, remaining_path) = match self.extract_client_and_path(path).await {
             Ok(result) => result,
-            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+            Err(e) => {
+                return Err(fungi_fs::FileSystemError::Other {
+                    message: e.to_string(),
+                });
+            }
         };
 
         client
@@ -447,41 +480,49 @@ impl FileTransferClientsControl {
             || to_str == "./"
             || to_str == "/"
         {
-            return Err(fungi_fs::FileTransferError::Other(
-                "Cannot rename root directory".to_string(),
-            ));
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot rename root directory".to_string(),
+            });
         }
 
         let from_clean = from_str.trim_start_matches("./").to_string();
         let to_clean = to_str.trim_start_matches("./").to_string();
 
         if !from_clean.contains('/') || !to_clean.contains('/') {
-            return Err(fungi_fs::FileTransferError::Other(
-                "Cannot rename client directories at the top level".to_string(),
-            ));
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot rename client directories at the top level".to_string(),
+            });
         }
 
         let (from_client, from_remaining_path) =
             match self.extract_client_and_path(from.clone()).await {
                 Ok(result) => result,
-                Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+                Err(e) => {
+                    return Err(fungi_fs::FileSystemError::Other {
+                        message: e.to_string(),
+                    });
+                }
             };
 
-        let (to_client, to_remaining_path) = match self.extract_client_and_path(to.clone()).await {
+        let (_to_client, to_remaining_path) = match self.extract_client_and_path(to.clone()).await {
             Ok(result) => result,
-            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+            Err(e) => {
+                return Err(fungi_fs::FileSystemError::Other {
+                    message: e.to_string(),
+                });
+            }
         };
 
         if from.components().next() != to.components().next() {
-            return Err(fungi_fs::FileTransferError::Other(
-                "Cannot rename across different clients".to_string(),
-            ));
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot rename across different clients".to_string(),
+            });
         }
 
         if from_remaining_path.to_string_lossy() == "." {
-            return Err(fungi_fs::FileTransferError::Other(
-                "Cannot rename client root directory".to_string(),
-            ));
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot rename client root directory".to_string(),
+            });
         }
 
         from_client
@@ -498,7 +539,11 @@ impl FileTransferClientsControl {
 
         let (client, remaining_path) = match self.extract_client_and_path(path).await {
             Ok(result) => result,
-            Err(e) => return Err(fungi_fs::FileTransferError::Other(e.to_string())),
+            Err(e) => {
+                return Err(fungi_fs::FileSystemError::Other {
+                    message: e.to_string(),
+                });
+            }
         };
 
         client
@@ -537,6 +582,8 @@ pub async fn start_webdav_proxy_service(
 ) {
     let dav_server = DavHandler::builder()
         .filesystem(Box::new(client))
+        // TODO macos finder needs the locking support. https://sabre.io/dav/clients/finder/
+        .locksystem(FakeLs::new())
         .build_handler();
 
     let addr = format!("{}:{}", host, port);
