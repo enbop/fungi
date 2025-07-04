@@ -1,10 +1,6 @@
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    sync::Arc,
-};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use fungi_config::tcp_tunneling::{ForwardingRule, ListeningRule, TcpTunneling};
 use libp2p::{PeerId, StreamProtocol};
 use libp2p_stream::Control;
@@ -65,26 +61,32 @@ impl TcpTunnelingControl {
     /// Add a new forwarding rule (local port -> remote peer)
     pub fn add_forwarding_rule(&self, rule: ForwardingRule) -> Result<String> {
         let rule_id = self.generate_forwarding_rule_id(&rule);
-        
+
         let mut rules = self.forwarding_rules.lock();
         if rules.contains_key(&rule_id) {
             bail!("Forwarding rule already exists: {}", rule_id);
         }
 
-        let local_addr: SocketAddr = (&rule.local_socket).try_into()
+        let local_addr: SocketAddr = (&rule.local_socket)
+            .try_into()
             .map_err(|e| anyhow::anyhow!("Invalid local socket address: {}", e))?;
 
-        let target_peer: PeerId = rule.remote.peer_id.parse()
+        let target_peer: PeerId = rule
+            .remote
+            .peer_id
+            .parse()
             .map_err(|e| anyhow::anyhow!("Invalid peer ID: {}", e))?;
 
         let target_protocol = StreamProtocol::try_from_owned(rule.remote.protocol.clone())
             .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
 
         let stream_control = self.stream_control.clone();
-        
+
         log::info!(
             "Adding forwarding rule: {} -> {}/{}",
-            local_addr, target_peer, target_protocol
+            local_addr,
+            target_peer,
+            target_protocol
         );
 
         let task_handle = tokio::spawn(async move {
@@ -93,13 +95,11 @@ impl TcpTunnelingControl {
                 local_addr,
                 target_peer,
                 target_protocol,
-            ).await;
+            )
+            .await;
         });
 
-        let rule_state = ForwardingRuleState {
-            rule,
-            task_handle,
-        };
+        let rule_state = ForwardingRuleState { rule, task_handle };
 
         rules.insert(rule_id.clone(), rule_state);
         Ok(rule_id)
@@ -120,23 +120,25 @@ impl TcpTunnelingControl {
     /// Add a new listening rule (remote peer -> local port)
     pub fn add_listening_rule(&self, rule: ListeningRule) -> Result<String> {
         let rule_id = self.generate_listening_rule_id(&rule);
-        
+
         let mut rules = self.listening_rules.lock();
         if rules.contains_key(&rule_id) {
             bail!("Listening rule already exists: {}", rule_id);
         }
 
-        let local_addr: SocketAddr = (&rule.local_socket).try_into()
+        let local_addr: SocketAddr = (&rule.local_socket)
+            .try_into()
             .map_err(|e| anyhow::anyhow!("Invalid local socket address: {}", e))?;
 
         let listening_protocol = StreamProtocol::try_from_owned(rule.listening_protocol.clone())
             .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
 
         let stream_control = self.stream_control.clone();
-        
+
         log::info!(
             "Adding listening rule: {} for {}",
-            local_addr, listening_protocol
+            local_addr,
+            listening_protocol
         );
 
         let task_handle = tokio::spawn(async move {
@@ -144,13 +146,11 @@ impl TcpTunnelingControl {
                 stream_control,
                 listening_protocol,
                 local_addr,
-            ).await;
+            )
+            .await;
         });
 
-        let rule_state = ListeningRuleState {
-            rule,
-            task_handle,
-        };
+        let rule_state = ListeningRuleState { rule, task_handle };
 
         rules.insert(rule_id.clone(), rule_state);
         Ok(rule_id)
@@ -205,9 +205,7 @@ impl TcpTunnelingControl {
     fn generate_forwarding_rule_id(&self, rule: &ForwardingRule) -> String {
         format!(
             "forward_{}:{}_to_{}",
-            rule.local_socket.host,
-            rule.local_socket.port,
-            rule.remote.peer_id
+            rule.local_socket.host, rule.local_socket.port, rule.remote.peer_id
         )
     }
 
@@ -215,9 +213,7 @@ impl TcpTunnelingControl {
     fn generate_listening_rule_id(&self, rule: &ListeningRule) -> String {
         format!(
             "listen_{}:{}_for_{}",
-            rule.local_socket.host,
-            rule.local_socket.port,
-            rule.listening_protocol
+            rule.local_socket.host, rule.local_socket.port, rule.listening_protocol
         )
     }
 }
