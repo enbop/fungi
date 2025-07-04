@@ -1,12 +1,12 @@
 use std::{
-    net::{IpAddr, SocketAddr},
+    net::IpAddr,
     sync::Arc,
     time::Duration,
 };
 
 use crate::{
     DaemonArgs,
-    controls::{FileTransferClientsControl, FileTransferServiceControl},
+    controls::{FileTransferClientsControl, FileTransferServiceControl, TcpTunnelingControl},
     listeners::FungiDaemonRpcServer,
 };
 use anyhow::Result;
@@ -15,8 +15,8 @@ use fungi_config::{
     file_transfer::FileTransferService as FTSConfig,
 };
 use fungi_swarm::{FungiSwarm, State, SwarmControl, TSwarm};
-use fungi_util::keypair::{self, get_keypair_from_dir};
-use libp2p::{PeerId, identity::Keypair};
+use fungi_util::keypair::get_keypair_from_dir;
+use libp2p::identity::Keypair;
 use parking_lot::Mutex;
 use tokio::task::JoinHandle;
 
@@ -34,6 +34,7 @@ pub struct FungiDaemon {
     swarm_control: SwarmControl,
     fts_control: FileTransferServiceControl,
     ftc_control: FileTransferClientsControl,
+    tcp_tunneling_control: TcpTunnelingControl,
 
     task_handles: TaskHandles,
 }
@@ -53,6 +54,10 @@ impl FungiDaemon {
 
     pub fn ftc_control(&self) -> &FileTransferClientsControl {
         &self.ftc_control
+    }
+
+    pub fn tcp_tunneling_control(&self) -> &TcpTunnelingControl {
+        &self.tcp_tunneling_control
     }
 
     pub async fn start(args: DaemonArgs) -> Result<Self> {
@@ -82,8 +87,6 @@ impl FungiDaemon {
         let (swarm_control, swarm_task) =
             FungiSwarm::start_swarm(keypair, state.clone(), |swarm| {
                 apply_listen(swarm, &config);
-                #[cfg(feature = "tcp-tunneling")]
-                apply_tcp_tunneling(swarm, &config);
             })
             .await?;
 
@@ -97,6 +100,9 @@ impl FungiDaemon {
 
         let ftc_control = FileTransferClientsControl::new(swarm_control.clone());
         Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
+
+        let tcp_tunneling_control = TcpTunnelingControl::new(stream_control.clone());
+        tcp_tunneling_control.init_from_config(&config.tcp_tunneling);
 
         let proxy_ftp_task = if config.file_transfer.proxy_ftp.enabled {
             Some(tokio::spawn(crate::controls::start_ftp_proxy_service(
@@ -132,6 +138,7 @@ impl FungiDaemon {
             swarm_control,
             fts_control,
             ftc_control,
+            tcp_tunneling_control,
             task_handles,
         })
     }
@@ -224,6 +231,96 @@ impl FungiDaemon {
         }
         Ok(())
     }
+
+    pub(crate) fn add_tcp_forwarding_rule_internal(
+        &self,
+        rule: fungi_config::tcp_tunneling::ForwardingRule,
+    ) -> Result<String> {
+        let rule_id = self.tcp_tunneling_control.add_forwarding_rule(rule.clone())?;
+        
+        // Update config file
+        self.update_config_with_forwarding_rule(rule, true)?;
+        
+        Ok(rule_id)
+    }
+
+    pub(crate) fn remove_tcp_forwarding_rule_internal(&self, rule_id: &str) -> Result<()> {
+        // Get the rule before removing it
+        let rules = self.tcp_tunneling_control.get_forwarding_rules();
+        let rule = rules.iter()
+            .find(|(id, _)| id == rule_id)
+            .map(|(_, rule)| rule.clone())
+            .ok_or_else(|| anyhow::anyhow!("Forwarding rule not found: {}", rule_id))?;
+
+        self.tcp_tunneling_control.remove_forwarding_rule(rule_id)?;
+        
+        // Update config file
+        self.update_config_with_forwarding_rule(rule, false)?;
+        
+        Ok(())
+    }
+
+    pub(crate) fn add_tcp_listening_rule_internal(
+        &self,
+        rule: fungi_config::tcp_tunneling::ListeningRule,
+    ) -> Result<String> {
+        let rule_id = self.tcp_tunneling_control.add_listening_rule(rule.clone())?;
+        
+        // Update config file
+        self.update_config_with_listening_rule(rule, true)?;
+        
+        Ok(rule_id)
+    }
+
+    pub(crate) fn remove_tcp_listening_rule_internal(&self, rule_id: &str) -> Result<()> {
+        // Get the rule before removing it
+        let rules = self.tcp_tunneling_control.get_listening_rules();
+        let rule = rules.iter()
+            .find(|(id, _)| id == rule_id)
+            .map(|(_, rule)| rule.clone())
+            .ok_or_else(|| anyhow::anyhow!("Listening rule not found: {}", rule_id))?;
+
+        self.tcp_tunneling_control.remove_listening_rule(rule_id)?;
+        
+        // Update config file
+        self.update_config_with_listening_rule(rule, false)?;
+        
+        Ok(())
+    }
+
+    fn update_config_with_forwarding_rule(
+        &self,
+        rule: fungi_config::tcp_tunneling::ForwardingRule,
+        add: bool,
+    ) -> Result<()> {
+        let current_config = self.config.lock().clone();
+        let updated_config = if add {
+            current_config.add_tcp_forwarding_rule(rule)?
+        } else {
+            current_config.remove_tcp_forwarding_rule(&rule)?
+        };
+        
+        // Update the cached config
+        *self.config.lock() = updated_config;
+        Ok(())
+    }
+
+    fn update_config_with_listening_rule(
+        &self,
+        rule: fungi_config::tcp_tunneling::ListeningRule,
+        add: bool,
+    ) -> Result<()> {
+        let current_config = self.config.lock().clone();
+        let updated_config = if add {
+            current_config.add_tcp_listening_rule(rule)?
+        } else {
+            current_config.remove_tcp_listening_rule(&rule)?
+        };
+        
+        // Update the cached config
+        *self.config.lock() = updated_config;
+        Ok(())
+    }
 }
 
 fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) {
@@ -244,44 +341,4 @@ fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) {
             .expect("address should be valid"),
         )
         .unwrap();
-}
-
-#[cfg(feature = "tcp-tunneling")]
-fn apply_tcp_tunneling(swarm: &mut TSwarm, config: &FungiConfig) {
-    if config.tcp_tunneling.forwarding.enabled {
-        for rule in config.tcp_tunneling.forwarding.rules.iter() {
-            let Ok(target_peer) = rule.remote.peer_id.parse() else {
-                continue;
-            };
-
-            let target_protocol =
-                libp2p::StreamProtocol::try_from_owned(rule.remote.protocol.clone()).unwrap(); // TODO unwrap
-            let stream_control = swarm.behaviour().stream.new_control();
-            println!(
-                "Forwarding local port {} to {}/{}",
-                rule.local_socket.port, target_peer, target_protocol
-            );
-            tokio::spawn(fungi_util::tcp_tunneling::forward_port_to_peer(
-                stream_control,
-                (&rule.local_socket).try_into().unwrap(), // TOOD unwrap
-                target_peer,
-                target_protocol,
-            ));
-        }
-    }
-
-    if config.tcp_tunneling.listening.enabled {
-        for rule in config.tcp_tunneling.listening.rules.iter() {
-            let local_addr = (&rule.local_socket).try_into().unwrap(); // TODO unwrap
-            let listening_protocol =
-                libp2p::StreamProtocol::try_from_owned(rule.listening_protocol.clone()).unwrap(); // TODO unwrap
-            let stream_control = swarm.behaviour().stream.new_control();
-            println!("Listening on {} for {}", local_addr, listening_protocol);
-            tokio::spawn(fungi_util::tcp_tunneling::listen_p2p_to_port(
-                stream_control,
-                listening_protocol,
-                local_addr,
-            ));
-        }
-    }
 }

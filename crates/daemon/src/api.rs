@@ -34,7 +34,10 @@ impl FungiDaemon {
 
     pub fn add_incoming_allowed_peer(&self, peer_id: PeerId) -> Result<()> {
         // update config and write config file
-        self.config().lock().add_incoming_allowed_peer(&peer_id)?;
+        let current_config = self.config().lock().clone();
+        let updated_config = current_config.add_incoming_allowed_peer(&peer_id)?;
+        *self.config().lock() = updated_config;
+        
         // update state
         self.swarm_control()
             .state()
@@ -46,9 +49,9 @@ impl FungiDaemon {
 
     pub fn remove_incoming_allowed_peer(&self, peer_id: PeerId) -> Result<()> {
         // update config and write config file
-        self.config()
-            .lock()
-            .remove_incoming_allowed_peer(&peer_id)?;
+        let current_config = self.config().lock().clone();
+        let updated_config = current_config.remove_incoming_allowed_peer(&peer_id)?;
+        *self.config().lock() = updated_config;
         // update state
         self.swarm_control()
             .state()
@@ -85,15 +88,15 @@ impl FungiDaemon {
         }
 
         // update config and write config file
-        let config = self
-            .config()
-            .lock()
+        let current_config = self.config().lock().clone();
+        let (updated_config, service_config) = current_config
             .update_file_transfer_service(true, PathBuf::from(root_dir.clone()))?;
+        *self.config().lock() = updated_config;
 
         self.fts_control().stop_all();
         self.fts_control()
             .clone()
-            .add_service(config)
+            .add_service(service_config)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to start file transfer service: {}", e))?;
         Ok(())
@@ -106,9 +109,10 @@ impl FungiDaemon {
         }
 
         // update config and write config file
-        self.config()
-            .lock()
+        let current_config = self.config().lock().clone();
+        let (updated_config, _) = current_config
             .update_file_transfer_service(false, current_root_dir)?;
+        *self.config().lock() = updated_config;
 
         self.fts_control().stop_all();
         Ok(())
@@ -131,9 +135,10 @@ impl FungiDaemon {
             }
         }
 
-        self.config()
-            .lock()
+        let current_config = self.config().lock().clone();
+        let updated_config = current_config
             .add_file_transfer_client(enabled, peer_id.clone(), name.clone())?;
+        *self.config().lock() = updated_config;
 
         if enabled {
             ftc_control.add_client(FileTransferClient {
@@ -147,17 +152,20 @@ impl FungiDaemon {
     }
 
     pub fn remove_file_transfer_client(&self, peer_id: PeerId) -> Result<()> {
-        self.config().lock().remove_file_transfer_client(&peer_id)?;
+        let current_config = self.config().lock().clone();
+        let updated_config = current_config.remove_file_transfer_client(&peer_id)?;
+        *self.config().lock() = updated_config;
         self.ftc_control().remove_client(&peer_id);
         Ok(())
     }
 
     pub async fn enable_file_transfer_client(&self, peer_id: PeerId, enabled: bool) -> Result<()> {
-        let Some(mut config) = self
-            .config()
-            .lock()
-            .enable_file_transfer_client(&peer_id, enabled)?
-        else {
+        let current_config = self.config().lock().clone();
+        let (updated_config, client_option) = current_config
+            .enable_file_transfer_client(&peer_id, enabled)?;
+        *self.config().lock() = updated_config;
+        
+        let Some(mut config) = client_option else {
             bail!("File transfer client with peer_id {} not found", peer_id);
         };
         if enabled {
@@ -195,7 +203,9 @@ impl FungiDaemon {
         if port == 0 {
             bail!("Port must be greater than 0");
         }
-        self.config().lock().update_ftp_proxy(enabled, host, port)?;
+        let current_config = self.config().lock().clone();
+        let updated_config = current_config.update_ftp_proxy(enabled, host, port)?;
+        *self.config().lock() = updated_config;
         self.update_ftp_proxy_task(enabled, host, port)
     }
 
@@ -207,9 +217,69 @@ impl FungiDaemon {
         if port == 0 {
             bail!("Port must be greater than 0");
         }
-        self.config()
-            .lock()
-            .update_webdav_proxy(enabled, host, port)?;
+        let current_config = self.config().lock().clone();
+        let updated_config = current_config.update_webdav_proxy(enabled, host, port)?;
+        *self.config().lock() = updated_config;
         self.update_webdav_proxy_task(enabled, host, port)
+    }
+
+    // TCP Tunneling API methods
+    pub fn get_tcp_forwarding_rules(&self) -> Vec<(String, fungi_config::tcp_tunneling::ForwardingRule)> {
+        self.tcp_tunneling_control().get_forwarding_rules()
+    }
+
+    pub fn get_tcp_listening_rules(&self) -> Vec<(String, fungi_config::tcp_tunneling::ListeningRule)> {
+        self.tcp_tunneling_control().get_listening_rules()
+    }
+
+    pub fn add_tcp_forwarding_rule(
+        &self,
+        local_host: String,
+        local_port: u16,
+        peer_id: String,
+        protocol: String,
+    ) -> Result<String> {
+        let rule = fungi_config::tcp_tunneling::ForwardingRule {
+            local_socket: fungi_config::tcp_tunneling::LocalSocket {
+                host: local_host,
+                port: local_port,
+            },
+            remote: fungi_config::tcp_tunneling::ForwardingRuleRemote {
+                peer_id,
+                protocol,
+                multiaddrs: vec![],
+            },
+        };
+        self.add_tcp_forwarding_rule_internal(rule)
+    }
+
+    pub fn remove_tcp_forwarding_rule(&self, rule_id: String) -> Result<()> {
+        self.remove_tcp_forwarding_rule_internal(&rule_id)
+    }
+
+    pub fn add_tcp_listening_rule(
+        &self,
+        local_host: String,
+        local_port: u16,
+        listening_protocol: String,
+        allowed_peers: Vec<String>,
+    ) -> Result<String> {
+        let rule = fungi_config::tcp_tunneling::ListeningRule {
+            local_socket: fungi_config::tcp_tunneling::LocalSocket {
+                host: local_host,
+                port: local_port,
+            },
+            listening_protocol,
+            allowed_peers,
+        };
+        self.add_tcp_listening_rule_internal(rule)
+    }
+
+    pub fn remove_tcp_listening_rule(&self, rule_id: String) -> Result<()> {
+        self.remove_tcp_listening_rule_internal(&rule_id)
+    }
+
+    pub fn get_tcp_tunneling_config(&self) -> fungi_config::tcp_tunneling::TcpTunneling {
+        self.config().lock().tcp_tunneling.clone()
     }
 }

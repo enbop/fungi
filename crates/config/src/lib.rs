@@ -1,7 +1,7 @@
 pub mod file_transfer;
 mod init;
 mod libp2p;
-mod tcp_tunneling;
+pub mod tcp_tunneling;
 
 pub use init::init;
 
@@ -10,12 +10,10 @@ use libp2p::*;
 use libp2p_identity::PeerId;
 use serde::{Deserialize, Serialize};
 use std::{
-    io,
     net::IpAddr,
     path::{Path, PathBuf},
 };
 use tcp_tunneling::*;
-use toml_edit::DocumentMut;
 
 use crate::file_transfer::{FileTransfer, FileTransferClient, FileTransferService};
 
@@ -35,8 +33,6 @@ pub struct FungiConfig {
 
     #[serde(skip)]
     config_file: PathBuf,
-    #[serde(skip)]
-    document: DocumentMut,
 }
 
 impl FungiConfig {
@@ -68,189 +64,183 @@ impl FungiConfig {
     }
 
     pub fn parse_toml(s: &str) -> Result<Self> {
-        let document: DocumentMut = s.parse()?;
-        let mut config: Self = toml::from_str(s)?;
-        config.document = document;
+        let config: Self = toml::from_str(s)?;
         Ok(config)
     }
 
-    fn save(&self) -> io::Result<()> {
-        let toml_string = self.document.to_string();
+    /// Save current config to file
+    pub fn save_to_file(&self) -> Result<()> {
+        let toml_string = toml::to_string_pretty(self)?;
         std::fs::write(&self.config_file, toml_string)?;
         Ok(())
     }
 
-    pub fn add_incoming_allowed_peer(&mut self, peer_id: &PeerId) -> Result<()> {
-        if self.network.incoming_allowed_peers.contains(peer_id) {
-            return Ok(());
-        }
-        self.network.incoming_allowed_peers.push(peer_id.clone());
-        // TODO remove this unwrap
-        self.document["network"]["incoming_allowed_peers"]
-            .as_array_mut()
-            .unwrap()
-            .push(peer_id.to_string());
-        self.save()?;
-        Ok(())
+    /// Create a new config with updated field and save to file
+    fn update_and_save<F>(&self, updater: F) -> Result<Self> 
+    where 
+        F: FnOnce(&mut Self),
+    {
+        let mut new_config = self.clone();
+        updater(&mut new_config);
+        new_config.save_to_file()?;
+        Ok(new_config)
     }
 
-    pub fn remove_incoming_allowed_peer(&mut self, peer_id: &PeerId) -> Result<()> {
-        if let Some(pos) = self
-            .network
-            .incoming_allowed_peers
-            .iter()
-            .position(|p| p == peer_id)
-        {
-            self.network.incoming_allowed_peers.remove(pos);
-
-            let peer_id_str = peer_id.to_string();
-            // TODO remove this unwrap
-            self.document["network"]["incoming_allowed_peers"]
-                .as_array_mut()
-                .unwrap()
-                .retain(|v| v.as_str() != Some(&peer_id_str));
-            self.save()?;
+    pub fn add_incoming_allowed_peer(&self, peer_id: &PeerId) -> Result<Self> {
+        if self.network.incoming_allowed_peers.contains(peer_id) {
+            return Ok(self.clone());
         }
-        Ok(())
+        
+        self.update_and_save(|config| {
+            config.network.incoming_allowed_peers.push(peer_id.clone());
+        })
+    }
+
+    pub fn remove_incoming_allowed_peer(&self, peer_id: &PeerId) -> Result<Self> {
+        self.update_and_save(|config| {
+            config.network.incoming_allowed_peers.retain(|p| p != peer_id);
+        })
     }
 
     pub fn update_file_transfer_service(
-        &mut self,
+        &self,
         enabled: bool,
         root_dir: PathBuf,
-    ) -> Result<FileTransferService> {
-        self.file_transfer.server.enabled = enabled;
-        self.file_transfer.server.shared_root_dir = root_dir.clone();
-
-        self.document["file_transfer"]["server"]["enabled"] = toml_edit::value(enabled);
-        self.document["file_transfer"]["server"]["shared_root_dir"] =
-            toml_edit::value(root_dir.to_string_lossy().to_string());
-        self.save()?;
-        Ok(self.file_transfer.server.clone())
+    ) -> Result<(Self, FileTransferService)> {
+        let new_config = self.update_and_save(|config| {
+            config.file_transfer.server.enabled = enabled;
+            config.file_transfer.server.shared_root_dir = root_dir.clone();
+        })?;
+        
+        Ok((new_config.clone(), new_config.file_transfer.server.clone()))
     }
 
     pub fn add_file_transfer_client(
-        &mut self,
+        &self,
         enabled: bool,
         peer_id: PeerId,
         name: Option<String>,
-    ) -> Result<()> {
-        if self
-            .file_transfer
-            .client
-            .iter()
-            .any(|c| c.peer_id == peer_id)
-        {
-            return Ok(());
+    ) -> Result<Self> {
+        if self.file_transfer.client.iter().any(|c| c.peer_id == peer_id) {
+            return Ok(self.clone());
         }
-        let client = FileTransferClient {
-            enabled,
-            name: name.clone(),
-            peer_id,
-        };
-        self.file_transfer.client.push(client.clone());
-
-        // TODO remove this unwrap
-        let client_array = self.document["file_transfer"]["client"]
-            .as_array_mut()
-            .unwrap();
-
-        let mut table = toml_edit::InlineTable::new();
-        table.insert("enabled", enabled.into());
-        table.insert("peer_id", peer_id.to_string().into());
-        if let Some(name_str) = &name {
-            table.insert("name", name_str.into());
-        }
-
-        client_array.push(toml_edit::Value::InlineTable(table));
-        self.save()?;
-        Ok(())
+        
+        self.update_and_save(|config| {
+            let client = FileTransferClient {
+                enabled,
+                name,
+                peer_id,
+            };
+            config.file_transfer.client.push(client);
+        })
     }
 
-    pub fn remove_file_transfer_client(&mut self, peer_id: &PeerId) -> Result<()> {
-        if let Some(pos) = self
-            .file_transfer
-            .client
-            .iter()
-            .position(|c| c.peer_id == *peer_id)
-        {
-            self.file_transfer.client.remove(pos);
-
-            // TODO remove this unwrap
-            let client_array = self.document["file_transfer"]["client"]
-                .as_array_mut()
-                .unwrap();
-            client_array.retain(|v| {
-                v.as_inline_table()
-                    .and_then(|t| t.get("peer_id"))
-                    .and_then(|v| v.as_str())
-                    != Some(&peer_id.to_string())
-            });
-            self.save()?;
-        }
-        Ok(())
+    pub fn remove_file_transfer_client(&self, peer_id: &PeerId) -> Result<Self> {
+        self.update_and_save(|config| {
+            config.file_transfer.client.retain(|c| c.peer_id != *peer_id);
+        })
     }
 
     pub fn enable_file_transfer_client(
-        &mut self,
+        &self,
         peer_id: &PeerId,
         enabled: bool,
-    ) -> Result<Option<FileTransferClient>> {
-        let client = {
-            let Some(client) = self
-                .file_transfer
-                .client
-                .iter_mut()
-                .find(|c| c.peer_id == *peer_id)
-            else {
-                return Ok(None);
-            };
-
-            client.enabled = enabled;
-            client.clone()
-        };
-
-        // Update the document
-        if let Some(client_array) = self.document["file_transfer"]["client"].as_array_mut() {
-            for item in client_array.iter_mut() {
-                let Some(inline_table) = item.as_inline_table_mut() else {
-                    continue;
-                };
-                let Some(id) = inline_table.get_mut("peer_id") else {
-                    continue;
-                };
-                if id.as_str() == Some(&peer_id.to_string()) {
-                    inline_table.insert("enabled", enabled.into());
-                    break;
-                }
-            }
+    ) -> Result<(Self, Option<FileTransferClient>)> {
+        let client_exists = self.file_transfer.client.iter().any(|c| c.peer_id == *peer_id);
+        if !client_exists {
+            return Ok((self.clone(), None));
         }
-        self.save()?;
-        Ok(Some(client))
+        
+        let new_config = self.update_and_save(|config| {
+            if let Some(client) = config.file_transfer.client.iter_mut().find(|c| c.peer_id == *peer_id) {
+                client.enabled = enabled;
+            }
+        })?;
+        
+        let updated_client = new_config.file_transfer.client.iter()
+            .find(|c| c.peer_id == *peer_id)
+            .cloned();
+            
+        Ok((new_config, updated_client))
     }
 
-    pub fn update_ftp_proxy(&mut self, enabled: bool, host: IpAddr, port: u16) -> Result<()> {
-        self.file_transfer.proxy_ftp.enabled = enabled;
-        self.file_transfer.proxy_ftp.host = host;
-        self.file_transfer.proxy_ftp.port = port;
-
-        self.document["file_transfer"]["proxy_ftp"]["enabled"] = toml_edit::value(enabled);
-        self.document["file_transfer"]["proxy_ftp"]["host"] = toml_edit::value(host.to_string());
-        self.document["file_transfer"]["proxy_ftp"]["port"] = toml_edit::value(port as i64);
-        self.save()?;
-        Ok(())
+    pub fn update_ftp_proxy(&self, enabled: bool, host: IpAddr, port: u16) -> Result<Self> {
+        self.update_and_save(|config| {
+            config.file_transfer.proxy_ftp.enabled = enabled;
+            config.file_transfer.proxy_ftp.host = host;
+            config.file_transfer.proxy_ftp.port = port;
+        })
     }
 
-    pub fn update_webdav_proxy(&mut self, enabled: bool, host: IpAddr, port: u16) -> Result<()> {
-        self.file_transfer.proxy_webdav.enabled = enabled;
-        self.file_transfer.proxy_webdav.host = host;
-        self.file_transfer.proxy_webdav.port = port;
+    pub fn update_webdav_proxy(&self, enabled: bool, host: IpAddr, port: u16) -> Result<Self> {
+        self.update_and_save(|config| {
+            config.file_transfer.proxy_webdav.enabled = enabled;
+            config.file_transfer.proxy_webdav.host = host;
+            config.file_transfer.proxy_webdav.port = port;
+        })
+    }
 
-        self.document["file_transfer"]["proxy_webdav"]["enabled"] = toml_edit::value(enabled);
-        self.document["file_transfer"]["proxy_webdav"]["host"] = toml_edit::value(host.to_string());
-        self.document["file_transfer"]["proxy_webdav"]["port"] = toml_edit::value(port as i64);
-        self.save()?;
-        Ok(())
+    /// Add TCP tunneling methods
+    pub fn add_tcp_forwarding_rule(&self, rule: crate::tcp_tunneling::ForwardingRule) -> Result<Self> {
+        // Check if rule already exists
+        let rule_exists = self.tcp_tunneling.forwarding.rules.iter().any(|r| {
+            r.local_socket.host == rule.local_socket.host
+                && r.local_socket.port == rule.local_socket.port
+                && r.remote.peer_id == rule.remote.peer_id
+                && r.remote.protocol == rule.remote.protocol
+        });
+        
+        if rule_exists {
+            return Ok(self.clone());
+        }
+        
+        self.update_and_save(|config| {
+            config.tcp_tunneling.forwarding.rules.push(rule);
+            if !config.tcp_tunneling.forwarding.enabled {
+                config.tcp_tunneling.forwarding.enabled = true;
+            }
+        })
+    }
+
+    pub fn remove_tcp_forwarding_rule(&self, rule: &crate::tcp_tunneling::ForwardingRule) -> Result<Self> {
+        self.update_and_save(|config| {
+            config.tcp_tunneling.forwarding.rules.retain(|r| {
+                !(r.local_socket.host == rule.local_socket.host
+                    && r.local_socket.port == rule.local_socket.port
+                    && r.remote.peer_id == rule.remote.peer_id
+                    && r.remote.protocol == rule.remote.protocol)
+            });
+        })
+    }
+
+    pub fn add_tcp_listening_rule(&self, rule: crate::tcp_tunneling::ListeningRule) -> Result<Self> {
+        // Check if rule already exists
+        let rule_exists = self.tcp_tunneling.listening.rules.iter().any(|r| {
+            r.local_socket.host == rule.local_socket.host
+                && r.local_socket.port == rule.local_socket.port
+                && r.listening_protocol == rule.listening_protocol
+        });
+        
+        if rule_exists {
+            return Ok(self.clone());
+        }
+        
+        self.update_and_save(|config| {
+            config.tcp_tunneling.listening.rules.push(rule);
+            if !config.tcp_tunneling.listening.enabled {
+                config.tcp_tunneling.listening.enabled = true;
+            }
+        })
+    }
+
+    pub fn remove_tcp_listening_rule(&self, rule: &crate::tcp_tunneling::ListeningRule) -> Result<Self> {
+        self.update_and_save(|config| {
+            config.tcp_tunneling.listening.rules.retain(|r| {
+                !(r.local_socket.host == rule.local_socket.host
+                    && r.local_socket.port == rule.local_socket.port
+                    && r.listening_protocol == rule.listening_protocol)
+            });
+        })
     }
 }
 
@@ -274,7 +264,6 @@ pub trait FungiDir {
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    use toml_edit::value;
 
     // return TempDir to keep lifetime
     fn create_temp_config() -> (FungiConfig, TempDir) {
@@ -302,17 +291,10 @@ mod tests {
 
     #[test]
     fn test_add_incoming_allowed_peer() {
-        let (mut config, _path) = create_temp_config();
+        let (config, _path) = create_temp_config();
         let peer_id = PeerId::random();
-        config.add_incoming_allowed_peer(&peer_id).unwrap();
-        assert!(config.network.incoming_allowed_peers.contains(&peer_id));
-        assert!(
-            config.document["network"]["incoming_allowed_peers"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|item| item.as_str() == Some(&peer_id.to_string()))
-        );
+        let updated_config = config.add_incoming_allowed_peer(&peer_id).unwrap();
+        assert!(updated_config.network.incoming_allowed_peers.contains(&peer_id));
         assert!(config.config_file.exists());
         let content = std::fs::read_to_string(&config.config_file).unwrap();
         println!("Config content: {}", content);
@@ -321,27 +303,18 @@ mod tests {
 
     #[test]
     fn test_remove_incoming_allowed_peer() {
-        let (mut config, _temp_dir) = create_temp_config();
+        let (config, _temp_dir) = create_temp_config();
 
         // Add a peer first
         let peer_id = PeerId::random();
-        config.add_incoming_allowed_peer(&peer_id).unwrap();
-        assert!(config.network.incoming_allowed_peers.contains(&peer_id));
+        let config_with_peer = config.add_incoming_allowed_peer(&peer_id).unwrap();
+        assert!(config_with_peer.network.incoming_allowed_peers.contains(&peer_id));
 
         // Remove it
-        config.remove_incoming_allowed_peer(&peer_id).unwrap();
+        let final_config = config_with_peer.remove_incoming_allowed_peer(&peer_id).unwrap();
 
         // Verify it's removed from memory
-        assert!(!config.network.incoming_allowed_peers.contains(&peer_id));
-
-        // Verify it's removed from document
-        assert!(
-            !config.document["network"]["incoming_allowed_peers"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|item| item.as_str() == Some(&peer_id.to_string()))
-        );
+        assert!(!final_config.network.incoming_allowed_peers.contains(&peer_id));
 
         // Verify changes were persisted
         let content = std::fs::read_to_string(&config.config_file).unwrap();
@@ -350,28 +323,18 @@ mod tests {
 
     #[test]
     fn test_update_file_transfer_service() {
-        let (mut config, _temp_dir) = create_temp_config();
+        let (config, _temp_dir) = create_temp_config();
         let root_dir = PathBuf::from("/test/path");
 
-        let service = config
+        let (updated_config, service) = config
             .update_file_transfer_service(true, root_dir.clone())
             .unwrap();
 
         // Verify memory updates
         assert!(service.enabled);
         assert_eq!(service.shared_root_dir, root_dir);
-        assert!(config.file_transfer.server.enabled);
-        assert_eq!(config.file_transfer.server.shared_root_dir, root_dir);
-
-        // Verify document updates
-        assert_eq!(
-            config.document["file_transfer"]["server"]["enabled"].as_bool(),
-            Some(true)
-        );
-        assert_eq!(
-            config.document["file_transfer"]["server"]["shared_root_dir"].as_str(),
-            Some(root_dir.to_str().unwrap())
-        );
+        assert!(updated_config.file_transfer.server.enabled);
+        assert_eq!(updated_config.file_transfer.server.shared_root_dir, root_dir);
 
         // Verify persisted changes
         let content = std::fs::read_to_string(&config.config_file).unwrap();
@@ -385,16 +348,16 @@ mod tests {
 
     #[test]
     fn test_add_file_transfer_client() {
-        let (mut config, _temp_dir) = create_temp_config();
+        let (config, _temp_dir) = create_temp_config();
         let peer_id = PeerId::random();
         let client_name = "test-client";
 
-        config
+        let updated_config = config
             .add_file_transfer_client(true, peer_id.clone(), Some(client_name.to_string()))
             .unwrap();
 
         // Verify memory updates
-        let client = config
+        let client = updated_config
             .file_transfer
             .client
             .iter()
@@ -402,19 +365,6 @@ mod tests {
             .unwrap();
         assert!(client.enabled);
         assert_eq!(client.name, Some(client_name.to_string()));
-
-        // Verify document updates
-        let client_array = config.document["file_transfer"]["client"]
-            .as_array()
-            .unwrap();
-        let client_exists = client_array.iter().any(|item| {
-            let item = item.as_inline_table().unwrap();
-            item.get("peer_id")
-                .and_then(|v| v.as_str())
-                .map(|s| s == peer_id.to_string())
-                .unwrap_or(false)
-        });
-        assert!(client_exists);
 
         // Verify persisted changes
         let content = std::fs::read_to_string(&config.config_file).unwrap();
@@ -425,15 +375,15 @@ mod tests {
 
     #[test]
     fn test_remove_file_transfer_client() {
-        let (mut config, _temp_dir) = create_temp_config();
+        let (config, _temp_dir) = create_temp_config();
         let peer_id = PeerId::random();
 
         // Add client first
-        config
+        let config_with_client = config
             .add_file_transfer_client(true, peer_id.clone(), None)
             .unwrap();
         assert!(
-            config
+            config_with_client
                 .file_transfer
                 .client
                 .iter()
@@ -441,29 +391,16 @@ mod tests {
         );
 
         // Remove the client
-        config.remove_file_transfer_client(&peer_id).unwrap();
+        let final_config = config_with_client.remove_file_transfer_client(&peer_id).unwrap();
 
         // Verify it's removed from memory
         assert!(
-            !config
+            !final_config
                 .file_transfer
                 .client
                 .iter()
                 .any(|c| c.peer_id == peer_id)
         );
-
-        // Verify it's removed from document
-        let client_array = config.document["file_transfer"]["client"]
-            .as_array()
-            .unwrap();
-        let client_exists = client_array.iter().any(|item| {
-            item.as_inline_table()
-                .and_then(|t| t.get("peer_id"))
-                .and_then(|v| v.as_str())
-                .map(|s| s == peer_id.to_string())
-                .unwrap_or(false)
-        });
-        assert!(!client_exists);
 
         // Verify persisted changes
         let content = std::fs::read_to_string(&config.config_file).unwrap();
@@ -473,44 +410,30 @@ mod tests {
 
     #[test]
     fn test_enable_file_transfer_client() {
-        let (mut config, _temp_dir) = create_temp_config();
+        let (config, _temp_dir) = create_temp_config();
         let peer_id = PeerId::random();
 
         // Add client first with enabled=false
-        config
+        let config_with_client = config
             .add_file_transfer_client(false, peer_id.clone(), None)
             .unwrap();
 
         // Enable the client
-        let client = config
+        let (final_config, client) = config_with_client
             .enable_file_transfer_client(&peer_id, true)
-            .unwrap()
             .unwrap();
+        
+        let client = client.unwrap();
 
         // Verify memory updates
         assert!(client.enabled);
-        let stored_client = config
+        let stored_client = final_config
             .file_transfer
             .client
             .iter()
             .find(|c| c.peer_id == peer_id)
             .unwrap();
         assert!(stored_client.enabled);
-
-        // Verify document updates
-        let client_array = config.document["file_transfer"]["client"]
-            .as_array()
-            .unwrap();
-        for item in client_array.iter() {
-            if let Some(table) = item.as_inline_table() {
-                if let Some(id) = table.get("peer_id").and_then(|v| v.as_str()) {
-                    if id == peer_id.to_string() {
-                        assert_eq!(table.get("enabled").and_then(|v| v.as_bool()), Some(true));
-                        break;
-                    }
-                }
-            }
-        }
 
         // Verify persisted changes
         let content = std::fs::read_to_string(&config.config_file).unwrap();
