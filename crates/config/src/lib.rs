@@ -187,7 +187,7 @@ impl FungiConfig {
             r.local_socket.host == rule.local_socket.host
                 && r.local_socket.port == rule.local_socket.port
                 && r.remote.peer_id == rule.remote.peer_id
-                && r.remote.protocol == rule.remote.protocol
+                && r.remote.port == rule.remote.port
         });
         
         if rule_exists {
@@ -208,7 +208,7 @@ impl FungiConfig {
                 !(r.local_socket.host == rule.local_socket.host
                     && r.local_socket.port == rule.local_socket.port
                     && r.remote.peer_id == rule.remote.peer_id
-                    && r.remote.protocol == rule.remote.protocol)
+                    && r.remote.port == rule.remote.port)
             });
         })
     }
@@ -218,7 +218,7 @@ impl FungiConfig {
         let rule_exists = self.tcp_tunneling.listening.rules.iter().any(|r| {
             r.local_socket.host == rule.local_socket.host
                 && r.local_socket.port == rule.local_socket.port
-                && r.listening_protocol == rule.listening_protocol
+                && r.listening_port == rule.listening_port
         });
         
         if rule_exists {
@@ -238,7 +238,7 @@ impl FungiConfig {
             config.tcp_tunneling.listening.rules.retain(|r| {
                 !(r.local_socket.host == rule.local_socket.host
                     && r.local_socket.port == rule.local_socket.port
-                    && r.listening_protocol == rule.listening_protocol)
+                    && r.listening_port == rule.listening_port)
             });
         })
     }

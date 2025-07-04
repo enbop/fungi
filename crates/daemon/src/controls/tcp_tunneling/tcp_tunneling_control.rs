@@ -2,6 +2,7 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use anyhow::{Result, bail};
 use fungi_config::tcp_tunneling::{ForwardingRule, ListeningRule, TcpTunneling};
+use fungi_util::protocols::FUNGI_TUNNEL_PROTOCOL;
 use libp2p::{PeerId, StreamProtocol};
 use libp2p_stream::Control;
 use parking_lot::Mutex;
@@ -77,8 +78,11 @@ impl TcpTunnelingControl {
             .parse()
             .map_err(|e| anyhow::anyhow!("Invalid peer ID: {}", e))?;
 
-        let target_protocol = StreamProtocol::try_from_owned(rule.remote.protocol.clone())
-            .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
+        let target_protocol = StreamProtocol::try_from_owned(format!(
+            "{}/{}",
+            FUNGI_TUNNEL_PROTOCOL, rule.remote.port
+        ))
+        .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
 
         let stream_control = self.stream_control.clone();
 
@@ -130,8 +134,11 @@ impl TcpTunnelingControl {
             .try_into()
             .map_err(|e| anyhow::anyhow!("Invalid local socket address: {}", e))?;
 
-        let listening_protocol = StreamProtocol::try_from_owned(rule.listening_protocol.clone())
-            .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
+        let listening_protocol = StreamProtocol::try_from_owned(format!(
+            "{}/{}",
+            FUNGI_TUNNEL_PROTOCOL, rule.listening_port
+        ))
+        .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
 
         let stream_control = self.stream_control.clone();
 
@@ -212,8 +219,8 @@ impl TcpTunnelingControl {
     /// Generate unique ID for listening rule
     fn generate_listening_rule_id(&self, rule: &ListeningRule) -> String {
         format!(
-            "listen_{}:{}_for_{}",
-            rule.local_socket.host, rule.local_socket.port, rule.listening_protocol
+            "listen_{}:{}_for_port_{}",
+            rule.local_socket.host, rule.local_socket.port, rule.listening_port
         )
     }
 }

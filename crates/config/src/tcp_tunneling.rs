@@ -1,6 +1,5 @@
 use std::net::{AddrParseError, SocketAddr};
 
-use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -20,14 +19,12 @@ impl TryInto<SocketAddr> for &LocalSocket {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ForwardingRuleRemote {
     pub peer_id: String,
-    pub protocol: String,
-    #[serde(default)]
-    pub multiaddrs: Vec<Multiaddr>,
+    pub port: u16,
 }
 
 // [[tcp-tunneling.forwarding.rules]]
 // local_socket = { host = "127.0.0.1", port = 9001 }
-// remote = { peer_id = "", protocol = "", multiaddrs = [] }
+// remote = { peer_id = "", port = 8888, multiaddrs = [] }
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ForwardingRule {
     pub local_socket: LocalSocket,
@@ -36,12 +33,12 @@ pub struct ForwardingRule {
 
 // [[tcp-tunneling.listening.rules]]
 // local_socket = { host = "127.0.0.1", port = 9002 }
-// listening_protocol = ""
+// listening_port = 8888
 // allowed_peers = []
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ListeningRule {
     pub local_socket: LocalSocket,
-    pub listening_protocol: String,
+    pub listening_port: u16,
     #[serde(default)]
     pub allowed_peers: Vec<String>,
 }

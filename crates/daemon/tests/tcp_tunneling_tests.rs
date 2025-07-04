@@ -121,7 +121,7 @@ mod tests {
                 "127.0.0.1".to_string(),
                 8080,
                 test_peer_id.to_string(),
-                "/fungi/test/1.0.0".to_string(),
+                8080,
             )
             .unwrap();
         
@@ -146,7 +146,7 @@ mod tests {
             .add_tcp_listening_rule(
                 "127.0.0.1".to_string(),
                 9090,
-                "/fungi/test/1.0.0".to_string(),
+                9090,
                 vec![test_peer_id.to_string()],
             )
             .unwrap();
@@ -176,7 +176,7 @@ mod tests {
                 "127.0.0.1".to_string(),
                 8080,
                 test_peer_id1.to_string(),
-                "/fungi/test/1.0.0".to_string(),
+                8080,
             )
             .unwrap();
         
@@ -185,7 +185,7 @@ mod tests {
             .add_tcp_listening_rule(
                 "127.0.0.1".to_string(),
                 9090,
-                "/fungi/test/1.0.0".to_string(),
+                9090,
                 vec![test_peer_id2.to_string()],
             )
             .unwrap();
@@ -219,7 +219,7 @@ mod tests {
                 "127.0.0.1".to_string(),
                 8080,
                 test_peer_id.to_string(),
-                "/fungi/test/1.0.0".to_string(),
+                8080,
             )
             .unwrap();
         
@@ -246,7 +246,7 @@ mod tests {
                 "127.0.0.1".to_string(),
                 8080,
                 test_peer_id1.to_string(),
-                "/fungi/test/1.0.0".to_string(),
+                8888,
             )
             .unwrap();
         
@@ -255,7 +255,7 @@ mod tests {
                 "127.0.0.1".to_string(),
                 8081,
                 test_peer_id2.to_string(),
-                "/fungi/test/1.0.0".to_string(),
+                8889,
             )
             .unwrap();
         

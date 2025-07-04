@@ -37,7 +37,7 @@ impl FungiDaemon {
         let current_config = self.config().lock().clone();
         let updated_config = current_config.add_incoming_allowed_peer(&peer_id)?;
         *self.config().lock() = updated_config;
-        
+
         // update state
         self.swarm_control()
             .state()
@@ -89,8 +89,8 @@ impl FungiDaemon {
 
         // update config and write config file
         let current_config = self.config().lock().clone();
-        let (updated_config, service_config) = current_config
-            .update_file_transfer_service(true, PathBuf::from(root_dir.clone()))?;
+        let (updated_config, service_config) =
+            current_config.update_file_transfer_service(true, PathBuf::from(root_dir.clone()))?;
         *self.config().lock() = updated_config;
 
         self.fts_control().stop_all();
@@ -110,8 +110,8 @@ impl FungiDaemon {
 
         // update config and write config file
         let current_config = self.config().lock().clone();
-        let (updated_config, _) = current_config
-            .update_file_transfer_service(false, current_root_dir)?;
+        let (updated_config, _) =
+            current_config.update_file_transfer_service(false, current_root_dir)?;
         *self.config().lock() = updated_config;
 
         self.fts_control().stop_all();
@@ -136,8 +136,8 @@ impl FungiDaemon {
         }
 
         let current_config = self.config().lock().clone();
-        let updated_config = current_config
-            .add_file_transfer_client(enabled, peer_id.clone(), name.clone())?;
+        let updated_config =
+            current_config.add_file_transfer_client(enabled, peer_id.clone(), name.clone())?;
         *self.config().lock() = updated_config;
 
         if enabled {
@@ -161,10 +161,10 @@ impl FungiDaemon {
 
     pub async fn enable_file_transfer_client(&self, peer_id: PeerId, enabled: bool) -> Result<()> {
         let current_config = self.config().lock().clone();
-        let (updated_config, client_option) = current_config
-            .enable_file_transfer_client(&peer_id, enabled)?;
+        let (updated_config, client_option) =
+            current_config.enable_file_transfer_client(&peer_id, enabled)?;
         *self.config().lock() = updated_config;
-        
+
         let Some(mut config) = client_option else {
             bail!("File transfer client with peer_id {} not found", peer_id);
         };
@@ -224,11 +224,15 @@ impl FungiDaemon {
     }
 
     // TCP Tunneling API methods
-    pub fn get_tcp_forwarding_rules(&self) -> Vec<(String, fungi_config::tcp_tunneling::ForwardingRule)> {
+    pub fn get_tcp_forwarding_rules(
+        &self,
+    ) -> Vec<(String, fungi_config::tcp_tunneling::ForwardingRule)> {
         self.tcp_tunneling_control().get_forwarding_rules()
     }
 
-    pub fn get_tcp_listening_rules(&self) -> Vec<(String, fungi_config::tcp_tunneling::ListeningRule)> {
+    pub fn get_tcp_listening_rules(
+        &self,
+    ) -> Vec<(String, fungi_config::tcp_tunneling::ListeningRule)> {
         self.tcp_tunneling_control().get_listening_rules()
     }
 
@@ -237,7 +241,7 @@ impl FungiDaemon {
         local_host: String,
         local_port: u16,
         peer_id: String,
-        protocol: String,
+        remote_port: u16,
     ) -> Result<String> {
         let rule = fungi_config::tcp_tunneling::ForwardingRule {
             local_socket: fungi_config::tcp_tunneling::LocalSocket {
@@ -246,8 +250,7 @@ impl FungiDaemon {
             },
             remote: fungi_config::tcp_tunneling::ForwardingRuleRemote {
                 peer_id,
-                protocol,
-                multiaddrs: vec![],
+                port: remote_port,
             },
         };
         self.add_tcp_forwarding_rule_internal(rule)
@@ -261,7 +264,7 @@ impl FungiDaemon {
         &self,
         local_host: String,
         local_port: u16,
-        listening_protocol: String,
+        listening_port: u16,
         allowed_peers: Vec<String>,
     ) -> Result<String> {
         let rule = fungi_config::tcp_tunneling::ListeningRule {
@@ -269,7 +272,7 @@ impl FungiDaemon {
                 host: local_host,
                 port: local_port,
             },
-            listening_protocol,
+            listening_port,
             allowed_peers,
         };
         self.add_tcp_listening_rule_internal(rule)
