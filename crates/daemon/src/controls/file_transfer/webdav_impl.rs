@@ -57,26 +57,20 @@ impl DavFile for DavFileImpl {
     fn write_buf(&mut self, buf: Box<dyn libp2p::bytes::Buf + Send>) -> FsFuture<()> {
         async move {
             let bytes = buf.chunk().to_vec();
-            log::info!(
-                "Writing {} bytes to {} at position {}",
-                bytes.len(),
-                self.path.display(),
-                self.position
-            );
+            let bytes_len = bytes.len();
 
             // If this is the first write and we have create permission, ensure file exists
             if self.position == 0 && self.options.create {
                 log::debug!("First write to file, ensuring it exists");
             }
 
-            let written = self
+            let _written = self
                 .clients_ctrl
-                .put(bytes.clone(), self.path.clone(), self.position)
+                .put(bytes, self.path.clone(), self.position)
                 .await
                 .map_err(|e| map_error(e, "write_buf", &self.path))?;
 
-            log::info!("Successfully wrote {} bytes", written);
-            self.position += bytes.len() as u64;
+            self.position += bytes_len as u64;
             Ok(())
         }
         .boxed()
@@ -85,12 +79,6 @@ impl DavFile for DavFileImpl {
     fn write_bytes(&mut self, buf: libp2p::bytes::Bytes) -> FsFuture<()> {
         async move {
             let bytes = buf.to_vec();
-            log::info!(
-                "Writing {} bytes to {} at position {}",
-                bytes.len(),
-                self.path.display(),
-                self.position
-            );
 
             // If this is the first write and we have create permission, ensure file exists
             if self.position == 0 && self.options.create {
@@ -103,7 +91,6 @@ impl DavFile for DavFileImpl {
                 .await
                 .map_err(|e| map_error(e, "write_bytes", &self.path))?;
 
-            log::info!("Successfully wrote {} bytes", written);
             self.position += buf.len() as u64;
             Ok(())
         }
