@@ -236,7 +236,7 @@ impl FungiDaemon {
         self.tcp_tunneling_control().get_listening_rules()
     }
 
-    pub fn add_tcp_forwarding_rule(
+    pub async fn add_tcp_forwarding_rule(
         &self,
         local_host: String,
         local_port: u16,
@@ -253,18 +253,17 @@ impl FungiDaemon {
                 port: remote_port,
             },
         };
-        self.add_tcp_forwarding_rule_internal(rule)
+        self.add_tcp_forwarding_rule_internal(rule).await
     }
 
     pub fn remove_tcp_forwarding_rule(&self, rule_id: String) -> Result<()> {
         self.remove_tcp_forwarding_rule_internal(&rule_id)
     }
 
-    pub fn add_tcp_listening_rule(
+    pub async fn add_tcp_listening_rule(
         &self,
         local_host: String,
         local_port: u16,
-        listening_port: u16,
         allowed_peers: Vec<String>,
     ) -> Result<String> {
         let rule = fungi_config::tcp_tunneling::ListeningRule {
@@ -272,10 +271,9 @@ impl FungiDaemon {
                 host: local_host,
                 port: local_port,
             },
-            listening_port,
             allowed_peers,
         };
-        self.add_tcp_listening_rule_internal(rule)
+        self.add_tcp_listening_rule_internal(rule).await
     }
 
     pub fn remove_tcp_listening_rule(&self, rule_id: String) -> Result<()> {

@@ -27,12 +27,75 @@ pub struct WebdavProxy {
     pub port: u16,
 }
 
+pub struct LocalSocket {
+    pub host: String,
+    pub port: u16,
+}
+
+pub struct ForwardingRuleRemote {
+    pub peer_id: String,
+    pub port: u16,
+}
+
+pub struct ForwardingRule {
+    pub local_socket: LocalSocket,
+    pub remote: ForwardingRuleRemote,
+}
+
+pub struct ListeningRule {
+    pub local_socket: LocalSocket,
+    pub allowed_peers: Vec<String>,
+}
+
+pub struct TcpTunnelingConfig {
+    pub forwarding_enabled: bool,
+    pub listening_enabled: bool,
+    pub forwarding_rules: Vec<ForwardingRule>,
+    pub listening_rules: Vec<ListeningRule>,
+}
+
 impl From<fungi_config::file_transfer::FileTransferClient> for FileTransferClient {
     fn from(client: fungi_config::file_transfer::FileTransferClient) -> Self {
         Self {
             enabled: client.enabled,
             name: client.name,
             peer_id: client.peer_id.to_string(),
+        }
+    }
+}
+
+impl From<fungi_config::tcp_tunneling::LocalSocket> for LocalSocket {
+    fn from(socket: fungi_config::tcp_tunneling::LocalSocket) -> Self {
+        Self {
+            host: socket.host,
+            port: socket.port,
+        }
+    }
+}
+
+impl From<fungi_config::tcp_tunneling::ForwardingRuleRemote> for ForwardingRuleRemote {
+    fn from(remote: fungi_config::tcp_tunneling::ForwardingRuleRemote) -> Self {
+        Self {
+            peer_id: remote.peer_id,
+            port: remote.port,
+        }
+    }
+}
+
+impl From<fungi_config::tcp_tunneling::ForwardingRule> for ForwardingRule {
+    fn from(rule: fungi_config::tcp_tunneling::ForwardingRule) -> Self {
+        Self {
+            local_socket: rule.local_socket.into(),
+            remote: rule.remote.into(),
+        }
+    }
+}
+
+impl From<fungi_config::tcp_tunneling::ListeningRule> for ListeningRule {
+    fn from(rule: fungi_config::tcp_tunneling::ListeningRule) -> Self {
+        Self {
+            local_socket: rule.local_socket.into(),
+            allowed_peers: rule.allowed_peers,
         }
     }
 }
@@ -198,6 +261,67 @@ pub fn get_webdav_proxy() -> Result<WebdavProxy> {
 pub fn update_webdav_proxy(enabled: bool, host: String, port: u16) -> Result<()> {
     let daemon = with_daemon!();
     daemon.update_webdav_proxy(enabled, host.parse()?, port)
+}
+
+// TCP Tunneling API methods
+#[frb(sync)]
+pub fn get_tcp_tunneling_config() -> Result<TcpTunnelingConfig> {
+    let daemon = with_daemon!();
+    let config = daemon.get_tcp_tunneling_config();
+
+    let forwarding_rules = daemon
+        .get_tcp_forwarding_rules()
+        .into_iter()
+        .map(|(_, rule)| rule.into())
+        .collect();
+
+    let listening_rules = daemon
+        .get_tcp_listening_rules()
+        .into_iter()
+        .map(|(_, rule)| rule.into())
+        .collect();
+
+    Ok(TcpTunnelingConfig {
+        forwarding_enabled: config.forwarding.enabled,
+        listening_enabled: config.listening.enabled,
+        forwarding_rules,
+        listening_rules,
+    })
+}
+
+pub async fn add_tcp_forwarding_rule(
+    local_host: String,
+    local_port: u16,
+    peer_id: String,
+    remote_port: u16,
+) -> Result<String> {
+    let daemon = with_daemon!();
+    daemon
+        .add_tcp_forwarding_rule(local_host, local_port, peer_id, remote_port)
+        .await
+}
+
+#[frb(sync)]
+pub fn remove_tcp_forwarding_rule(rule_id: String) -> Result<()> {
+    let daemon = with_daemon!();
+    daemon.remove_tcp_forwarding_rule(rule_id)
+}
+
+pub async fn add_tcp_listening_rule(
+    local_host: String,
+    local_port: u16,
+    allowed_peers: Vec<String>,
+) -> Result<String> {
+    let daemon = with_daemon!();
+    daemon
+        .add_tcp_listening_rule(local_host, local_port, allowed_peers)
+        .await
+}
+
+#[frb(sync)]
+pub fn remove_tcp_listening_rule(rule_id: String) -> Result<()> {
+    let daemon = with_daemon!();
+    daemon.remove_tcp_listening_rule(rule_id)
 }
 
 #[flutter_rust_bridge::frb(init)]

@@ -1,9 +1,11 @@
-use std::net::SocketAddr;
 use futures::StreamExt;
 use libp2p_stream::Control;
 use libp2p_swarm::{Stream, StreamProtocol};
+use std::net::SocketAddr;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 
+// TODO remove unwraps
+// TODO check incoming allowed peers
 pub async fn listen_p2p_to_port(
     mut stream_control: Control,
     target_protocol: StreamProtocol,
@@ -24,7 +26,9 @@ async fn handle_income(p2p_stream: Stream, target_addr: SocketAddr) {
     let mut target_stream = tokio::net::TcpStream::connect(target_addr).await.unwrap();
     tokio::spawn(async move {
         println!("new sub stream to {:?}", target_addr);
-        tokio::io::copy_bidirectional(&mut p2p_stream.compat(), &mut target_stream).await.ok();
+        tokio::io::copy_bidirectional(&mut p2p_stream.compat(), &mut target_stream)
+            .await
+            .ok();
         println!("sub stream closed");
     });
 }

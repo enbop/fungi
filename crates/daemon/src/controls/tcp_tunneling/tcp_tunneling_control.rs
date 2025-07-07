@@ -41,10 +41,10 @@ impl TcpTunnelingControl {
     }
 
     /// Initialize TCP tunneling from config
-    pub fn init_from_config(&self, config: &TcpTunneling) {
+    pub async fn init_from_config(&self, config: &TcpTunneling) {
         if config.forwarding.enabled {
             for rule in &config.forwarding.rules {
-                if let Err(e) = self.add_forwarding_rule(rule.clone()) {
+                if let Err(e) = self.add_forwarding_rule(rule.clone()).await {
                     log::warn!("Failed to add forwarding rule: {}", e);
                 }
             }
@@ -52,7 +52,7 @@ impl TcpTunnelingControl {
 
         if config.listening.enabled {
             for rule in &config.listening.rules {
-                if let Err(e) = self.add_listening_rule(rule.clone()) {
+                if let Err(e) = self.add_listening_rule(rule.clone()).await {
                     log::warn!("Failed to add listening rule: {}", e);
                 }
             }
@@ -60,7 +60,8 @@ impl TcpTunnelingControl {
     }
 
     /// Add a new forwarding rule (local port -> remote peer)
-    pub fn add_forwarding_rule(&self, rule: ForwardingRule) -> Result<String> {
+    /// async is necessary for tokio::spawn
+    pub async fn add_forwarding_rule(&self, rule: ForwardingRule) -> Result<String> {
         let rule_id = self.generate_forwarding_rule_id(&rule);
 
         let mut rules = self.forwarding_rules.lock();
@@ -122,7 +123,8 @@ impl TcpTunnelingControl {
     }
 
     /// Add a new listening rule (remote peer -> local port)
-    pub fn add_listening_rule(&self, rule: ListeningRule) -> Result<String> {
+    /// async is necessary for tokio::spawn
+    pub async fn add_listening_rule(&self, rule: ListeningRule) -> Result<String> {
         let rule_id = self.generate_listening_rule_id(&rule);
 
         let mut rules = self.listening_rules.lock();
@@ -136,7 +138,7 @@ impl TcpTunnelingControl {
 
         let listening_protocol = StreamProtocol::try_from_owned(format!(
             "{}/{}",
-            FUNGI_TUNNEL_PROTOCOL, rule.listening_port
+            FUNGI_TUNNEL_PROTOCOL, rule.local_socket.port
         ))
         .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
 
@@ -219,8 +221,8 @@ impl TcpTunnelingControl {
     /// Generate unique ID for listening rule
     fn generate_listening_rule_id(&self, rule: &ListeningRule) -> String {
         format!(
-            "listen_{}:{}_for_port_{}",
-            rule.local_socket.host, rule.local_socket.port, rule.listening_port
+            "listen_{}:{}",
+            rule.local_socket.host, rule.local_socket.port
         )
     }
 }

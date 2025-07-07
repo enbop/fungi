@@ -31,6 +31,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   FileTransferClient dco_decode_file_transfer_client(dynamic raw);
 
   @protected
+  ForwardingRule dco_decode_forwarding_rule(dynamic raw);
+
+  @protected
+  ForwardingRuleRemote dco_decode_forwarding_rule_remote(dynamic raw);
+
+  @protected
   FtpProxy dco_decode_ftp_proxy(dynamic raw);
 
   @protected
@@ -40,10 +46,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<FileTransferClient> dco_decode_list_file_transfer_client(dynamic raw);
 
   @protected
+  List<ForwardingRule> dco_decode_list_forwarding_rule(dynamic raw);
+
+  @protected
+  List<ListeningRule> dco_decode_list_listening_rule(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  ListeningRule dco_decode_listening_rule(dynamic raw);
+
+  @protected
+  LocalSocket dco_decode_local_socket(dynamic raw);
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  TcpTunnelingConfig dco_decode_tcp_tunneling_config(dynamic raw);
 
   @protected
   int dco_decode_u_16(dynamic raw);
@@ -72,6 +93,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ForwardingRule sse_decode_forwarding_rule(SseDeserializer deserializer);
+
+  @protected
+  ForwardingRuleRemote sse_decode_forwarding_rule_remote(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   FtpProxy sse_decode_ftp_proxy(SseDeserializer deserializer);
 
   @protected
@@ -83,10 +112,31 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<ForwardingRule> sse_decode_list_forwarding_rule(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ListeningRule> sse_decode_list_listening_rule(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  ListeningRule sse_decode_listening_rule(SseDeserializer deserializer);
+
+  @protected
+  LocalSocket sse_decode_local_socket(SseDeserializer deserializer);
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  TcpTunnelingConfig sse_decode_tcp_tunneling_config(
+    SseDeserializer deserializer,
+  );
 
   @protected
   int sse_decode_u_16(SseDeserializer deserializer);
@@ -122,6 +172,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_forwarding_rule(
+    ForwardingRule self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_forwarding_rule_remote(
+    ForwardingRuleRemote self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_ftp_proxy(FtpProxy self, SseSerializer serializer);
 
   @protected
@@ -134,13 +196,37 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_forwarding_rule(
+    List<ForwardingRule> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_listening_rule(
+    List<ListeningRule> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
     SseSerializer serializer,
   );
 
   @protected
+  void sse_encode_listening_rule(ListeningRule self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_local_socket(LocalSocket self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_tcp_tunneling_config(
+    TcpTunnelingConfig self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_u_16(int self, SseSerializer serializer);

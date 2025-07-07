@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart';
 import 'package:get/get.dart';
-import 'package:get/get_connect/http/src/utils/utils.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart' as fungi;
 
@@ -51,6 +50,14 @@ class FungiController extends GetxController {
   final incomingAllowdPeers = <String>[].obs;
   final fileTransferServerState = FileTransferServerState(enabled: false).obs;
   final fileTransferClients = <FileTransferClient>[].obs;
+
+  // TCP Tunneling state
+  final tcpTunnelingConfig = TcpTunnelingConfig(
+    forwardingEnabled: false,
+    listeningEnabled: false,
+    forwardingRules: [],
+    listeningRules: [],
+  ).obs;
 
   final ftpProxy = FtpProxy(enabled: false, host: "", port: 0).obs;
   final webdavProxy = WebdavProxy(enabled: false, host: "", port: 0).obs;
@@ -202,12 +209,129 @@ class FungiController extends GetxController {
       } catch (e) {
         debugPrint('Failed to get proxy infos: $e');
       }
-
       updateIncomingAllowedPeers();
+      // Load TCP tunneling config
+      refreshTcpTunnelingConfig();
     } catch (e) {
       isServiceRunning.value = false;
       peerId.value = 'error';
       debugPrint('Failed to init, error: $e');
+    }
+  }
+
+  // TCP Tunneling methods
+  void refreshTcpTunnelingConfig() {
+    try {
+      final config = fungi.getTcpTunnelingConfig();
+      tcpTunnelingConfig.value = config;
+    } catch (e) {
+      debugPrint('Failed to get TCP tunneling config: $e');
+    }
+  }
+
+  Future<void> addTcpForwardingRule({
+    required String localHost,
+    required int localPort,
+    required String peerId,
+    required int remotePort,
+  }) async {
+    try {
+      await fungi.addTcpForwardingRule(
+        localHost: localHost,
+        localPort: localPort,
+        peerId: peerId,
+        remotePort: remotePort,
+      );
+      refreshTcpTunnelingConfig();
+      Get.snackbar(
+        'Success',
+        'Forwarding rule added successfully',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green.withOpacity(0.1),
+        colorText: Colors.green,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to add forwarding rule: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.withOpacity(0.1),
+        colorText: Colors.red,
+      );
+    }
+  }
+
+  Future<void> removeTcpForwardingRule(String ruleId) async {
+    try {
+      fungi.removeTcpForwardingRule(ruleId: ruleId);
+      refreshTcpTunnelingConfig();
+      Get.snackbar(
+        'Success',
+        'Forwarding rule removed successfully',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green.withOpacity(0.1),
+        colorText: Colors.green,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to remove forwarding rule: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.withOpacity(0.1),
+        colorText: Colors.red,
+      );
+    }
+  }
+
+  Future<void> addTcpListeningRule({
+    required String localHost,
+    required int localPort,
+    required List<String> allowedPeers,
+  }) async {
+    try {
+      fungi.addTcpListeningRule(
+        localHost: localHost,
+        localPort: localPort,
+        allowedPeers: allowedPeers,
+      );
+      refreshTcpTunnelingConfig();
+      Get.snackbar(
+        'Success',
+        'Listening rule added successfully',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green.withOpacity(0.1),
+        colorText: Colors.green,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to add listening rule: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.withOpacity(0.1),
+        colorText: Colors.red,
+      );
+    }
+  }
+
+  Future<void> removeTcpListeningRule(String ruleId) async {
+    try {
+      fungi.removeTcpListeningRule(ruleId: ruleId);
+      refreshTcpTunnelingConfig();
+      Get.snackbar(
+        'Success',
+        'Listening rule removed successfully',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green.withOpacity(0.1),
+        colorText: Colors.green,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to remove listening rule: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.withOpacity(0.1),
+        colorText: Colors.red,
+      );
     }
   }
 }

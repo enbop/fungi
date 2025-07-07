@@ -1,8 +1,4 @@
-use std::{
-    net::IpAddr,
-    sync::Arc,
-    time::Duration,
-};
+use std::{net::IpAddr, sync::Arc, time::Duration};
 
 use crate::{
     DaemonArgs,
@@ -102,7 +98,9 @@ impl FungiDaemon {
         Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
 
         let tcp_tunneling_control = TcpTunnelingControl::new(stream_control.clone());
-        tcp_tunneling_control.init_from_config(&config.tcp_tunneling);
+        tcp_tunneling_control
+            .init_from_config(&config.tcp_tunneling)
+            .await;
 
         let proxy_ftp_task = if config.file_transfer.proxy_ftp.enabled {
             Some(tokio::spawn(crate::controls::start_ftp_proxy_service(
@@ -232,59 +230,67 @@ impl FungiDaemon {
         Ok(())
     }
 
-    pub(crate) fn add_tcp_forwarding_rule_internal(
+    pub(crate) async fn add_tcp_forwarding_rule_internal(
         &self,
         rule: fungi_config::tcp_tunneling::ForwardingRule,
     ) -> Result<String> {
-        let rule_id = self.tcp_tunneling_control.add_forwarding_rule(rule.clone())?;
-        
+        let rule_id = self
+            .tcp_tunneling_control
+            .add_forwarding_rule(rule.clone())
+            .await?;
+
         // Update config file
         self.update_config_with_forwarding_rule(rule, true)?;
-        
+
         Ok(rule_id)
     }
 
     pub(crate) fn remove_tcp_forwarding_rule_internal(&self, rule_id: &str) -> Result<()> {
         // Get the rule before removing it
         let rules = self.tcp_tunneling_control.get_forwarding_rules();
-        let rule = rules.iter()
+        let rule = rules
+            .iter()
             .find(|(id, _)| id == rule_id)
             .map(|(_, rule)| rule.clone())
             .ok_or_else(|| anyhow::anyhow!("Forwarding rule not found: {}", rule_id))?;
 
         self.tcp_tunneling_control.remove_forwarding_rule(rule_id)?;
-        
+
         // Update config file
         self.update_config_with_forwarding_rule(rule, false)?;
-        
+
         Ok(())
     }
 
-    pub(crate) fn add_tcp_listening_rule_internal(
+    pub(crate) async fn add_tcp_listening_rule_internal(
         &self,
         rule: fungi_config::tcp_tunneling::ListeningRule,
     ) -> Result<String> {
-        let rule_id = self.tcp_tunneling_control.add_listening_rule(rule.clone())?;
-        
+        let rule_id = self
+            .tcp_tunneling_control
+            .add_listening_rule(rule.clone())
+            .await?;
+
         // Update config file
         self.update_config_with_listening_rule(rule, true)?;
-        
+
         Ok(rule_id)
     }
 
     pub(crate) fn remove_tcp_listening_rule_internal(&self, rule_id: &str) -> Result<()> {
         // Get the rule before removing it
         let rules = self.tcp_tunneling_control.get_listening_rules();
-        let rule = rules.iter()
+        let rule = rules
+            .iter()
             .find(|(id, _)| id == rule_id)
             .map(|(_, rule)| rule.clone())
             .ok_or_else(|| anyhow::anyhow!("Listening rule not found: {}", rule_id))?;
 
         self.tcp_tunneling_control.remove_listening_rule(rule_id)?;
-        
+
         // Update config file
         self.update_config_with_listening_rule(rule, false)?;
-        
+
         Ok(())
     }
 
@@ -299,7 +305,7 @@ impl FungiDaemon {
         } else {
             current_config.remove_tcp_forwarding_rule(&rule)?
         };
-        
+
         // Update the cached config
         *self.config.lock() = updated_config;
         Ok(())
@@ -316,7 +322,7 @@ impl FungiDaemon {
         } else {
             current_config.remove_tcp_listening_rule(&rule)?
         };
-        
+
         // Update the cached config
         *self.config.lock() = updated_config;
         Ok(())

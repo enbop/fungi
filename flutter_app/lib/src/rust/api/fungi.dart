@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `parse_peer_id`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`, `from`, `from`, `from`, `from`
 
 Future<void> startFungiDaemon() =>
     RustLib.instance.api.crateApiFungiStartFungiDaemon();
@@ -90,6 +90,37 @@ void updateWebdavProxy({
   port: port,
 );
 
+TcpTunnelingConfig getTcpTunnelingConfig() =>
+    RustLib.instance.api.crateApiFungiGetTcpTunnelingConfig();
+
+Future<String> addTcpForwardingRule({
+  required String localHost,
+  required int localPort,
+  required String peerId,
+  required int remotePort,
+}) => RustLib.instance.api.crateApiFungiAddTcpForwardingRule(
+  localHost: localHost,
+  localPort: localPort,
+  peerId: peerId,
+  remotePort: remotePort,
+);
+
+void removeTcpForwardingRule({required String ruleId}) =>
+    RustLib.instance.api.crateApiFungiRemoveTcpForwardingRule(ruleId: ruleId);
+
+Future<String> addTcpListeningRule({
+  required String localHost,
+  required int localPort,
+  required List<String> allowedPeers,
+}) => RustLib.instance.api.crateApiFungiAddTcpListeningRule(
+  localHost: localHost,
+  localPort: localPort,
+  allowedPeers: allowedPeers,
+);
+
+void removeTcpListeningRule({required String ruleId}) =>
+    RustLib.instance.api.crateApiFungiRemoveTcpListeningRule(ruleId: ruleId);
+
 class FileTransferClient {
   final bool enabled;
   final String? name;
@@ -114,6 +145,42 @@ class FileTransferClient {
           peerId == other.peerId;
 }
 
+class ForwardingRule {
+  final LocalSocket localSocket;
+  final ForwardingRuleRemote remote;
+
+  const ForwardingRule({required this.localSocket, required this.remote});
+
+  @override
+  int get hashCode => localSocket.hashCode ^ remote.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ForwardingRule &&
+          runtimeType == other.runtimeType &&
+          localSocket == other.localSocket &&
+          remote == other.remote;
+}
+
+class ForwardingRuleRemote {
+  final String peerId;
+  final int port;
+
+  const ForwardingRuleRemote({required this.peerId, required this.port});
+
+  @override
+  int get hashCode => peerId.hashCode ^ port.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ForwardingRuleRemote &&
+          runtimeType == other.runtimeType &&
+          peerId == other.peerId &&
+          port == other.port;
+}
+
 class FtpProxy {
   final bool enabled;
   final String host;
@@ -136,6 +203,73 @@ class FtpProxy {
           enabled == other.enabled &&
           host == other.host &&
           port == other.port;
+}
+
+class ListeningRule {
+  final LocalSocket localSocket;
+  final List<String> allowedPeers;
+
+  const ListeningRule({required this.localSocket, required this.allowedPeers});
+
+  @override
+  int get hashCode => localSocket.hashCode ^ allowedPeers.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ListeningRule &&
+          runtimeType == other.runtimeType &&
+          localSocket == other.localSocket &&
+          allowedPeers == other.allowedPeers;
+}
+
+class LocalSocket {
+  final String host;
+  final int port;
+
+  const LocalSocket({required this.host, required this.port});
+
+  @override
+  int get hashCode => host.hashCode ^ port.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LocalSocket &&
+          runtimeType == other.runtimeType &&
+          host == other.host &&
+          port == other.port;
+}
+
+class TcpTunnelingConfig {
+  final bool forwardingEnabled;
+  final bool listeningEnabled;
+  final List<ForwardingRule> forwardingRules;
+  final List<ListeningRule> listeningRules;
+
+  const TcpTunnelingConfig({
+    required this.forwardingEnabled,
+    required this.listeningEnabled,
+    required this.forwardingRules,
+    required this.listeningRules,
+  });
+
+  @override
+  int get hashCode =>
+      forwardingEnabled.hashCode ^
+      listeningEnabled.hashCode ^
+      forwardingRules.hashCode ^
+      listeningRules.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TcpTunnelingConfig &&
+          runtimeType == other.runtimeType &&
+          forwardingEnabled == other.forwardingEnabled &&
+          listeningEnabled == other.listeningEnabled &&
+          forwardingRules == other.forwardingRules &&
+          listeningRules == other.listeningRules;
 }
 
 class WebdavProxy {

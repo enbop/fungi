@@ -76,8 +76,8 @@ impl FungiConfig {
     }
 
     /// Create a new config with updated field and save to file
-    fn update_and_save<F>(&self, updater: F) -> Result<Self> 
-    where 
+    fn update_and_save<F>(&self, updater: F) -> Result<Self>
+    where
         F: FnOnce(&mut Self),
     {
         let mut new_config = self.clone();
@@ -90,7 +90,7 @@ impl FungiConfig {
         if self.network.incoming_allowed_peers.contains(peer_id) {
             return Ok(self.clone());
         }
-        
+
         self.update_and_save(|config| {
             config.network.incoming_allowed_peers.push(peer_id.clone());
         })
@@ -98,7 +98,10 @@ impl FungiConfig {
 
     pub fn remove_incoming_allowed_peer(&self, peer_id: &PeerId) -> Result<Self> {
         self.update_and_save(|config| {
-            config.network.incoming_allowed_peers.retain(|p| p != peer_id);
+            config
+                .network
+                .incoming_allowed_peers
+                .retain(|p| p != peer_id);
         })
     }
 
@@ -111,7 +114,7 @@ impl FungiConfig {
             config.file_transfer.server.enabled = enabled;
             config.file_transfer.server.shared_root_dir = root_dir.clone();
         })?;
-        
+
         Ok((new_config.clone(), new_config.file_transfer.server.clone()))
     }
 
@@ -121,10 +124,15 @@ impl FungiConfig {
         peer_id: PeerId,
         name: Option<String>,
     ) -> Result<Self> {
-        if self.file_transfer.client.iter().any(|c| c.peer_id == peer_id) {
+        if self
+            .file_transfer
+            .client
+            .iter()
+            .any(|c| c.peer_id == peer_id)
+        {
             return Ok(self.clone());
         }
-        
+
         self.update_and_save(|config| {
             let client = FileTransferClient {
                 enabled,
@@ -137,7 +145,10 @@ impl FungiConfig {
 
     pub fn remove_file_transfer_client(&self, peer_id: &PeerId) -> Result<Self> {
         self.update_and_save(|config| {
-            config.file_transfer.client.retain(|c| c.peer_id != *peer_id);
+            config
+                .file_transfer
+                .client
+                .retain(|c| c.peer_id != *peer_id);
         })
     }
 
@@ -146,21 +157,33 @@ impl FungiConfig {
         peer_id: &PeerId,
         enabled: bool,
     ) -> Result<(Self, Option<FileTransferClient>)> {
-        let client_exists = self.file_transfer.client.iter().any(|c| c.peer_id == *peer_id);
+        let client_exists = self
+            .file_transfer
+            .client
+            .iter()
+            .any(|c| c.peer_id == *peer_id);
         if !client_exists {
             return Ok((self.clone(), None));
         }
-        
+
         let new_config = self.update_and_save(|config| {
-            if let Some(client) = config.file_transfer.client.iter_mut().find(|c| c.peer_id == *peer_id) {
+            if let Some(client) = config
+                .file_transfer
+                .client
+                .iter_mut()
+                .find(|c| c.peer_id == *peer_id)
+            {
                 client.enabled = enabled;
             }
         })?;
-        
-        let updated_client = new_config.file_transfer.client.iter()
+
+        let updated_client = new_config
+            .file_transfer
+            .client
+            .iter()
             .find(|c| c.peer_id == *peer_id)
             .cloned();
-            
+
         Ok((new_config, updated_client))
     }
 
@@ -181,7 +204,10 @@ impl FungiConfig {
     }
 
     /// Add TCP tunneling methods
-    pub fn add_tcp_forwarding_rule(&self, rule: crate::tcp_tunneling::ForwardingRule) -> Result<Self> {
+    pub fn add_tcp_forwarding_rule(
+        &self,
+        rule: crate::tcp_tunneling::ForwardingRule,
+    ) -> Result<Self> {
         // Check if rule already exists
         let rule_exists = self.tcp_tunneling.forwarding.rules.iter().any(|r| {
             r.local_socket.host == rule.local_socket.host
@@ -189,11 +215,11 @@ impl FungiConfig {
                 && r.remote.peer_id == rule.remote.peer_id
                 && r.remote.port == rule.remote.port
         });
-        
+
         if rule_exists {
             return Ok(self.clone());
         }
-        
+
         self.update_and_save(|config| {
             config.tcp_tunneling.forwarding.rules.push(rule);
             if !config.tcp_tunneling.forwarding.enabled {
@@ -202,7 +228,10 @@ impl FungiConfig {
         })
     }
 
-    pub fn remove_tcp_forwarding_rule(&self, rule: &crate::tcp_tunneling::ForwardingRule) -> Result<Self> {
+    pub fn remove_tcp_forwarding_rule(
+        &self,
+        rule: &crate::tcp_tunneling::ForwardingRule,
+    ) -> Result<Self> {
         self.update_and_save(|config| {
             config.tcp_tunneling.forwarding.rules.retain(|r| {
                 !(r.local_socket.host == rule.local_socket.host
@@ -213,18 +242,20 @@ impl FungiConfig {
         })
     }
 
-    pub fn add_tcp_listening_rule(&self, rule: crate::tcp_tunneling::ListeningRule) -> Result<Self> {
+    pub fn add_tcp_listening_rule(
+        &self,
+        rule: crate::tcp_tunneling::ListeningRule,
+    ) -> Result<Self> {
         // Check if rule already exists
         let rule_exists = self.tcp_tunneling.listening.rules.iter().any(|r| {
             r.local_socket.host == rule.local_socket.host
                 && r.local_socket.port == rule.local_socket.port
-                && r.listening_port == rule.listening_port
         });
-        
+
         if rule_exists {
             return Ok(self.clone());
         }
-        
+
         self.update_and_save(|config| {
             config.tcp_tunneling.listening.rules.push(rule);
             if !config.tcp_tunneling.listening.enabled {
@@ -233,12 +264,14 @@ impl FungiConfig {
         })
     }
 
-    pub fn remove_tcp_listening_rule(&self, rule: &crate::tcp_tunneling::ListeningRule) -> Result<Self> {
+    pub fn remove_tcp_listening_rule(
+        &self,
+        rule: &crate::tcp_tunneling::ListeningRule,
+    ) -> Result<Self> {
         self.update_and_save(|config| {
             config.tcp_tunneling.listening.rules.retain(|r| {
                 !(r.local_socket.host == rule.local_socket.host
-                    && r.local_socket.port == rule.local_socket.port
-                    && r.listening_port == rule.listening_port)
+                    && r.local_socket.port == rule.local_socket.port)
             });
         })
     }
@@ -294,7 +327,12 @@ mod tests {
         let (config, _path) = create_temp_config();
         let peer_id = PeerId::random();
         let updated_config = config.add_incoming_allowed_peer(&peer_id).unwrap();
-        assert!(updated_config.network.incoming_allowed_peers.contains(&peer_id));
+        assert!(
+            updated_config
+                .network
+                .incoming_allowed_peers
+                .contains(&peer_id)
+        );
         assert!(config.config_file.exists());
         let content = std::fs::read_to_string(&config.config_file).unwrap();
         println!("Config content: {}", content);
@@ -308,13 +346,25 @@ mod tests {
         // Add a peer first
         let peer_id = PeerId::random();
         let config_with_peer = config.add_incoming_allowed_peer(&peer_id).unwrap();
-        assert!(config_with_peer.network.incoming_allowed_peers.contains(&peer_id));
+        assert!(
+            config_with_peer
+                .network
+                .incoming_allowed_peers
+                .contains(&peer_id)
+        );
 
         // Remove it
-        let final_config = config_with_peer.remove_incoming_allowed_peer(&peer_id).unwrap();
+        let final_config = config_with_peer
+            .remove_incoming_allowed_peer(&peer_id)
+            .unwrap();
 
         // Verify it's removed from memory
-        assert!(!final_config.network.incoming_allowed_peers.contains(&peer_id));
+        assert!(
+            !final_config
+                .network
+                .incoming_allowed_peers
+                .contains(&peer_id)
+        );
 
         // Verify changes were persisted
         let content = std::fs::read_to_string(&config.config_file).unwrap();
@@ -334,7 +384,10 @@ mod tests {
         assert!(service.enabled);
         assert_eq!(service.shared_root_dir, root_dir);
         assert!(updated_config.file_transfer.server.enabled);
-        assert_eq!(updated_config.file_transfer.server.shared_root_dir, root_dir);
+        assert_eq!(
+            updated_config.file_transfer.server.shared_root_dir,
+            root_dir
+        );
 
         // Verify persisted changes
         let content = std::fs::read_to_string(&config.config_file).unwrap();
@@ -391,7 +444,9 @@ mod tests {
         );
 
         // Remove the client
-        let final_config = config_with_client.remove_file_transfer_client(&peer_id).unwrap();
+        let final_config = config_with_client
+            .remove_file_transfer_client(&peer_id)
+            .unwrap();
 
         // Verify it's removed from memory
         assert!(
@@ -422,7 +477,7 @@ mod tests {
         let (final_config, client) = config_with_client
             .enable_file_transfer_client(&peer_id, true)
             .unwrap();
-        
+
         let client = client.unwrap();
 
         // Verify memory updates

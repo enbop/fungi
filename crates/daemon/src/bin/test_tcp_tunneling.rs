@@ -98,7 +98,10 @@ async fn main() {
     println!("🔧 Setting up test tunneling rules...");
 
     // Add a listening rule on server (port 8888 -> tunneled traffic)
-    match server_daemon.add_tcp_listening_rule("127.0.0.1".to_string(), 8888, 8888, vec![]) {
+    match server_daemon
+        .add_tcp_listening_rule("127.0.0.1".to_string(), 8888, vec![])
+        .await
+    {
         Ok(listen_rule_id) => {
             println!("✅ Added listening rule: {}", listen_rule_id);
             println!("   Server listening on: 127.0.0.1:8888 (protocol: /fungi/tunnel/0.1.0/8888)");
@@ -107,12 +110,15 @@ async fn main() {
     }
 
     // Add a forwarding rule on client (port 7777 -> server:8888)
-    match client_daemon.add_tcp_forwarding_rule(
-        "127.0.0.1".to_string(),
-        7777,
-        server_peer_id.to_string(),
-        8888,
-    ) {
+    match client_daemon
+        .add_tcp_forwarding_rule(
+            "127.0.0.1".to_string(),
+            7777,
+            server_peer_id.to_string(),
+            8888,
+        )
+        .await
+    {
         Ok(forward_rule_id) => {
             println!("✅ Added forwarding rule: {}", forward_rule_id);
             println!(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart';
 import 'package:fungi_app/ui/pages/home/drive_page.dart';
+import 'package:fungi_app/ui/pages/home/data_tunnel_page.dart';
 import 'package:fungi_app/ui/pages/settings/settings.dart';
 import 'package:fungi_app/ui/pages/widgets/text.dart';
 import 'package:get/get.dart';
@@ -164,7 +165,7 @@ class HomePage extends StatelessWidget {
                 body: const TabBarView(
                   children: <Widget>[
                     SingleChildScrollView(child: FileTransferPage()),
-                    Center(child: Text("Coming soon...")),
+                    SingleChildScrollView(child: DataTunnelPage()),
                     Settings(),
                   ],
                 ),

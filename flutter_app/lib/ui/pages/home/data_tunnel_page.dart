@@ -1,0 +1,435 @@
+import 'package:flutter/material.dart';
+import 'package:fungi_app/app/controllers/fungi_controller.dart';
+import 'package:fungi_app/ui/pages/widgets/text.dart';
+import 'package:get/get.dart';
+
+class DataTunnelPage extends GetView<FungiController> {
+  const DataTunnelPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "TCP Port Tunneling",
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          Text(
+            "Create TCP tunnels to forward local ports to remote devices or expose local services through P2P connections.",
+            style: Theme.of(context).textTheme.labelSmall?.apply(
+              color: Theme.of(context).colorScheme.onSurface.withAlpha(150),
+            ),
+          ),
+          SizedBox(height: 20),
+
+          // Forwarding Rules Section
+          _buildForwardingSection(context),
+
+          SizedBox(height: 30),
+
+          // Listening Rules Section
+          _buildListeningSection(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildForwardingSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.arrow_forward,
+              size: 20,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            SizedBox(width: 8),
+            Text(
+              "Port Forwarding Rules",
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ],
+        ),
+        Text(
+          "Forward local ports to remote devices",
+          style: Theme.of(context).textTheme.labelSmall?.apply(
+            color: Theme.of(context).colorScheme.onSurface.withAlpha(150),
+          ),
+        ),
+        SizedBox(height: 10),
+        TextButton.icon(
+          onPressed: () => _showAddForwardingRuleDialog(context),
+          icon: Icon(Icons.add_circle),
+          label: Text("Add Forwarding Rule"),
+        ),
+        SizedBox(height: 10),
+        Obx(
+          () => controller.tcpTunnelingConfig.value.forwardingRules.isEmpty
+              ? Text(
+                  "-- No forwarding rules. --",
+                  style: Theme.of(context).textTheme.bodySmall?.apply(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withAlpha(150),
+                  ),
+                )
+              : Column(
+                  children: controller.tcpTunnelingConfig.value.forwardingRules.map((
+                    rule,
+                  ) {
+                    final ruleId =
+                        "forward_${rule.localSocket.host}:${rule.localSocket.port}_to_${rule.remote.peerId}";
+
+                    return Card(
+                      child: ListTile(
+                        title: Text(
+                          "${rule.localSocket.host}:${rule.localSocket.port} → Remote:${rule.remote.port}",
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TruncatedId(
+                              id: rule.remote.peerId,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.apply(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withAlpha(150),
+                                  ),
+                            ),
+                            Text(
+                              "Protocol: /fungi/tunnel/0.1.0/${rule.remote.port}",
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.apply(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withAlpha(120),
+                                  ),
+                            ),
+                          ],
+                        ),
+                        trailing: IconButton(
+                          icon: Icon(Icons.delete, size: 20, color: Colors.red),
+                          onPressed: () =>
+                              controller.removeTcpForwardingRule(ruleId),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildListeningSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.arrow_back,
+              size: 20,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
+            SizedBox(width: 8),
+            Text(
+              "Port Listening Rules",
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ],
+        ),
+        Text(
+          "Expose local services to remote devices",
+          style: Theme.of(context).textTheme.labelSmall?.apply(
+            color: Theme.of(context).colorScheme.onSurface.withAlpha(150),
+          ),
+        ),
+        SizedBox(height: 10),
+        TextButton.icon(
+          onPressed: () => _showAddListeningRuleDialog(context),
+          icon: Icon(Icons.add_circle),
+          label: Text("Add Listening Rule"),
+        ),
+        SizedBox(height: 10),
+        Obx(
+          () => controller.tcpTunnelingConfig.value.listeningRules.isEmpty
+              ? Text(
+                  "-- No listening rules. --",
+                  style: Theme.of(context).textTheme.bodySmall?.apply(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withAlpha(150),
+                  ),
+                )
+              : Column(
+                  children: controller.tcpTunnelingConfig.value.listeningRules.map((
+                    rule,
+                  ) {
+                    final ruleId =
+                        "listen_${rule.localSocket.host}:${rule.localSocket.port}";
+
+                    return Card(
+                      child: ListTile(
+                        title: Text(
+                          "Local:${rule.localSocket.host}:${rule.localSocket.port}",
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Protocol: /fungi/tunnel/0.1.0/${rule.localSocket.port}",
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.apply(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withAlpha(120),
+                                  ),
+                            ),
+                            if (rule.allowedPeers.isNotEmpty)
+                              Text(
+                                "Allowed peers: ${rule.allowedPeers.length}",
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.apply(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurface.withAlpha(150),
+                                    ),
+                              ),
+                            // else
+                            //   Text(
+                            //     "Open to all peers",
+                            //     style: Theme.of(context).textTheme.bodySmall
+                            //         ?.apply(color: Colors.orange),
+                            //   ),
+                          ],
+                        ),
+                        trailing: IconButton(
+                          icon: Icon(Icons.delete, size: 20, color: Colors.red),
+                          onPressed: () =>
+                              controller.removeTcpListeningRule(ruleId),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+        ),
+      ],
+    );
+  }
+
+  void _showAddForwardingRuleDialog(BuildContext context) {
+    final localHostController = TextEditingController(text: "127.0.0.1");
+    final localPortController = TextEditingController();
+    final peerIdController = TextEditingController();
+    final remotePortController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Add Port Forwarding Rule"),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Forward traffic from a local port to a remote device's port",
+                  style: Theme.of(context).textTheme.bodySmall?.apply(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withAlpha(150),
+                  ),
+                ),
+                SizedBox(height: 16),
+                TextField(
+                  controller: localHostController,
+                  decoration: InputDecoration(
+                    labelText: "Local Host",
+                    hintText: "127.0.0.1",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                SizedBox(height: 12),
+                TextField(
+                  controller: localPortController,
+                  decoration: InputDecoration(
+                    labelText: "Local Port",
+                    hintText: "8080",
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                SizedBox(height: 12),
+                TextField(
+                  controller: peerIdController,
+                  decoration: InputDecoration(
+                    labelText: "Remote Peer ID",
+                    hintText: "12D3KooW...",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                SizedBox(height: 12),
+                TextField(
+                  controller: remotePortController,
+                  decoration: InputDecoration(
+                    labelText: "Remote Port",
+                    hintText: "8888",
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () async {
+                final localHost = localHostController.text.trim();
+                final localPort = int.tryParse(localPortController.text.trim());
+                final peerId = peerIdController.text.trim();
+                final remotePort = int.tryParse(
+                  remotePortController.text.trim(),
+                );
+
+                if (localHost.isEmpty ||
+                    localPort == null ||
+                    peerId.isEmpty ||
+                    remotePort == null) {
+                  Get.snackbar(
+                    'Error',
+                    'Please fill in all fields with valid values',
+                    snackPosition: SnackPosition.BOTTOM,
+                    backgroundColor: Colors.red.withOpacity(0.1),
+                    colorText: Colors.red,
+                  );
+                  return;
+                }
+
+                Navigator.of(context).pop();
+                await controller.addTcpForwardingRule(
+                  localHost: localHost,
+                  localPort: localPort,
+                  peerId: peerId,
+                  remotePort: remotePort,
+                );
+              },
+              child: Text("Add"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showAddListeningRuleDialog(BuildContext context) {
+    final localHostController = TextEditingController(text: "127.0.0.1");
+    final localPortController = TextEditingController();
+    final allowedPeersController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Add Port Listening Rule"),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Expose a local service to remote devices through P2P tunneling",
+                  style: Theme.of(context).textTheme.bodySmall?.apply(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withAlpha(150),
+                  ),
+                ),
+                SizedBox(height: 16),
+                TextField(
+                  controller: localHostController,
+                  decoration: InputDecoration(
+                    labelText: "Local Host",
+                    hintText: "127.0.0.1",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                SizedBox(height: 12),
+                TextField(
+                  controller: localPortController,
+                  decoration: InputDecoration(
+                    labelText: "Local Port",
+                    hintText: "8888",
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                // SizedBox(height: 12),
+                // TextField(
+                //   controller: allowedPeersController,
+                //   decoration: InputDecoration(
+                //     labelText: "Allowed Peer IDs (Optional)",
+                //     hintText: "12D3KooW...,12D3KooX... (comma separated)",
+                //     border: OutlineInputBorder(),
+                //   ),
+                //   maxLines: 2,
+                // ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () async {
+                final localHost = localHostController.text.trim();
+                final localPort = int.tryParse(localPortController.text.trim());
+                final allowedPeersText = allowedPeersController.text.trim();
+                final allowedPeers = allowedPeersText.isEmpty
+                    ? <String>[]
+                    : allowedPeersText
+                          .split(',')
+                          .map((e) => e.trim())
+                          .where((e) => e.isNotEmpty)
+                          .toList();
+
+                if (localHost.isEmpty || localPort == null) {
+                  Get.snackbar(
+                    'Error',
+                    'Please fill in all required fields with valid values',
+                    snackPosition: SnackPosition.BOTTOM,
+                    backgroundColor: Colors.red.withOpacity(0.1),
+                    colorText: Colors.red,
+                  );
+                  return;
+                }
+
+                Navigator.of(context).pop();
+                await controller.addTcpListeningRule(
+                  localHost: localHost,
+                  localPort: localPort,
+                  allowedPeers: allowedPeers,
+                );
+              },
+              child: Text("Add"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
