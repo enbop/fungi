@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
+import 'package:fungi_app/ui/pages/widgets/dialog.dart';
 import 'package:fungi_app/ui/pages/widgets/text.dart';
+import 'package:fungi_app/ui/pages/widgets/enhanced_card.dart';
 import 'package:get/get.dart';
 
 class DataTunnelPage extends GetView<FungiController> {
@@ -86,7 +88,7 @@ class DataTunnelPage extends GetView<FungiController> {
                     final ruleId =
                         "forward_${rule.localSocket.host}:${rule.localSocket.port}_to_${rule.remote.peerId}";
 
-                    return Card(
+                    return EnhancedCard(
                       child: ListTile(
                         title: Text(
                           "${rule.localSocket.host}:${rule.localSocket.port} → Remote:${rule.remote.port}",
@@ -153,6 +155,27 @@ class DataTunnelPage extends GetView<FungiController> {
             color: Theme.of(context).colorScheme.onSurface.withAlpha(150),
           ),
         ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              "Incoming Allowed Peers: ",
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            SizedBox(width: 5),
+            SelectableText(
+              "${controller.incomingAllowdPeers.length}",
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            IconButton(
+              onPressed: () {
+                showAllowedPeersList(context);
+              },
+              icon: Icon(Icons.edit, size: 15),
+            ),
+          ],
+        ),
         SizedBox(height: 10),
         TextButton.icon(
           onPressed: () => _showAddListeningRuleDialog(context),
@@ -177,7 +200,8 @@ class DataTunnelPage extends GetView<FungiController> {
                     final ruleId =
                         "listen_${rule.localSocket.host}:${rule.localSocket.port}";
 
-                    return Card(
+                    return EnhancedCard(
+                      accentColor: Theme.of(context).colorScheme.secondary,
                       child: ListTile(
                         title: Text(
                           "Local:${rule.localSocket.host}:${rule.localSocket.port}",

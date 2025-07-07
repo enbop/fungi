@@ -4,6 +4,7 @@ import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:fungi_app/ui/pages/home/home_page.dart';
 import 'package:fungi_app/ui/pages/widgets/dialog.dart';
 import 'package:fungi_app/ui/pages/widgets/text.dart';
+import 'package:fungi_app/ui/pages/widgets/enhanced_card.dart';
 import 'package:get/get.dart';
 
 class RemoteFileAccess extends GetView<FungiController> {
@@ -92,50 +93,56 @@ class RemoteFileAccess extends GetView<FungiController> {
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: controller.fileTransferClients.map((client) {
-                      return ListTile(
-                        title: Tooltip(
-                          message: client.name ?? client.peerId,
-                          waitDuration: const Duration(milliseconds: 1000),
-                          child: Text(
-                            client.name ?? client.peerId,
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
+                      return EnhancedCard(
+                        child: ListTile(
+                          title: Tooltip(
+                            message: client.name ?? client.peerId,
+                            waitDuration: const Duration(milliseconds: 1000),
+                            child: Text(
+                              client.name ?? client.peerId,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
                           ),
-                        ),
-                        subtitle: TruncatedId(
-                          id: client.peerId,
-                          style: Theme.of(context).textTheme.bodySmall?.apply(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withAlpha(150),
+                          subtitle: TruncatedId(
+                            id: client.peerId,
+                            style: Theme.of(context).textTheme.bodySmall?.apply(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withAlpha(150),
+                            ),
                           ),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Transform.scale(
-                              scale: 0.6,
-                              child: Switch(
-                                value: client.enabled,
-                                onChanged: (value) {
-                                  controller.enableFileTransferClient(
-                                    client: client,
-                                    enabled: value,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Transform.scale(
+                                scale: 0.6,
+                                child: Switch(
+                                  value: client.enabled,
+                                  onChanged: (value) {
+                                    controller.enableFileTransferClient(
+                                      client: client,
+                                      enabled: value,
+                                    );
+                                  },
+                                ),
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.delete,
+                                  size: 20,
+                                  color: Colors.red,
+                                ),
+                                padding: EdgeInsets.zero,
+                                constraints: BoxConstraints(),
+                                onPressed: () {
+                                  controller.removeFileTransferClient(
+                                    client.peerId,
                                   );
                                 },
                               ),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.remove_circle, size: 20),
-                              padding: EdgeInsets.zero,
-                              constraints: BoxConstraints(),
-                              onPressed: () {
-                                controller.removeFileTransferClient(
-                                  client.peerId,
-                                );
-                              },
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       );
                     }).toList(),

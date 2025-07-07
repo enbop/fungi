@@ -147,7 +147,7 @@ class HomePage extends StatelessWidget {
                 backgroundColor: Colors.transparent,
                 appBar: PreferredSize(
                   preferredSize: const Size.fromHeight(
-                    kMinInteractiveDimension - 16,
+                    kMinInteractiveDimension - 10,
                   ),
                   child: AppBar(
                     backgroundColor: colorScheme.primaryContainer,
