@@ -2,52 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart';
 import 'package:fungi_app/ui/pages/home/drive_page.dart';
 import 'package:fungi_app/ui/pages/settings/settings.dart';
+import 'package:fungi_app/ui/pages/widgets/text.dart';
 import 'package:get/get.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
-import 'package:flutter/services.dart';
-
-class TruncatedId extends StatelessWidget {
-  final String id;
-  final TextStyle? style;
-  final VoidCallback? onCopied;
-
-  const TruncatedId({super.key, required this.id, this.style, this.onCopied});
-
-  String get truncatedId {
-    if (id.length <= 12) return id;
-    return '${id.substring(0, 4)}***${id.substring(id.length - 4)}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Click to copy: $id',
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          onTap: () => _copyToClipboard(context),
-          child: Text(truncatedId, style: style),
-        ),
-      ),
-    );
-  }
-
-  void _copyToClipboard(BuildContext context) async {
-    await Clipboard.setData(ClipboardData(text: id));
-    if (onCopied != null) {
-      onCopied!();
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('ID copied to clipboard'),
-            duration: Duration(seconds: 1),
-          ),
-        );
-      }
-    }
-  }
-}
 
 class LabeledText extends StatelessWidget {
   final String label;
@@ -107,64 +64,60 @@ class HomeHeader extends GetView<FungiController> {
       decoration: BoxDecoration(color: colorScheme.primaryContainer),
       child: Obx(
         () => Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Padding(
-              padding: const EdgeInsets.all(25),
+              padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 20),
               child: Image.asset(
                 'assets/images/logo.png',
-                width: 80,
-                height: 80,
+                width: 50,
+                height: 50,
                 color: colorScheme.primary,
               ),
             ),
-            const SizedBox(width: 10),
             Column(
               mainAxisAlignment: MainAxisAlignment.start,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 18),
                 LabeledText(
                   label: 'Hostname',
                   labelStyle: TextStyle(
-                    fontSize: 15,
+                    fontSize: 12,
                     color: colorScheme.surfaceTint,
                     fontWeight: FontWeight.bold,
                   ),
                   value: hostName() ?? "Unknown",
-                  style: const TextStyle(fontSize: 15),
+                  style: const TextStyle(fontSize: 12),
                 ),
-                const SizedBox(height: 5),
                 LabeledText(
                   label: 'Peer ID',
                   labelStyle: TextStyle(
-                    fontSize: 15,
+                    fontSize: 12,
                     color: colorScheme.surfaceTint,
                     fontWeight: FontWeight.bold,
                   ),
                   value: controller.peerId.value.substring(0, 5),
                   valueWidget: TruncatedId(
                     id: controller.peerId.value,
-                    style: const TextStyle(fontSize: 15),
+                    style: const TextStyle(fontSize: 12),
                   ),
                 ),
-                const SizedBox(height: 5),
                 LabeledText(
                   label: 'Service state',
                   labelStyle: TextStyle(
-                    fontSize: 15,
+                    fontSize: 12,
                     color: colorScheme.surfaceTint,
                     fontWeight: FontWeight.bold,
                   ),
                   value: controller.isServiceRunning.value ? "ON" : "OFF",
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: 12,
                     color: controller.isServiceRunning.value
                         ? Colors.green
                         : Colors.red,
                   ),
                 ),
-                const SizedBox(height: 20),
-                // TextButton(onPressed: () => {}, child: Text('Settings')),
               ],
             ),
           ],
@@ -193,16 +146,16 @@ class HomePage extends StatelessWidget {
                 backgroundColor: Colors.transparent,
                 appBar: PreferredSize(
                   preferredSize: const Size.fromHeight(
-                    kMinInteractiveDimension,
+                    kMinInteractiveDimension - 16,
                   ),
                   child: AppBar(
                     backgroundColor: colorScheme.primaryContainer,
                     automaticallyImplyLeading: false,
                     bottom: TabBar(
                       tabs: const <Widget>[
-                        Tab(text: "File Transfer"),
-                        Tab(text: "Data Tunnel"),
-                        Tab(text: "Settings"),
+                        Tab(text: "File Transfer", height: 30),
+                        Tab(text: "Data Tunnel", height: 30),
+                        Tab(text: "Settings", height: 30),
                       ],
                       indicatorColor: colorScheme.primary,
                     ),

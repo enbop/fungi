@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:fungi_app/ui/pages/home/home_page.dart';
 import 'package:fungi_app/ui/pages/widgets/dialog.dart';
+import 'package:fungi_app/ui/pages/widgets/text.dart';
 import 'package:get/get.dart';
 
 class RemoteFileAccess extends GetView<FungiController> {
@@ -94,24 +95,19 @@ class RemoteFileAccess extends GetView<FungiController> {
                       return ListTile(
                         title: Tooltip(
                           message: client.name ?? client.peerId,
+                          waitDuration: const Duration(milliseconds: 1000),
                           child: Text(
                             client.name ?? client.peerId,
                             overflow: TextOverflow.ellipsis,
                             maxLines: 1,
                           ),
                         ),
-                        subtitle: Tooltip(
-                          message: client.peerId,
-                          child: Text(
-                            client.peerId,
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                            style: Theme.of(context).textTheme.bodySmall?.apply(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withAlpha(150),
-                              fontSizeDelta: -2,
-                            ),
+                        subtitle: TruncatedId(
+                          id: client.peerId,
+                          style: Theme.of(context).textTheme.bodySmall?.apply(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withAlpha(150),
                           ),
                         ),
                         trailing: Row(
