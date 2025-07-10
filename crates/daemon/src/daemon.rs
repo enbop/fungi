@@ -97,7 +97,7 @@ impl FungiDaemon {
         let ftc_control = FileTransferClientsControl::new(swarm_control.clone());
         Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
 
-        let tcp_tunneling_control = TcpTunnelingControl::new(stream_control.clone());
+        let tcp_tunneling_control = TcpTunnelingControl::new(swarm_control.clone());
         tcp_tunneling_control
             .init_from_config(&config.tcp_tunneling)
             .await;

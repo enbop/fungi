@@ -2,9 +2,9 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use anyhow::{Result, bail};
 use fungi_config::tcp_tunneling::{ForwardingRule, ListeningRule, TcpTunneling};
+use fungi_swarm::SwarmControl;
 use fungi_util::protocols::FUNGI_TUNNEL_PROTOCOL;
 use libp2p::{PeerId, StreamProtocol};
-use libp2p_stream::Control;
 use parking_lot::Mutex;
 use tokio::task::JoinHandle;
 
@@ -26,15 +26,15 @@ struct ListeningRuleState {
 /// Manages both forwarding (local port -> remote peer) and listening (remote peer -> local port) rules
 #[derive(Clone)]
 pub struct TcpTunnelingControl {
-    stream_control: Control,
+    swarm_control: SwarmControl,
     forwarding_rules: Arc<Mutex<HashMap<String, ForwardingRuleState>>>,
     listening_rules: Arc<Mutex<HashMap<String, ListeningRuleState>>>,
 }
 
 impl TcpTunnelingControl {
-    pub fn new(stream_control: Control) -> Self {
+    pub fn new(swarm_control: SwarmControl) -> Self {
         Self {
-            stream_control,
+            swarm_control,
             forwarding_rules: Arc::new(Mutex::new(HashMap::new())),
             listening_rules: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -85,7 +85,8 @@ impl TcpTunnelingControl {
         ))
         .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
 
-        let stream_control = self.stream_control.clone();
+        let swarm_control = self.swarm_control.clone();
+        let stream_control = swarm_control.stream_control().clone();
 
         log::info!(
             "Adding forwarding rule: {} -> {}/{}",
@@ -95,8 +96,14 @@ impl TcpTunnelingControl {
         );
 
         let task_handle = tokio::spawn(async move {
-            super::forward_port_to_peer(stream_control, local_addr, target_peer, target_protocol)
-                .await;
+            super::forward_port_to_peer(
+                swarm_control,
+                stream_control,
+                local_addr,
+                target_peer,
+                target_protocol,
+            )
+            .await;
         });
 
         let rule_state = ForwardingRuleState { rule, task_handle };
@@ -137,7 +144,7 @@ impl TcpTunnelingControl {
         ))
         .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
 
-        let stream_control = self.stream_control.clone();
+        let stream_control = self.swarm_control.stream_control().clone();
 
         log::info!(
             "Adding listening rule: {} for {}",

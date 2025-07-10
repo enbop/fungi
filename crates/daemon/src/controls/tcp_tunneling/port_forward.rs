@@ -1,3 +1,4 @@
+use fungi_swarm::SwarmControl;
 use libp2p::{PeerId, StreamProtocol};
 use libp2p_stream::Control;
 use std::net::SocketAddr;
@@ -5,6 +6,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 // TODO remove unwraps handle errors properly
 pub async fn forward_port_to_peer(
+    swarm_control: SwarmControl,
     mut stream_control: Control,
     local_addr: SocketAddr,
     target_peer: PeerId,
@@ -17,6 +19,11 @@ pub async fn forward_port_to_peer(
     );
     loop {
         let (mut tcp_stream, _) = listener.accept().await.unwrap();
+        // TODO: DialError::Aborted at first connecting.
+        if let Err(e) = swarm_control.connect(target_peer).await {
+            log::error!("Failed to connect to peer {}: {}", target_peer, e);
+            continue;
+        }
         let Ok(libp2p_stream) = stream_control
             .open_stream(target_peer, target_protocol.clone())
             .await

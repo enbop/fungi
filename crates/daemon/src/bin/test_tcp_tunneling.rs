@@ -1,5 +1,6 @@
 use fungi_config::FungiConfig;
 use fungi_daemon::FungiDaemon;
+use fungi_swarm::get_default_relay_addr;
 use libp2p::identity::Keypair;
 use tempfile::TempDir;
 
@@ -63,6 +64,12 @@ async fn create_tcp_tunneling_daemons() -> (FungiDaemon, FungiDaemon, TempDir, T
         })
         .await
         .expect("Failed to add server address to client");
+
+    server_daemon
+        .swarm_control()
+        .listen_relay(get_default_relay_addr())
+        .await
+        .unwrap();
 
     println!("✅ Client Daemon started on port {}", CLIENT_TCP_PORT);
     println!("✅ Server Daemon started on port {}", SERVER_TCP_PORT);
