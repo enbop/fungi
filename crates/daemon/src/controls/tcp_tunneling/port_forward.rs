@@ -1,6 +1,5 @@
-use libp2p_identity::PeerId;
+use libp2p::{PeerId, StreamProtocol};
 use libp2p_stream::Control;
-use libp2p_swarm::StreamProtocol;
 use std::net::SocketAddr;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 

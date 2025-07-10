@@ -1516,7 +1516,6 @@ dependencies = [
  "futures",
  "interprocess",
  "libp2p-identity",
- "libp2p-stream",
  "libp2p-swarm",
  "log",
  "serde",

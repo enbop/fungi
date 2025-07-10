@@ -95,13 +95,8 @@ impl TcpTunnelingControl {
         );
 
         let task_handle = tokio::spawn(async move {
-            fungi_util::tcp_tunneling::forward_port_to_peer(
-                stream_control,
-                local_addr,
-                target_peer,
-                target_protocol,
-            )
-            .await;
+            super::forward_port_to_peer(stream_control, local_addr, target_peer, target_protocol)
+                .await;
         });
 
         let rule_state = ForwardingRuleState { rule, task_handle };
@@ -151,12 +146,7 @@ impl TcpTunnelingControl {
         );
 
         let task_handle = tokio::spawn(async move {
-            fungi_util::tcp_tunneling::listen_p2p_to_port(
-                stream_control,
-                listening_protocol,
-                local_addr,
-            )
-            .await;
+            super::listen_p2p_to_port(stream_control, listening_protocol, local_addr).await;
         });
 
         let rule_state = ListeningRuleState { rule, task_handle };

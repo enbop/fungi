@@ -1,6 +1,6 @@
 use futures::StreamExt;
+use libp2p::{Stream, StreamProtocol};
 use libp2p_stream::Control;
-use libp2p_swarm::{Stream, StreamProtocol};
 use std::net::SocketAddr;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 
