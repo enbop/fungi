@@ -1,7 +1,4 @@
-use crate::{
-    behaviours::{FungiBehaviours, FungiBehavioursEvent},
-    peer_handshake::PeerHandshakePayload,
-};
+use crate::{behaviours::FungiBehaviours, peer_handshake::PeerHandshakePayload};
 use anyhow::{Context, Result, bail};
 use async_result::{AsyncResult, Completer};
 use fungi_util::protocols::{FUNGI_PEER_HANDSHAKE_PROTOCOL, FUNGI_RELAY_HANDSHAKE_PROTOCOL};
@@ -197,7 +194,19 @@ impl SwarmControl {
 
         let dial: std::result::Result<(), DialError> = self
             .invoke_swarm(move |swarm| {
-                swarm.dial(peer_id.clone())?;
+                if let Err(e) = swarm.dial(peer_id.clone()) {
+                    match e {
+                        DialError::NoAddresses => {
+                            // TODO: add a rendezvous server
+                            // dial with relay when no mDNS addresses are available
+                            let addr =
+                                peer_addr_with_relay(peer_id.clone(), get_default_relay_addr());
+                            log::info!("Dialing {} with relay address {}", peer_id, addr);
+                            swarm.dial(addr)?;
+                        }
+                        _ => return Err(e),
+                    }
+                };
                 swarm
                     .behaviour()
                     .dial_callback
@@ -278,12 +287,8 @@ impl SwarmControl {
             bail!("Handshake failed: empty response");
         };
 
-        let addr = relay_addr
-            .with(Protocol::P2pCircuit)
-            .with(Protocol::P2p(self.local_peer_id()));
-        let addr_clone = addr.clone();
         // 2. listen on relay
-        self.invoke_swarm(|swarm| swarm.listen_on(addr_clone))
+        self.invoke_swarm(|swarm| swarm.listen_on(relay_addr.with(Protocol::P2pCircuit)))
             .await??;
 
         Ok(())
@@ -400,4 +405,16 @@ impl FungiSwarm {
 
         swarm_task
     }
+}
+
+pub fn get_default_relay_addr() -> Multiaddr {
+    "/ip4/160.16.206.21/tcp/30001/p2p/16Uiu2HAmGXFS6aYsKKYRkEDo1tNigZKN8TAYrsfSnEdC5sZLNkiE"
+        .parse()
+        .unwrap()
+}
+
+pub fn peer_addr_with_relay(peer_id: PeerId, relay: Multiaddr) -> Multiaddr {
+    relay
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(peer_id))
 }

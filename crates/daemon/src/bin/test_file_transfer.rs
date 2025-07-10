@@ -1,5 +1,6 @@
 use fungi_config::FungiConfig;
 use fungi_daemon::FungiDaemon;
+use fungi_swarm::get_default_relay_addr;
 use libp2p::identity::Keypair;
 use std::path::PathBuf;
 
@@ -51,6 +52,12 @@ async fn create_daemons() -> (FungiDaemon, FungiDaemon) {
         "/ip4/127.0.0.1/tcp/{}/p2p/{}",
         SERVER_TCP_PORT, server_peer_id
     );
+
+    server_daemon
+        .swarm_control()
+        .listen_relay(get_default_relay_addr())
+        .await
+        .unwrap();
 
     client_daemon
         .swarm_control()

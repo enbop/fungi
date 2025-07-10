@@ -1,7 +1,7 @@
 use anyhow::Result;
 pub use fungi_daemon::DaemonArgs;
 use fungi_daemon::FungiDaemon;
-use libp2p::{Multiaddr, PeerId, multiaddr::Protocol};
+use fungi_swarm::get_default_relay_addr;
 
 pub async fn run(args: DaemonArgs) -> Result<()> {
     fungi_config::init(&args).unwrap();
@@ -31,16 +31,4 @@ pub async fn run(args: DaemonArgs) -> Result<()> {
     }
 
     Ok(())
-}
-
-pub(crate) fn get_default_relay_addr() -> Multiaddr {
-    "/ip4/160.16.206.21/tcp/30001/p2p/16Uiu2HAmGXFS6aYsKKYRkEDo1tNigZKN8TAYrsfSnEdC5sZLNkiE"
-        .parse()
-        .unwrap()
-}
-
-pub fn peer_addr_with_relay(peer_id: PeerId, relay: Multiaddr) -> Multiaddr {
-    relay
-        .with(Protocol::P2pCircuit)
-        .with(Protocol::P2p(peer_id))
 }
