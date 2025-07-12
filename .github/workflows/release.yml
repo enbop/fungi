@@ -128,8 +128,8 @@ jobs:
         run: |
           flutter config --enable-windows-desktop
           flutter build windows --release
-          cd build/windows/runner/Release
-          tar -czf ../../../../../fungi-flutter-windows.tar.gz .
+          cd build/windows/x64/runner/Release
+          tar -czf ../../../../../../fungi-flutter-windows.tar.gz .
 
 
       # only create nightly release when manually triggered
