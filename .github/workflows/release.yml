@@ -21,15 +21,19 @@ jobs:
           - rust-target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
             flutter-platform: linux
+            platform-name: linux-x86_64
           - rust-target: aarch64-unknown-linux-gnu
             os: ubuntu-22.04
             cross: true
+            platform-name: linux-aarch64
           - rust-target: universal-apple-darwin
             os: macos-latest
             flutter-platform: macos
+            platform-name: macos-universal
           - rust-target: x86_64-pc-windows-msvc
             os: windows-latest
             flutter-platform: windows
+            platform-name: windows-x86_64
     permissions:
       contents: write
     steps:
@@ -91,14 +95,14 @@ jobs:
         shell: bash
         run: |
           ls -la target/${{ matrix.rust-target }}/release/
-          tar -czf fungi-cli-${{ matrix.rust-target }}.tar.gz -C target/${{ matrix.rust-target }}/release fungi.exe
+          tar -czf fungi-cli-${{ matrix.platform-name }}.tar.gz -C target/${{ matrix.rust-target }}/release fungi.exe
       
       - name: Archive Rust CLI
         if: matrix.os != 'windows-latest'
         shell: bash
         run: |
           ls -la target/${{ matrix.rust-target }}/release/
-          tar -czf fungi-cli-${{ matrix.rust-target }}.tar.gz -C target/${{ matrix.rust-target }}/release fungi
+          tar -czf fungi-cli-${{ matrix.platform-name }}.tar.gz -C target/${{ matrix.rust-target }}/release fungi
 
       - name: Flutter dependencies
         if: matrix.flutter-platform
@@ -111,7 +115,7 @@ jobs:
         run: |
           flutter config --enable-linux-desktop
           flutter build linux --release
-          tar -czf ../fungi-flutter-linux.tar.gz -C build/linux/x64/release/bundle .
+          tar -czf ../fungi-app-${{ matrix.platform-name }}.tar.gz -C build/linux/x64/release/bundle .
 
       - name: Build Flutter macOS
         if: matrix.flutter-platform == 'macos'
@@ -119,7 +123,7 @@ jobs:
         run: |
           flutter config --enable-macos-desktop
           flutter build macos --release
-          tar -czf ../fungi-flutter-macos.tar.gz -C build/macos/Build/Products/Release fungi.app
+          tar -czf ../fungi-app-${{ matrix.platform-name }}.tar.gz -C build/macos/Build/Products/Release fungi.app
 
       - name: Build Flutter Windows
         if: matrix.flutter-platform == 'windows'
@@ -129,7 +133,7 @@ jobs:
           flutter config --enable-windows-desktop
           flutter build windows --release
           cd build/windows/x64/runner/Release
-          tar -czf ../../../../../../fungi-flutter-windows.tar.gz .
+          tar -czf ../../../../../../fungi-app-${{ matrix.platform-name }}.tar.gz .
 
 
       # only create nightly release when manually triggered
@@ -153,14 +157,8 @@ jobs:
             RELEASE_TAG="${{ github.ref_name }}"
           fi
           
-          gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-cli-${{ matrix.rust-target }}.tar.gz
+          gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-cli-${{ matrix.platform-name }}.tar.gz
           
-          if [ -f fungi-flutter-linux.tar.gz ]; then
-            gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-flutter-linux.tar.gz
-          fi
-          if [ -f fungi-flutter-macos.tar.gz ]; then
-            gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-flutter-macos.tar.gz
-          fi
-          if [ -f fungi-flutter-windows.tar.gz ]; then
-            gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-flutter-windows.tar.gz
+          if [ -f fungi-app-${{ matrix.platform-name }}.tar.gz ]; then
+            gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-app-${{ matrix.platform-name }}.tar.gz
           fi
