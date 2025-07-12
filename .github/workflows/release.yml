@@ -123,7 +123,7 @@ jobs:
         run: |
           flutter config --enable-macos-desktop
           flutter build macos --release
-          tar -czf ../fungi-app-${{ matrix.platform-name }}.tar.gz -C build/macos/Build/Products/Release fungi.app
+          tar -czf ../fungi-app-${{ matrix.platform-name }}.tar.gz -C build/macos/Build/Products/Release "Fungi App.app"
 
       - name: Build Flutter Windows
         if: matrix.flutter-platform == 'windows'
