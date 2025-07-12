@@ -47,3 +47,12 @@ parking_lot = "0.12"
 [patch.crates-io]
 # workaround for fixing the build error on macOS
 if-watch = { git = "https://github.com/Heap-Hop/if-watch.git", branch = "no_system_configuration_on_macos" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.release.build-override]
+opt-level = 0
