@@ -12,9 +12,26 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 # make sure run "cargo build --release" before "flutter run"
 # include("../cargokit/cmake/cargokit.cmake")
 # apply_cargokit(${PROJECT_NAME} ../../../../../../rust rust_lib_fungi_app "")
-set(PREBUILT_DLL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../target/release/rust_lib_fungi_app.dll")
-if(NOT EXISTS ${PREBUILT_DLL_PATH})
-    message(FATAL_ERROR "Prebuilt DLL not found at: ${PREBUILT_DLL_PATH}")
+
+# Try multiple possible paths for the prebuilt DLL
+set(POSSIBLE_DLL_PATHS
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../target/release/rust_lib_fungi_app.dll"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../target/x86_64-pc-windows-msvc/release/rust_lib_fungi_app.dll"
+)
+
+set(PREBUILT_DLL_PATH "")
+foreach(DLL_PATH ${POSSIBLE_DLL_PATHS})
+    if(EXISTS ${DLL_PATH})
+        set(PREBUILT_DLL_PATH ${DLL_PATH})
+        message(STATUS "Found prebuilt DLL at: ${PREBUILT_DLL_PATH}")
+        break()
+    endif()
+endforeach()
+
+if(NOT PREBUILT_DLL_PATH)
+    message(FATAL_ERROR "Prebuilt DLL not found in any of the expected locations:
+    - ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../target/release/rust_lib_fungi_app.dll
+    - ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../target/x86_64-pc-windows-msvc/release/rust_lib_fungi_app.dll")
 endif()
 
 # List of absolute paths to libraries that should be bundled with the plugin.
