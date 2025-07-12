@@ -1,11 +1,12 @@
 name: "Android Release"
 
 on:
-  workflow_dispatch:
-  push:
-    branches: ["main"]
-    tags:
-      - "v*"
+  # temporarily disabled android release workflow
+  # workflow_dispatch:
+  # push:
+  #   branches: ["main"]
+  #   tags:
+  #     - "v*"
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
