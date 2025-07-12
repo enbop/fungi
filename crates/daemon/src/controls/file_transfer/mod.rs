@@ -4,17 +4,17 @@ mod ftp_impl;
 mod webdav_impl;
 
 pub use file_transfer_client::{
-    FileTransferClientControl, start_ftp_proxy_service, start_webdav_proxy_service,
+    FileTransferClientsControl, start_ftp_proxy_service, start_webdav_proxy_service,
 };
 pub use file_transfer_service::FileTransferServiceControl;
-use fungi_fs::{FileInfo, Metadata, Result};
+use fungi_fs::{DirEntry, Metadata, Result};
 use std::path::PathBuf;
 
 #[tarpc::service]
 pub trait FileTransferRpc {
     async fn metadata(path: PathBuf) -> Result<Metadata>;
 
-    async fn list(path: PathBuf) -> Result<Vec<FileInfo>>;
+    async fn list(path: PathBuf) -> Result<Vec<DirEntry>>;
 
     async fn get(path: PathBuf, start_pos: u64) -> Result<Vec<u8>>;
 

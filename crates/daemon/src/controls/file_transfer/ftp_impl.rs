@@ -3,10 +3,10 @@ use std::fmt::Debug;
 use async_trait::async_trait;
 use libunftp::{auth::UserDetail, storage::StorageBackend};
 
-use super::FileTransferClientControl;
+use super::FileTransferClientsControl;
 
 #[async_trait]
-impl<User: UserDetail> StorageBackend<User> for FileTransferClientControl {
+impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
     type Metadata = fungi_fs::Metadata;
 
     fn supported_features(&self) -> u32 {
@@ -126,16 +126,25 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientControl {
     }
 }
 
-fn map_error(err: fungi_fs::FileTransferError) -> libunftp::storage::Error {
-    use fungi_fs::FileTransferError;
+fn map_error(err: fungi_fs::FileSystemError) -> libunftp::storage::Error {
+    use fungi_fs::FileSystemError;
     use libunftp::storage::ErrorKind;
 
     match err {
-        FileTransferError::NotFound => ErrorKind::PermanentFileNotAvailable.into(),
-        FileTransferError::PermissionDenied => ErrorKind::PermissionDenied.into(),
-        FileTransferError::ConnectionBroken => ErrorKind::ConnectionClosed.into(),
-        FileTransferError::Other(msg) => {
-            log::error!("File transfer error: {}", msg);
+        FileSystemError::NotFound { .. } => ErrorKind::PermanentFileNotAvailable.into(),
+        FileSystemError::PermissionDenied { .. } => ErrorKind::PermissionDenied.into(),
+        FileSystemError::ConnectionBroken => ErrorKind::ConnectionClosed.into(),
+        FileSystemError::AlreadyExists { .. } => ErrorKind::LocalError.into(), // No direct equivalent
+        FileSystemError::DirectoryNotEmpty { .. } => ErrorKind::TransientFileNotAvailable.into(),
+        FileSystemError::IsDirectory { .. } => ErrorKind::TransientFileNotAvailable.into(),
+        FileSystemError::NotDirectory { .. } => ErrorKind::TransientFileNotAvailable.into(),
+        FileSystemError::InvalidPath { .. } => ErrorKind::LocalError.into(), // No direct equivalent
+        FileSystemError::NoSpace => ErrorKind::InsufficientStorageSpaceError.into(),
+        FileSystemError::FileTooLarge => ErrorKind::LocalError.into(), // No direct equivalent
+        FileSystemError::ReadOnly => ErrorKind::PermissionDenied.into(),
+        FileSystemError::NotSupported { .. } => ErrorKind::CommandNotImplemented.into(),
+        FileSystemError::Io { message } | FileSystemError::Other { message } => {
+            log::error!("File transfer error: {}", message);
             ErrorKind::LocalError.into()
         }
     }

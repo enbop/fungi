@@ -1,9 +1,8 @@
 pub mod messages;
 
 use interprocess::local_socket::{
-    self,
-    tokio::{prelude::*, Stream},
-    ListenerOptions,
+    self, ListenerOptions,
+    tokio::{Stream, prelude::*},
 };
 use std::io;
 

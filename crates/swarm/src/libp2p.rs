@@ -1,20 +1,22 @@
-use crate::behaviours::FungiBehaviours;
-use anyhow::{Result, bail};
+use crate::{behaviours::FungiBehaviours, peer_handshake::PeerHandshakePayload};
+use anyhow::{Context, Result, bail};
 use async_result::{AsyncResult, Completer};
-use fungi_util::protocols::FUNGI_RELAY_HANDSHAKE_PROTOCOL;
+use fungi_util::protocols::{FUNGI_PEER_HANDSHAKE_PROTOCOL, FUNGI_RELAY_HANDSHAKE_PROTOCOL};
 use libp2p::{
     Multiaddr, PeerId, Swarm,
-    futures::{AsyncReadExt, StreamExt},
+    futures::{AsyncReadExt, AsyncWriteExt, StreamExt},
     identity::Keypair,
     mdns,
     multiaddr::Protocol,
     noise,
-    swarm::SwarmEvent,
+    swarm::{DialError, SwarmEvent},
     tcp, yamux,
 };
+use parking_lot::{Mutex, RwLock};
 use std::{
     any::Any,
-    ops::{Deref, DerefMut},
+    collections::{HashMap, HashSet},
+    ops::Deref,
     sync::Arc,
     time::Duration,
 };
@@ -26,6 +28,67 @@ use tokio::{
 pub type TSwarm = Swarm<FungiBehaviours>;
 type SwarmResponse = Box<dyn Any + Send>;
 type SwarmRequest = Box<dyn FnOnce(&mut TSwarm) -> SwarmResponse + Send + Sync>;
+
+pub struct ConnectedPeer {
+    handshake: Option<PeerHandshakePayload>,
+    multiaddr: Multiaddr,
+}
+
+impl ConnectedPeer {
+    pub fn with_multiaddr(multiaddr: Multiaddr) -> Self {
+        Self {
+            handshake: None,
+            multiaddr,
+        }
+    }
+
+    pub fn update_handshake(&mut self, handshake: PeerHandshakePayload) {
+        self.handshake = Some(handshake);
+    }
+
+    pub fn host_name(&self) -> Option<String> {
+        self.handshake.as_ref().and_then(|h| h.host_name())
+    }
+
+    pub fn multiaddr(&self) -> &Multiaddr {
+        &self.multiaddr
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct State {
+    dial_callback: Arc<Mutex<HashMap<PeerId, Completer<std::result::Result<(), DialError>>>>>,
+    connected_peers: Arc<Mutex<HashMap<PeerId, ConnectedPeer>>>,
+    incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
+}
+
+impl State {
+    pub fn new(incoming_allowed_peers: HashSet<PeerId>) -> Self {
+        Self {
+            dial_callback: Arc::new(Mutex::new(HashMap::new())),
+            connected_peers: Arc::new(Mutex::new(HashMap::new())),
+            incoming_allowed_peers: Arc::new(RwLock::new(incoming_allowed_peers)),
+        }
+    }
+
+    pub fn dial_callback(
+        &self,
+    ) -> Arc<Mutex<HashMap<PeerId, Completer<std::result::Result<(), DialError>>>>> {
+        self.dial_callback.clone()
+    }
+
+    pub fn connected_peers(&self) -> Arc<Mutex<HashMap<PeerId, ConnectedPeer>>> {
+        self.connected_peers.clone()
+    }
+
+    pub fn incoming_allowed_peers(&self) -> Arc<RwLock<HashSet<PeerId>>> {
+        self.incoming_allowed_peers.clone()
+    }
+
+    pub fn get_incoming_allowed_peers_list(&self) -> Vec<PeerId> {
+        self.incoming_allowed_peers.read().iter().cloned().collect()
+    }
+}
 
 pub struct SwarmAsyncCall {
     request: SwarmRequest,
@@ -48,14 +111,121 @@ impl Deref for SwarmControl {
 
 #[derive(Clone)]
 pub struct SwarmControl {
-    pub local_peer_id: Arc<PeerId>,
-    pub swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
-    pub stream_control: libp2p_stream::Control,
+    local_peer_id: Arc<PeerId>,
+    swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
+    stream_control: libp2p_stream::Control,
+
+    state: State,
 }
 
 impl SwarmControl {
+    pub fn new(
+        local_peer_id: Arc<PeerId>,
+        swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
+        stream_control: libp2p_stream::Control,
+        state: State,
+    ) -> Self {
+        Self {
+            local_peer_id,
+            swarm_caller_tx,
+            stream_control,
+            state,
+        }
+    }
+
     pub fn local_peer_id(&self) -> PeerId {
         *self.local_peer_id
+    }
+
+    pub fn stream_control(&self) -> &libp2p_stream::Control {
+        &self.stream_control
+    }
+
+    pub fn stream_control_mut(&mut self) -> &mut libp2p_stream::Control {
+        &mut self.stream_control
+    }
+
+    pub fn state(&self) -> &State {
+        &self.state
+    }
+
+    async fn handshake(&self, peer_id: PeerId) -> Result<()> {
+        let mut stream = self
+            .stream_control
+            .clone()
+            .open_stream(peer_id, FUNGI_PEER_HANDSHAKE_PROTOCOL)
+            .await
+            .context(format!("Failed to open handshake stream to {}", peer_id))?;
+        stream
+            .write_all(&PeerHandshakePayload::new().to_bytes())
+            .await?;
+        let mut buf = [0; 512];
+        let n = tokio::time::timeout(Duration::from_secs(5), stream.read(&mut buf)).await??;
+        let handshake_res = PeerHandshakePayload::from_bytes(&buf[..n])?;
+        log::info!(
+            "Connected to {} - {}",
+            handshake_res.host_name().unwrap_or_default(),
+            peer_id
+        );
+        self.state
+            .connected_peers
+            .lock()
+            .get_mut(&peer_id)
+            .expect("Peer should be connected")
+            .update_handshake(handshake_res);
+
+        Ok(())
+    }
+
+    // connect and handshake
+    // TODO add a timeout
+    // TODO handle error
+    pub async fn connect(&self, peer_id: PeerId) -> std::result::Result<(), DialError> {
+        if self.state.connected_peers.lock().contains_key(&peer_id) {
+            return Ok(());
+        }
+
+        if self.state.dial_callback.lock().contains_key(&peer_id) {
+            // TODO correct error type
+            return Err(DialError::Aborted);
+        }
+
+        let (completer, res) = AsyncResult::new_split::<std::result::Result<(), DialError>>();
+
+        let dial: std::result::Result<(), DialError> = self
+            .invoke_swarm(move |swarm| {
+                if let Err(e) = swarm.dial(peer_id.clone()) {
+                    match e {
+                        DialError::NoAddresses => {
+                            // TODO: add a rendezvous server
+                            // dial with relay when no mDNS addresses are available
+                            let addr =
+                                peer_addr_with_relay(peer_id.clone(), get_default_relay_addr());
+                            log::info!("Dialing {} with relay address {}", peer_id, addr);
+                            swarm.dial(addr)?;
+                        }
+                        _ => return Err(e),
+                    }
+                };
+                swarm
+                    .behaviour()
+                    .dial_callback
+                    .lock()
+                    .insert(peer_id, completer);
+                Ok(())
+            })
+            .await
+            .map_err(|e| {
+                log::warn!("Failed to invoke swarm for dial: {:?}", e);
+                DialError::Aborted
+            })?;
+        dial?;
+        res.await.map_err(|_| DialError::Aborted)??;
+
+        self.handshake(peer_id)
+            .await
+            .map_err(|_| DialError::Aborted)?;
+        Ok(())
     }
 
     pub async fn invoke_swarm<F, R: Any + Send>(&self, f: F) -> Result<R>
@@ -118,10 +288,9 @@ impl SwarmControl {
         };
 
         // 2. listen on relay
-        self.invoke_swarm(|swarm| {
-            swarm.listen_on(relay_addr.with(libp2p::multiaddr::Protocol::P2pCircuit))
-        })
-        .await??;
+        self.invoke_swarm(|swarm| swarm.listen_on(relay_addr.with(Protocol::P2pCircuit)))
+            .await??;
+
         Ok(())
     }
 }
@@ -131,6 +300,7 @@ pub struct FungiSwarm;
 impl FungiSwarm {
     pub async fn start_swarm(
         keypair: Keypair,
+        state: State,
         apply: impl FnOnce(&mut TSwarm),
     ) -> Result<(SwarmControl, JoinHandle<()>)> {
         let mdns =
@@ -145,7 +315,9 @@ impl FungiSwarm {
             )?
             .with_quic()
             .with_relay_client(noise::Config::new, yamux::Config::default)?
-            .with_behaviour(|keypair, relay| FungiBehaviours::new(keypair, relay, mdns))?
+            .with_behaviour(|keypair, relay| {
+                FungiBehaviours::new(keypair, relay, mdns, state.clone())
+            })?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
 
@@ -159,11 +331,12 @@ impl FungiSwarm {
         let task_handle = Self::spawn_swarm(swarm, swarm_caller_rx);
 
         Ok((
-            SwarmControl {
-                local_peer_id: Arc::new(local_peer_id),
+            SwarmControl::new(
+                Arc::new(local_peer_id),
                 swarm_caller_tx,
                 stream_control,
-            },
+                state,
+            ),
             task_handle,
         ))
     }
@@ -173,7 +346,6 @@ impl FungiSwarm {
         swarm_caller_rx: UnboundedReceiver<SwarmAsyncCall>,
     ) -> JoinHandle<()> {
         let swarm_task = tokio::spawn(swarm_loop(swarm, swarm_caller_rx));
-
         async fn swarm_loop(
             mut swarm: TSwarm,
             mut swarm_caller_rx: UnboundedReceiver<SwarmAsyncCall>,
@@ -181,13 +353,40 @@ impl FungiSwarm {
             loop {
                 tokio::select! {
                     swarm_events = swarm.select_next_some() => {
-                        log::debug!("Handle swarm event {:?}", swarm_events);
                         match swarm_events {
                             SwarmEvent::NewListenAddr { address, .. } => {
-                                let addr = address.with_p2p(*swarm.local_peer_id()).unwrap();
-                                println!("Listening on {addr:?}")
+                                println!("Listening on {address:?}");
                             },
-                            SwarmEvent::Behaviour(event) => log::info!("{event:?}"),
+                            SwarmEvent::NewExternalAddrCandidate { address, .. } => {
+                                log::info!("New external address candidate: {address:?}");
+                            },
+                            SwarmEvent::ConnectionEstablished { peer_id, endpoint,.. } => {
+                                log::info!("Connection established with {peer_id:?} at {endpoint:?}");
+                                // check dial callback
+                                if let Some(completer) = swarm.behaviour().dial_callback.lock().remove(&peer_id) {
+                                    completer.complete(Ok(()));
+                                }
+                                // add peer to connected peers
+                                swarm.behaviour().connected_peers.lock().insert(peer_id,
+                                    ConnectedPeer::with_multiaddr(
+                                        endpoint.get_remote_address().clone()
+                                    ));
+                            },
+                            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                                log::info!("Outgoing connection error with {peer_id:?}: {error:?}");
+                                // check dial callback
+                                let Some(peer_id) = peer_id else {
+                                    continue;
+                                };
+                                if let Some(completer) = swarm.behaviour().dial_callback.lock().remove(&peer_id) {
+                                    completer.complete(Err(error));
+                                }
+                            },
+                            SwarmEvent::ConnectionClosed { peer_id, cause, .. } => {
+                                log::info!("Connection closed with {peer_id:?}: {:?}", cause);
+                                // update connected peers
+                                swarm.behaviour().connected_peers.lock().remove(&peer_id);
+                            },
                             _ => {}
                         }
                     },
@@ -206,4 +405,16 @@ impl FungiSwarm {
 
         swarm_task
     }
+}
+
+pub fn get_default_relay_addr() -> Multiaddr {
+    "/ip4/160.16.206.21/tcp/30001/p2p/16Uiu2HAmGXFS6aYsKKYRkEDo1tNigZKN8TAYrsfSnEdC5sZLNkiE"
+        .parse()
+        .unwrap()
+}
+
+pub fn peer_addr_with_relay(peer_id: PeerId, relay: Multiaddr) -> Multiaddr {
+    relay
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(peer_id))
 }

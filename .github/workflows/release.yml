@@ -3,7 +3,7 @@ name: "Release"
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: ["master"]
     tags:
       - "v*"
 
@@ -18,40 +18,136 @@ jobs:
       matrix:
         include:
           - rust-target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-22.04
+            flutter-platform: linux
           - rust-target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-22.04
             cross: true
-          - rust-target: x86_64-apple-darwin
+          - rust-target: universal-apple-darwin
             os: macos-latest
-          - rust-target: aarch64-apple-darwin
-            os: macos-latest
+            flutter-platform: macos
           - rust-target: x86_64-pc-windows-gnu
             os: windows-latest
+            flutter-platform: windows
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+
       - name: Install Rust
-        run: rustup update stable --no-self-update && rustup default stable && rustup target add ${{ matrix.rust-target }}
+        run: |
+          rustup update stable --no-self-update && rustup default stable
+          if [ "${{ matrix.rust-target }}" = "universal-apple-darwin" ]; then
+            rustup target add x86_64-apple-darwin aarch64-apple-darwin
+          elif [ "${{ matrix.rust-target }}" != "universal-apple-darwin" ]; then
+            rustup target add ${{ matrix.rust-target }}
+          fi
 
-      - run: cargo build --release --target ${{ matrix.rust-target }}
-        if: ${{ ! matrix.cross }}
-      - run: cargo install cross
-        if: ${{ matrix.cross }}
-      - run: cross build --release --target ${{ matrix.rust-target }}
-        if: ${{ matrix.cross }}
+      - name: Build Rust CLI (macOS Universal)
+        if: matrix.rust-target == 'universal-apple-darwin'
+        run: |
+          cargo build --release --target x86_64-apple-darwin
+          cargo build --release --target aarch64-apple-darwin
+          lipo -create -output target/fungi target/x86_64-apple-darwin/release/fungi target/aarch64-apple-darwin/release/fungi
+          mkdir -p target/universal-apple-darwin/release
+          mv target/fungi target/universal-apple-darwin/release/
 
-      - name: Archive .exe
-        if: matrix.os == 'windows-latest'
-        run: tar -czf fungi-${{ matrix.rust-target }}.tar.gz -C target/${{ matrix.rust-target }}/release fungi.exe
+      - name: Build Rust CLI (Other platforms)
+        run: cargo build --release --target ${{ matrix.rust-target }}
+        if: ${{ ! matrix.cross && matrix.rust-target != 'universal-apple-darwin' }}
       
-      - name: Archive
+      - name: Install cross for ARM64
+        run: cargo install cross
+        if: ${{ matrix.cross }}
+      
+      - name: Build Rust CLI (ARM64 cross compile)
+        run: cross build --release --target ${{ matrix.rust-target }}
+        if: ${{ matrix.cross }}
+
+      - name: Archive Rust CLI (.exe)
+        if: matrix.os == 'windows-latest'
+        run: |
+          ls -la target/${{ matrix.rust-target }}/release/
+          tar -czf fungi-cli-${{ matrix.rust-target }}.tar.gz -C target/${{ matrix.rust-target }}/release fungi.exe
+      
+      - name: Archive Rust CLI
         if: matrix.os != 'windows-latest'
-        run: tar -czf fungi-${{ matrix.rust-target }}.tar.gz -C target/${{ matrix.rust-target }}/release fungi
+        run: |
+          ls -la target/${{ matrix.rust-target }}/release/
+          tar -czf fungi-cli-${{ matrix.rust-target }}.tar.gz -C target/${{ matrix.rust-target }}/release fungi
+
+      - name: Flutter dependencies
+        if: matrix.flutter-platform
+        run: flutter pub get
+        working-directory: ./flutter_app
+
+      - name: Build Flutter Linux
+        if: matrix.flutter-platform == 'linux' && !matrix.cross
+        working-directory: ./flutter_app
+        run: |
+          flutter config --enable-linux-desktop
+          flutter build linux --release
+          tar -czf ../fungi-flutter-linux.tar.gz -C build/linux/x64/release/bundle .
+
+      - name: Build Flutter macOS
+        if: matrix.flutter-platform == 'macos'
+        working-directory: ./flutter_app
+        run: |
+          flutter config --enable-macos-desktop
+          flutter build macos --release
+          tar -czf ../fungi-flutter-macos.tar.gz -C build/macos/Build/Products/Release fungi.app
+
+      - name: Build Flutter Windows
+        if: matrix.flutter-platform == 'windows'
+        working-directory: ./flutter_app
+        shell: bash
+        run: |
+          flutter config --enable-windows-desktop
+          flutter build windows --release
+          cd build/windows/runner/Release
+          tar -czf ../../../../../fungi-flutter-windows.tar.gz .
+
+
+      # only create nightly release when manually triggered
+      - name: Create or update nightly release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete nightly --yes || true
+          gh release create nightly --title "Nightly Build" --notes "Latest development build from commit ${{ github.sha }} ($(date))" --prerelease
 
       - name: GH publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload -R ${{ github.repository }} --clobber ${{ github.ref_name }} fungi-${{ matrix.rust-target }}.tar.gz
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RELEASE_TAG="nightly"
+          else
+            RELEASE_TAG="${{ github.ref_name }}"
+          fi
+          
+          gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-cli-${{ matrix.rust-target }}.tar.gz
+          
+          if [ -f fungi-flutter-linux.tar.gz ]; then
+            gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-flutter-linux.tar.gz
+          fi
+          if [ -f fungi-flutter-macos.tar.gz ]; then
+            gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-flutter-macos.tar.gz
+          fi
+          if [ -f fungi-flutter-windows.tar.gz ]; then
+            gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-flutter-windows.tar.gz
+          fi

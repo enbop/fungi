@@ -39,15 +39,16 @@ pub struct FungiDaemonRpcServer {
 
 impl FungiDaemonRpcServer {
     pub fn start(args: DaemonArgs, swarm_control: SwarmControl) -> io::Result<JoinHandle<()>> {
-        let ipc_listener = ipc::create_ipc_listener(&args.daemon_rpc_path().to_string_lossy())?;
-        let task_handle = tokio::spawn(Self::listen_from_ipc(
-            Self {
-                swarm_control,
-                accept_streams: Default::default(),
-            },
-            ipc_listener,
-        ));
-        Ok(task_handle)
+        // TODO release the sock address if it already exists
+        // let ipc_listener = ipc::create_ipc_listener(&args.daemon_rpc_path().to_string_lossy())?;
+        // let task_handle = tokio::spawn(Self::listen_from_ipc(
+        //     Self {
+        //         swarm_control,
+        //         accept_streams: Default::default(),
+        //     },
+        //     ipc_listener,
+        // ));
+        Ok(tokio::spawn(async {}))
     }
 }
 
@@ -71,7 +72,7 @@ impl FungiDaemonRpc for FungiDaemonRpcServer {
 
         let mut incoming_streams = self
             .swarm_control
-            .stream_control
+            .stream_control_mut()
             .accept(protocol.clone())
             .map_err(|e| e.to_string())?;
 

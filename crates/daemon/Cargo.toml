@@ -6,9 +6,7 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["tcp-tunneling"]
-tcp-tunneling = []
-cli = ["clap"]
+
 
 [dependencies]
 fungi-config = { path = "../config" }
@@ -28,15 +26,18 @@ libp2p-stream = { workspace = true }
 tokio-util = { version = "0.7", features = ["compat"] }
 anyhow = { workspace = true }
 tarpc = { workspace = true }
-fungi-fs = { path = "../fs" }
+fungi-fs = { path = "../fs", features = ["libunftp"] }
 thiserror = { workspace = true }
 async-trait = "0.1"
 libunftp = "0.21"
 dav-server = { version = "0.8", default-features = false }
 hyper = { version = "1.1.0", features = ["http1", "server"] }
 hyper-util = { version = "0.1.2", features = ["tokio"] }
+clap = { version = "4", features = ["derive"] }
+parking_lot = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
+tempfile = "3.20.0"
+env_logger = "0.11"
 
-[dependencies.clap]
-version = "4"
-features = ["derive"]
-optional = true
+[dev-dependencies]
+toml = "0.8"

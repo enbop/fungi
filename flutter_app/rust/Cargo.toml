@@ -1,0 +1,29 @@
+[package]
+name = "rust_lib_fungi_app"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+flutter_rust_bridge = "=2.10.0"
+fungi-daemon = { path = "../../crates/daemon" }
+fungi-config = { path = "../../crates/config" }
+anyhow = { workspace = true }
+once_cell = { workspace = true }
+log = { workspace = true }
+env_logger = "0.11"
+libp2p-identity = { version = "0.2", features = ["secp256k1"] }
+parking_lot = "0.12"
+
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+opt-level = "z"

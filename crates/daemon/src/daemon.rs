@@ -1,71 +1,106 @@
+use std::{net::IpAddr, sync::Arc, time::Duration};
+
 use crate::{
     DaemonArgs,
-    controls::{FileTransferClientControl, FileTransferServiceControl},
-    listeners::{FRALocalListener, FRAPeerListener, FungiDaemonRpcServer},
+    controls::{FileTransferClientsControl, FileTransferServiceControl, TcpTunnelingControl},
+    listeners::FungiDaemonRpcServer,
 };
 use anyhow::Result;
 use fungi_config::{
     FungiConfig, FungiDir, file_transfer::FileTransferClient as FTCConfig,
     file_transfer::FileTransferService as FTSConfig,
 };
-use fungi_swarm::{FungiSwarm, SwarmControl, TSwarm};
+use fungi_swarm::{FungiSwarm, State, SwarmControl, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
-use std::path::PathBuf;
-use tokio::{sync::OnceCell, task::JoinHandle};
-
-static FUNGI_BIN_PATH: OnceCell<PathBuf> = OnceCell::const_new();
+use libp2p::identity::Keypair;
+use parking_lot::Mutex;
+use tokio::task::JoinHandle;
 
 struct TaskHandles {
     swarm_task: JoinHandle<()>,
-    fra_local_listener_task: JoinHandle<()>,
-    fra_remote_listener_task: JoinHandle<()>,
-    daemon_rpc_task: JoinHandle<()>,
-    proxy_ftp_task: Option<JoinHandle<()>>,
-    proxy_webdav_task: Option<JoinHandle<()>>,
+    daemon_rpc_task: Arc<Mutex<Option<JoinHandle<()>>>>,
+    proxy_ftp_task: Arc<Mutex<Option<JoinHandle<()>>>>,
+    proxy_webdav_task: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 pub struct FungiDaemon {
-    config: FungiConfig,
+    config: Arc<Mutex<FungiConfig>>,
     args: DaemonArgs,
 
-    pub swarm_control: SwarmControl,
-    pub fts_control: FileTransferServiceControl,
+    swarm_control: SwarmControl,
+    fts_control: FileTransferServiceControl,
+    ftc_control: FileTransferClientsControl,
+    tcp_tunneling_control: TcpTunnelingControl,
 
     task_handles: TaskHandles,
 }
 
 impl FungiDaemon {
+    pub fn config(&self) -> Arc<Mutex<FungiConfig>> {
+        self.config.clone()
+    }
+
+    pub fn swarm_control(&self) -> &SwarmControl {
+        &self.swarm_control
+    }
+
+    pub fn fts_control(&self) -> &FileTransferServiceControl {
+        &self.fts_control
+    }
+
+    pub fn ftc_control(&self) -> &FileTransferClientsControl {
+        &self.ftc_control
+    }
+
+    pub fn tcp_tunneling_control(&self) -> &TcpTunnelingControl {
+        &self.tcp_tunneling_control
+    }
+
     pub async fn start(args: DaemonArgs) -> Result<Self> {
         let fungi_dir = args.fungi_dir();
         println!("Fungi directory: {:?}", fungi_dir);
 
-        FungiDaemon::init_fungi_bin_path(&args);
+        let config = FungiConfig::apply_from_dir(&fungi_dir)?;
+        let keypair = get_keypair_from_dir(&fungi_dir)?;
 
-        let mut config = FungiConfig::apply_from_dir(&fungi_dir).unwrap();
-        if let Some(allow_all_peers) = args.debug_allow_all_peers {
-            config.set_fra_allow_all_peers(allow_all_peers);
-        }
+        Self::start_with(args, config, keypair).await
+    }
 
-        let keypair = get_keypair_from_dir(&fungi_dir).unwrap();
-        let (swarm_control, swarm_task) = FungiSwarm::start_swarm(keypair, |swarm| {
-            apply_listen(swarm, &config);
-            #[cfg(feature = "tcp-tunneling")]
-            apply_tcp_tunneling(swarm, &config);
-        })
-        .await?;
+    pub async fn start_with(
+        args: DaemonArgs,
+        config: FungiConfig,
+        keypair: Keypair,
+    ) -> Result<Self> {
+        let state = State::new(
+            config
+                .network
+                .incoming_allowed_peers
+                .clone()
+                .into_iter()
+                .collect(),
+        );
 
-        let stream_control = swarm_control.stream_control.clone();
+        let (swarm_control, swarm_task) =
+            FungiSwarm::start_swarm(keypair, state.clone(), |swarm| {
+                apply_listen(swarm, &config);
+            })
+            .await?;
 
-        let fra_local_listener_task =
-            FRALocalListener::start(args.clone(), stream_control.clone())?;
-        let fra_remote_listener_task =
-            FRAPeerListener::start(args.clone(), config.clone(), stream_control.clone())?;
+        let stream_control = swarm_control.stream_control().clone();
 
-        let fts_control = FileTransferServiceControl::new(stream_control.clone());
-        Self::init_fts(config.file_transfer.server.clone(), &fts_control);
+        let fts_control = FileTransferServiceControl::new(
+            stream_control.clone(),
+            state.incoming_allowed_peers().clone(),
+        );
+        Self::init_fts(config.file_transfer.server.clone(), &fts_control).await;
 
-        let ftc_control = FileTransferClientControl::new(swarm_control.clone());
-        Self::init_ftc(config.file_transfer.client.clone(), &ftc_control);
+        let ftc_control = FileTransferClientsControl::new(swarm_control.clone());
+        Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
+
+        let tcp_tunneling_control = TcpTunnelingControl::new(swarm_control.clone());
+        tcp_tunneling_control
+            .init_from_config(&config.tcp_tunneling)
+            .await;
 
         let proxy_ftp_task = if config.file_transfer.proxy_ftp.enabled {
             Some(tokio::spawn(crate::controls::start_ftp_proxy_service(
@@ -91,17 +126,17 @@ impl FungiDaemon {
 
         let task_handles = TaskHandles {
             swarm_task,
-            fra_local_listener_task,
-            fra_remote_listener_task,
-            daemon_rpc_task,
-            proxy_ftp_task,
-            proxy_webdav_task,
+            daemon_rpc_task: Arc::new(Mutex::new(Some(daemon_rpc_task))),
+            proxy_ftp_task: Arc::new(Mutex::new(proxy_ftp_task)),
+            proxy_webdav_task: Arc::new(Mutex::new(proxy_webdav_task)),
         };
         Ok(Self {
-            config,
+            config: Arc::new(Mutex::new(config)),
             args,
             swarm_control,
             fts_control,
+            ftc_control,
+            tcp_tunneling_control,
             task_handles,
         })
     }
@@ -111,117 +146,205 @@ impl FungiDaemon {
             _ = self.task_handles.swarm_task => {
                 println!("Swarm task is closed");
             },
-            _ = self.task_handles.fra_local_listener_task => {
-                println!("FRA local listener task is closed");
-            },
-            _ = self.task_handles.fra_remote_listener_task => {
-                println!("FRA remote listener task is closed");
-            },
-            _ = self.task_handles.daemon_rpc_task => {
-                println!("Daemon RPC task is closed");
-            },
+            // _ = self.task_handles.daemon_rpc_task => {
+            //     println!("Daemon RPC task is closed");
+            // },
         }
     }
 
-    #[allow(unused_variables)]
-    fn init_fungi_bin_path(args: &DaemonArgs) {
-        let fungi_bin_path = args.fungi_bin_path.clone().map(PathBuf::from);
-        if let Some(fungi_bin_path) = fungi_bin_path {
-            FUNGI_BIN_PATH.set(fungi_bin_path).unwrap();
-            return;
-        }
-
-        #[cfg(feature = "daemon")]
-        let all_in_one_bin = true;
-        #[cfg(not(feature = "daemon"))]
-        let all_in_one_bin = false;
-
-        let self_bin = std::env::current_exe().unwrap();
-        let fungi_bin_path = if all_in_one_bin {
-            self_bin
-        } else {
-            self_bin.parent().unwrap().join("fungi")
-        };
-        FUNGI_BIN_PATH.set(fungi_bin_path).unwrap();
-    }
-
-    pub fn get_fungi_bin_path_unchecked() -> PathBuf {
-        FUNGI_BIN_PATH.get().unwrap().clone()
-    }
-
-    fn init_fts(config: FTSConfig, fts_control: &FileTransferServiceControl) {
+    async fn init_fts(config: FTSConfig, fts_control: &FileTransferServiceControl) {
         if config.enabled {
-            if let Err(e) = fts_control.add_service(config) {
+            if let Err(e) = fts_control.add_service(config).await {
                 log::warn!("Failed to add file transfer service: {}", e);
             }
         }
     }
 
-    fn init_ftc(clients: Vec<FTCConfig>, ftc_control: &FileTransferClientControl) {
-        for client in clients {
-            ftc_control.add_client(client);
+    fn init_ftc(clients: Vec<FTCConfig>, ftc_control: FileTransferClientsControl) {
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            for mut client in clients {
+                if !client.enabled {
+                    continue;
+                }
+                if client.name.is_none() {
+                    if let Ok(remote_host_name) = ftc_control
+                        .connect_and_get_host_name(client.peer_id.clone())
+                        .await
+                    {
+                        client.name = remote_host_name
+                    }
+                }
+                ftc_control.add_client(client);
+            }
+        });
+    }
+
+    pub(crate) fn update_ftp_proxy_task(
+        &self,
+        enabled: bool,
+        host: IpAddr,
+        port: u16,
+    ) -> Result<()> {
+        if port == 0 {
+            return Err(anyhow::anyhow!("Port must be greater than 0"));
         }
+        if let Some(old_task) = self.task_handles.proxy_ftp_task.lock().take() {
+            if !old_task.is_finished() {
+                old_task.abort();
+            }
+        }
+        if enabled {
+            let task = tokio::spawn(crate::controls::start_ftp_proxy_service(
+                host,
+                port,
+                self.ftc_control.clone(),
+            ));
+            self.task_handles.proxy_ftp_task.lock().replace(task);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn update_webdav_proxy_task(
+        &self,
+        enabled: bool,
+        host: IpAddr,
+        port: u16,
+    ) -> Result<()> {
+        if port == 0 {
+            return Err(anyhow::anyhow!("Port must be greater than 0"));
+        }
+        if let Some(old_task) = self.task_handles.proxy_webdav_task.lock().take() {
+            if !old_task.is_finished() {
+                old_task.abort();
+            }
+        }
+        if enabled {
+            let task = tokio::spawn(crate::controls::start_webdav_proxy_service(
+                host,
+                port,
+                self.ftc_control.clone(),
+            ));
+            self.task_handles.proxy_webdav_task.lock().replace(task);
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn add_tcp_forwarding_rule_internal(
+        &self,
+        rule: fungi_config::tcp_tunneling::ForwardingRule,
+    ) -> Result<String> {
+        let rule_id = self
+            .tcp_tunneling_control
+            .add_forwarding_rule(rule.clone())
+            .await?;
+
+        // Update config file
+        self.update_config_with_forwarding_rule(rule, true)?;
+
+        Ok(rule_id)
+    }
+
+    pub(crate) fn remove_tcp_forwarding_rule_internal(&self, rule_id: &str) -> Result<()> {
+        // Get the rule before removing it
+        let rules = self.tcp_tunneling_control.get_forwarding_rules();
+        let rule = rules
+            .iter()
+            .find(|(id, _)| id == rule_id)
+            .map(|(_, rule)| rule.clone())
+            .ok_or_else(|| anyhow::anyhow!("Forwarding rule not found: {}", rule_id))?;
+
+        self.tcp_tunneling_control.remove_forwarding_rule(rule_id)?;
+
+        // Update config file
+        self.update_config_with_forwarding_rule(rule, false)?;
+
+        Ok(())
+    }
+
+    pub(crate) async fn add_tcp_listening_rule_internal(
+        &self,
+        rule: fungi_config::tcp_tunneling::ListeningRule,
+    ) -> Result<String> {
+        let rule_id = self
+            .tcp_tunneling_control
+            .add_listening_rule(rule.clone())
+            .await?;
+
+        // Update config file
+        self.update_config_with_listening_rule(rule, true)?;
+
+        Ok(rule_id)
+    }
+
+    pub(crate) fn remove_tcp_listening_rule_internal(&self, rule_id: &str) -> Result<()> {
+        // Get the rule before removing it
+        let rules = self.tcp_tunneling_control.get_listening_rules();
+        let rule = rules
+            .iter()
+            .find(|(id, _)| id == rule_id)
+            .map(|(_, rule)| rule.clone())
+            .ok_or_else(|| anyhow::anyhow!("Listening rule not found: {}", rule_id))?;
+
+        self.tcp_tunneling_control.remove_listening_rule(rule_id)?;
+
+        // Update config file
+        self.update_config_with_listening_rule(rule, false)?;
+
+        Ok(())
+    }
+
+    fn update_config_with_forwarding_rule(
+        &self,
+        rule: fungi_config::tcp_tunneling::ForwardingRule,
+        add: bool,
+    ) -> Result<()> {
+        let current_config = self.config.lock().clone();
+        let updated_config = if add {
+            current_config.add_tcp_forwarding_rule(rule)?
+        } else {
+            current_config.remove_tcp_forwarding_rule(&rule)?
+        };
+
+        // Update the cached config
+        *self.config.lock() = updated_config;
+        Ok(())
+    }
+
+    fn update_config_with_listening_rule(
+        &self,
+        rule: fungi_config::tcp_tunneling::ListeningRule,
+        add: bool,
+    ) -> Result<()> {
+        let current_config = self.config.lock().clone();
+        let updated_config = if add {
+            current_config.add_tcp_listening_rule(rule)?
+        } else {
+            current_config.remove_tcp_listening_rule(&rule)?
+        };
+
+        // Update the cached config
+        *self.config.lock() = updated_config;
+        Ok(())
     }
 }
 
 fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) {
     swarm
         .listen_on(
-            format!("/ip4/0.0.0.0/tcp/{}", config.libp2p.listen_tcp_port)
+            format!("/ip4/0.0.0.0/tcp/{}", config.network.listen_tcp_port)
                 .parse()
                 .expect("address should be valid"),
         )
         .unwrap();
     swarm
         .listen_on(
-            format!("/ip4/0.0.0.0/udp/{}/quic-v1", config.libp2p.listen_udp_port)
-                .parse()
-                .expect("address should be valid"),
+            format!(
+                "/ip4/0.0.0.0/udp/{}/quic-v1",
+                config.network.listen_udp_port
+            )
+            .parse()
+            .expect("address should be valid"),
         )
         .unwrap();
-}
-
-#[cfg(feature = "tcp-tunneling")]
-fn apply_tcp_tunneling(swarm: &mut TSwarm, config: &FungiConfig) {
-    if config.tcp_tunneling.forwarding.enabled {
-        for rule in config.tcp_tunneling.forwarding.rules.iter() {
-            let Ok(target_peer) = rule.remote.peer_id.parse() else {
-                continue;
-            };
-
-            swarm
-                .behaviour_mut()
-                .address_book
-                .set_addresses(&target_peer, rule.remote.multiaddrs.clone());
-
-            let target_protocol =
-                libp2p::StreamProtocol::try_from_owned(rule.remote.protocol.clone()).unwrap(); // TODO unwrap
-            let stream_control = swarm.behaviour().stream.new_control();
-            println!(
-                "Forwarding local port {} to {}/{}",
-                rule.local_socket.port, target_peer, target_protocol
-            );
-            tokio::spawn(fungi_util::tcp_tunneling::forward_port_to_peer(
-                stream_control,
-                (&rule.local_socket).try_into().unwrap(), // TOOD unwrap
-                target_peer,
-                target_protocol,
-            ));
-        }
-    }
-
-    if config.tcp_tunneling.listening.enabled {
-        for rule in config.tcp_tunneling.listening.rules.iter() {
-            let local_addr = (&rule.local_socket).try_into().unwrap(); // TODO unwrap
-            let listening_protocol =
-                libp2p::StreamProtocol::try_from_owned(rule.listening_protocol.clone()).unwrap(); // TODO unwrap
-            let stream_control = swarm.behaviour().stream.new_control();
-            println!("Listening on {} for {}", local_addr, listening_protocol);
-            tokio::spawn(fungi_util::tcp_tunneling::listen_p2p_to_port(
-                stream_control,
-                listening_protocol,
-                local_addr,
-            ));
-        }
-    }
 }
