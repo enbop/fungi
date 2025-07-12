@@ -115,6 +115,7 @@ jobs:
         run: |
           flutter config --enable-linux-desktop
           flutter build linux --release
+          ls -la build/linux/x64/release/bundle/
           tar -czf ../fungi-app-${{ matrix.platform-name }}.tar.gz -C build/linux/x64/release/bundle .
 
       - name: Build Flutter macOS
@@ -123,6 +124,7 @@ jobs:
         run: |
           flutter config --enable-macos-desktop
           flutter build macos --release
+          ls -la build/macos/Build/Products/Release/
           tar -czf ../fungi-app-${{ matrix.platform-name }}.tar.gz -C build/macos/Build/Products/Release "Fungi App.app"
 
       - name: Build Flutter Windows
@@ -132,19 +134,17 @@ jobs:
         run: |
           flutter config --enable-windows-desktop
           flutter build windows --release
+          ls -la build/windows/x64/runner/Release/
           cd build/windows/x64/runner/Release
           tar -czf ../../../../../../fungi-app-${{ matrix.platform-name }}.tar.gz .
 
-
-      # only create nightly release when manually triggered
-      - name: Create or update nightly release
-        if: github.event_name == 'workflow_dispatch'
+      - name: Update nightly release
+        if: github.event_name == 'workflow_dispatch' && matrix.platform-name == 'linux-x86_64'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release delete nightly --yes || true
-          gh release create nightly --title "Nightly Build" --notes "Latest development build from commit ${{ github.sha }} ($(date))" --prerelease
+          gh release edit nightly --title "Nightly Build" --notes "Latest development build from commit ${{ github.sha }} ($(date))"
 
       - name: GH publish
         shell: bash
