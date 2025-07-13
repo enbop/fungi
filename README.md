@@ -7,121 +7,68 @@
   <br>
 </h1>
 
-<p align="center" style="font-size: 1.2rem;">Effortless WASM deployment anywhere</p>
-<p align="center" style="font-size: 1rem;">built on libp2p and WASI</p>
+<p align="center" style="font-size: 1.2rem;">Connect Your Devices Securely</p>
+<p align="center" style="font-size: 1rem;">Easy file transfer, port forwarding, and more</p>
+
+<div align="center">
+  <img src="assets/fungi-home-file-transfer.png" alt="File Transfer Interface" width="250" style="margin: 10px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+  <img src="assets/fungi-data-tunnel.png" alt="Data Tunnel Interface" width="250" style="margin: 10px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+</div>
 
 <hr/>
 
 ## What is Fungi?
 
-Fungi is a modular project for distributed computing. It combines WASI (wasmtime) and libp2p. With Fungi, you can seamlessly run WASI applications on both local and remote devices. It allows you to securely connect to remote devices and perform tasks safely.
+Fungi lets you securely connect and manage multiple devices through P2P connections. No server can see your data - everything is encrypted end-to-end between your devices.
 
-*Fungi is still in an experimental stage and welcomes contributions of any kind.*
+Built with Rust (using [rust-libp2p](https://github.com/libp2p/rust-libp2p) for p2p) and Flutter for cross-platform UI.
 
-## Quickstart
+### What You Can Do
 
-Fungi consists of two components:
+📁 **File Transfer**
+- Mount remote folders as local drives (FTP/WebDAV)
 
-- **fungi**: A WASI runtime for both local and remote devices.
-- **fungi-daemon**: A libp2p service and a remote access service.
+🔗 **Port Forwarding** 
 
-By default, all functionalities are bundled into a single binary -- `fungi`
+🔮 **Remote Computing** *(Coming Soon)*
 
-#### Download fungi from Github releases:
-[Github releases](https://github.com/enbop/fungi/releases)
+## How It Works
 
-#### Build fungi from source:
-```
-cargo build --release
+**Local Network**: Devices automatically discover each other via mDNS - no setup needed.
 
-# Output binary file: target/release/fungi
-```
+**Internet**: Attempts NAT hole punching for direct P2P connections. If successful, data flows directly between devices; otherwise uses relay server. All traffic is end-to-end encrypted - relay server only sees encrypted data packets.
 
-### Run with Local Node
-1. Run fungi:
-```
-$ fungi
-```
+## Quick Start
 
-```
-(output:)
+### Download
+[Get the latest release](https://github.com/enbop/fungi/releases):
 
-Initializing Fungi...
-Generating key pair...
-Key pair generated Secp256k1:PublicKey { ... }
-Key pair saved at $HOME/.fungi/.keys/keypair
-Fungi initialized at $HOME/.fungi
+Available in two versions:
+- **fungi-cli**: Command-line interface for terminal users
+- **fungi-app**: Graphical user interface with Flutter UI
 
-Starting Fungi...
- # 
-```
+## Build from source
 
-2. Add some WASM applications to this node.
-
-By default, the fungi WASI runtime will only search for and run WASM applications in the `$HOME/.fungi/root/bin` directory.
-
-(Optional) You can quickly obtain a WASM application by building the Hello World example provided in this project:
-```
-rustup target add wasm32-wasi
-cargo build -p hello-fungi --release --target=wasm32-wasi
-
-# Output .wasm file: target/wasm32-wasi/release/hello-fungi.wasm
-```
-
-Copy the WASM application to the directory:
-```
-cp target/wasm32-wasi/release/hello-fungi.wasm $HOME/.fungi/root/bin/
-```
-
-3. Return to the fungi cli, and run wasm:
-
-```
-...
-Starting Fungi...
-# hello-fungi.wasm
-Hello, Fungi!
-```
-
-### Run with Remote Node
-
-Fungi enable mDNS by default, which will discover and register LAN device address automatically. You can connect to a LAN node using only the `Peer ID`.
-
-1. On Device A within the same LAN, run the fungi daemon with a **UNSAFE** debug flag to allow all inbound peers. **For demonstration only**.
-
-```
-fungi daemon --debug-allow-all-peers true
-
-# Copy the `Peer ID` from the output
-```
-
-2. On Device B within the same LAN, run the fungi daemon:
-
-```
-fungi daemon
-```
-
-1. On Device B, open another shell and connect to Device A:
-```
-fungi -p ${PEER_ID_FROM_DEVICE_A}
-```
+TODO
 
 ## Platform Support
 
 | Platform | Status |
 |----------|--------|
-| macOS    | ✅     |
-| Windows  | ✅     |
-| Linux    | ✅     |
-| Android  | ✅     |
-| iOS      | 💤     |
-| Web      | 💤     |
+| macOS    | ✅ Ready |
+| Windows  | ✅ Ready |
+| Linux    | ✅ Ready |
+| Android  | 🚧 In progress |
+| iOS      | 🚧 In progress |
 
-*only support 64-bit, see: [Cranelift supports](https://docs.wasmtime.dev/stability-platform-support.html#compiler-support)
+## Contributing
 
-## Roadmap
-
-TODO
+We welcome all contributions:
+- 🐛 Bug reports and fixes
+- ✨ New features
+- 📖 Documentation
+- 🎨 UI improvements
 
 ## License
 
-Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+Apache License 2.0 - see [LICENSE](LICENSE) for details.
