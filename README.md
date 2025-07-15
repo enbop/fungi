@@ -7,8 +7,14 @@
   <br>
 </h1>
 
-<p align="center" style="font-size: 1.2rem;">Connect Your Devices Securely</p>
-<p align="center" style="font-size: 1rem;">Easy file transfer, port forwarding, and more</p>
+<p align="center" style="font-size: 1.2rem;">Turn Multiple Devices Into One Unified System</p>
+<p align="center" style="font-size: 1rem;">A distributed computing platform built for seamless device integration</p>
+<p align="center" style="font-size: 0.9rem; color: #666;">File Transfer • Port Forwarding • Remote Execution (Coming Soon)</p>
+
+<p align="center">
+  <a href="docs/README_zh.md">🇨🇳 简体中文</a> •
+  <a href="docs/README_ja.md">🇯🇵 日本語</a>
+</p>
 
 <div align="center">
   <img src="assets/fungi-home-file-transfer.png" alt="File Transfer Interface" width="250" style="margin: 10px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
