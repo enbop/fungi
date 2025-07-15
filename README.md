@@ -30,7 +30,7 @@ Built with Rust (using [rust-libp2p](https://github.com/libp2p/rust-libp2p) for 
 
 🔗 **Port Forwarding** 
 
-🔮 **Remote Computing** *(Coming Soon)*
+🔮 **Remote Execution** *(Coming Soon)*
 
 ## How It Works
 
@@ -38,18 +38,83 @@ Built with Rust (using [rust-libp2p](https://github.com/libp2p/rust-libp2p) for 
 
 **Internet**: Attempts NAT hole punching for direct P2P connections. If successful, data flows directly between devices; otherwise uses relay server. All traffic is end-to-end encrypted - relay server only sees encrypted data packets.
 
-## Quick Start
-
-### Download
+## Download
 [Get the latest release](https://github.com/enbop/fungi/releases):
 
 Available in two versions:
 - **fungi-cli**: Command-line interface for terminal users
 - **fungi-app**: Graphical user interface with Flutter UI
 
-## Build from source
+### Quick Start (fungi-app)
 
-TODO
+Let's say you have two devices: `Device A` and `Device B`, and you want `Device A` to access files on `Device B`.
+
+#### Step 1: Setup Device A (Client)
+1. Launch `Fungi App` on Device A
+2. Copy Device A's `PeerID` from the status center at the top and save it
+
+#### Step 2: Configure Device B (File Server)
+1. Launch `Fungi App` on Device B
+2. Navigate to **File Transfer > File Server > Incoming Allowed Peers**
+   *(You can also find this setting in `Data Tunnel` and `Settings`)*
+3. Add Device A's `PeerID` to Device B's `Incoming Allowed Peers` list
+   *(Device B will now allow access from Device A)*
+
+4. Set Device B's **Shared Directory** to the folder you want to share (e.g., `/tmp`)
+5. Ensure the **File Server State** is enabled
+6. Copy Device B's PeerID and save it
+
+#### Step 3: Connect from Device A
+1. On Device A, go to **File Transfer > Remote File Access > Add Remote Device**
+2. Add Device B's PeerID and assign an alias for Device B
+
+#### Step 4: Access Files
+Now you can use your favorite FTP or WebDAV client to access the Remote File Access address. 
+*(Both macOS and Windows built-in file managers can mount WebDAV as a readable/writable drive)*
+
+> **Note**: More convenient mDNS local device discovery features are coming soon.
+
+## Build from Source
+
+All platforms require Rust and Flutter to be installed.
+
+### Build fungi-cli
+
+Simply run:
+```bash
+cargo build --release --bin fungi
+```
+The binary will be located at:
+```
+./target/release/fungi
+```
+
+### Build fungi-app
+
+#### Ubuntu
+```
+sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+
+cd flutter_app
+flutter build linux --release
+```
+
+#### macOS
+```bash
+cd flutter_app
+flutter build macos --release
+```
+
+#### Windows
+
+Install aws-lc-rs [build dependencies](https://aws.github.io/aws-lc-rs/requirements/windows.html)
+
+Ensure you have at least: C/C++ Compiler, CMake, NASM
+
+```bash
+cargo build --release -p rust_lib_fungi_app
+flutter build windows --release
+```
 
 ## Platform Support
 
