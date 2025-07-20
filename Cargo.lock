@@ -1441,6 +1441,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "serde",
+ "thiserror 2.0.12",
  "tokio",
  "void",
 ]

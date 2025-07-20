@@ -20,10 +20,25 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use thiserror::Error;
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
 };
+
+#[derive(Error, Debug)]
+pub enum ConnectError {
+    #[error("Dial failed: {0}")]
+    DialFailed(#[from] DialError),
+    #[error("Already dialing peer {peer_id}")]
+    AlreadyDialing { peer_id: PeerId },
+    #[error("Swarm invocation failed: {0}")]
+    SwarmInvocationFailed(anyhow::Error),
+    #[error("Handshake failed: {0}")]
+    HandshakeFailed(anyhow::Error),
+    #[error("Connection cancelled")]
+    Cancelled,
+}
 
 pub type TSwarm = Swarm<FungiBehaviours>;
 type SwarmResponse = Box<dyn Any + Send>;
@@ -149,13 +164,14 @@ impl SwarmControl {
         &self.state
     }
 
-    async fn handshake(&self, peer_id: PeerId) -> Result<()> {
+    // TODO impl handshake
+    async fn _handshake(&self, peer_id: PeerId) -> Result<()> {
         let mut stream = self
             .stream_control
             .clone()
             .open_stream(peer_id, FUNGI_PEER_HANDSHAKE_PROTOCOL)
             .await
-            .context(format!("Failed to open handshake stream to {}", peer_id))?;
+            .map_err(|e| ConnectError::HandshakeFailed(anyhow::anyhow!(e)))?;
         stream
             .write_all(&PeerHandshakePayload::new().to_bytes())
             .await?;
@@ -179,20 +195,19 @@ impl SwarmControl {
 
     // connect and handshake
     // TODO add a timeout
-    // TODO handle error
-    pub async fn connect(&self, peer_id: PeerId) -> std::result::Result<(), DialError> {
+    pub async fn connect(&self, peer_id: PeerId) -> Result<(), ConnectError> {
         if self.state.connected_peers.lock().contains_key(&peer_id) {
             return Ok(());
         }
 
         if self.state.dial_callback.lock().contains_key(&peer_id) {
-            // TODO correct error type
-            return Err(DialError::Aborted);
+            log::warn!("Already dialing {}", peer_id);
+            return Err(ConnectError::AlreadyDialing { peer_id });
         }
 
         let (completer, res) = AsyncResult::new_split::<std::result::Result<(), DialError>>();
 
-        let dial: std::result::Result<(), DialError> = self
+        let dial_result = self
             .invoke_swarm(move |swarm| {
                 if let Err(e) = swarm.dial(peer_id.clone()) {
                     match e {
@@ -214,17 +229,24 @@ impl SwarmControl {
                     .insert(peer_id, completer);
                 Ok(())
             })
-            .await
-            .map_err(|e| {
-                log::warn!("Failed to invoke swarm for dial: {:?}", e);
-                DialError::Aborted
-            })?;
-        dial?;
-        res.await.map_err(|_| DialError::Aborted)??;
+            .await;
 
-        self.handshake(peer_id)
-            .await
-            .map_err(|_| DialError::Aborted)?;
+        match dial_result {
+            Ok(dial_res) => dial_res?,
+            Err(e) => {
+                log::warn!("Failed to invoke swarm for dial: {:?}", e);
+                return Err(ConnectError::SwarmInvocationFailed(e));
+            }
+        }
+
+        // Wait for dial result
+        res.await.map_err(|_| ConnectError::Cancelled)??;
+
+        // TODO impl handshake
+        // self.handshake(peer_id)
+        //     .await
+        //     .map_err(ConnectError::HandshakeFailed)?;
+
         Ok(())
     }
 
