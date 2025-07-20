@@ -209,6 +209,11 @@ impl SwarmControl {
 
         let dial_result = self
             .invoke_swarm(move |swarm| {
+                if swarm.is_connected(&peer_id) {
+                    log::info!("Already connected to {}", peer_id);
+                    completer.complete(Ok(()));
+                    return Ok(());
+                }
                 if let Err(e) = swarm.dial(peer_id.clone()) {
                     match e {
                         DialError::NoAddresses => {
