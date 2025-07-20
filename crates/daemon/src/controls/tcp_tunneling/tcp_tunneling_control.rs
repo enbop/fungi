@@ -7,19 +7,22 @@ use fungi_util::protocols::FUNGI_TUNNEL_PROTOCOL;
 use libp2p::{PeerId, StreamProtocol};
 use parking_lot::Mutex;
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
 /// State for active forwarding rules
 #[derive(Debug)]
 struct ForwardingRuleState {
     rule: ForwardingRule,
-    task_handle: JoinHandle<()>,
+    task_handle: JoinHandle<Result<(), super::port_forward::PortForwardError>>,
+    cancellation_token: CancellationToken,
 }
 
 /// State for active listening rules  
 #[derive(Debug)]
 struct ListeningRuleState {
     rule: ListeningRule,
-    task_handle: JoinHandle<()>,
+    task_handle: JoinHandle<Result<(), super::port_listen::TcpTunnelingError>>,
+    cancellation_token: CancellationToken,
 }
 
 /// Control interface for TCP tunneling functionality
@@ -95,6 +98,9 @@ impl TcpTunnelingControl {
             target_protocol
         );
 
+        let cancellation_token = CancellationToken::new();
+        let cancellation_token_clone = cancellation_token.clone();
+
         let task_handle = tokio::spawn(async move {
             super::forward_port_to_peer(
                 swarm_control,
@@ -102,11 +108,16 @@ impl TcpTunnelingControl {
                 local_addr,
                 target_peer,
                 target_protocol,
+                cancellation_token_clone,
             )
-            .await;
+            .await
         });
 
-        let rule_state = ForwardingRuleState { rule, task_handle };
+        let rule_state = ForwardingRuleState { 
+            rule, 
+            task_handle,
+            cancellation_token,
+        };
 
         rules.insert(rule_id.clone(), rule_state);
         Ok(rule_id)
@@ -116,8 +127,9 @@ impl TcpTunnelingControl {
     pub fn remove_forwarding_rule(&self, rule_id: &str) -> Result<()> {
         let mut rules = self.forwarding_rules.lock();
         if let Some(rule_state) = rules.remove(rule_id) {
+            log::info!("Removing forwarding rule: {}", rule_id);
+            rule_state.cancellation_token.cancel();
             rule_state.task_handle.abort();
-            log::info!("Removed forwarding rule: {}", rule_id);
             Ok(())
         } else {
             bail!("Forwarding rule not found: {}", rule_id);
@@ -152,11 +164,24 @@ impl TcpTunnelingControl {
             listening_protocol
         );
 
+        let cancellation_token = CancellationToken::new();
+        let cancellation_token_clone = cancellation_token.clone();
+
+        // Accept incoming streams before spawning
+        let mut stream_control_clone = stream_control.clone();
+        let incomings = stream_control_clone
+            .accept(listening_protocol)
+            .map_err(|e| anyhow::anyhow!("Failed to accept incoming streams: {}", e))?;
+
         let task_handle = tokio::spawn(async move {
-            super::listen_p2p_to_port(stream_control, listening_protocol, local_addr).await;
+            super::listen_p2p_to_port(incomings, local_addr, cancellation_token_clone).await
         });
 
-        let rule_state = ListeningRuleState { rule, task_handle };
+        let rule_state = ListeningRuleState { 
+            rule, 
+            task_handle,
+            cancellation_token,
+        };
 
         rules.insert(rule_id.clone(), rule_state);
         Ok(rule_id)
@@ -166,8 +191,9 @@ impl TcpTunnelingControl {
     pub fn remove_listening_rule(&self, rule_id: &str) -> Result<()> {
         let mut rules = self.listening_rules.lock();
         if let Some(rule_state) = rules.remove(rule_id) {
+            log::info!("Removing listening rule: {}", rule_id);
+            rule_state.cancellation_token.cancel();
             rule_state.task_handle.abort();
-            log::info!("Removed listening rule: {}", rule_id);
             Ok(())
         } else {
             bail!("Listening rule not found: {}", rule_id);
@@ -194,16 +220,22 @@ impl TcpTunnelingControl {
 
     /// Stop all active rules
     pub fn stop_all(&self) {
-        let mut forwarding_rules = self.forwarding_rules.lock();
-        for (rule_id, rule_state) in forwarding_rules.drain() {
-            log::info!("Stopping forwarding rule: {}", rule_id);
-            rule_state.task_handle.abort();
+        {
+            let mut forwarding_rules = self.forwarding_rules.lock();
+            for (rule_id, rule_state) in forwarding_rules.drain() {
+                log::info!("Stopping forwarding rule: {}", rule_id);
+                rule_state.cancellation_token.cancel();
+                rule_state.task_handle.abort();
+            }
         }
-
-        let mut listening_rules = self.listening_rules.lock();
-        for (rule_id, rule_state) in listening_rules.drain() {
-            log::info!("Stopping listening rule: {}", rule_id);
-            rule_state.task_handle.abort();
+        
+        {
+            let mut listening_rules = self.listening_rules.lock();
+            for (rule_id, rule_state) in listening_rules.drain() {
+                log::info!("Stopping listening rule: {}", rule_id);
+                rule_state.cancellation_token.cancel();
+                rule_state.task_handle.abort();
+            }
         }
     }
 
