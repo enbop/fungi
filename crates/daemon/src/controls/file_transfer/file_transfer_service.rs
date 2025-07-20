@@ -8,9 +8,9 @@ use std::{
 use fungi_config::file_transfer::FileTransferService as FileTransferServiceConfig;
 use fungi_fs::{FileSystem, Result};
 use fungi_util::protocols::FUNGI_FILE_TRANSFER_PROTOCOL;
-use futures::{Future, StreamExt};
+use futures::StreamExt;
 use libp2p::PeerId;
-use libp2p_stream::Control;
+use libp2p_stream::{Control, IncomingStreams};
 use parking_lot::{Mutex, RwLock};
 use tarpc::{
     context::Context,
@@ -19,6 +19,7 @@ use tarpc::{
     tokio_serde::formats::Bincode,
 };
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tokio_util::{codec::LengthDelimitedCodec, compat::FuturesAsyncReadCompatExt as _};
 
 use super::FileTransferRpc as _;
@@ -105,43 +106,86 @@ impl FileTransferRpcService {
         })
     }
 
-    pub async fn listen_from_libp2p_stream(self, mut control: Control) {
-        let mut incoming_streams = control.accept(FUNGI_FILE_TRANSFER_PROTOCOL).unwrap();
-        log::info!(
-            "File Transfer Service listening on protocol: {}",
-            FUNGI_FILE_TRANSFER_PROTOCOL
-        );
+    pub async fn listen_from_libp2p_stream(
+        self,
+        mut incoming_streams: IncomingStreams,
+        cancellation_token: CancellationToken,
+    ) {
         let codec_builder = LengthDelimitedCodec::builder();
 
-        // TODO: cancel tasks gracefully
-        async fn spawn(fut: impl Future<Output = ()> + Send + 'static) {
-            tokio::spawn(fut);
-        }
+        // Store active connection tasks for graceful shutdown
+        let active_tasks: Arc<Mutex<Vec<JoinHandle<()>>>> = Arc::new(Mutex::new(Vec::new()));
+        let active_tasks_for_cleanup = active_tasks.clone();
 
         loop {
-            let (peer_id, stream) = incoming_streams.next().await.unwrap();
-            if !self.allowed_peers.read().contains(&peer_id) {
-                log::warn!("Deny connection from disallowed peer: {}.", peer_id);
-                continue;
+            tokio::select! {
+                stream_result = incoming_streams.next() => {
+                    match stream_result {
+                        Some((peer_id, stream)) => {
+                            if !self.allowed_peers.read().contains(&peer_id) {
+                                log::warn!("Deny connection from disallowed peer: {}.", peer_id);
+                                continue;
+                            }
+                            log::debug!("Accepted connection from peer: {}.", peer_id);
+
+                            let framed = codec_builder.new_framed(stream.compat());
+                            let transport = serde_transport::new(framed, Bincode::default());
+
+                            let this = self.clone();
+                            let active_tasks_clone = active_tasks.clone();
+                            let connection_handle = tokio::spawn(async move {
+                                let fut = BaseChannel::with_defaults(transport)
+                                    .execute(this.serve())
+                                    .for_each(|f| async { tokio::spawn(f); });
+
+                                fut.await;
+                                log::debug!("File transfer connection with peer {} closed", peer_id);
+                            });
+
+                            // Track the connection task and clean up completed ones
+                            let mut tasks = active_tasks_clone.lock();
+                            tasks.retain(|handle| !handle.is_finished());
+                            tasks.push(connection_handle);
+                        },
+                        None => {
+                            log::info!("File Transfer Service stream closed naturally");
+                            break;
+                        }
+                    }
+                },
+                _ = cancellation_token.cancelled() => {
+                    log::info!("File Transfer Service shutdown requested");
+                    break;
+                }
             }
-            log::info!("Accepted connection from peer: {}.", peer_id);
-
-            let framed = codec_builder.new_framed(stream.compat());
-            let transport = serde_transport::new(framed, Bincode::default());
-
-            let this = self.clone();
-            let fut = BaseChannel::with_defaults(transport)
-                .execute(this.serve())
-                .for_each(spawn);
-            tokio::spawn(fut);
         }
+
+        // Cleanup: explicitly drop the incoming_streams to release the protocol registration
+        log::debug!(
+            "File Transfer Service dropping incoming_streams to release protocol registration"
+        );
+        drop(incoming_streams);
+
+        // Close all active connections
+        log::info!("File Transfer Service received shutdown signal, closing active connections...");
+        let mut tasks = active_tasks_for_cleanup.lock();
+        let task_count = tasks.len();
+        if task_count > 0 {
+            log::info!("Aborting {} active file transfer connections", task_count);
+        }
+        for handle in tasks.drain(..) {
+            handle.abort();
+        }
+        drop(tasks); // Release the mutex guard
+
+        log::info!("File Transfer Service stopped");
     }
 }
 
 #[derive(Clone)]
 pub struct FileTransferServiceControl {
     stream_control: Control,
-    services: Arc<Mutex<HashMap<PathBuf, JoinHandle<()>>>>,
+    services: Arc<Mutex<HashMap<PathBuf, CancellationToken>>>,
     incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
 }
 
@@ -169,19 +213,29 @@ impl FileTransferServiceControl {
 
         let service_path = config.shared_root_dir.clone();
         let service = FileTransferRpcService::new(config, self.incoming_allowed_peers.clone())?;
-        let stream_control = self.stream_control.clone();
-        let handle = tokio::spawn(async move {
-            service.listen_from_libp2p_stream(stream_control).await;
-        });
+        let mut stream_control = self.stream_control.clone();
+        let cancellation_token = CancellationToken::new();
+        let cancellation_token_clone = cancellation_token.clone();
 
-        services.insert(service_path, handle);
+        let incoming_streams = stream_control
+            .accept(FUNGI_FILE_TRANSFER_PROTOCOL)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        log::info!(
+            "File Transfer Service listening on protocol: {}",
+            FUNGI_FILE_TRANSFER_PROTOCOL
+        );
+
+        tokio::spawn(service.listen_from_libp2p_stream(incoming_streams, cancellation_token_clone));
+
+        services.insert(service_path, cancellation_token);
         Ok(())
     }
 
     pub fn remove_service(&self, path: &PathBuf) {
         let mut services = self.services.lock();
-        if let Some(handle) = services.remove(path) {
-            handle.abort();
+        if let Some(cancellation_token) = services.remove(path) {
+            log::info!("Stopping file transfer service at: {:?}", path);
+            cancellation_token.cancel();
         }
     }
 
@@ -191,9 +245,9 @@ impl FileTransferServiceControl {
 
     pub fn stop_all(&self) {
         let mut services = self.services.lock();
-        for (path, handle) in services.drain() {
+        for (path, cancellation_token) in services.drain() {
             log::info!("Stopping file transfer service at: {:?}", path);
-            handle.abort();
+            cancellation_token.cancel();
         }
     }
 }

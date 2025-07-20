@@ -22,7 +22,7 @@ interprocess = { version = "2.2.3", features = ["tokio"] }
 serde = { version = "1", features = ["derive"] }
 tarpc = { version = "0.35", features = ["full"] }
 thiserror = "2.0"
-libp2p = { version = "0.55", features = [
+libp2p = { version = "0.56", features = [
     "macros",
     "noise",
     "mdns",
@@ -39,9 +39,9 @@ libp2p = { version = "0.55", features = [
     "secp256k1",
     "ed25519",
 ] }
-libp2p-stream = "0.3.0-alpha"
+libp2p-stream = "0.4.0-alpha"
 libp2p-identity = { version = "0.2", features = ["secp256k1", "serde", "rand"] }
-libp2p-swarm = "0.46"
+libp2p-swarm = "0.47"
 parking_lot = "0.12"
 
 [patch.crates-io]

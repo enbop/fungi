@@ -94,6 +94,9 @@ impl FungiDaemon {
         *self.config().lock() = updated_config;
 
         self.fts_control().stop_all();
+        // FIXME: This is a workaround to ensure the service is stopped before starting it again.
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
         self.fts_control()
             .clone()
             .add_service(service_config)

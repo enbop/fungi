@@ -107,6 +107,7 @@ class FungiController extends GetxController {
       fileTransferServerState.value.error = e.toString();
       debugPrint('Failed to start File Transfer Server: $e');
     }
+    fileTransferServerState.value.rootDir = rootDir;
     fileTransferServerState.refresh();
   }
 
