@@ -228,6 +228,8 @@ impl FileTransferClientsControl {
         let clean_path = path_str
             .trim_start_matches("./")
             .trim_start_matches("/")
+            .trim_start_matches("\\")
+            .trim_start_matches(".\\")
             .to_string();
 
         if clean_path.is_empty() || clean_path == "." {
@@ -259,7 +261,7 @@ impl FileTransferClientsControl {
     // TODO better way to check root path
     pub async fn metadata(&self, path: PathBuf) -> fungi_fs::Result<fungi_fs::Metadata> {
         let path_str = path.to_string_lossy();
-        if path_str == "." || path_str == "./" || path_str == "/" {
+        if path_str == "." || path_str == "./" || path_str == "/" || path_str == ".\\" {
             return Ok(fungi_fs::Metadata {
                 is_dir: true,
                 is_file: false,
@@ -294,7 +296,7 @@ impl FileTransferClientsControl {
 
     pub async fn list(&self, path: PathBuf) -> fungi_fs::Result<Vec<fungi_fs::DirEntry>> {
         let path_str = path.to_string_lossy();
-        if path_str == "." || path_str == "./" || path_str == "/" {
+        if path_str == "." || path_str == "./" || path_str == "/" || path_str == ".\\" {
             let clients = self.clients.lock();
             let mut result = Vec::new();
 
@@ -339,7 +341,7 @@ impl FileTransferClientsControl {
 
     pub async fn get(&self, path: PathBuf, start_pos: u64) -> fungi_fs::Result<Vec<u8>> {
         let path_str = path.to_string_lossy();
-        if path_str == "." || path_str == "./" || path_str == "/" {
+        if path_str == "." || path_str == "./" || path_str == "/" || path_str == ".\\" {
             return Err(fungi_fs::FileSystemError::Other {
                 message: "Cannot read from root directory".to_string(),
             });
@@ -367,7 +369,7 @@ impl FileTransferClientsControl {
         start_pos: u64,
     ) -> fungi_fs::Result<u64> {
         let path_str = path.to_string_lossy();
-        if path_str == "." || path_str == "./" || path_str == "/" {
+        if path_str == "." || path_str == "./" || path_str == "/" || path_str == ".\\" {
             return Err(fungi_fs::FileSystemError::Other {
                 message: "Cannot write to root directory".to_string(),
             });
@@ -390,7 +392,7 @@ impl FileTransferClientsControl {
 
     pub async fn del(&self, path: PathBuf) -> fungi_fs::Result<()> {
         let path_str = path.to_string_lossy();
-        if path_str == "." || path_str == "./" || path_str == "/" {
+        if path_str == "." || path_str == "./" || path_str == "/" || path_str == ".\\" {
             return Err(fungi_fs::FileSystemError::Other {
                 message: "Cannot delete root directory".to_string(),
             });
@@ -419,7 +421,7 @@ impl FileTransferClientsControl {
 
     pub async fn rmd(&self, path: PathBuf) -> fungi_fs::Result<()> {
         let path_str = path.to_string_lossy();
-        if path_str == "." || path_str == "./" || path_str == "/" {
+        if path_str == "." || path_str == "./" || path_str == "/" || path_str == ".\\" {
             return Err(fungi_fs::FileSystemError::Other {
                 message: "Cannot remove root directory".to_string(),
             });
@@ -448,7 +450,7 @@ impl FileTransferClientsControl {
 
     pub async fn mkd(&self, path: PathBuf) -> fungi_fs::Result<()> {
         let path_str = path.to_string_lossy();
-        if path_str == "." || path_str == "./" || path_str == "/" {
+        if path_str == "." || path_str == "./" || path_str == "/" || path_str == ".\\" {
             return Err(fungi_fs::FileSystemError::Other {
                 message: "Cannot create directory in root".to_string(),
             });
@@ -533,7 +535,7 @@ impl FileTransferClientsControl {
 
     pub async fn cwd(&self, path: PathBuf) -> fungi_fs::Result<()> {
         let path_str = path.to_string_lossy();
-        if path_str == "." || path_str == "./" || path_str == "/" {
+        if path_str == "." || path_str == "./" || path_str == "/" || path_str == ".\\" {
             return Ok(());
         }
 
