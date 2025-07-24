@@ -1,4 +1,5 @@
 pub mod fungi_daemon;
+pub mod fungi_init;
 use clap::{Parser, Subcommand};
 
 /// Fungi the world!
@@ -15,6 +16,7 @@ pub struct FungiArgs {
 pub enum Commands {
     /// Start a Fungi daemon
     Daemon(fungi_daemon::DaemonArgs),
+    Init(fungi_init::InitArgs),
 }
 
 // impl FungiDir for FungiArgs {

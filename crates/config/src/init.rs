@@ -6,11 +6,15 @@ pub fn init(dirs: &impl FungiDir) -> Result<()> {
     // check if the directory exists
     if fungi_dir.exists() && fungi_dir.is_dir() {
         if fungi_dir.read_dir()?.next().is_some() {
+            println!(
+                "Fungi directory already exists and is not empty: {}",
+                fungi_dir.display()
+            );
             return Ok(());
         }
     }
     println!("Initializing Fungi...");
-    std::fs::create_dir(&fungi_dir)?;
+    std::fs::create_dir(&fungi_dir).ok();
 
     // create config.toml
     FungiConfig::apply_from_dir(&fungi_dir)?;

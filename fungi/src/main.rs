@@ -9,6 +9,7 @@ async fn main() -> Result<()> {
 
     match fungi_args.command {
         Commands::Daemon(args) => fungi_daemon::run(args).await?,
+        Commands::Init(args) => fungi_init::run(args).await?,
     }
     Ok(())
 }
