@@ -714,10 +714,10 @@ mod tests {
         let test_cases = vec![
             (vec!["client1"], "."),
             (vec!["client1", "file.txt"], "file.txt"),
-            (vec!["client1", "subdir", "file.txt"], "subdir/file.txt"),
+            (vec!["client1", "subdir", "file.txt"], if cfg!(windows) { "subdir\\file.txt" } else { "subdir/file.txt" }),
             (
                 vec!["client1", "subdir", "nested", "file.txt"],
-                "subdir/nested/file.txt",
+                if cfg!(windows) { "subdir\\nested\\file.txt" } else { "subdir/nested/file.txt" },
             ),
         ];
 
@@ -957,7 +957,7 @@ mod tests {
 
             #[cfg(windows)]
             assert_eq!(
-                components, expected_on_windows,
+                components, _expected_on_windows,
                 "Windows path parsing failed for: {}",
                 path_str
             );
