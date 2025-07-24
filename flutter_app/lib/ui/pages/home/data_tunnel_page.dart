@@ -86,19 +86,19 @@ class DataTunnelPage extends GetView<FungiController> {
                     rule,
                   ) {
                     final ruleId =
-                        "forward_${rule.localSocket.host}:${rule.localSocket.port}_to_${rule.remote.peerId}";
+                        "forward_${rule.localHost}:${rule.localPort}_to_${rule.remotePeerId}";
 
                     return EnhancedCard(
                       child: ListTile(
                         title: Text(
-                          "${rule.localSocket.host}:${rule.localSocket.port} → Remote:${rule.remote.port}",
+                          "${rule.localHost}:${rule.localPort} → Remote:${rule.remotePort}",
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             TruncatedId(
-                              id: rule.remote.peerId,
+                              id: rule.remotePeerId,
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.apply(
                                     color: Theme.of(
@@ -107,7 +107,7 @@ class DataTunnelPage extends GetView<FungiController> {
                                   ),
                             ),
                             Text(
-                              "Protocol: /fungi/tunnel/0.1.0/${rule.remote.port}",
+                              "Protocol: /fungi/tunnel/0.1.0/${rule.remotePort}",
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.apply(
                                     color: Theme.of(
@@ -197,21 +197,20 @@ class DataTunnelPage extends GetView<FungiController> {
                   children: controller.tcpTunnelingConfig.value.listeningRules.map((
                     rule,
                   ) {
-                    final ruleId =
-                        "listen_${rule.localSocket.host}:${rule.localSocket.port}";
+                    final ruleId = "listen_${rule.host}:${rule.port}";
 
                     return EnhancedCard(
                       accentColor: Theme.of(context).colorScheme.secondary,
                       child: ListTile(
                         title: Text(
-                          "Local:${rule.localSocket.host}:${rule.localSocket.port}",
+                          "Local:${rule.host}:${rule.port}",
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              "Protocol: /fungi/tunnel/0.1.0/${rule.localSocket.port}",
+                              "Protocol: /fungi/tunnel/0.1.0/${rule.port}",
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.apply(
                                     color: Theme.of(

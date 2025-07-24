@@ -27,23 +27,16 @@ pub struct WebdavProxy {
     pub port: u16,
 }
 
-pub struct LocalSocket {
-    pub host: String,
-    pub port: u16,
-}
-
-pub struct ForwardingRuleRemote {
-    pub peer_id: String,
-    pub port: u16,
-}
-
 pub struct ForwardingRule {
-    pub local_socket: LocalSocket,
-    pub remote: ForwardingRuleRemote,
+    pub local_host: String,
+    pub local_port: u16,
+    pub remote_peer_id: String,
+    pub remote_port: u16,
 }
 
 pub struct ListeningRule {
-    pub local_socket: LocalSocket,
+    pub host: String,
+    pub port: u16,
     pub allowed_peers: Vec<String>,
 }
 
@@ -64,29 +57,13 @@ impl From<fungi_config::file_transfer::FileTransferClient> for FileTransferClien
     }
 }
 
-impl From<fungi_config::tcp_tunneling::LocalSocket> for LocalSocket {
-    fn from(socket: fungi_config::tcp_tunneling::LocalSocket) -> Self {
-        Self {
-            host: socket.host,
-            port: socket.port,
-        }
-    }
-}
-
-impl From<fungi_config::tcp_tunneling::ForwardingRuleRemote> for ForwardingRuleRemote {
-    fn from(remote: fungi_config::tcp_tunneling::ForwardingRuleRemote) -> Self {
-        Self {
-            peer_id: remote.peer_id,
-            port: remote.port,
-        }
-    }
-}
-
 impl From<fungi_config::tcp_tunneling::ForwardingRule> for ForwardingRule {
     fn from(rule: fungi_config::tcp_tunneling::ForwardingRule) -> Self {
         Self {
-            local_socket: rule.local_socket.into(),
-            remote: rule.remote.into(),
+            local_host: rule.local_host,
+            local_port: rule.local_port,
+            remote_peer_id: rule.remote_peer_id,
+            remote_port: rule.remote_port,
         }
     }
 }
@@ -94,8 +71,9 @@ impl From<fungi_config::tcp_tunneling::ForwardingRule> for ForwardingRule {
 impl From<fungi_config::tcp_tunneling::ListeningRule> for ListeningRule {
     fn from(rule: fungi_config::tcp_tunneling::ListeningRule) -> Self {
         Self {
-            local_socket: rule.local_socket.into(),
-            allowed_peers: rule.allowed_peers,
+            host: rule.host,
+            port: rule.port,
+            allowed_peers: Default::default(), // TODO: add support for allowed peers
         }
     }
 }

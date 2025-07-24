@@ -137,7 +137,7 @@ mod tests {
         let rules = daemon.get_tcp_forwarding_rules();
         assert_eq!(rules.len(), 1);
         assert_eq!(rules[0].0, rule_id);
-        assert_eq!(rules[0].1.local_socket.port, 8080);
+        assert_eq!(rules[0].1.local_port, 8080);
     }
 
     #[tokio::test]
@@ -163,7 +163,7 @@ mod tests {
         let rules = daemon.get_tcp_listening_rules();
         assert_eq!(rules.len(), 1);
         assert_eq!(rules[0].0, rule_id);
-        assert_eq!(rules[0].1.local_socket.port, 9090);
+        assert_eq!(rules[0].1.port, 9090);
     }
 
     #[tokio::test]
@@ -235,7 +235,7 @@ mod tests {
         let config = daemon.get_tcp_tunneling_config();
         assert!(config.forwarding.enabled);
         assert_eq!(config.forwarding.rules.len(), 1);
-        assert_eq!(config.forwarding.rules[0].local_socket.port, 8080);
+        assert_eq!(config.forwarding.rules[0].local_port, 8080);
     }
 
     #[tokio::test]

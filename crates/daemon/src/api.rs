@@ -243,18 +243,14 @@ impl FungiDaemon {
         &self,
         local_host: String,
         local_port: u16,
-        peer_id: String,
+        remote_peer_id: String,
         remote_port: u16,
     ) -> Result<String> {
         let rule = fungi_config::tcp_tunneling::ForwardingRule {
-            local_socket: fungi_config::tcp_tunneling::LocalSocket {
-                host: local_host,
-                port: local_port,
-            },
-            remote: fungi_config::tcp_tunneling::ForwardingRuleRemote {
-                peer_id,
-                port: remote_port,
-            },
+            local_host,
+            local_port,
+            remote_peer_id,
+            remote_port,
         };
         self.add_tcp_forwarding_rule_internal(rule).await
     }
@@ -267,14 +263,11 @@ impl FungiDaemon {
         &self,
         local_host: String,
         local_port: u16,
-        allowed_peers: Vec<String>,
+        _allowed_peers: Vec<String>,
     ) -> Result<String> {
         let rule = fungi_config::tcp_tunneling::ListeningRule {
-            local_socket: fungi_config::tcp_tunneling::LocalSocket {
-                host: local_host,
-                port: local_port,
-            },
-            allowed_peers,
+            host: local_host,
+            port: local_port,
         };
         self.add_tcp_listening_rule_internal(rule).await
     }

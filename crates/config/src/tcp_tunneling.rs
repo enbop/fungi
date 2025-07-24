@@ -2,13 +2,7 @@ use std::net::{AddrParseError, SocketAddr};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct LocalSocket {
-    pub host: String,
-    pub port: u16,
-}
-
-impl TryInto<SocketAddr> for &LocalSocket {
+impl TryInto<SocketAddr> for &ListeningRule {
     type Error = AddrParseError;
 
     fn try_into(self) -> Result<SocketAddr, Self::Error> {
@@ -16,29 +10,29 @@ impl TryInto<SocketAddr> for &LocalSocket {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct ForwardingRuleRemote {
-    pub peer_id: String,
-    pub port: u16,
+impl TryInto<SocketAddr> for &ForwardingRule {
+    type Error = AddrParseError;
+
+    fn try_into(self) -> Result<SocketAddr, Self::Error> {
+        format!("{}:{}", self.local_host, self.local_port).parse()
+    }
 }
 
-// [[tcp-tunneling.forwarding.rules]]
-// local_socket = { host = "127.0.0.1", port = 9001 }
-// remote = { peer_id = "", port = 8888, multiaddrs = [] }
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ForwardingRule {
-    pub local_socket: LocalSocket,
-    pub remote: ForwardingRuleRemote,
+    pub local_host: String,
+    pub local_port: u16,
+
+    pub remote_peer_id: String,
+    pub remote_port: u16,
 }
 
-// [[tcp-tunneling.listening.rules]]
-// local_socket = { host = "127.0.0.1", port = 8888 }
-// allowed_peers = []
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ListeningRule {
-    pub local_socket: LocalSocket,
-    #[serde(default)]
-    pub allowed_peers: Vec<String>,
+    pub host: String,
+    pub port: u16,
+    // #[serde(default)]
+    // pub allowed_peers: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -210,10 +210,10 @@ impl FungiConfig {
     ) -> Result<Self> {
         // Check if rule already exists
         let rule_exists = self.tcp_tunneling.forwarding.rules.iter().any(|r| {
-            r.local_socket.host == rule.local_socket.host
-                && r.local_socket.port == rule.local_socket.port
-                && r.remote.peer_id == rule.remote.peer_id
-                && r.remote.port == rule.remote.port
+            r.local_host == rule.local_host
+                && r.local_port == rule.local_port
+                && r.remote_peer_id == rule.remote_peer_id
+                && r.remote_port == rule.remote_port
         });
 
         if rule_exists {
@@ -234,10 +234,10 @@ impl FungiConfig {
     ) -> Result<Self> {
         self.update_and_save(|config| {
             config.tcp_tunneling.forwarding.rules.retain(|r| {
-                !(r.local_socket.host == rule.local_socket.host
-                    && r.local_socket.port == rule.local_socket.port
-                    && r.remote.peer_id == rule.remote.peer_id
-                    && r.remote.port == rule.remote.port)
+                !(r.local_host == rule.local_host
+                    && r.local_port == rule.local_port
+                    && r.remote_peer_id == rule.remote_peer_id
+                    && r.remote_port == rule.remote_port)
             });
         })
     }
@@ -247,10 +247,12 @@ impl FungiConfig {
         rule: crate::tcp_tunneling::ListeningRule,
     ) -> Result<Self> {
         // Check if rule already exists
-        let rule_exists = self.tcp_tunneling.listening.rules.iter().any(|r| {
-            r.local_socket.host == rule.local_socket.host
-                && r.local_socket.port == rule.local_socket.port
-        });
+        let rule_exists = self
+            .tcp_tunneling
+            .listening
+            .rules
+            .iter()
+            .any(|r| r.host == rule.host && r.port == rule.port);
 
         if rule_exists {
             return Ok(self.clone());
@@ -269,10 +271,11 @@ impl FungiConfig {
         rule: &crate::tcp_tunneling::ListeningRule,
     ) -> Result<Self> {
         self.update_and_save(|config| {
-            config.tcp_tunneling.listening.rules.retain(|r| {
-                !(r.local_socket.host == rule.local_socket.host
-                    && r.local_socket.port == rule.local_socket.port)
-            });
+            config
+                .tcp_tunneling
+                .listening
+                .rules
+                .retain(|r| !(r.host == rule.host && r.port == rule.port));
         })
     }
 }

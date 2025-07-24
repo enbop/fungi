@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `parse_peer_id`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`, `from`, `from`
 
 Future<void> startFungiDaemon() =>
     RustLib.instance.api.crateApiFungiStartFungiDaemon();
@@ -146,39 +146,34 @@ class FileTransferClient {
 }
 
 class ForwardingRule {
-  final LocalSocket localSocket;
-  final ForwardingRuleRemote remote;
+  final String localHost;
+  final int localPort;
+  final String remotePeerId;
+  final int remotePort;
 
-  const ForwardingRule({required this.localSocket, required this.remote});
+  const ForwardingRule({
+    required this.localHost,
+    required this.localPort,
+    required this.remotePeerId,
+    required this.remotePort,
+  });
 
   @override
-  int get hashCode => localSocket.hashCode ^ remote.hashCode;
+  int get hashCode =>
+      localHost.hashCode ^
+      localPort.hashCode ^
+      remotePeerId.hashCode ^
+      remotePort.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is ForwardingRule &&
           runtimeType == other.runtimeType &&
-          localSocket == other.localSocket &&
-          remote == other.remote;
-}
-
-class ForwardingRuleRemote {
-  final String peerId;
-  final int port;
-
-  const ForwardingRuleRemote({required this.peerId, required this.port});
-
-  @override
-  int get hashCode => peerId.hashCode ^ port.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ForwardingRuleRemote &&
-          runtimeType == other.runtimeType &&
-          peerId == other.peerId &&
-          port == other.port;
+          localHost == other.localHost &&
+          localPort == other.localPort &&
+          remotePeerId == other.remotePeerId &&
+          remotePort == other.remotePort;
 }
 
 class FtpProxy {
@@ -206,39 +201,27 @@ class FtpProxy {
 }
 
 class ListeningRule {
-  final LocalSocket localSocket;
+  final String host;
+  final int port;
   final List<String> allowedPeers;
 
-  const ListeningRule({required this.localSocket, required this.allowedPeers});
+  const ListeningRule({
+    required this.host,
+    required this.port,
+    required this.allowedPeers,
+  });
 
   @override
-  int get hashCode => localSocket.hashCode ^ allowedPeers.hashCode;
+  int get hashCode => host.hashCode ^ port.hashCode ^ allowedPeers.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is ListeningRule &&
           runtimeType == other.runtimeType &&
-          localSocket == other.localSocket &&
-          allowedPeers == other.allowedPeers;
-}
-
-class LocalSocket {
-  final String host;
-  final int port;
-
-  const LocalSocket({required this.host, required this.port});
-
-  @override
-  int get hashCode => host.hashCode ^ port.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is LocalSocket &&
-          runtimeType == other.runtimeType &&
           host == other.host &&
-          port == other.port;
+          port == other.port &&
+          allowedPeers == other.allowedPeers;
 }
 
 class TcpTunnelingConfig {

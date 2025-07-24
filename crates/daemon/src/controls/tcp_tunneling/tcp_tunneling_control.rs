@@ -72,19 +72,18 @@ impl TcpTunnelingControl {
             bail!("Forwarding rule already exists: {}", rule_id);
         }
 
-        let local_addr: SocketAddr = (&rule.local_socket)
+        let local_addr: SocketAddr = (&rule)
             .try_into()
             .map_err(|e| anyhow::anyhow!("Invalid local socket address: {}", e))?;
 
         let target_peer: PeerId = rule
-            .remote
-            .peer_id
+            .remote_peer_id
             .parse()
             .map_err(|e| anyhow::anyhow!("Invalid peer ID: {}", e))?;
 
         let target_protocol = StreamProtocol::try_from_owned(format!(
             "{}/{}",
-            FUNGI_TUNNEL_PROTOCOL, rule.remote.port
+            FUNGI_TUNNEL_PROTOCOL, rule.remote_port
         ))
         .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
 
@@ -113,8 +112,8 @@ impl TcpTunnelingControl {
             .await
         });
 
-        let rule_state = ForwardingRuleState { 
-            rule, 
+        let rule_state = ForwardingRuleState {
+            rule,
             task_handle,
             cancellation_token,
         };
@@ -146,15 +145,13 @@ impl TcpTunnelingControl {
             bail!("Listening rule already exists: {}", rule_id);
         }
 
-        let local_addr: SocketAddr = (&rule.local_socket)
+        let local_addr: SocketAddr = (&rule)
             .try_into()
             .map_err(|e| anyhow::anyhow!("Invalid local socket address: {}", e))?;
 
-        let listening_protocol = StreamProtocol::try_from_owned(format!(
-            "{}/{}",
-            FUNGI_TUNNEL_PROTOCOL, rule.local_socket.port
-        ))
-        .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
+        let listening_protocol =
+            StreamProtocol::try_from_owned(format!("{}/{}", FUNGI_TUNNEL_PROTOCOL, rule.port))
+                .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
 
         let stream_control = self.swarm_control.stream_control().clone();
 
@@ -177,8 +174,8 @@ impl TcpTunnelingControl {
             super::listen_p2p_to_port(incomings, local_addr, cancellation_token_clone).await
         });
 
-        let rule_state = ListeningRuleState { 
-            rule, 
+        let rule_state = ListeningRuleState {
+            rule,
             task_handle,
             cancellation_token,
         };
@@ -228,7 +225,7 @@ impl TcpTunnelingControl {
                 rule_state.task_handle.abort();
             }
         }
-        
+
         {
             let mut listening_rules = self.listening_rules.lock();
             for (rule_id, rule_state) in listening_rules.drain() {
@@ -243,15 +240,12 @@ impl TcpTunnelingControl {
     fn generate_forwarding_rule_id(&self, rule: &ForwardingRule) -> String {
         format!(
             "forward_{}:{}_to_{}",
-            rule.local_socket.host, rule.local_socket.port, rule.remote.peer_id
+            rule.local_host, rule.local_port, rule.remote_peer_id
         )
     }
 
     /// Generate unique ID for listening rule
     fn generate_listening_rule_id(&self, rule: &ListeningRule) -> String {
-        format!(
-            "listen_{}:{}",
-            rule.local_socket.host, rule.local_socket.port
-        )
+        format!("listen_{}:{}", rule.host, rule.port)
     }
 }

@@ -935,23 +935,15 @@ impl SseDecode for crate::api::fungi::FileTransferClient {
 impl SseDecode for crate::api::fungi::ForwardingRule {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_localSocket = <crate::api::fungi::LocalSocket>::sse_decode(deserializer);
-        let mut var_remote = <crate::api::fungi::ForwardingRuleRemote>::sse_decode(deserializer);
+        let mut var_localHost = <String>::sse_decode(deserializer);
+        let mut var_localPort = <u16>::sse_decode(deserializer);
+        let mut var_remotePeerId = <String>::sse_decode(deserializer);
+        let mut var_remotePort = <u16>::sse_decode(deserializer);
         return crate::api::fungi::ForwardingRule {
-            local_socket: var_localSocket,
-            remote: var_remote,
-        };
-    }
-}
-
-impl SseDecode for crate::api::fungi::ForwardingRuleRemote {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_peerId = <String>::sse_decode(deserializer);
-        let mut var_port = <u16>::sse_decode(deserializer);
-        return crate::api::fungi::ForwardingRuleRemote {
-            peer_id: var_peerId,
-            port: var_port,
+            local_host: var_localHost,
+            local_port: var_localPort,
+            remote_peer_id: var_remotePeerId,
+            remote_port: var_remotePort,
         };
     }
 }
@@ -1037,23 +1029,13 @@ impl SseDecode for Vec<u8> {
 impl SseDecode for crate::api::fungi::ListeningRule {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_localSocket = <crate::api::fungi::LocalSocket>::sse_decode(deserializer);
-        let mut var_allowedPeers = <Vec<String>>::sse_decode(deserializer);
-        return crate::api::fungi::ListeningRule {
-            local_socket: var_localSocket,
-            allowed_peers: var_allowedPeers,
-        };
-    }
-}
-
-impl SseDecode for crate::api::fungi::LocalSocket {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_host = <String>::sse_decode(deserializer);
         let mut var_port = <u16>::sse_decode(deserializer);
-        return crate::api::fungi::LocalSocket {
+        let mut var_allowedPeers = <Vec<String>>::sse_decode(deserializer);
+        return crate::api::fungi::ListeningRule {
             host: var_host,
             port: var_port,
+            allowed_peers: var_allowedPeers,
         };
     }
 }
@@ -1242,8 +1224,10 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::fungi::FileTransferClient>
 impl flutter_rust_bridge::IntoDart for crate::api::fungi::ForwardingRule {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
-            self.local_socket.into_into_dart().into_dart(),
-            self.remote.into_into_dart().into_dart(),
+            self.local_host.into_into_dart().into_dart(),
+            self.local_port.into_into_dart().into_dart(),
+            self.remote_peer_id.into_into_dart().into_dart(),
+            self.remote_port.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1256,27 +1240,6 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::fungi::ForwardingRule>
     for crate::api::fungi::ForwardingRule
 {
     fn into_into_dart(self) -> crate::api::fungi::ForwardingRule {
-        self
-    }
-}
-// Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::api::fungi::ForwardingRuleRemote {
-    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [
-            self.peer_id.into_into_dart().into_dart(),
-            self.port.into_into_dart().into_dart(),
-        ]
-        .into_dart()
-    }
-}
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::api::fungi::ForwardingRuleRemote
-{
-}
-impl flutter_rust_bridge::IntoIntoDart<crate::api::fungi::ForwardingRuleRemote>
-    for crate::api::fungi::ForwardingRuleRemote
-{
-    fn into_into_dart(self) -> crate::api::fungi::ForwardingRuleRemote {
         self
     }
 }
@@ -1303,7 +1266,8 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::fungi::FtpProxy>
 impl flutter_rust_bridge::IntoDart for crate::api::fungi::ListeningRule {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
-            self.local_socket.into_into_dart().into_dart(),
+            self.host.into_into_dart().into_dart(),
+            self.port.into_into_dart().into_dart(),
             self.allowed_peers.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -1317,27 +1281,6 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::fungi::ListeningRule>
     for crate::api::fungi::ListeningRule
 {
     fn into_into_dart(self) -> crate::api::fungi::ListeningRule {
-        self
-    }
-}
-// Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::api::fungi::LocalSocket {
-    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [
-            self.host.into_into_dart().into_dart(),
-            self.port.into_into_dart().into_dart(),
-        ]
-        .into_dart()
-    }
-}
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::api::fungi::LocalSocket
-{
-}
-impl flutter_rust_bridge::IntoIntoDart<crate::api::fungi::LocalSocket>
-    for crate::api::fungi::LocalSocket
-{
-    fn into_into_dart(self) -> crate::api::fungi::LocalSocket {
         self
     }
 }
@@ -1420,16 +1363,10 @@ impl SseEncode for crate::api::fungi::FileTransferClient {
 impl SseEncode for crate::api::fungi::ForwardingRule {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <crate::api::fungi::LocalSocket>::sse_encode(self.local_socket, serializer);
-        <crate::api::fungi::ForwardingRuleRemote>::sse_encode(self.remote, serializer);
-    }
-}
-
-impl SseEncode for crate::api::fungi::ForwardingRuleRemote {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <String>::sse_encode(self.peer_id, serializer);
-        <u16>::sse_encode(self.port, serializer);
+        <String>::sse_encode(self.local_host, serializer);
+        <u16>::sse_encode(self.local_port, serializer);
+        <String>::sse_encode(self.remote_peer_id, serializer);
+        <u16>::sse_encode(self.remote_port, serializer);
     }
 }
 
@@ -1495,16 +1432,9 @@ impl SseEncode for Vec<u8> {
 impl SseEncode for crate::api::fungi::ListeningRule {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <crate::api::fungi::LocalSocket>::sse_encode(self.local_socket, serializer);
-        <Vec<String>>::sse_encode(self.allowed_peers, serializer);
-    }
-}
-
-impl SseEncode for crate::api::fungi::LocalSocket {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.host, serializer);
         <u16>::sse_encode(self.port, serializer);
+        <Vec<String>>::sse_encode(self.allowed_peers, serializer);
     }
 }
 

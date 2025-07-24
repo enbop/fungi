@@ -879,23 +879,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ForwardingRule dco_decode_forwarding_rule(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return ForwardingRule(
-      localSocket: dco_decode_local_socket(arr[0]),
-      remote: dco_decode_forwarding_rule_remote(arr[1]),
-    );
-  }
-
-  @protected
-  ForwardingRuleRemote dco_decode_forwarding_rule_remote(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
-    return ForwardingRuleRemote(
-      peerId: dco_decode_String(arr[0]),
-      port: dco_decode_u_16(arr[1]),
+      localHost: dco_decode_String(arr[0]),
+      localPort: dco_decode_u_16(arr[1]),
+      remotePeerId: dco_decode_String(arr[2]),
+      remotePort: dco_decode_u_16(arr[3]),
     );
   }
 
@@ -946,23 +936,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ListeningRule dco_decode_listening_rule(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return ListeningRule(
-      localSocket: dco_decode_local_socket(arr[0]),
-      allowedPeers: dco_decode_list_String(arr[1]),
-    );
-  }
-
-  @protected
-  LocalSocket dco_decode_local_socket(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
-    return LocalSocket(
       host: dco_decode_String(arr[0]),
       port: dco_decode_u_16(arr[1]),
+      allowedPeers: dco_decode_list_String(arr[2]),
     );
   }
 
@@ -1055,19 +1034,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   ForwardingRule sse_decode_forwarding_rule(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_localSocket = sse_decode_local_socket(deserializer);
-    var var_remote = sse_decode_forwarding_rule_remote(deserializer);
-    return ForwardingRule(localSocket: var_localSocket, remote: var_remote);
-  }
-
-  @protected
-  ForwardingRuleRemote sse_decode_forwarding_rule_remote(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_peerId = sse_decode_String(deserializer);
-    var var_port = sse_decode_u_16(deserializer);
-    return ForwardingRuleRemote(peerId: var_peerId, port: var_port);
+    var var_localHost = sse_decode_String(deserializer);
+    var var_localPort = sse_decode_u_16(deserializer);
+    var var_remotePeerId = sse_decode_String(deserializer);
+    var var_remotePort = sse_decode_u_16(deserializer);
+    return ForwardingRule(
+      localHost: var_localHost,
+      localPort: var_localPort,
+      remotePeerId: var_remotePeerId,
+      remotePort: var_remotePort,
+    );
   }
 
   @protected
@@ -1143,20 +1119,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   ListeningRule sse_decode_listening_rule(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_localSocket = sse_decode_local_socket(deserializer);
-    var var_allowedPeers = sse_decode_list_String(deserializer);
-    return ListeningRule(
-      localSocket: var_localSocket,
-      allowedPeers: var_allowedPeers,
-    );
-  }
-
-  @protected
-  LocalSocket sse_decode_local_socket(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
     var var_host = sse_decode_String(deserializer);
     var var_port = sse_decode_u_16(deserializer);
-    return LocalSocket(host: var_host, port: var_port);
+    var var_allowedPeers = sse_decode_list_String(deserializer);
+    return ListeningRule(
+      host: var_host,
+      port: var_port,
+      allowedPeers: var_allowedPeers,
+    );
   }
 
   @protected
@@ -1257,18 +1227,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_local_socket(self.localSocket, serializer);
-    sse_encode_forwarding_rule_remote(self.remote, serializer);
-  }
-
-  @protected
-  void sse_encode_forwarding_rule_remote(
-    ForwardingRuleRemote self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.peerId, serializer);
-    sse_encode_u_16(self.port, serializer);
+    sse_encode_String(self.localHost, serializer);
+    sse_encode_u_16(self.localPort, serializer);
+    sse_encode_String(self.remotePeerId, serializer);
+    sse_encode_u_16(self.remotePort, serializer);
   }
 
   @protected
@@ -1337,15 +1299,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_encode_listening_rule(ListeningRule self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_local_socket(self.localSocket, serializer);
-    sse_encode_list_String(self.allowedPeers, serializer);
-  }
-
-  @protected
-  void sse_encode_local_socket(LocalSocket self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.host, serializer);
     sse_encode_u_16(self.port, serializer);
+    sse_encode_list_String(self.allowedPeers, serializer);
   }
 
   @protected
