@@ -5,6 +5,12 @@ pub struct PeerHandshakePayload {
     host_name: Option<String>,
 }
 
+impl Default for PeerHandshakePayload {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PeerHandshakePayload {
     pub fn new() -> Self {
         Self {

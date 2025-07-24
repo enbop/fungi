@@ -23,6 +23,7 @@ use tokio_util::{codec::LengthDelimitedCodec, compat::FuturesAsyncReadCompatExt 
 
 use crate::controls::file_transfer::FileTransferRpcClient;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct ConnectedClient {
     peer_id: Arc<PeerId>,
@@ -120,7 +121,7 @@ impl FileTransferClientsControl {
     }
 
     pub fn remove_client(&self, peer_id: &PeerId) {
-        log::info!("Removing file transfer client with peer_id: {}", peer_id);
+        log::info!("Removing file transfer client with peer_id: {peer_id}");
         self.clients.lock().retain(|_, (id, _)| id != peer_id);
     }
 
@@ -128,7 +129,7 @@ impl FileTransferClientsControl {
         self.swarm_control.connect(peer_id).await?;
         let mut stream_control = self.swarm_control.stream_control().clone();
         let Ok(stream) = stream_control
-            .open_stream(peer_id.clone(), FUNGI_FILE_TRANSFER_PROTOCOL)
+            .open_stream(peer_id, FUNGI_FILE_TRANSFER_PROTOCOL)
             .await
         else {
             bail!("Failed to open stream to peer {}", peer_id);
@@ -143,24 +144,21 @@ impl FileTransferClientsControl {
             bail!("File transfer client with name '{}' not found", name);
         };
         match fc {
-            FileClientState::Connected(client) => {
-                return Ok(client);
-            }
+            FileClientState::Connected(client) => Ok(client),
             FileClientState::Disconnected => {
                 // set the state to connecting
                 let start_time = SystemTime::now();
                 self.clients.lock().insert(
                     name.to_string(),
-                    (peer_id.clone(), FileClientState::Connecting(start_time)),
+                    (peer_id, FileClientState::Connecting(start_time)),
                 );
                 // try to connect
-                let client = match self.connect_client(peer_id.clone()).await {
+                let client = match self.connect_client(peer_id).await {
                     Ok(client) => client,
                     Err(e) => {
-                        self.clients.lock().insert(
-                            name.to_string(),
-                            (peer_id.clone(), FileClientState::Disconnected),
-                        );
+                        self.clients
+                            .lock()
+                            .insert(name.to_string(), (peer_id, FileClientState::Disconnected));
                         bail!(
                             "Failed to connect to file transfer client '{}': {}",
                             name,
@@ -169,14 +167,13 @@ impl FileTransferClientsControl {
                     }
                 };
                 let Ok(is_windows) = client.is_windows(context::current()).await else {
-                    self.clients.lock().insert(
-                        name.to_string(),
-                        (peer_id.clone(), FileClientState::Disconnected),
-                    );
+                    self.clients
+                        .lock()
+                        .insert(name.to_string(), (peer_id, FileClientState::Disconnected));
                     bail!("Failed to check if client '{}' is Windows", name);
                 };
                 let connected_client = ConnectedClient {
-                    peer_id: Arc::new(peer_id.clone()),
+                    peer_id: Arc::new(peer_id),
                     is_windows,
                     rpc_client: client,
                 };
@@ -184,11 +181,11 @@ impl FileTransferClientsControl {
                 self.clients.lock().insert(
                     name.to_string(),
                     (
-                        peer_id.clone(),
+                        peer_id,
                         FileClientState::Connected(connected_client.clone()),
                     ),
                 );
-                return Ok(connected_client);
+                Ok(connected_client)
             }
             FileClientState::Connecting(_start_time) => {
                 bail!(
@@ -220,7 +217,7 @@ impl FileTransferClientsControl {
     }
 
     fn map_rpc_error(&self, peer_id: &PeerId) -> fungi_fs::FileSystemError {
-        log::warn!("Client {} disconnected", peer_id);
+        log::warn!("Client {peer_id} disconnected");
         let mut lock = self.clients.lock();
         for (_key, (id, state)) in lock.iter_mut() {
             if id == peer_id {
@@ -567,12 +564,10 @@ pub async fn start_ftp_proxy_service(host: IpAddr, port: u16, client: FileTransf
             .build()
             .unwrap();
 
-        log::info!("Starting FTP proxy service on port {}", port);
-        if let Err(e) = server.listen(format!("{}:{}", host, port)).await {
+        log::info!("Starting FTP proxy service on port {port}");
+        if let Err(e) = server.listen(format!("{host}:{port}")).await {
             log::error!(
-                "Failed to start FTP proxy service on port {}: {}. Retrying in 5 seconds...",
-                port,
-                e
+                "Failed to start FTP proxy service on port {port}: {e}. Retrying in 5 seconds..."
             );
         }
 
@@ -591,7 +586,7 @@ pub async fn start_webdav_proxy_service(
         .locksystem(FakeLs::new())
         .build_handler();
 
-    let addr = format!("{}:{}", host, port);
+    let addr = format!("{host}:{port}");
     println!("Listening webdav on {addr}");
     let listener = TcpListener::bind(addr).await.unwrap();
 
@@ -682,7 +677,7 @@ mod tests {
                 })
                 .collect();
 
-            assert_eq!(components, expected, "Failed for path: {}", path_str);
+            assert_eq!(components, expected, "Failed for path: {path_str}");
         }
     }
 
@@ -702,8 +697,7 @@ mod tests {
 
             assert!(
                 components.is_empty(),
-                "Path '{}' should have no meaningful components",
-                path_str
+                "Path '{path_str}' should have no meaningful components"
             );
         }
     }
@@ -714,10 +708,21 @@ mod tests {
         let test_cases = vec![
             (vec!["client1"], "."),
             (vec!["client1", "file.txt"], "file.txt"),
-            (vec!["client1", "subdir", "file.txt"], if cfg!(windows) { "subdir\\file.txt" } else { "subdir/file.txt" }),
+            (
+                vec!["client1", "subdir", "file.txt"],
+                if cfg!(windows) {
+                    "subdir\\file.txt"
+                } else {
+                    "subdir/file.txt"
+                },
+            ),
             (
                 vec!["client1", "subdir", "nested", "file.txt"],
-                if cfg!(windows) { "subdir\\nested\\file.txt" } else { "subdir/nested/file.txt" },
+                if cfg!(windows) {
+                    "subdir\\nested\\file.txt"
+                } else {
+                    "subdir/nested/file.txt"
+                },
             ),
         ];
 
@@ -731,8 +736,7 @@ mod tests {
             assert_eq!(
                 remaining_path.to_string_lossy(),
                 expected,
-                "Failed for components: {:?}",
-                components
+                "Failed for components: {components:?}"
             );
         }
     }
@@ -821,8 +825,7 @@ mod tests {
 
             assert_eq!(
                 is_same_client, should_be_valid,
-                "Validation failed for {} -> {}",
-                from_path, to_path
+                "Validation failed for {from_path} -> {to_path}"
             );
         }
     }
@@ -850,8 +853,7 @@ mod tests {
             let is_client_dir = components.len() == 1;
             assert_eq!(
                 is_client_dir, is_top_level,
-                "Client directory detection failed for: {}",
-                path_str
+                "Client directory detection failed for: {path_str}"
             );
         }
     }
@@ -902,8 +904,7 @@ mod tests {
             assert_eq!(
                 components,
                 vec!["client1", "file.txt"],
-                "Path normalization failed for: {}",
-                path_str
+                "Path normalization failed for: {path_str}"
             );
         }
     }
@@ -912,20 +913,24 @@ mod tests {
     fn test_windows_specific_root_paths() {
         // Test Windows-specific root path representations
         let windows_root_paths = vec![
-            "\\",      // Windows root
-            ".\\",     // Current directory with Windows separator
-            "\\\\",    // UNC path start (treated as root in our context)
+            "\\",   // Windows root
+            ".\\",  // Current directory with Windows separator
+            "\\\\", // UNC path start (treated as root in our context)
         ];
 
         for path_str in windows_root_paths {
             let path = PathBuf::from(path_str);
             let is_root = FileTransferClientsControl::is_root_path(&path);
-            
+
             // On Windows, these should be treated as root paths
             // On Unix, backslashes are treated as regular characters
             #[cfg(windows)]
-            assert!(is_root, "Windows path '{}' should be recognized as root", path_str);
-            
+            assert!(
+                is_root,
+                "Windows path '{}' should be recognized as root",
+                path_str
+            );
+
             // On Unix, we might not recognize these as root, which is acceptable
             // since they would be invalid paths anyway
             #[cfg(unix)]
@@ -1003,29 +1008,32 @@ mod tests {
                 .collect();
 
             // Ensure we always extract at least one component
-            assert!(!components.is_empty(), "Should extract at least one component from: {}", path_str);
-            
+            assert!(
+                !components.is_empty(),
+                "Should extract at least one component from: {path_str}"
+            );
+
             // On Windows, should properly separate components; on Unix, backslashes are part of filename
             let first_component = components[0];
-            
+
             #[cfg(windows)]
             {
                 // On Windows, should extract clean client name
                 assert!(
                     first_component == "client1",
                     "Windows: First component should be client1, got: {} from path: {}",
-                    first_component, path_str
+                    first_component,
+                    path_str
                 );
             }
-            
+
             #[cfg(unix)]
             {
                 // On Unix, backslashes are treated as part of the filename
                 // So we just check that we have meaningful content
                 assert!(
                     first_component.contains("client1"),
-                    "Unix: First component should contain client1, got: {} from path: {}",
-                    first_component, path_str
+                    "Unix: First component should contain client1, got: {first_component} from path: {path_str}"
                 );
             }
         }
@@ -1035,25 +1043,25 @@ mod tests {
     fn test_edge_case_paths() {
         // Test various edge cases that might break path parsing
         let edge_cases = vec![
-            "",           // Empty path
-            ".",          // Current directory
-            "..",         // Parent directory
-            "/",          // Unix root
-            "\\",         // Windows root (on Unix this is just a backslash filename)
-            "./",         // Current directory with trailing slash
-            "../",        // Parent directory with trailing slash
-            "client1/",   // Client with trailing slash
-            "client1\\",  // Client with Windows trailing slash
-            "//client1",  // Double slash prefix
+            "",            // Empty path
+            ".",           // Current directory
+            "..",          // Parent directory
+            "/",           // Unix root
+            "\\",          // Windows root (on Unix this is just a backslash filename)
+            "./",          // Current directory with trailing slash
+            "../",         // Parent directory with trailing slash
+            "client1/",    // Client with trailing slash
+            "client1\\",   // Client with Windows trailing slash
+            "//client1",   // Double slash prefix
             "\\\\client1", // Windows UNC-style path
         ];
 
         for path_str in edge_cases {
             let path = PathBuf::from(path_str);
-            
+
             // Test that is_root_path doesn't panic
             let is_root = FileTransferClientsControl::is_root_path(&path);
-            
+
             // Test that component extraction doesn't panic
             let components: Vec<&str> = path
                 .components()
@@ -1062,25 +1070,27 @@ mod tests {
                     _ => None,
                 })
                 .collect();
-            
+
             // For paths that should be root, verify they're detected correctly
             match path_str {
                 "" | "." | "./" | "/" => {
-                    assert!(is_root, "Path '{}' should be detected as root", path_str);
-                    assert!(components.is_empty(), "Root path '{}' should have no normal components", path_str);
+                    assert!(is_root, "Path '{path_str}' should be detected as root");
+                    assert!(
+                        components.is_empty(),
+                        "Root path '{path_str}' should have no normal components"
+                    );
                 }
                 _ => {
                     // Non-root paths should have components or be properly handled
                     if !is_root {
                         // If not root, should either have components or be a special case
-                        let has_meaningful_content = !components.is_empty() || 
-                            path_str.contains("..") ||  // Parent directory references
-                            (cfg!(unix) && path_str.contains("\\")); // Backslashes on Unix
-                        
+                        let has_meaningful_content = !components.is_empty()
+                            || path_str.contains("..")
+                            || (cfg!(unix) && path_str.contains("\\")); // Backslashes on Unix
+
                         assert!(
                             has_meaningful_content || path_str.len() <= 2,
-                            "Non-root path '{}' should have meaningful content or be very short",
-                            path_str
+                            "Non-root path '{path_str}' should have meaningful content or be very short"
                         );
                     }
                 }
@@ -1092,12 +1102,12 @@ mod tests {
     fn test_unicode_and_special_characters() {
         // Test paths with Unicode and special characters
         let special_paths = vec![
-            "客户端1/文件.txt",           // Chinese characters
-            "client1/файл.txt",        // Cyrillic characters
-            "client1/file with spaces.txt", // Spaces
-            "client1/file-with-dashes.txt", // Dashes
+            "客户端1/文件.txt",                  // Chinese characters
+            "client1/файл.txt",                  // Cyrillic characters
+            "client1/file with spaces.txt",      // Spaces
+            "client1/file-with-dashes.txt",      // Dashes
             "client1/file_with_underscores.txt", // Underscores
-            "client1/file.with.dots.txt",   // Multiple dots
+            "client1/file.with.dots.txt",        // Multiple dots
         ];
 
         for path_str in special_paths {
@@ -1113,16 +1123,14 @@ mod tests {
             // Should always have at least 2 components (client and file)
             assert!(
                 components.len() >= 2,
-                "Special character path should have at least 2 components: {}",
-                path_str
+                "Special character path should have at least 2 components: {path_str}"
             );
 
             // Verify we can extract the client name correctly
             let client_name = components[0];
             assert!(
                 !client_name.is_empty(),
-                "Client name should not be empty for path: {}",
-                path_str
+                "Client name should not be empty for path: {path_str}"
             );
         }
     }

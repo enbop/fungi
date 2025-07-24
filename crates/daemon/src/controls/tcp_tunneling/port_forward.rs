@@ -53,7 +53,7 @@ pub async fn forward_port_to_peer(
             source,
         })?;
 
-    log::info!("Listening on {} for TCP tunneling", actual_addr);
+    log::info!("Listening on {actual_addr} for TCP tunneling");
 
     // Store active connection tasks for graceful shutdown
     let active_tasks: Arc<Mutex<Vec<JoinHandle<()>>>> = Arc::new(Mutex::new(Vec::new()));
@@ -64,7 +64,7 @@ pub async fn forward_port_to_peer(
             accept_result = listener.accept() => {
                 match accept_result {
                     Ok((tcp_stream, client_addr)) => {
-                        log::debug!("Accepted connection from {}", client_addr);
+                        log::debug!("Accepted connection from {client_addr}");
 
                         let swarm_control = swarm_control.clone();
                         let stream_control = stream_control.clone();
@@ -78,7 +78,7 @@ pub async fn forward_port_to_peer(
                                 target_peer,
                                 target_protocol,
                             ).await {
-                                log::error!("Failed to handle connection from {}: {}", client_addr, e);
+                                log::error!("Failed to handle connection from {client_addr}: {e}");
                             }
                         });
 
@@ -88,7 +88,7 @@ pub async fn forward_port_to_peer(
                         active_tasks.lock().retain(|task| !task.is_finished());
                     }
                     Err(e) => {
-                        log::error!("Failed to accept connection: {}", e);
+                        log::error!("Failed to accept connection: {e}");
                         continue;
                     }
                 }
@@ -136,21 +136,13 @@ async fn handle_tcp_connection(
     let tcp_peer_addr = tcp_stream
         .peer_addr()
         .map_err(PortForwardError::AcceptTcp)?;
-    log::debug!(
-        "Established tunnel from {} to peer {}",
-        tcp_peer_addr,
-        target_peer
-    );
+    log::debug!("Established tunnel from {tcp_peer_addr} to peer {target_peer}");
 
     // Bidirectional copy
     tokio::io::copy_bidirectional(&mut libp2p_stream.compat(), &mut tcp_stream)
         .await
         .map_err(PortForwardError::AcceptTcp)?;
 
-    log::debug!(
-        "Tunnel from {} to peer {} closed",
-        tcp_peer_addr,
-        target_peer
-    );
+    log::debug!("Tunnel from {tcp_peer_addr} to peer {target_peer} closed");
     Ok(())
 }

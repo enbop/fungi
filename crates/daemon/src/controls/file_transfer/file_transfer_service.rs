@@ -123,10 +123,10 @@ impl FileTransferRpcService {
                     match stream_result {
                         Some((peer_id, stream)) => {
                             if !self.allowed_peers.read().contains(&peer_id) {
-                                log::warn!("Deny connection from disallowed peer: {}.", peer_id);
+                                log::warn!("Deny connection from disallowed peer: {peer_id}.");
                                 continue;
                             }
-                            log::debug!("Accepted connection from peer: {}.", peer_id);
+                            log::debug!("Accepted connection from peer: {peer_id}.");
 
                             let framed = codec_builder.new_framed(stream.compat());
                             let transport = serde_transport::new(framed, Bincode::default());
@@ -139,7 +139,7 @@ impl FileTransferRpcService {
                                     .for_each(|f| async { tokio::spawn(f); });
 
                                 fut.await;
-                                log::debug!("File transfer connection with peer {} closed", peer_id);
+                                log::debug!("File transfer connection with peer {peer_id} closed");
                             });
 
                             // Track the connection task and clean up completed ones
@@ -171,7 +171,7 @@ impl FileTransferRpcService {
         let mut tasks = active_tasks_for_cleanup.lock();
         let task_count = tasks.len();
         if task_count > 0 {
-            log::info!("Aborting {} active file transfer connections", task_count);
+            log::info!("Aborting {task_count} active file transfer connections");
         }
         for handle in tasks.drain(..) {
             handle.abort();
@@ -219,11 +219,8 @@ impl FileTransferServiceControl {
 
         let incoming_streams = stream_control
             .accept(FUNGI_FILE_TRANSFER_PROTOCOL)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-        log::info!(
-            "File Transfer Service listening on protocol: {}",
-            FUNGI_FILE_TRANSFER_PROTOCOL
-        );
+            .map_err(io::Error::other)?;
+        log::info!("File Transfer Service listening on protocol: {FUNGI_FILE_TRANSFER_PROTOCOL}");
 
         tokio::spawn(service.listen_from_libp2p_stream(incoming_streams, cancellation_token_clone));
 
@@ -234,7 +231,7 @@ impl FileTransferServiceControl {
     pub fn remove_service(&self, path: &PathBuf) {
         let mut services = self.services.lock();
         if let Some(cancellation_token) = services.remove(path) {
-            log::info!("Stopping file transfer service at: {:?}", path);
+            log::info!("Stopping file transfer service at: {path:?}");
             cancellation_token.cancel();
         }
     }
@@ -246,7 +243,7 @@ impl FileTransferServiceControl {
     pub fn stop_all(&self) {
         let mut services = self.services.lock();
         for (path, cancellation_token) in services.drain() {
-            log::info!("Stopping file transfer service at: {:?}", path);
+            log::info!("Stopping file transfer service at: {path:?}");
             cancellation_token.cancel();
         }
     }

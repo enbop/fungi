@@ -48,10 +48,7 @@ async fn create_daemons() -> (FungiDaemon, FungiDaemon) {
 
     // Connect client to server
     let server_peer_id = server_daemon.swarm_control().local_peer_id();
-    let server_addr = format!(
-        "/ip4/127.0.0.1/tcp/{}/p2p/{}",
-        SERVER_TCP_PORT, server_peer_id
-    );
+    let server_addr = format!("/ip4/127.0.0.1/tcp/{SERVER_TCP_PORT}/p2p/{server_peer_id}");
 
     server_daemon
         .swarm_control()
@@ -83,9 +80,9 @@ async fn main() {
     let client_peer_id = client_daemon.swarm_control().local_peer_id();
 
     println!("✅ File transfer daemons started successfully!");
-    println!("📋 Server peer ID: {}", server_peer_id);
-    println!("📋 Client peer ID: {}", client_peer_id);
-    println!("📋 Server TCP port: {}", SERVER_TCP_PORT);
+    println!("📋 Server peer ID: {server_peer_id}");
+    println!("📋 Client peer ID: {client_peer_id}");
+    println!("📋 Server TCP port: {SERVER_TCP_PORT}");
     println!();
 
     // Show WebDAV info

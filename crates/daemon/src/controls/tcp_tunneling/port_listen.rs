@@ -37,7 +37,7 @@ pub async fn listen_p2p_to_port(
             stream_result = incomings.next() => {
                 match stream_result {
                     Some((peer_id, stream)) => {
-                        log::debug!("Received stream from {:?}", peer_id);
+                        log::debug!("Received stream from {peer_id:?}");
 
                         let task = tokio::spawn(handle_incoming_stream(stream, target_addr));
                         active_tasks.lock().push(task);
@@ -71,8 +71,8 @@ pub async fn listen_p2p_to_port(
 
 async fn handle_incoming_stream(p2p_stream: Stream, target_addr: SocketAddr) {
     match handle_incoming_stream_inner(p2p_stream, target_addr).await {
-        Ok(()) => log::debug!("Connection to {} closed successfully", target_addr),
-        Err(e) => log::error!("Connection to {} failed: {}", target_addr, e),
+        Ok(()) => log::debug!("Connection to {target_addr} closed successfully"),
+        Err(e) => log::error!("Connection to {target_addr} failed: {e}"),
     }
 }
 
@@ -85,12 +85,12 @@ async fn handle_incoming_stream_inner(p2p_stream: Stream, target_addr: SocketAdd
                 source,
             })?;
 
-    log::debug!("Established connection to {}", target_addr);
+    log::debug!("Established connection to {target_addr}");
 
     tokio::io::copy_bidirectional(&mut p2p_stream.compat(), &mut target_stream)
         .await
         .map_err(TcpTunnelingError::Io)?;
 
-    log::debug!("Connection to {} closed", target_addr);
+    log::debug!("Connection to {target_addr} closed");
     Ok(())
 }

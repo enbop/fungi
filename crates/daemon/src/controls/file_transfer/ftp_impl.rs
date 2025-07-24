@@ -19,7 +19,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         path: P,
     ) -> libunftp::storage::Result<Self::Metadata> {
         let path = path.as_ref().to_path_buf();
-        self.metadata(path).await.map_err(|e| map_error(e))
+        self.metadata(path).await.map_err(map_error)
     }
 
     async fn list<P: AsRef<std::path::Path> + Send + Debug>(
@@ -30,7 +30,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         Vec<libunftp::storage::Fileinfo<std::path::PathBuf, Self::Metadata>>,
     > {
         let path = path.as_ref().to_path_buf();
-        let file_infos = self.list(path).await.map_err(|e| map_error(e))?;
+        let file_infos = self.list(path).await.map_err(map_error)?;
 
         Ok(file_infos
             .into_iter()
@@ -48,7 +48,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         start_pos: u64,
     ) -> libunftp::storage::Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
         let path = path.as_ref().to_path_buf();
-        let bytes = self.get(path, start_pos).await.map_err(|e| map_error(e))?;
+        let bytes = self.get(path, start_pos).await.map_err(map_error)?;
 
         let cursor = std::io::Cursor::new(bytes);
         Ok(Box::new(cursor) as Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>)
@@ -73,9 +73,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
                 libunftp::storage::Error::new(libunftp::storage::ErrorKind::LocalError, e)
             })?;
 
-        self.put(buffer, path, start_pos)
-            .await
-            .map_err(|e| map_error(e))
+        self.put(buffer, path, start_pos).await.map_err(map_error)
     }
 
     async fn del<P: AsRef<std::path::Path> + Send + Debug>(
@@ -84,7 +82,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         path: P,
     ) -> libunftp::storage::Result<()> {
         let path = path.as_ref().to_path_buf();
-        self.del(path).await.map_err(|e| map_error(e))
+        self.del(path).await.map_err(map_error)
     }
 
     async fn rmd<P: AsRef<std::path::Path> + Send + Debug>(
@@ -93,7 +91,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         path: P,
     ) -> libunftp::storage::Result<()> {
         let path = path.as_ref().to_path_buf();
-        self.rmd(path).await.map_err(|e| map_error(e))
+        self.rmd(path).await.map_err(map_error)
     }
 
     async fn mkd<P: AsRef<std::path::Path> + Send + Debug>(
@@ -102,7 +100,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         path: P,
     ) -> libunftp::storage::Result<()> {
         let path = path.as_ref().to_path_buf();
-        self.mkd(path).await.map_err(|e| map_error(e))
+        self.mkd(path).await.map_err(map_error)
     }
 
     async fn rename<P: AsRef<std::path::Path> + Send + Debug>(
@@ -113,7 +111,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
     ) -> libunftp::storage::Result<()> {
         let from = from.as_ref().to_path_buf();
         let to = to.as_ref().to_path_buf();
-        self.rename(from, to).await.map_err(|e| map_error(e))
+        self.rename(from, to).await.map_err(map_error)
     }
 
     async fn cwd<P: AsRef<std::path::Path> + Send + Debug>(
@@ -122,7 +120,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         path: P,
     ) -> libunftp::storage::Result<()> {
         let path = path.as_ref().to_path_buf();
-        self.cwd(path).await.map_err(|e| map_error(e))
+        self.cwd(path).await.map_err(map_error)
     }
 }
 
@@ -144,7 +142,7 @@ fn map_error(err: fungi_fs::FileSystemError) -> libunftp::storage::Error {
         FileSystemError::ReadOnly => ErrorKind::PermissionDenied.into(),
         FileSystemError::NotSupported { .. } => ErrorKind::CommandNotImplemented.into(),
         FileSystemError::Io { message } | FileSystemError::Other { message } => {
-            log::error!("File transfer error: {}", message);
+            log::error!("File transfer error: {message}");
             ErrorKind::LocalError.into()
         }
     }

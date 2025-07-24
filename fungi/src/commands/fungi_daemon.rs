@@ -17,10 +17,10 @@ pub async fn run(args: DaemonArgs) -> Result<()> {
         .invoke_swarm(|swarm| swarm.network_info())
         .await
         .unwrap();
-    println!("Network info: {:?}", network_info);
+    println!("Network info: {network_info:?}");
 
     if let Err(e) = swarm_control.listen_relay(get_default_relay_addr()).await {
-        eprintln!("Failed to listen on relay: {:?}", e);
+        eprintln!("Failed to listen on relay: {e:?}");
     };
 
     tokio::select! {

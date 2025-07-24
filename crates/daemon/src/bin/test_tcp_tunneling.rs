@@ -13,7 +13,7 @@ async fn create_tcp_tunneling_daemons() -> (FungiDaemon, FungiDaemon, TempDir, T
     let server_key = Keypair::generate_secp256k1();
 
     let client_peer_id = client_key.public().to_peer_id();
-    let server_peer_id = server_key.public().to_peer_id();
+    let _server_peer_id = server_key.public().to_peer_id();
 
     let client_temp_dir = TempDir::new().unwrap();
     let server_temp_dir = TempDir::new().unwrap();
@@ -52,10 +52,7 @@ async fn create_tcp_tunneling_daemons() -> (FungiDaemon, FungiDaemon, TempDir, T
 
     // Connect client to server
     let server_peer_id = server_daemon.swarm_control().local_peer_id();
-    let server_addr = format!(
-        "/ip4/127.0.0.1/tcp/{}/p2p/{}",
-        SERVER_TCP_PORT, server_peer_id
-    );
+    let server_addr = format!("/ip4/127.0.0.1/tcp/{SERVER_TCP_PORT}/p2p/{server_peer_id}");
 
     client_daemon
         .swarm_control()
@@ -71,8 +68,8 @@ async fn create_tcp_tunneling_daemons() -> (FungiDaemon, FungiDaemon, TempDir, T
         .await
         .unwrap();
 
-    println!("✅ Client Daemon started on port {}", CLIENT_TCP_PORT);
-    println!("✅ Server Daemon started on port {}", SERVER_TCP_PORT);
+    println!("✅ Client Daemon started on port {CLIENT_TCP_PORT}");
+    println!("✅ Server Daemon started on port {SERVER_TCP_PORT}");
     println!(
         "✅ Client peer ID: {}",
         client_daemon.swarm_control().local_peer_id()
@@ -110,10 +107,10 @@ async fn main() {
         .await
     {
         Ok(listen_rule_id) => {
-            println!("✅ Added listening rule: {}", listen_rule_id);
+            println!("✅ Added listening rule: {listen_rule_id}");
             println!("   Server listening on: 127.0.0.1:8888 (protocol: /fungi/tunnel/0.1.0/8888)");
         }
-        Err(e) => println!("❌ Failed to add listening rule: {}", e),
+        Err(e) => println!("❌ Failed to add listening rule: {e}"),
     }
 
     // Add a forwarding rule on client (port 7777 -> server:8888)
@@ -127,13 +124,10 @@ async fn main() {
         .await
     {
         Ok(forward_rule_id) => {
-            println!("✅ Added forwarding rule: {}", forward_rule_id);
-            println!(
-                "   Client forwarding: 127.0.0.1:7777 -> {} (127.0.0.1:8888)",
-                server_peer_id
-            );
+            println!("✅ Added forwarding rule: {forward_rule_id}");
+            println!("   Client forwarding: 127.0.0.1:7777 -> {server_peer_id} (127.0.0.1:8888)");
         }
-        Err(e) => println!("❌ Failed to add forwarding rule: {}", e),
+        Err(e) => println!("❌ Failed to add forwarding rule: {e}"),
     }
 
     println!();
@@ -144,9 +138,9 @@ async fn main() {
         "   Client peer ID: {}",
         client_daemon.swarm_control().local_peer_id()
     );
-    println!("   Server peer ID: {}", server_peer_id);
-    println!("   Client TCP port: {}", CLIENT_TCP_PORT);
-    println!("   Server TCP port: {}", SERVER_TCP_PORT);
+    println!("   Server peer ID: {server_peer_id}");
+    println!("   Client TCP port: {CLIENT_TCP_PORT}");
+    println!("   Server TCP port: {SERVER_TCP_PORT}");
     println!();
     println!("🧪 How to Test:");
     println!("   1. Start a server on the server side: nc -l 8888");

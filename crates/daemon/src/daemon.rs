@@ -16,6 +16,7 @@ use libp2p::identity::Keypair;
 use parking_lot::Mutex;
 use tokio::task::JoinHandle;
 
+#[allow(dead_code)]
 struct TaskHandles {
     swarm_task: JoinHandle<()>,
     daemon_rpc_task: Arc<Mutex<Option<JoinHandle<()>>>>,
@@ -23,6 +24,7 @@ struct TaskHandles {
     proxy_webdav_task: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
+#[allow(dead_code)]
 pub struct FungiDaemon {
     config: Arc<Mutex<FungiConfig>>,
     args: DaemonArgs,
@@ -58,7 +60,7 @@ impl FungiDaemon {
 
     pub async fn start(args: DaemonArgs) -> Result<Self> {
         let fungi_dir = args.fungi_dir();
-        println!("Fungi directory: {:?}", fungi_dir);
+        println!("Fungi directory: {fungi_dir:?}");
 
         let config = FungiConfig::apply_from_dir(&fungi_dir)?;
         let keypair = get_keypair_from_dir(&fungi_dir)?;
@@ -104,7 +106,7 @@ impl FungiDaemon {
 
         let proxy_ftp_task = if config.file_transfer.proxy_ftp.enabled {
             Some(tokio::spawn(crate::controls::start_ftp_proxy_service(
-                config.file_transfer.proxy_ftp.host.clone(),
+                config.file_transfer.proxy_ftp.host,
                 config.file_transfer.proxy_ftp.port,
                 ftc_control.clone(),
             )))
@@ -114,7 +116,7 @@ impl FungiDaemon {
 
         let proxy_webdav_task = if config.file_transfer.proxy_webdav.enabled {
             Some(tokio::spawn(crate::controls::start_webdav_proxy_service(
-                config.file_transfer.proxy_webdav.host.clone(),
+                config.file_transfer.proxy_webdav.host,
                 config.file_transfer.proxy_webdav.port,
                 ftc_control.clone(),
             )))
@@ -155,7 +157,7 @@ impl FungiDaemon {
     async fn init_fts(config: FTSConfig, fts_control: &FileTransferServiceControl) {
         if config.enabled {
             if let Err(e) = fts_control.add_service(config).await {
-                log::warn!("Failed to add file transfer service: {}", e);
+                log::warn!("Failed to add file transfer service: {e}");
             }
         }
     }
@@ -168,9 +170,8 @@ impl FungiDaemon {
                     continue;
                 }
                 if client.name.is_none() {
-                    if let Ok(remote_host_name) = ftc_control
-                        .connect_and_get_host_name(client.peer_id.clone())
-                        .await
+                    if let Ok(remote_host_name) =
+                        ftc_control.connect_and_get_host_name(client.peer_id).await
                     {
                         client.name = remote_host_name
                     }

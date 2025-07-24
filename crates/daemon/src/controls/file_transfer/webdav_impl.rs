@@ -85,12 +85,11 @@ impl DavFile for DavFileImpl {
                 log::debug!("First write to file, ensuring it exists");
             }
 
-            let written = self
+            let _written = self
                 .clients_ctrl
                 .put(bytes, self.path.clone(), self.position)
                 .await
                 .map_err(|e| map_error(e, "write_bytes", &self.path))?;
-
             self.position += buf.len() as u64;
             Ok(())
         }
@@ -141,7 +140,7 @@ impl DavFile for DavFileImpl {
                     if offset >= 0 {
                         self.position += offset as u64;
                     } else {
-                        let offset = offset.abs() as u64;
+                        let offset = offset.unsigned_abs();
                         if self.position >= offset {
                             self.position -= offset;
                         } else {
@@ -161,7 +160,7 @@ impl DavFile for DavFileImpl {
                         if offset >= 0 {
                             self.position = meta.len + offset as u64;
                         } else {
-                            let offset = offset.abs() as u64;
+                            let offset = offset.unsigned_abs();
                             if meta.len >= offset {
                                 self.position = meta.len - offset;
                             } else {
@@ -453,11 +452,11 @@ fn map_error(err: fungi_fs::FileSystemError, op: &str, path: &PathBuf) -> FsErro
         FileSystemError::ConnectionBroken => FsError::GeneralFailure,
         FileSystemError::NotSupported { .. } => FsError::NotImplemented,
         FileSystemError::Io { message } => {
-            log::error!("IO error: {}", message);
+            log::error!("IO error: {message}");
             FsError::GeneralFailure
         }
         FileSystemError::Other { message } => {
-            log::error!("Other error: {}", message);
+            log::error!("Other error: {message}");
             FsError::GeneralFailure
         }
     }

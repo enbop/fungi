@@ -1,5 +1,5 @@
 use crate::{behaviours::FungiBehaviours, peer_handshake::PeerHandshakePayload};
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use async_result::{AsyncResult, Completer};
 use fungi_util::protocols::{FUNGI_PEER_HANDSHAKE_PROTOCOL, FUNGI_RELAY_HANDSHAKE_PROTOCOL};
 use libp2p::{
@@ -201,7 +201,7 @@ impl SwarmControl {
         }
 
         if self.state.dial_callback.lock().contains_key(&peer_id) {
-            log::warn!("Already dialing {}", peer_id);
+            log::warn!("Already dialing {peer_id}");
             return Err(ConnectError::AlreadyDialing { peer_id });
         }
 
@@ -210,18 +210,17 @@ impl SwarmControl {
         let dial_result = self
             .invoke_swarm(move |swarm| {
                 if swarm.is_connected(&peer_id) {
-                    log::info!("Already connected to {}", peer_id);
+                    log::info!("Already connected to {peer_id}");
                     completer.complete(Ok(()));
                     return Ok(());
                 }
-                if let Err(e) = swarm.dial(peer_id.clone()) {
+                if let Err(e) = swarm.dial(peer_id) {
                     match e {
                         DialError::NoAddresses => {
                             // TODO: add a rendezvous server
                             // dial with relay when no mDNS addresses are available
-                            let addr =
-                                peer_addr_with_relay(peer_id.clone(), get_default_relay_addr());
-                            log::info!("Dialing {} with relay address {}", peer_id, addr);
+                            let addr = peer_addr_with_relay(peer_id, get_default_relay_addr());
+                            log::info!("Dialing {peer_id} with relay address {addr}");
                             swarm.dial(addr)?;
                         }
                         _ => return Err(e),
@@ -239,7 +238,7 @@ impl SwarmControl {
         match dial_result {
             Ok(dial_res) => dial_res?,
             Err(e) => {
-                log::warn!("Failed to invoke swarm for dial: {:?}", e);
+                log::warn!("Failed to invoke swarm for dial: {e:?}");
                 return Err(ConnectError::SwarmInvocationFailed(e));
             }
         }
@@ -410,7 +409,7 @@ impl FungiSwarm {
                                 }
                             },
                             SwarmEvent::ConnectionClosed { peer_id, cause, .. } => {
-                                log::info!("Connection closed with {peer_id:?}: {:?}", cause);
+                                log::info!("Connection closed with {peer_id:?}: {cause:?}");
                                 // update connected peers
                                 swarm.behaviour().connected_peers.lock().remove(&peer_id);
                             },

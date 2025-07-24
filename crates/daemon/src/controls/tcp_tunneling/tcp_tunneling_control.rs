@@ -48,7 +48,7 @@ impl TcpTunnelingControl {
         if config.forwarding.enabled {
             for rule in &config.forwarding.rules {
                 if let Err(e) = self.add_forwarding_rule(rule.clone()).await {
-                    log::warn!("Failed to add forwarding rule: {}", e);
+                    log::warn!("Failed to add forwarding rule: {e}");
                 }
             }
         }
@@ -56,7 +56,7 @@ impl TcpTunnelingControl {
         if config.listening.enabled {
             for rule in &config.listening.rules {
                 if let Err(e) = self.add_listening_rule(rule.clone()).await {
-                    log::warn!("Failed to add listening rule: {}", e);
+                    log::warn!("Failed to add listening rule: {e}");
                 }
             }
         }
@@ -90,12 +90,7 @@ impl TcpTunnelingControl {
         let swarm_control = self.swarm_control.clone();
         let stream_control = swarm_control.stream_control().clone();
 
-        log::info!(
-            "Adding forwarding rule: {} -> {}/{}",
-            local_addr,
-            target_peer,
-            target_protocol
-        );
+        log::info!("Adding forwarding rule: {local_addr} -> {target_peer}/{target_protocol}");
 
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
@@ -126,7 +121,7 @@ impl TcpTunnelingControl {
     pub fn remove_forwarding_rule(&self, rule_id: &str) -> Result<()> {
         let mut rules = self.forwarding_rules.lock();
         if let Some(rule_state) = rules.remove(rule_id) {
-            log::info!("Removing forwarding rule: {}", rule_id);
+            log::info!("Removing forwarding rule: {rule_id}");
             rule_state.cancellation_token.cancel();
             rule_state.task_handle.abort();
             Ok(())
@@ -155,11 +150,7 @@ impl TcpTunnelingControl {
 
         let stream_control = self.swarm_control.stream_control().clone();
 
-        log::info!(
-            "Adding listening rule: {} for {}",
-            local_addr,
-            listening_protocol
-        );
+        log::info!("Adding listening rule: {local_addr} for {listening_protocol}");
 
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
@@ -188,7 +179,7 @@ impl TcpTunnelingControl {
     pub fn remove_listening_rule(&self, rule_id: &str) -> Result<()> {
         let mut rules = self.listening_rules.lock();
         if let Some(rule_state) = rules.remove(rule_id) {
-            log::info!("Removing listening rule: {}", rule_id);
+            log::info!("Removing listening rule: {rule_id}");
             rule_state.cancellation_token.cancel();
             rule_state.task_handle.abort();
             Ok(())
@@ -220,7 +211,7 @@ impl TcpTunnelingControl {
         {
             let mut forwarding_rules = self.forwarding_rules.lock();
             for (rule_id, rule_state) in forwarding_rules.drain() {
-                log::info!("Stopping forwarding rule: {}", rule_id);
+                log::info!("Stopping forwarding rule: {rule_id}");
                 rule_state.cancellation_token.cancel();
                 rule_state.task_handle.abort();
             }
@@ -229,7 +220,7 @@ impl TcpTunnelingControl {
         {
             let mut listening_rules = self.listening_rules.lock();
             for (rule_id, rule_state) in listening_rules.drain() {
-                log::info!("Stopping listening rule: {}", rule_id);
+                log::info!("Stopping listening rule: {rule_id}");
                 rule_state.cancellation_token.cancel();
                 rule_state.task_handle.abort();
             }

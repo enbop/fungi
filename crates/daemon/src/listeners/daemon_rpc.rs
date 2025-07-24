@@ -1,6 +1,4 @@
-use fungi_config::FungiDir;
 use fungi_swarm::SwarmControl;
-use fungi_util::ipc;
 use futures::StreamExt;
 use interprocess::local_socket::tokio::prelude::*;
 use libp2p::{PeerId, StreamProtocol};
@@ -38,7 +36,7 @@ pub struct FungiDaemonRpcServer {
 }
 
 impl FungiDaemonRpcServer {
-    pub fn start(args: DaemonArgs, swarm_control: SwarmControl) -> io::Result<JoinHandle<()>> {
+    pub fn start(_args: DaemonArgs, _swarm_control: SwarmControl) -> io::Result<JoinHandle<()>> {
         // TODO release the sock address if it already exists
         // let ipc_listener = ipc::create_ipc_listener(&args.daemon_rpc_path().to_string_lossy())?;
         // let task_handle = tokio::spawn(Self::listen_from_ipc(
@@ -88,7 +86,7 @@ impl FungiDaemonRpc for FungiDaemonRpcServer {
                 };
                 tokio::spawn(async move {
                     // send the PeerId first
-                    if let Err(_) = local_stream.write_all(peer_id.to_string().as_bytes()).await {
+                    if (local_stream.write_all(peer_id.to_string().as_bytes()).await).is_err() {
                         println!("Failed to write peer id to ipc stream");
                         return;
                     };

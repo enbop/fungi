@@ -131,16 +131,14 @@ impl FungiDaemon {
 
         // TODO add transaction
         if name.is_none() {
-            if let Ok(remote_host_name) =
-                ftc_control.connect_and_get_host_name(peer_id.clone()).await
-            {
+            if let Ok(remote_host_name) = ftc_control.connect_and_get_host_name(peer_id).await {
                 name = remote_host_name
             }
         }
 
         let current_config = self.config().lock().clone();
         let updated_config =
-            current_config.add_file_transfer_client(enabled, peer_id.clone(), name.clone())?;
+            current_config.add_file_transfer_client(enabled, peer_id, name.clone())?;
         *self.config().lock() = updated_config;
 
         if enabled {
@@ -178,10 +176,8 @@ impl FungiDaemon {
 
             // TODO add transaction
             if config.name.is_none() {
-                if let Ok(remote_host_name) = self
-                    .ftc_control()
-                    .connect_and_get_host_name(peer_id.clone())
-                    .await
+                if let Ok(remote_host_name) =
+                    self.ftc_control().connect_and_get_host_name(peer_id).await
                 {
                     config.name = remote_host_name
                 }

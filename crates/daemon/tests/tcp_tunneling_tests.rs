@@ -80,7 +80,7 @@ async fn create_daemon_pair() -> (FungiDaemon, FungiDaemon, TempDir, TempDir) {
 
     // Connect client to server
     let server_peer_id = server_daemon.swarm_control().local_peer_id();
-    let server_addr = format!("/ip4/127.0.0.1/tcp/{}/p2p/{}", server_port, server_peer_id);
+    let server_addr = format!("/ip4/127.0.0.1/tcp/{server_port}/p2p/{server_peer_id}");
 
     client_daemon
         .swarm_control()

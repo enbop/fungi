@@ -104,7 +104,7 @@ impl From<FileSystemError> for io::Error {
             FileSystemError::ConnectionBroken => {
                 io::Error::new(io::ErrorKind::ConnectionAborted, err.to_string())
             }
-            _ => io::Error::new(io::ErrorKind::Other, err.to_string()),
+            _ => io::Error::other(err.to_string()),
         }
     }
 }
@@ -482,7 +482,7 @@ impl FileSystem {
             })?;
 
         while let Some(entry) = dir.next_entry().await.map_err(|e| FileSystemError::Io {
-            message: format!("Failed to read directory entry: {}", e),
+            message: format!("Failed to read directory entry: {e}"),
         })? {
             let name = entry.file_name().to_string_lossy().to_string();
             let entry_path = entry.path();
@@ -583,14 +583,14 @@ impl FileSystem {
             file.seek(SeekFrom::Start(start_pos))
                 .await
                 .map_err(|e| FileSystemError::Io {
-                    message: format!("Failed to seek: {}", e),
+                    message: format!("Failed to seek: {e}"),
                 })?;
 
             let mut buffer = Vec::new();
             file.read_to_end(&mut buffer)
                 .await
                 .map_err(|e| FileSystemError::Io {
-                    message: format!("Failed to read: {}", e),
+                    message: format!("Failed to read: {e}"),
                 })?;
 
             Ok(buffer)
@@ -613,7 +613,7 @@ impl FileSystem {
             tokio::io::copy(&mut data, &mut buffer)
                 .await
                 .map_err(|e| FileSystemError::Io {
-                    message: format!("Failed to read data: {}", e),
+                    message: format!("Failed to read data: {e}"),
                 })?;
 
             self.write(&path, &buffer).await?;
@@ -626,14 +626,14 @@ impl FileSystem {
             file.seek(SeekFrom::Start(start_pos))
                 .await
                 .map_err(|e| FileSystemError::Io {
-                    message: format!("Failed to seek: {}", e),
+                    message: format!("Failed to seek: {e}"),
                 })?;
 
             let bytes_written =
                 tokio::io::copy(&mut data, &mut file)
                     .await
                     .map_err(|e| FileSystemError::Io {
-                        message: format!("Failed to write: {}", e),
+                        message: format!("Failed to write: {e}"),
                     })?;
 
             file.sync_all().await?;

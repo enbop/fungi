@@ -56,7 +56,7 @@ impl FungiConfig {
             Self::init_config_file(config_file.clone())?;
         }
 
-        println!("Loading Fungi config from: {:?}", config_file);
+        println!("Loading Fungi config from: {config_file:?}");
         let s = std::fs::read_to_string(&config_file)?;
         let mut cfg = Self::parse_toml(&s)?;
         cfg.config_file = config_file;
@@ -92,7 +92,7 @@ impl FungiConfig {
         }
 
         self.update_and_save(|config| {
-            config.network.incoming_allowed_peers.push(peer_id.clone());
+            config.network.incoming_allowed_peers.push(*peer_id);
         })
     }
 
@@ -338,7 +338,7 @@ mod tests {
         );
         assert!(config.config_file.exists());
         let content = std::fs::read_to_string(&config.config_file).unwrap();
-        println!("Config content: {}", content);
+        println!("Config content: {content}");
         assert!(content.contains(&peer_id.to_string()));
     }
 
@@ -394,7 +394,7 @@ mod tests {
 
         // Verify persisted changes
         let content = std::fs::read_to_string(&config.config_file).unwrap();
-        println!("Config content: {}", content);
+        println!("Config content: {content}");
         assert!(content.contains(&format!(
             "shared_root_dir = \"{}\"",
             root_dir.to_string_lossy()
@@ -409,7 +409,7 @@ mod tests {
         let client_name = "test-client";
 
         let updated_config = config
-            .add_file_transfer_client(true, peer_id.clone(), Some(client_name.to_string()))
+            .add_file_transfer_client(true, peer_id, Some(client_name.to_string()))
             .unwrap();
 
         // Verify memory updates
@@ -424,7 +424,7 @@ mod tests {
 
         // Verify persisted changes
         let content = std::fs::read_to_string(&config.config_file).unwrap();
-        println!("Config content: {}", content);
+        println!("Config content: {content}");
         assert!(content.contains(&peer_id.to_string()));
         assert!(content.contains(client_name));
     }
@@ -436,7 +436,7 @@ mod tests {
 
         // Add client first
         let config_with_client = config
-            .add_file_transfer_client(true, peer_id.clone(), None)
+            .add_file_transfer_client(true, peer_id, None)
             .unwrap();
         assert!(
             config_with_client
@@ -462,7 +462,7 @@ mod tests {
 
         // Verify persisted changes
         let content = std::fs::read_to_string(&config.config_file).unwrap();
-        println!("Config content: {}", content);
+        println!("Config content: {content}");
         assert!(!content.contains(&peer_id.to_string()));
     }
 
@@ -473,7 +473,7 @@ mod tests {
 
         // Add client first with enabled=false
         let config_with_client = config
-            .add_file_transfer_client(false, peer_id.clone(), None)
+            .add_file_transfer_client(false, peer_id, None)
             .unwrap();
 
         // Enable the client
@@ -495,7 +495,7 @@ mod tests {
 
         // Verify persisted changes
         let content = std::fs::read_to_string(&config.config_file).unwrap();
-        println!("Config content: {}", content);
+        println!("Config content: {content}");
         assert!(content.contains(&peer_id.to_string()));
         assert!(content.contains("enabled = true"));
     }

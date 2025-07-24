@@ -7,7 +7,7 @@ use libp2p_identity::PeerId;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 
-static FUNGI_DAEMON: Lazy<Mutex<Option<Arc<FungiDaemon>>>> = Lazy::new(|| Default::default());
+static FUNGI_DAEMON: Lazy<Mutex<Option<Arc<FungiDaemon>>>> = Lazy::new(Default::default);
 
 pub struct FileTransferClient {
     pub enabled: bool,
