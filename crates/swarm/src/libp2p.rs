@@ -70,9 +70,11 @@ impl ConnectedPeer {
     }
 }
 
+type DialCallback = Arc<Mutex<HashMap<PeerId, Completer<std::result::Result<(), DialError>>>>>;
+
 #[derive(Default, Clone)]
 pub struct State {
-    dial_callback: Arc<Mutex<HashMap<PeerId, Completer<std::result::Result<(), DialError>>>>>,
+    dial_callback: DialCallback,
     connected_peers: Arc<Mutex<HashMap<PeerId, ConnectedPeer>>>,
     incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
 }
@@ -86,9 +88,7 @@ impl State {
         }
     }
 
-    pub fn dial_callback(
-        &self,
-    ) -> Arc<Mutex<HashMap<PeerId, Completer<std::result::Result<(), DialError>>>>> {
+    pub fn dial_callback(&self) -> DialCallback {
         self.dial_callback.clone()
     }
 

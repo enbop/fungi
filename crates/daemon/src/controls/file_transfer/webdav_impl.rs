@@ -1,4 +1,8 @@
-use std::{io::SeekFrom, path::PathBuf, pin::Pin};
+use std::{
+    io::SeekFrom,
+    path::{Path, PathBuf},
+    pin::Pin,
+};
 
 use dav_server::{
     davpath::DavPath,
@@ -274,7 +278,8 @@ impl DavFileSystem for FileTransferClientsControl {
             let file = DavFileImpl {
                 path: path_buf,
                 clients_ctrl,
-                position: if options.truncate { 0 } else { 0 }, // TODO: handle append mode properly
+                // position: if options.truncate { 0 } else { 0 }, // TODO: handle append mode properly
+                position: 0,
                 data: None,
                 options,
             };
@@ -430,7 +435,7 @@ impl DavFileSystem for FileTransferClientsControl {
     }
 }
 
-fn map_error(err: fungi_fs::FileSystemError, op: &str, path: &PathBuf) -> FsError {
+fn map_error(err: fungi_fs::FileSystemError, op: &str, path: &Path) -> FsError {
     use fungi_fs::FileSystemError;
     log::error!(
         "FileSystem error during {}: {} at path: {}",
