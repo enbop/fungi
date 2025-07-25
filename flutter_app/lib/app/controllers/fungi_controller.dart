@@ -290,7 +290,7 @@ class FungiController extends GetxController {
     required List<String> allowedPeers,
   }) async {
     try {
-      fungi.addTcpListeningRule(
+      await fungi.addTcpListeningRule(
         localHost: localHost,
         localPort: localPort,
         allowedPeers: allowedPeers,
