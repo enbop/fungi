@@ -8,8 +8,8 @@
 </h1>
 
 <p align="center" style="font-size: 1.2rem;">複数デバイスを統合システムに</p>
-<p align="center" style="font-size: 1rem;">シームレスなデバイス統合のための分散コンピューティングプラットフォーム</p>
-<p align="center" style="font-size: 0.9rem; color: #666;">ファイル転送 • ポートフォワーディング • リモート実行（近日公開）</p>
+<p align="center" style="font-size: 1rem;">シームレスなマルチデバイス統合のためのプラットフォーム</p>
+<p align="center" style="font-size: 0.9rem; color: #666;">ファイル転送 • ポートフォワーディング • クロスデバイス統合（近日公開）</p>
 
 <p align="center">
   <a href="../README.md">🇺🇸 English</a> •
@@ -36,7 +36,7 @@ Rust（P2P通信に[rust-libp2p](https://github.com/libp2p/rust-libp2p)を採用
 
 🔗 **ポートフォワーディング** 
 
-🔮 **リモート実行** *（近日公開）*
+🔮 **クロスデバイス統合** *（近日公開）*
 
 ## 動作原理
 
@@ -93,6 +93,10 @@ Rust（P2P通信に[rust-libp2p](https://github.com/libp2p/rust-libp2p)を採用
 デバイスAで`localhost:9090`にアクセスして、デバイスBのポート`8080`のサービスにアクセス。
 
 > **注意**：より便利なmDNSローカルデバイス発見機能が近日公開予定です。
+
+### クイックスタート（fungi-cli）
+
+[CLI サービスクイックスタートガイド](cli_service_quick_start.md)をご覧ください。
 
 ## ソースからビルド
 

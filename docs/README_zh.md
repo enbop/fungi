@@ -8,8 +8,8 @@
 </h1>
 
 <p align="center" style="font-size: 1.2rem;">将多设备融合为统一系统</p>
-<p align="center" style="font-size: 1rem;">打造无缝设备集成的分布式计算平台</p>
-<p align="center" style="font-size: 0.9rem; color: #666;">文件传输 • 端口转发 • 远程执行（即将推出）</p>
+<p align="center" style="font-size: 1rem;">打造无缝多设备集成的平台</p>
+<p align="center" style="font-size: 0.9rem; color: #666;">文件传输 • 端口转发 • 跨设备集成（即将推出）</p>
 
 <p align="center">
   <a href="../README.md">🇺🇸 English</a> •
@@ -36,7 +36,7 @@ Fungi 让您通过 P2P 连接安全地连接和管理多个设备。没有服务
 
 🔗 **端口转发** 
 
-🔮 **远程执行** *（即将推出）*
+🔮 **跨设备集成** *（即将推出）*
 
 ## 工作原理
 
@@ -93,6 +93,10 @@ Fungi 让您通过 P2P 连接安全地连接和管理多个设备。没有服务
 在设备 A 上访问 `localhost:9090` 来访问设备 B 的端口 `8080` 上的服务。
 
 > **注意**：更便捷的 mDNS 本地设备发现功能即将推出。
+
+### 快速开始（fungi-cli）
+
+参见 [CLI 服务快速开始指南](cli_service_quick_start.md)。
 
 ## 从源码构建
 

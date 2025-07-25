@@ -8,8 +8,8 @@
 </h1>
 
 <p align="center" style="font-size: 1.2rem;">Turn Multiple Devices Into One Unified System</p>
-<p align="center" style="font-size: 1rem;">A distributed computing platform built for seamless device integration</p>
-<p align="center" style="font-size: 0.9rem; color: #666;">File Transfer • Port Forwarding • Remote Execution (Coming Soon)</p>
+<p align="center" style="font-size: 1rem;">A platform built for seamless multi-device integration</p>
+<p align="center" style="font-size: 0.9rem; color: #666;">File Transfer • Port Forwarding • Cross-Device Integration (Coming Soon)</p>
 
 <p align="center">
   <a href="docs/README_zh.md">🇨🇳 简体中文</a> •
@@ -36,7 +36,7 @@ Built with Rust (using [rust-libp2p](https://github.com/libp2p/rust-libp2p) for 
 
 🔗 **Port Forwarding** 
 
-🔮 **Remote Execution** *(Coming Soon)*
+🔮 **Cross-Device Integration** *(Coming Soon)*
 
 ## How It Works
 
@@ -93,6 +93,10 @@ Launch apps and exchange PeerIDs between devices.
 Access `localhost:9090` on Device A to reach the service on Device B's port `8080`.
 
 > **Note**: More convenient mDNS local device discovery features are coming soon.
+
+### Quick Start (fungi-cli)
+
+See the [CLI Service Quick Start Guide](docs/cli_service_quick_start.md).
 
 ## Build from Source
 
