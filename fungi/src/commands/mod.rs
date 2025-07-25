@@ -2,7 +2,7 @@ pub mod fungi_daemon;
 pub mod fungi_init;
 use clap::{Parser, Subcommand};
 
-/// Fungi the world!
+/// A platform built for seamless multi-device integration
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
 pub struct FungiArgs {
