@@ -42,7 +42,7 @@ Built with Rust (using [rust-libp2p](https://github.com/libp2p/rust-libp2p) for 
 
 **Local Network**: Devices automatically discover each other via mDNS - no setup needed.
 
-**Internet**: Attempts NAT hole punching for direct P2P connections. If successful, data flows directly between devices; otherwise uses relay server. All traffic is end-to-end encrypted - relay server only sees encrypted data packets.
+**Internet**: Attempts NAT hole punching for direct P2P connections. If successful, data flows directly between devices; otherwise uses relay server. All traffic is end-to-end encrypted - relay server only sees encrypted data packets. By default, we provide a relay server.
 
 ## Download
 [Get the latest release](https://github.com/enbop/fungi/releases):
@@ -53,30 +53,44 @@ Available in two versions:
 
 ### Quick Start (fungi-app)
 
+#### File Transfer Example
+
 Let's say you have two devices: `Device A` and `Device B`, and you want `Device A` to access files on `Device B`.
 
-#### Step 1: Setup Device A (Client)
-1. Launch `Fungi App` on Device A
-2. Copy Device A's `PeerID` from the status center at the top and save it
+#### Step 1: Launch and Get PeerIDs
+1. Launch `Fungi App` on both devices
+2. Click on each device's `PeerID` at the top of the app to automatically copy it and save them
 
 #### Step 2: Configure Device B (File Server)
-1. Launch `Fungi App` on Device B
-2. Navigate to **File Transfer > File Server > Incoming Allowed Peers**
-   *(You can also find this setting in `Data Tunnel` and `Settings`)*
-3. Add Device A's `PeerID` to Device B's `Incoming Allowed Peers` list
-   *(Device B will now allow access from Device A)*
-
-4. Set Device B's **Shared Directory** to the folder you want to share (e.g., `/tmp`)
-5. Ensure the **File Server State** is enabled
-6. Copy Device B's PeerID and save it
+1. Navigate to **File Transfer > File Server > Incoming Allowed Peers**
+2. Add Device A's `PeerID` to the allowed list
+3. Set **Shared Directory** to the folder you want to share (e.g., `/tmp`) and enable **File Server State**
 
 #### Step 3: Connect from Device A
-1. On Device A, go to **File Transfer > Remote File Access > Add Remote Device**
-2. Add Device B's PeerID and assign an alias for Device B
+1. Go to **File Transfer > Remote File Access > Add Remote Device**
+2. Add Device B's PeerID and assign an alias
 
 #### Step 4: Access Files
-Now you can use your favorite FTP or WebDAV client to access the Remote File Access address. 
-*(Both macOS and Windows built-in file managers can mount WebDAV as a readable/writable drive)*
+Use any FTP or WebDAV client to access the Remote File Access address.
+*(Both macOS and Windows built-in file managers can mount WebDAV as a drive)*
+
+#### Port Forwarding Example
+
+To forward a port from Device B to Device A:
+
+#### Step 1: Setup (same as above)
+Launch apps and exchange PeerIDs between devices.
+
+#### Step 2: Configure Device B (Port Server)
+1. Navigate to **Data Tunnel > Port Listening Rules**
+2. Add the port you want to forward (e.g., `8080`)
+
+#### Step 3: Configure Device A (Port Client)  
+1. Navigate to **Data Tunnel > Port Forwarding Rules**
+2. Add Device B's PeerID and set up port mapping (e.g., local `9090` → remote `8080`)
+
+#### Step 4: Access Service
+Access `localhost:9090` on Device A to reach the service on Device B's port `8080`.
 
 > **Note**: More convenient mDNS local device discovery features are coming soon.
 

@@ -42,7 +42,7 @@ Fungi 让您通过 P2P 连接安全地连接和管理多个设备。没有服务
 
 **本地网络**：设备通过 mDNS 自动发现彼此 - 无需设置。
 
-**互联网连接**：尝试 NAT 打洞进行直接 P2P 连接。如果成功，数据直接在设备间流动；否则使用中继服务器。所有流量都是端到端加密的 - 中继服务器只能看到加密的数据包。
+**互联网连接**：尝试 NAT 打洞进行直接 P2P 连接。如果成功，数据直接在设备间流动；否则使用中继服务器。所有流量都是端到端加密的 - 中继服务器只能看到加密的数据包。默认情况下，我们提供了一个中继服务器。
 
 ## 下载
 [获取最新版本](https://github.com/enbop/fungi/releases)：
@@ -53,30 +53,44 @@ Fungi 让您通过 P2P 连接安全地连接和管理多个设备。没有服务
 
 ### 快速开始（fungi-app）
 
+#### 文件传输示例
+
 假设您有两个设备：`设备 A` 和 `设备 B`，您希望 `设备 A` 访问 `设备 B` 上的文件。
 
-#### 步骤 1：设置设备 A（客户端）
-1. 在设备 A 上启动 `Fungi App`
-2. 从顶部状态中心复制设备 A 的 `PeerID` 并保存
+#### 步骤 1：启动并获取 PeerID
+1. 在两个设备上都启动 `Fungi App`
+2. 点击应用顶部的 `PeerID` 自动复制并保存它们
 
 #### 步骤 2：配置设备 B（文件服务器）
-1. 在设备 B 上启动 `Fungi App`
-2. 导航到 **File Transfer > File Server > Incoming Allowed Peers**
-   *（您也可以在 `Data Tunnel` 和 `Settings` 中找到此设置）*
-3. 将设备 A 的 `PeerID` 添加到设备 B 的 `Incoming Allowed Peers` 列表中
-   *（设备 B 现在将允许来自设备 A 的访问）*
-
-4. 将设备 B 的 **Shared Directory** 设置为您要共享的文件夹（例如 `/tmp`）
-5. 确保 **File Server State** 已启用
-6. 复制设备 B 的 PeerID 并保存
+1. 导航到 **File Transfer > File Server > Incoming Allowed Peers**
+2. 将设备 A 的 `PeerID` 添加到允许列表中
+3. 设置 **Shared Directory** 为要共享的文件夹（例如 `/tmp`）并启用 **File Server State**
 
 #### 步骤 3：从设备 A 连接
-1. 在设备 A 上，转到 **File Transfer > Remote File Access > Add Remote Device**
-2. 添加设备 B 的 PeerID 并为设备 B 分配别名
+1. 转到 **File Transfer > Remote File Access > Add Remote Device**
+2. 添加设备 B 的 PeerID 并分配别名
 
 #### 步骤 4：访问文件
-现在您可以使用您喜欢的 FTP 或 WebDAV 客户端访问远程文件访问地址。
-*（macOS 和 Windows 内置文件管理器都可以将 WebDAV 挂载为可读写驱动器）*
+使用任何 FTP 或 WebDAV 客户端访问远程文件访问地址。
+*（macOS 和 Windows 内置文件管理器都可以将 WebDAV 挂载为驱动器）*
+
+#### 端口转发示例
+
+将设备 B 的端口转发到设备 A：
+
+#### 步骤 1：设置（同上）
+启动应用并在设备间交换 PeerID。
+
+#### 步骤 2：配置设备 B（端口服务器）
+1. 导航到 **Data Tunnel > Port Listening Rules**
+2. 添加要转发的端口（例如 `8080`）
+
+#### 步骤 3：配置设备 A（端口客户端）
+1. 导航到 **Data Tunnel > Port Forwarding Rules**
+2. 添加设备 B 的 PeerID 并设置端口映射（例如本地 `9090` → 远程 `8080`）
+
+#### 步骤 4：访问服务
+在设备 A 上访问 `localhost:9090` 来访问设备 B 的端口 `8080` 上的服务。
 
 > **注意**：更便捷的 mDNS 本地设备发现功能即将推出。
 
