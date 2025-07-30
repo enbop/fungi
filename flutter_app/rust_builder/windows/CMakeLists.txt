@@ -13,26 +13,67 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 # include("../cargokit/cmake/cargokit.cmake")
 # apply_cargokit(${PROJECT_NAME} ../../../../../../rust rust_lib_fungi_app "")
 
-# Try multiple possible paths for the prebuilt DLL
+# Use the same logic as cargokit to determine Rust build configuration
+# This mimics cargokit's BuildConfiguration mapping:
+# - Debug -> debug
+# - Release -> release  
+# - Profile -> release (Profile uses release Rust artifacts)
+
+# Create generator expressions to map Flutter config to Rust target directory
+set(RUST_CONFIG "$<IF:$<CONFIG:Debug>,debug,release>")
+set(BASE_TARGET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../target")
+
+# Try multiple possible paths for the prebuilt DLL based on configuration
+set(DLL_NAME "rust_lib_fungi_app.dll")
 set(POSSIBLE_DLL_PATHS
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../target/release/rust_lib_fungi_app.dll"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../target/x86_64-pc-windows-msvc/release/rust_lib_fungi_app.dll"
+    "${BASE_TARGET_DIR}/${RUST_CONFIG}/${DLL_NAME}"
+    "${BASE_TARGET_DIR}/x86_64-pc-windows-msvc/${RUST_CONFIG}/${DLL_NAME}"
 )
 
-set(PREBUILT_DLL_PATH "")
-foreach(DLL_PATH ${POSSIBLE_DLL_PATHS})
-    if(EXISTS ${DLL_PATH})
-        set(PREBUILT_DLL_PATH ${DLL_PATH})
-        message(STATUS "Found prebuilt DLL at: ${PREBUILT_DLL_PATH}")
-        break()
-    endif()
+message(STATUS "=== Rust DLL Configuration Detection ===")
+message(STATUS "Flutter configuration mapping:")
+message(STATUS "  Debug -> debug Rust artifacts")
+message(STATUS "  Release -> release Rust artifacts")
+message(STATUS "  Profile -> release Rust artifacts")
+message(STATUS "Current paths to try:")
+foreach(PATH ${POSSIBLE_DLL_PATHS})
+    message(STATUS "  - ${PATH}")
 endforeach()
 
-if(NOT PREBUILT_DLL_PATH)
-    message(FATAL_ERROR "Prebuilt DLL not found in any of the expected locations:
-    - ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../target/release/rust_lib_fungi_app.dll
-    - ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../target/x86_64-pc-windows-msvc/release/rust_lib_fungi_app.dll")
+# Check which DLLs exist at configure time for both debug and release
+set(DEBUG_DLL_PATH_1 "${BASE_TARGET_DIR}/debug/${DLL_NAME}")
+set(DEBUG_DLL_PATH_2 "${BASE_TARGET_DIR}/x86_64-pc-windows-msvc/debug/${DLL_NAME}")
+set(RELEASE_DLL_PATH_1 "${BASE_TARGET_DIR}/release/${DLL_NAME}")
+set(RELEASE_DLL_PATH_2 "${BASE_TARGET_DIR}/x86_64-pc-windows-msvc/release/${DLL_NAME}")
+
+set(DEBUG_DLL_EXISTS FALSE)
+set(RELEASE_DLL_EXISTS FALSE)
+
+if(EXISTS ${DEBUG_DLL_PATH_1} OR EXISTS ${DEBUG_DLL_PATH_2})
+    set(DEBUG_DLL_EXISTS TRUE)
+    if(EXISTS ${DEBUG_DLL_PATH_1})
+        message(STATUS "Found debug DLL: ${DEBUG_DLL_PATH_1}")
+    else()
+        message(STATUS "Found debug DLL: ${DEBUG_DLL_PATH_2}")
+    endif()
 endif()
+
+if(EXISTS ${RELEASE_DLL_PATH_1} OR EXISTS ${RELEASE_DLL_PATH_2})
+    set(RELEASE_DLL_EXISTS TRUE)
+    if(EXISTS ${RELEASE_DLL_PATH_1})
+        message(STATUS "Found release DLL: ${RELEASE_DLL_PATH_1}")
+    else()
+        message(STATUS "Found release DLL: ${RELEASE_DLL_PATH_2}")
+    endif()
+endif()
+
+
+# Use generator expressions to select the right DLL at build time (no nested $<EXISTS:...>)
+set(PREBUILT_DLL_PATH "$<IF:$<CONFIG:Debug>,${BASE_TARGET_DIR}/debug/${DLL_NAME},${BASE_TARGET_DIR}/release/${DLL_NAME}>")
+
+message(STATUS "Selected DLL path (with generator expressions): ${PREBUILT_DLL_PATH}")
+message(STATUS "This will resolve to the appropriate path at build time")
+message(STATUS "==============================================")
 
 # List of absolute paths to libraries that should be bundled with the plugin.
 # This list could contain prebuilt libraries, or libraries created by an
