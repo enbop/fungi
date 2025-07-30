@@ -51,48 +51,55 @@ Available in two versions:
 - **fungi-cli**: Command-line interface for terminal users
 - **fungi-app**: Graphical user interface with Flutter UI
 
-### Quick Start (fungi-app)
+## Quick Start (fungi-app)
 
-#### File Transfer Example
-
-Let's say you have two devices: `Device A` and `Device B`, and you want `Device A` to access files on `Device B`.
-
-#### Step 1: Launch and Get PeerIDs
+**Prerequisites**: 
 1. Launch `Fungi App` on both devices
 2. Click on each device's `PeerID` at the top of the app to automatically copy it and save them
 
-#### Step 2: Configure Device B (File Server)
+> File Transfer and Port Forwarding are independent features. You can use either one without the other based on your needs.
+
+---
+
+### 📁 File Transfer Example: Device A accessing files on Device B
+
+**Use Case**: Access files from one device on another device through FTP/WebDAV.
+
+**On Device B (File Server):**
 1. Navigate to **File Transfer > File Server > Incoming Allowed Peers**
 2. Add Device A's `PeerID` to the allowed list
-3. Set **Shared Directory** to the folder you want to share (e.g., `/tmp`) and enable **File Server State**
+3. Set **Shared Directory** to the folder you want to share (e.g., `/tmp`)
+4. Enable **File Server State**
 
-#### Step 3: Connect from Device A
+**On Device A (File Client):**
 1. Go to **File Transfer > Remote File Access > Add Remote Device**
 2. Add Device B's PeerID and assign an alias
 
-#### Step 4: Access Files
-Use any FTP or WebDAV client to access the Remote File Access address.
+**Access Files:**
+The FTP/WebDAV addresses are displayed on home page. 
+Use any FTP or WebDAV client on Device A to access the directory of Device B.
 *(Both macOS and Windows built-in file managers can mount WebDAV as a drive)*
 
-#### Port Forwarding Example
+---
 
-To forward a port from Device B to Device A:
+### 🔗 Port Forwarding Example: Accessing Device B's service from Device A
 
-#### Step 1: Setup (same as above)
-Launch apps and exchange PeerIDs between devices.
+**Use Case**: Access services running on one device from another device through port tunneling.
 
-#### Step 2: Configure Device B (Port Server)
+**On Device B (Port Listening):**
 1. Navigate to **Data Tunnel > Port Listening Rules**
 2. Add the port you want to forward (e.g., `8080`)
 
-#### Step 3: Configure Device A (Port Client)  
+**On Device A (Port Forwarding):**
 1. Navigate to **Data Tunnel > Port Forwarding Rules**
 2. Add Device B's PeerID and set up port mapping (e.g., local `9090` → remote `8080`)
 
-#### Step 4: Access Service
-Access `localhost:9090` on Device A to reach the service on Device B's port `8080`.
+**Access Service:**
+Connect `localhost:9090` on Device A to reach the service running on Device B's port `8080`.
 
-> **Note**: More convenient mDNS local device discovery features are coming soon.
+---
+
+> More convenient mDNS local device discovery features are coming soon.
 
 ### Quick Start (fungi-cli)
 
