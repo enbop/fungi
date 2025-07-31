@@ -81,7 +81,13 @@ jobs:
       - name: Build Rust CLI (Other platforms)
         run: cargo build --release --target ${{ matrix.rust-target }}
         if: ${{ ! matrix.cross && matrix.rust-target != 'universal-apple-darwin' }}
-      
+      - name: Copy DLL to release directory for flutter_app\rust_builder\windows\CMakeLists.txt
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          mkdir -p target/release
+          cp -f target/x86_64-pc-windows-msvc/release/rust_lib_fungi_app.dll target/release/ || true
+
       - name: Install cross for ARM64
         run: cargo install cross
         if: ${{ matrix.cross }}

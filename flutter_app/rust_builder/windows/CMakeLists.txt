@@ -23,52 +23,10 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 set(RUST_CONFIG "$<IF:$<CONFIG:Debug>,debug,release>")
 set(BASE_TARGET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../target")
 
-# Try multiple possible paths for the prebuilt DLL based on configuration
+# Prebuilt DLL name
 set(DLL_NAME "rust_lib_fungi_app.dll")
-set(POSSIBLE_DLL_PATHS
-    "${BASE_TARGET_DIR}/${RUST_CONFIG}/${DLL_NAME}"
-    "${BASE_TARGET_DIR}/x86_64-pc-windows-msvc/${RUST_CONFIG}/${DLL_NAME}"
-)
 
-message(STATUS "=== Rust DLL Configuration Detection ===")
-message(STATUS "Flutter configuration mapping:")
-message(STATUS "  Debug -> debug Rust artifacts")
-message(STATUS "  Release -> release Rust artifacts")
-message(STATUS "  Profile -> release Rust artifacts")
-message(STATUS "Current paths to try:")
-foreach(PATH ${POSSIBLE_DLL_PATHS})
-    message(STATUS "  - ${PATH}")
-endforeach()
-
-# Check which DLLs exist at configure time for both debug and release
-set(DEBUG_DLL_PATH_1 "${BASE_TARGET_DIR}/debug/${DLL_NAME}")
-set(DEBUG_DLL_PATH_2 "${BASE_TARGET_DIR}/x86_64-pc-windows-msvc/debug/${DLL_NAME}")
-set(RELEASE_DLL_PATH_1 "${BASE_TARGET_DIR}/release/${DLL_NAME}")
-set(RELEASE_DLL_PATH_2 "${BASE_TARGET_DIR}/x86_64-pc-windows-msvc/release/${DLL_NAME}")
-
-set(DEBUG_DLL_EXISTS FALSE)
-set(RELEASE_DLL_EXISTS FALSE)
-
-if(EXISTS ${DEBUG_DLL_PATH_1} OR EXISTS ${DEBUG_DLL_PATH_2})
-    set(DEBUG_DLL_EXISTS TRUE)
-    if(EXISTS ${DEBUG_DLL_PATH_1})
-        message(STATUS "Found debug DLL: ${DEBUG_DLL_PATH_1}")
-    else()
-        message(STATUS "Found debug DLL: ${DEBUG_DLL_PATH_2}")
-    endif()
-endif()
-
-if(EXISTS ${RELEASE_DLL_PATH_1} OR EXISTS ${RELEASE_DLL_PATH_2})
-    set(RELEASE_DLL_EXISTS TRUE)
-    if(EXISTS ${RELEASE_DLL_PATH_1})
-        message(STATUS "Found release DLL: ${RELEASE_DLL_PATH_1}")
-    else()
-        message(STATUS "Found release DLL: ${RELEASE_DLL_PATH_2}")
-    endif()
-endif()
-
-
-# Use generator expressions to select the right DLL at build time (no nested $<EXISTS:...>)
+# Use generator expressions to select the right DLL at build time (debug or release)
 set(PREBUILT_DLL_PATH "$<IF:$<CONFIG:Debug>,${BASE_TARGET_DIR}/debug/${DLL_NAME},${BASE_TARGET_DIR}/release/${DLL_NAME}>")
 
 message(STATUS "Selected DLL path (with generator expressions): ${PREBUILT_DLL_PATH}")
