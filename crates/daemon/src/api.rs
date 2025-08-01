@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use fungi_config::file_transfer::{FileTransferClient, FtpProxy, WebdavProxy};
 use libp2p::PeerId;
 
-use crate::FungiDaemon;
+use crate::{FungiDaemon, controls::mdns::DeviceInfo};
 
 impl FungiDaemon {
     pub fn host_name() -> Option<String> {
@@ -274,5 +274,25 @@ impl FungiDaemon {
 
     pub fn get_tcp_tunneling_config(&self) -> fungi_config::tcp_tunneling::TcpTunneling {
         self.config().lock().tcp_tunneling.clone()
+    }
+
+    pub async fn get_local_devices(&self) -> Result<Vec<DeviceInfo>> {
+        let local_devices = self.mdns_control().get_all_devices();
+
+        let res = self
+            .swarm_control()
+            .invoke_swarm(move |swarm| {
+                let mut res: Vec<DeviceInfo> = Vec::new();
+                let libp2p_discovered_nodes = swarm.behaviour().mdns.discovered_nodes();
+                for peer_id in libp2p_discovered_nodes {
+                    if let Some(device_info) = local_devices.get(&peer_id) {
+                        res.push(device_info.clone());
+                    }
+                }
+                res
+            })
+            .await?;
+
+        Ok(res)
     }
 }

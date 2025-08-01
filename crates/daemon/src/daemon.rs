@@ -2,7 +2,10 @@ use std::{net::IpAddr, sync::Arc, time::Duration};
 
 use crate::{
     DaemonArgs,
-    controls::{FileTransferClientsControl, FileTransferServiceControl, TcpTunnelingControl},
+    controls::{
+        FileTransferClientsControl, FileTransferServiceControl, TcpTunnelingControl,
+        mdns::MdnsControl,
+    },
     listeners::FungiDaemonRpcServer,
 };
 use anyhow::Result;
@@ -30,6 +33,7 @@ pub struct FungiDaemon {
     args: DaemonArgs,
 
     swarm_control: SwarmControl,
+    mdns_control: MdnsControl,
     fts_control: FileTransferServiceControl,
     ftc_control: FileTransferClientsControl,
     tcp_tunneling_control: TcpTunnelingControl,
@@ -56,6 +60,10 @@ impl FungiDaemon {
 
     pub fn tcp_tunneling_control(&self) -> &TcpTunnelingControl {
         &self.tcp_tunneling_control
+    }
+
+    pub fn mdns_control(&self) -> &MdnsControl {
+        &self.mdns_control
     }
 
     pub async fn start(args: DaemonArgs) -> Result<Self> {
@@ -87,6 +95,8 @@ impl FungiDaemon {
                 apply_listen(swarm, &config);
             })
             .await?;
+        let mdns_control = MdnsControl::new();
+        mdns_control.start(swarm_control.local_peer_id())?;
 
         let stream_control = swarm_control.stream_control().clone();
 
@@ -136,6 +146,7 @@ impl FungiDaemon {
             config: Arc::new(Mutex::new(config)),
             args,
             swarm_control,
+            mdns_control,
             fts_control,
             ftc_control,
             tcp_tunneling_control,

@@ -5,6 +5,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use anyhow::Result;
 use libp2p::PeerId;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use parking_lot::Mutex;
@@ -133,7 +134,7 @@ impl MdnsControl {
         }
     }
 
-    pub fn start(&self, peer_id: PeerId) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn start(&self, peer_id: PeerId) -> Result<()> {
         self.stop();
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel();
@@ -195,7 +196,7 @@ impl MdnsControl {
         device_info: DeviceInfo,
         local_devices: Arc<Mutex<HashMap<PeerId, DeviceInfo>>>,
         shutdown_rx: mpsc::Receiver<()>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<()> {
         let mdns = ServiceDaemon::new()?;
         let service_type = FUNGI_SERVICE_TYPE;
 

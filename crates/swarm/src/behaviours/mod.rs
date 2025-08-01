@@ -17,7 +17,7 @@ fn identify_user_agent() -> String {
 pub struct FungiBehaviours {
     ping: ping::Behaviour,
     pub stream: libp2p_stream::Behaviour,
-    mdns: mdns::tokio::Behaviour,
+    pub mdns: mdns::tokio::Behaviour,
     identify: identify::Behaviour,
     relay: relay::client::Behaviour,
     dcutr: dcutr::Behaviour,
