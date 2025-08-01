@@ -4,6 +4,7 @@ import 'package:fungi_app/ui/pages/widgets/dialog.dart';
 import 'package:fungi_app/ui/pages/widgets/text.dart';
 import 'package:fungi_app/ui/pages/widgets/enhanced_card.dart';
 import 'package:get/get.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 class DataTunnelPage extends GetView<FungiController> {
   const DataTunnelPage({super.key});
@@ -256,8 +257,7 @@ class DataTunnelPage extends GetView<FungiController> {
     final peerIdController = TextEditingController();
     final remotePortController = TextEditingController();
 
-    showDialog(
-      context: context,
+    SmartDialog.show(
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text("Add Port Forwarding Rule"),
@@ -316,7 +316,7 @@ class DataTunnelPage extends GetView<FungiController> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => SmartDialog.dismiss(),
               child: Text("Cancel"),
             ),
             TextButton(
@@ -342,7 +342,7 @@ class DataTunnelPage extends GetView<FungiController> {
                   return;
                 }
 
-                Navigator.of(context).pop();
+                SmartDialog.dismiss();
                 await controller.addTcpForwardingRule(
                   localHost: localHost,
                   localPort: localPort,
@@ -363,8 +363,7 @@ class DataTunnelPage extends GetView<FungiController> {
     final localPortController = TextEditingController();
     final allowedPeersController = TextEditingController();
 
-    showDialog(
-      context: context,
+    SmartDialog.show(
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text("Add Port Listening Rule"),
@@ -414,7 +413,7 @@ class DataTunnelPage extends GetView<FungiController> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => SmartDialog.dismiss(),
               child: Text("Cancel"),
             ),
             TextButton(
@@ -441,7 +440,7 @@ class DataTunnelPage extends GetView<FungiController> {
                   return;
                 }
 
-                Navigator.of(context).pop();
+                SmartDialog.dismiss();
                 await controller.addTcpListeningRule(
                   localHost: localHost,
                   localPort: localPort,

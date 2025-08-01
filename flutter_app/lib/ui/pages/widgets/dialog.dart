@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:get/get.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 void showAllowedPeersList(BuildContext context) {
   final controller = Get.find<FungiController>();
-  showDialog(
-    context: context,
+  SmartDialog.show(
     builder: (context) {
       return AlertDialog(
         title: const Text('Incoming Allowed Peers'),
@@ -56,7 +56,7 @@ void showAllowedPeersList(BuildContext context) {
             child: const Text('Add Peer'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => SmartDialog.dismiss(),
             child: const Text('Close'),
           ),
         ],
@@ -68,8 +68,7 @@ void showAllowedPeersList(BuildContext context) {
 void showAddPeerDialog(BuildContext context, void Function(String) onAddPeer) {
   final textController = TextEditingController();
   final errorMessage = RxString('');
-  showDialog(
-    context: context,
+  SmartDialog.show(
     builder: (context) {
       return AlertDialog(
         title: const Text('Add Peer'),
@@ -99,7 +98,7 @@ void showAddPeerDialog(BuildContext context, void Function(String) onAddPeer) {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => SmartDialog.dismiss(),
             child: const Text('Cancel'),
           ),
           TextButton(
@@ -110,7 +109,7 @@ void showAddPeerDialog(BuildContext context, void Function(String) onAddPeer) {
               }
               try {
                 onAddPeer(textController.text);
-                Navigator.pop(context);
+                SmartDialog.dismiss();
               } catch (e) {
                 errorMessage.value = 'Failed to add peer: $e';
               }
@@ -138,8 +137,7 @@ void showAddClientDialog(
   final nameTextController = TextEditingController();
   final enabled = RxBool(true);
   final errorMessage = RxString('');
-  showDialog(
-    context: context,
+  SmartDialog.show(
     builder: (context) {
       return AlertDialog(
         title: const Text('Add Peer'),
@@ -191,7 +189,7 @@ void showAddClientDialog(
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => SmartDialog.dismiss(),
             child: const Text('Cancel'),
           ),
           TextButton(
@@ -211,9 +209,7 @@ void showAddClientDialog(
                   enabled: enabled.value,
                 );
                 await onAddClient(client);
-                if (context.mounted) {
-                  Navigator.pop(context);
-                }
+                SmartDialog.dismiss();
               } catch (e) {
                 errorMessage.value = 'Failed to add peer: $e';
               }

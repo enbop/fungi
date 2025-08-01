@@ -42,6 +42,7 @@ dependencies:
   get_storage: ^2.1.1
   file_picker: ^10.2.0
   window_manager: ^0.4.3
+  flutter_smart_dialog: ^4.9.8+9
 
 dev_dependencies:
   flutter_test:

@@ -4,6 +4,7 @@ import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:fungi_app/ui/pages/widgets/dialog.dart';
 import 'package:get/get.dart';
 import 'package:settings_ui/settings_ui.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 class Settings extends GetView<FungiController> {
   const Settings({super.key});
@@ -67,8 +68,7 @@ class Settings extends GetView<FungiController> {
   }
 
   void _showThemeDialog(BuildContext context) {
-    showDialog(
-      context: context,
+    SmartDialog.show(
       builder: (context) {
         return AlertDialog(
           title: Text('Select Theme'),
@@ -83,20 +83,20 @@ class Settings extends GetView<FungiController> {
                   onChanged: (ThemeOption? value) {
                     if (value != null) {
                       controller.changeTheme(value);
-                      Navigator.pop(context);
+                      SmartDialog.dismiss();
                     }
                   },
                 ),
                 onTap: () {
                   controller.changeTheme(option);
-                  Navigator.pop(context);
+                  SmartDialog.dismiss();
                 },
               );
             }).toList(),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => SmartDialog.dismiss(),
               child: Text('Cancel'),
             ),
           ],
