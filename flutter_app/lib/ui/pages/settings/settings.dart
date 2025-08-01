@@ -38,12 +38,7 @@ class Settings extends GetView<FungiController> {
                 Clipboard.setData(
                   ClipboardData(text: controller.configFilePath.value),
                 );
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Path copied to clipboard'),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
+                SmartDialog.showToast('Path copied to clipboard');
               },
             ),
           ],

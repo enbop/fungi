@@ -248,7 +248,7 @@ class FungiController extends GetxController {
         'Success',
         'Forwarding rule added successfully',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green.withOpacity(0.1),
+        backgroundColor: Colors.green.withValues(alpha: 0.1),
         colorText: Colors.green,
       );
     } catch (e) {
@@ -256,7 +256,7 @@ class FungiController extends GetxController {
         'Error',
         'Failed to add forwarding rule: $e',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red.withOpacity(0.1),
+        backgroundColor: Colors.red.withValues(alpha: 0.1),
         colorText: Colors.red,
       );
     }
@@ -270,7 +270,7 @@ class FungiController extends GetxController {
         'Success',
         'Forwarding rule removed successfully',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green.withOpacity(0.1),
+        backgroundColor: Colors.green.withValues(alpha: 0.1),
         colorText: Colors.green,
       );
     } catch (e) {
@@ -278,7 +278,7 @@ class FungiController extends GetxController {
         'Error',
         'Failed to remove forwarding rule: $e',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red.withOpacity(0.1),
+        backgroundColor: Colors.red.withValues(alpha: 0.1),
         colorText: Colors.red,
       );
     }
@@ -300,7 +300,7 @@ class FungiController extends GetxController {
         'Success',
         'Listening rule added successfully',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green.withOpacity(0.1),
+        backgroundColor: Colors.green.withValues(alpha: 0.1),
         colorText: Colors.green,
       );
     } catch (e) {
@@ -308,7 +308,7 @@ class FungiController extends GetxController {
         'Error',
         'Failed to add listening rule: $e',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red.withOpacity(0.1),
+        backgroundColor: Colors.red.withValues(alpha: 0.1),
         colorText: Colors.red,
       );
     }
@@ -322,7 +322,7 @@ class FungiController extends GetxController {
         'Success',
         'Listening rule removed successfully',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green.withOpacity(0.1),
+        backgroundColor: Colors.green.withValues(alpha: 0.1),
         colorText: Colors.green,
       );
     } catch (e) {
@@ -330,7 +330,7 @@ class FungiController extends GetxController {
         'Error',
         'Failed to remove listening rule: $e',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red.withOpacity(0.1),
+        backgroundColor: Colors.red.withValues(alpha: 0.1),
         colorText: Colors.red,
       );
     }
