@@ -69,7 +69,6 @@ class RemoteFileAccess extends GetView<FungiController> {
           SizedBox(height: 10),
           TextButton.icon(
             onPressed: () => showAddClientDialog(
-              context,
               (Client client) => controller.addFileTransferClient(
                 enabled: client.enabled,
                 peerId: client.peerId,
@@ -249,7 +248,7 @@ class FileServer extends GetView<FungiController> {
                 ),
                 IconButton(
                   onPressed: () {
-                    showAllowedPeersList(context);
+                    showAllowedPeersList();
                   },
                   icon: Icon(Icons.edit, size: 15),
                 ),

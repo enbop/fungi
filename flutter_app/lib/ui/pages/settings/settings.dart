@@ -27,7 +27,7 @@ class Settings extends GetView<FungiController> {
               title: Text('Theme'),
               value: Obx(() => Text(controller.currentTheme.value.name)),
               onPressed: (context) {
-                _showThemeDialog(context);
+                _showThemeDialog();
               },
             ),
             SettingsTile.navigation(
@@ -58,7 +58,7 @@ class Settings extends GetView<FungiController> {
                 () => Text('${controller.incomingAllowdPeers.length} peers'),
               ),
               onPressed: (context) {
-                showAllowedPeersList(context);
+                showAllowedPeersList();
               },
             ),
           ],
@@ -67,7 +67,7 @@ class Settings extends GetView<FungiController> {
     );
   }
 
-  void _showThemeDialog(BuildContext context) {
+  void _showThemeDialog() {
     SmartDialog.show(
       builder: (context) {
         return AlertDialog(

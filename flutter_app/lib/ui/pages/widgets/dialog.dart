@@ -3,7 +3,7 @@ import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:get/get.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
-void showAllowedPeersList(BuildContext context) {
+void showAllowedPeersList() {
   final controller = Get.find<FungiController>();
   SmartDialog.show(
     builder: (context) {
@@ -50,7 +50,6 @@ void showAllowedPeersList(BuildContext context) {
         actions: [
           TextButton(
             onPressed: () => showAddPeerDialog(
-              context,
               (String text) => controller.addIncomingAllowedPeer(text),
             ),
             child: const Text('Add Peer'),
@@ -65,7 +64,7 @@ void showAllowedPeersList(BuildContext context) {
   );
 }
 
-void showAddPeerDialog(BuildContext context, void Function(String) onAddPeer) {
+void showAddPeerDialog(void Function(String) onAddPeer) {
   final textController = TextEditingController();
   final errorMessage = RxString('');
   SmartDialog.show(
@@ -129,10 +128,7 @@ class Client {
   Client({required this.peerId, required this.name, required this.enabled});
 }
 
-void showAddClientDialog(
-  BuildContext context,
-  Future<void> Function(Client) onAddClient,
-) {
+void showAddClientDialog(Future<void> Function(Client) onAddClient) {
   final peerIdTextController = TextEditingController();
   final nameTextController = TextEditingController();
   final enabled = RxBool(true);

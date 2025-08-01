@@ -67,7 +67,7 @@ class DataTunnelPage extends GetView<FungiController> {
         ),
         SizedBox(height: 10),
         TextButton.icon(
-          onPressed: () => _showAddForwardingRuleDialog(context),
+          onPressed: () => _showAddForwardingRuleDialog(),
           icon: Icon(Icons.add_circle),
           label: Text("Add Forwarding Rule"),
         ),
@@ -171,7 +171,7 @@ class DataTunnelPage extends GetView<FungiController> {
             ),
             IconButton(
               onPressed: () {
-                showAllowedPeersList(context);
+                showAllowedPeersList();
               },
               icon: Icon(Icons.edit, size: 15),
             ),
@@ -179,7 +179,7 @@ class DataTunnelPage extends GetView<FungiController> {
         ),
         SizedBox(height: 10),
         TextButton.icon(
-          onPressed: () => _showAddListeningRuleDialog(context),
+          onPressed: () => _showAddListeningRuleDialog(),
           icon: Icon(Icons.add_circle),
           label: Text("Add Listening Rule"),
         ),
@@ -251,7 +251,7 @@ class DataTunnelPage extends GetView<FungiController> {
     );
   }
 
-  void _showAddForwardingRuleDialog(BuildContext context) {
+  void _showAddForwardingRuleDialog() {
     final localHostController = TextEditingController(text: "127.0.0.1");
     final localPortController = TextEditingController();
     final peerIdController = TextEditingController();
@@ -358,7 +358,7 @@ class DataTunnelPage extends GetView<FungiController> {
     );
   }
 
-  void _showAddListeningRuleDialog(BuildContext context) {
+  void _showAddListeningRuleDialog() {
     final localHostController = TextEditingController(text: "127.0.0.1");
     final localPortController = TextEditingController();
     final allowedPeersController = TextEditingController();
