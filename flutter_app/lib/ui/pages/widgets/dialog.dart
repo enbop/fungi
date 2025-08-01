@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:get/get.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import '../../widgets/device_selector_dialog.dart';
 
 void showAllowedPeersList() {
   final controller = Get.find<FungiController>();
@@ -76,9 +77,22 @@ void showAddPeerDialog(void Function(String) onAddPeer) {
           children: [
             TextField(
               controller: textController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Peer ID',
                 hintText: 'Enter peer ID',
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.devices),
+                  tooltip: 'Select from network devices',
+                  onPressed: () async {
+                    final selectedPeerId = await DeviceSelectorDialog.show(
+                      title: 'Select Network Device',
+                      dialogId: 'device_selector_add_peer',
+                    );
+                    if (selectedPeerId != null) {
+                      textController.text = selectedPeerId;
+                    }
+                  },
+                ),
               ),
               autofocus: true,
             ),
@@ -149,9 +163,22 @@ void showAddClientDialog(Future<void> Function(Client) onAddClient) {
             ),
             TextField(
               controller: peerIdTextController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Peer ID',
                 hintText: 'Enter peer ID',
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.devices),
+                  tooltip: 'Select from network devices',
+                  onPressed: () async {
+                    final selectedPeerId = await DeviceSelectorDialog.show(
+                      title: 'Select Network Device',
+                      dialogId: 'device_selector_add_client',
+                    );
+                    if (selectedPeerId != null) {
+                      peerIdTextController.text = selectedPeerId;
+                    }
+                  },
+                ),
               ),
               autofocus: true,
             ),

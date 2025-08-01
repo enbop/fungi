@@ -47,6 +47,14 @@ pub struct TcpTunnelingConfig {
     pub listening_rules: Vec<ListeningRule>,
 }
 
+pub struct DeviceInfo {
+    pub peer_id: String,
+    pub hostname: Option<String>,
+    pub os: String,
+    pub version: String,
+    pub ip_address: Option<String>,
+}
+
 impl From<fungi_config::file_transfer::FileTransferClient> for FileTransferClient {
     fn from(client: fungi_config::file_transfer::FileTransferClient) -> Self {
         Self {
@@ -74,6 +82,18 @@ impl From<fungi_config::tcp_tunneling::ListeningRule> for ListeningRule {
             host: rule.host,
             port: rule.port,
             allowed_peers: Default::default(), // TODO: add support for allowed peers
+        }
+    }
+}
+
+impl From<fungi_daemon::DeviceInfo> for DeviceInfo {
+    fn from(device: fungi_daemon::DeviceInfo) -> Self {
+        Self {
+            peer_id: device.peer_id().to_string(),
+            hostname: device.hostname().map(|s| s.clone()),
+            os: device.os().clone().into(),
+            version: device.version().to_string(),
+            ip_address: device.ip_address().map(|s| s.clone()),
         }
     }
 }
@@ -300,6 +320,12 @@ pub async fn add_tcp_listening_rule(
 pub fn remove_tcp_listening_rule(rule_id: String) -> Result<()> {
     let daemon = with_daemon!();
     daemon.remove_tcp_listening_rule(rule_id)
+}
+
+pub async fn get_local_devices() -> Result<Vec<DeviceInfo>> {
+    let daemon = with_daemon!();
+    let devices = daemon.get_local_devices().await?;
+    Ok(devices.into_iter().map(|d| d.into()).collect())
 }
 
 #[flutter_rust_bridge::frb(init)]

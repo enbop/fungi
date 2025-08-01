@@ -28,6 +28,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  DeviceInfo dco_decode_device_info(dynamic raw);
+
+  @protected
   FileTransferClient dco_decode_file_transfer_client(dynamic raw);
 
   @protected
@@ -38,6 +41,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<DeviceInfo> dco_decode_list_device_info(dynamic raw);
 
   @protected
   List<FileTransferClient> dco_decode_list_file_transfer_client(dynamic raw);
@@ -82,6 +88,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  DeviceInfo sse_decode_device_info(SseDeserializer deserializer);
+
+  @protected
   FileTransferClient sse_decode_file_transfer_client(
     SseDeserializer deserializer,
   );
@@ -94,6 +103,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<DeviceInfo> sse_decode_list_device_info(SseDeserializer deserializer);
 
   @protected
   List<FileTransferClient> sse_decode_list_file_transfer_client(
@@ -152,6 +164,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_device_info(DeviceInfo self, SseSerializer serializer);
+
+  @protected
   void sse_encode_file_transfer_client(
     FileTransferClient self,
     SseSerializer serializer,
@@ -168,6 +183,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_device_info(
+    List<DeviceInfo> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_file_transfer_client(

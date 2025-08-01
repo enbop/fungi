@@ -4,6 +4,7 @@ mod daemon;
 pub mod listeners;
 
 use clap::Parser;
+pub use controls::mdns::DeviceInfo;
 pub use daemon::FungiDaemon;
 use fungi_config::{DEFAULT_FUNGI_DIR, FungiDir};
 use std::path::PathBuf;

@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `parse_peer_id`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`, `from`, `from`, `from`
 
 Future<void> startFungiDaemon() =>
     RustLib.instance.api.crateApiFungiStartFungiDaemon();
@@ -120,6 +120,44 @@ Future<String> addTcpListeningRule({
 
 void removeTcpListeningRule({required String ruleId}) =>
     RustLib.instance.api.crateApiFungiRemoveTcpListeningRule(ruleId: ruleId);
+
+Future<List<DeviceInfo>> getLocalDevices() =>
+    RustLib.instance.api.crateApiFungiGetLocalDevices();
+
+class DeviceInfo {
+  final String peerId;
+  final String? hostname;
+  final String os;
+  final String version;
+  final String? ipAddress;
+
+  const DeviceInfo({
+    required this.peerId,
+    this.hostname,
+    required this.os,
+    required this.version,
+    this.ipAddress,
+  });
+
+  @override
+  int get hashCode =>
+      peerId.hashCode ^
+      hostname.hashCode ^
+      os.hashCode ^
+      version.hashCode ^
+      ipAddress.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DeviceInfo &&
+          runtimeType == other.runtimeType &&
+          peerId == other.peerId &&
+          hostname == other.hostname &&
+          os == other.os &&
+          version == other.version &&
+          ipAddress == other.ipAddress;
+}
 
 class FileTransferClient {
   final bool enabled;

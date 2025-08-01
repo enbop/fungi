@@ -73,6 +73,7 @@ pub struct DeviceInfo {
     hostname: Option<String>,
     os: Os,
     version: String,
+    ip_address: Option<String>,
     created_at: SystemTime,
 }
 
@@ -85,6 +86,7 @@ impl DeviceInfo {
             hostname: fungi_util::sysinfo::System::host_name(),
             os: Os::this_device(),
             version,
+            ip_address: MdnsControl::get_local_ip(),
             created_at: SystemTime::now(),
         }
     }
@@ -103,6 +105,10 @@ impl DeviceInfo {
 
     pub fn version(&self) -> &str {
         &self.version
+    }
+
+    pub fn ip_address(&self) -> Option<&String> {
+        self.ip_address.as_ref()
     }
 
     pub fn created_at(&self) -> SystemTime {
@@ -303,11 +309,15 @@ impl MdnsControl {
         let os = Os::try_from(os_str).ok()?;
         let version = properties.get("version")?.val_str().to_string();
 
+        // Get IP address from service info
+        let ip_address = Some(info.get_addresses().iter().next()?.to_string());
+
         Some(DeviceInfo {
             peer_id,
             hostname,
             os,
             version,
+            ip_address,
             created_at: SystemTime::now(),
         })
     }

@@ -3,6 +3,7 @@ import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:fungi_app/ui/pages/widgets/dialog.dart';
 import 'package:fungi_app/ui/pages/widgets/text.dart';
 import 'package:fungi_app/ui/pages/widgets/enhanced_card.dart';
+import 'package:fungi_app/ui/widgets/device_selector_dialog.dart';
 import 'package:get/get.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
@@ -299,6 +300,19 @@ class DataTunnelPage extends GetView<FungiController> {
                     labelText: "Remote Peer ID",
                     hintText: "12D3KooW...",
                     border: OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.devices),
+                      tooltip: 'Select from network devices',
+                      onPressed: () async {
+                        final selectedPeerId = await DeviceSelectorDialog.show(
+                          title: 'Select Network Device',
+                          dialogId: 'device_selector_forwarding',
+                        );
+                        if (selectedPeerId != null) {
+                          peerIdController.text = selectedPeerId;
+                        }
+                      },
+                    ),
                   ),
                 ),
                 SizedBox(height: 12),
@@ -336,7 +350,7 @@ class DataTunnelPage extends GetView<FungiController> {
                     'Error',
                     'Please fill in all fields with valid values',
                     snackPosition: SnackPosition.BOTTOM,
-                    backgroundColor: Colors.red.withOpacity(0.1),
+                    backgroundColor: Colors.red.withValues(alpha: 0.1),
                     colorText: Colors.red,
                   );
                   return;
@@ -398,16 +412,6 @@ class DataTunnelPage extends GetView<FungiController> {
                   ),
                   keyboardType: TextInputType.number,
                 ),
-                // SizedBox(height: 12),
-                // TextField(
-                //   controller: allowedPeersController,
-                //   decoration: InputDecoration(
-                //     labelText: "Allowed Peer IDs (Optional)",
-                //     hintText: "12D3KooW...,12D3KooX... (comma separated)",
-                //     border: OutlineInputBorder(),
-                //   ),
-                //   maxLines: 2,
-                // ),
               ],
             ),
           ),
@@ -434,7 +438,7 @@ class DataTunnelPage extends GetView<FungiController> {
                     'Error',
                     'Please fill in all required fields with valid values',
                     snackPosition: SnackPosition.BOTTOM,
-                    backgroundColor: Colors.red.withOpacity(0.1),
+                    backgroundColor: Colors.red.withValues(alpha: 0.1),
                     colorText: Colors.red,
                   );
                   return;
