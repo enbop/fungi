@@ -304,12 +304,12 @@ class DataTunnelPage extends GetView<FungiController> {
                       icon: const Icon(Icons.devices),
                       tooltip: 'Select from network devices',
                       onPressed: () async {
-                        final selectedPeerId = await DeviceSelectorDialog.show(
+                        final selectedDevice = await DeviceSelectorDialog.show(
                           title: 'Select Network Device',
                           dialogId: 'device_selector_forwarding',
                         );
-                        if (selectedPeerId != null) {
-                          peerIdController.text = selectedPeerId;
+                        if (selectedDevice != null) {
+                          peerIdController.text = selectedDevice.peerId;
                         }
                       },
                     ),

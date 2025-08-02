@@ -1,4 +1,4 @@
-use std::{net::IpAddr, path::PathBuf};
+use std::{collections::HashSet, net::IpAddr, path::PathBuf};
 
 use anyhow::{Result, bail};
 use fungi_config::file_transfer::{FileTransferClient, FtpProxy, WebdavProxy};
@@ -276,17 +276,23 @@ impl FungiDaemon {
         self.config().lock().tcp_tunneling.clone()
     }
 
+    // get local devices both available in mod mdns and libp2p
     pub async fn get_local_devices(&self) -> Result<Vec<DeviceInfo>> {
         let local_devices = self.mdns_control().get_all_devices();
 
         let res = self
             .swarm_control()
             .invoke_swarm(move |swarm| {
-                let mut res: Vec<DeviceInfo> = Vec::new();
+                let mut peers_available_in_libp2p = HashSet::new();
                 let libp2p_discovered_nodes = swarm.behaviour().mdns.discovered_nodes();
+                // peer_id from libp2p_discovered_nodes maybe duplicated
                 for peer_id in libp2p_discovered_nodes {
-                    if let Some(device_info) = local_devices.get(&peer_id) {
-                        res.push(device_info.clone());
+                    peers_available_in_libp2p.insert(peer_id);
+                }
+                let mut res: Vec<DeviceInfo> = Vec::new();
+                for (peer_id, device_info) in local_devices {
+                    if peers_available_in_libp2p.contains(&peer_id) {
+                        res.push(device_info);
                     }
                 }
                 res

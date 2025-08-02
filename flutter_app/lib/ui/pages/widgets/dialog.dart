@@ -84,12 +84,12 @@ void showAddPeerDialog(void Function(String) onAddPeer) {
                   icon: const Icon(Icons.devices),
                   tooltip: 'Select from network devices',
                   onPressed: () async {
-                    final selectedPeerId = await DeviceSelectorDialog.show(
+                    final selectedDevice = await DeviceSelectorDialog.show(
                       title: 'Select Network Device',
                       dialogId: 'device_selector_add_peer',
                     );
-                    if (selectedPeerId != null) {
-                      textController.text = selectedPeerId;
+                    if (selectedDevice != null) {
+                      textController.text = selectedDevice.peerId;
                     }
                   },
                 ),
@@ -157,8 +157,10 @@ void showAddClientDialog(Future<void> Function(Client) onAddClient) {
             TextField(
               controller: nameTextController,
               decoration: const InputDecoration(
-                labelText: 'Name',
-                hintText: 'Enter a device name',
+                labelText: 'Device Alias',
+                hintText: 'Enter a device alias',
+                helperText:
+                    'Device alias will be displayed as filename in mount directory',
               ),
             ),
             TextField(
@@ -170,12 +172,16 @@ void showAddClientDialog(Future<void> Function(Client) onAddClient) {
                   icon: const Icon(Icons.devices),
                   tooltip: 'Select from network devices',
                   onPressed: () async {
-                    final selectedPeerId = await DeviceSelectorDialog.show(
+                    final selectedDevice = await DeviceSelectorDialog.show(
                       title: 'Select Network Device',
                       dialogId: 'device_selector_add_client',
                     );
-                    if (selectedPeerId != null) {
-                      peerIdTextController.text = selectedPeerId;
+                    if (selectedDevice != null) {
+                      peerIdTextController.text = selectedDevice.peerId;
+                      if (nameTextController.text.isEmpty &&
+                          selectedDevice.hostname != null) {
+                        nameTextController.text = selectedDevice.hostname!;
+                      }
                     }
                   },
                 ),

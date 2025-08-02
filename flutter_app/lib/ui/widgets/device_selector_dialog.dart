@@ -3,8 +3,11 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import '../../src/rust/api/fungi.dart' as fungi_api;
 
 class DeviceSelectorDialog {
-  static Future<String?> show({required String title, String? dialogId}) async {
-    return await SmartDialog.show<String>(
+  static Future<fungi_api.DeviceInfo?> show({
+    required String title,
+    String? dialogId,
+  }) async {
+    return await SmartDialog.show<fungi_api.DeviceInfo>(
       tag: dialogId,
       builder: (context) =>
           DeviceSelectorDialogWidget(title: title, dialogId: dialogId),
@@ -51,7 +54,6 @@ class _DeviceSelectorDialogWidgetState
 
       final result = await fungi_api.getLocalDevices();
 
-      // Sort devices by hostname, putting unknowns at the end
       result.sort((a, b) {
         final aName = a.hostname ?? 'Unknown';
         final bName = b.hostname ?? 'Unknown';
@@ -291,14 +293,14 @@ class _DeviceSelectorDialogWidgetState
                   style: TextStyle(color: Colors.grey[600]),
                 ),
               Text(
-                '${device.os} • ${device.version}',
+                device.os,
                 style: TextStyle(color: Colors.grey[500], fontSize: 12),
               ),
             ],
           ),
           trailing: const Icon(Icons.arrow_forward_ios, size: 16),
           onTap: () {
-            SmartDialog.dismiss(tag: widget.dialogId, result: device.peerId);
+            SmartDialog.dismiss(tag: widget.dialogId, result: device);
           },
         );
       },
