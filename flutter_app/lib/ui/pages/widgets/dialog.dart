@@ -13,7 +13,7 @@ void showAllowedPeersList() {
         content: SizedBox(
           width: double.maxFinite,
           child: Obx(() {
-            if (controller.incomingAllowdPeers.isEmpty) {
+            if (controller.incomingAllowedPeersWithInfo.isEmpty) {
               return const Center(
                 child: Padding(
                   padding: EdgeInsets.all(16.0),
@@ -24,14 +24,38 @@ void showAllowedPeersList() {
 
             return ListView.builder(
               shrinkWrap: true,
-              itemCount: controller.incomingAllowdPeers.length,
+              itemCount: controller.incomingAllowedPeersWithInfo.length,
               itemBuilder: (context, index) {
-                final peerId = controller.incomingAllowdPeers[index];
+                final peerWithInfo =
+                    controller.incomingAllowedPeersWithInfo[index];
+                final peerId = peerWithInfo.peerId;
+                final peerInfo = peerWithInfo.peerInfo;
+
+                String displayName = peerId;
+                String subtitle = peerId;
+
+                if (peerInfo != null && peerInfo.hostname != null) {
+                  displayName = peerInfo.hostname!;
+                  subtitle = peerId;
+                }
+
                 return ListTile(
                   title: SelectableText(
-                    peerId,
-                    style: const TextStyle(fontSize: 14),
+                    displayName,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
+                  subtitle: displayName != subtitle
+                      ? SelectableText(
+                          subtitle,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        )
+                      : null,
                   trailing: IconButton(
                     icon: const Icon(
                       Icons.remove_circle_outline,
@@ -50,9 +74,7 @@ void showAllowedPeersList() {
         ),
         actions: [
           TextButton(
-            onPressed: () => showAddPeerDialog(
-              (String text) => controller.addIncomingAllowedPeer(text),
-            ),
+            onPressed: () => showAddPeerDialog(),
             child: const Text('Add Peer'),
           ),
           TextButton(
@@ -65,9 +87,12 @@ void showAllowedPeersList() {
   );
 }
 
-void showAddPeerDialog(void Function(String) onAddPeer) {
-  final textController = TextEditingController();
+void showAddPeerDialog() {
+  final textPeerIdController = TextEditingController();
+  final textAliasController = TextEditingController();
   final errorMessage = RxString('');
+  final controller = Get.find<FungiController>();
+
   SmartDialog.show(
     builder: (context) {
       return AlertDialog(
@@ -75,26 +100,59 @@ void showAddPeerDialog(void Function(String) onAddPeer) {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller: textController,
-              decoration: InputDecoration(
-                labelText: 'Peer ID',
-                hintText: 'Enter peer ID',
-                suffixIcon: IconButton(
+            Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.devices_other),
+                  tooltip: 'Select from known devices',
+                  onPressed: () async {
+                    if (controller.knownPeers.isEmpty) {
+                      SmartDialog.showToast('No known devices');
+                      return;
+                    }
+                    // TODO add showKnownPeersDialog
+                    // final selectedPeer = await showKnownPeersDialog(
+                    //   controller.knownPeers,
+                    // );
+                    // if (selectedPeer != null) {
+                    //   textPeerIdController.text = selectedPeer.peerId;
+                    //   textAliasController.text = selectedPeer.hostname ?? '';
+                    // }
+                  },
+                ),
+                IconButton(
                   icon: const Icon(Icons.devices),
                   tooltip: 'Select from network devices',
                   onPressed: () async {
+                    // TODO merge DeviceSelectorDialog with showKnownPeersDialog
                     final selectedDevice = await DeviceSelectorDialog.show(
                       title: 'Select Network Device',
                       dialogId: 'device_selector_add_peer',
                     );
                     if (selectedDevice != null) {
-                      textController.text = selectedDevice.peerId;
+                      textPeerIdController.text = selectedDevice.peerId;
+                      textAliasController.text = selectedDevice.hostname ?? '';
                     }
                   },
                 ),
+              ],
+            ),
+            TextField(
+              controller: textPeerIdController,
+              decoration: const InputDecoration(
+                labelText: 'Peer ID',
+                hintText: 'Enter peer ID',
               ),
               autofocus: true,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: textAliasController,
+              decoration: const InputDecoration(
+                labelText: 'Alias (Optional)',
+                hintText: 'Enter a friendly name for this device',
+              ),
             ),
             Obx(
               () => errorMessage.isNotEmpty
@@ -116,12 +174,17 @@ void showAddPeerDialog(void Function(String) onAddPeer) {
           ),
           TextButton(
             onPressed: () {
-              if (textController.text.isEmpty) {
+              if (textPeerIdController.text.isEmpty) {
                 errorMessage.value = 'Peer ID cannot be empty';
                 return;
               }
               try {
-                onAddPeer(textController.text);
+                controller.addIncomingAllowedPeer(
+                  textPeerIdController.text,
+                  textAliasController.text.isNotEmpty
+                      ? textAliasController.text
+                      : null,
+                );
                 SmartDialog.dismiss();
               } catch (e) {
                 errorMessage.value = 'Failed to add peer: $e';

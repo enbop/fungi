@@ -55,6 +55,20 @@ pub struct DeviceInfo {
     pub ip_address: Option<String>,
 }
 
+pub struct PeerInfo {
+    pub peer_id: String,
+    pub hostname: Option<String>,
+    pub public_ip: Option<String>,
+    pub private_ips: Vec<String>,
+    pub created_at: u64,
+    pub last_connected: Option<u64>,
+}
+
+pub struct PeerWithInfo {
+    pub peer_id: String,
+    pub peer_info: Option<PeerInfo>,
+}
+
 impl From<fungi_config::file_transfer::FileTransferClient> for FileTransferClient {
     fn from(client: fungi_config::file_transfer::FileTransferClient) -> Self {
         Self {
@@ -94,6 +108,19 @@ impl From<fungi_daemon::DeviceInfo> for DeviceInfo {
             os: device.os().clone().into(),
             version: device.version().to_string(),
             ip_address: device.ip_address().map(|s| s.clone()),
+        }
+    }
+}
+
+impl From<fungi_config::known_peers::PeerInfo> for PeerInfo {
+    fn from(peer: fungi_config::known_peers::PeerInfo) -> Self {
+        Self {
+            peer_id: peer.peer_id.to_string(),
+            hostname: peer.hostname,
+            public_ip: peer.public_ip,
+            private_ips: peer.private_ips,
+            created_at: peer.created_at,
+            last_connected: peer.last_connected,
         }
     }
 }
@@ -326,6 +353,46 @@ pub async fn get_local_devices() -> Result<Vec<DeviceInfo>> {
     let daemon = with_daemon!();
     let devices = daemon.get_local_devices().await?;
     Ok(devices.into_iter().map(|d| d.into()).collect())
+}
+
+#[frb(sync)]
+pub fn get_all_known_peers() -> Result<Vec<PeerInfo>> {
+    let daemon = with_daemon!();
+    let peers = daemon.get_all_known_peers();
+    Ok(peers.into_iter().map(|p| p.into()).collect())
+}
+
+#[frb(sync)]
+pub fn add_or_update_known_peer(peer_id: String, hostname: Option<String>) -> Result<()> {
+    let daemon = with_daemon!();
+    daemon.add_or_update_known_peer(parse_peer_id(peer_id)?, hostname)
+}
+
+#[frb(sync)]
+pub fn get_known_peer_info(peer_id: String) -> Result<Option<PeerInfo>> {
+    let daemon = with_daemon!();
+    Ok(daemon
+        .get_known_peer_info(parse_peer_id(peer_id)?)
+        .map(|p| p.into()))
+}
+
+#[frb(sync)]
+pub fn remove_known_peer(peer_id: String) -> Result<()> {
+    let daemon = with_daemon!();
+    daemon.remove_known_peer(parse_peer_id(peer_id)?)
+}
+
+#[frb(sync)]
+pub fn get_incoming_allowed_peers_with_info() -> Result<Vec<PeerWithInfo>> {
+    let daemon = with_daemon!();
+    let peers_with_info = daemon.get_incoming_allowed_peers_with_info();
+    Ok(peers_with_info
+        .into_iter()
+        .map(|(peer_id, peer_info)| PeerWithInfo {
+            peer_id,
+            peer_info: peer_info.map(|p| p.into()),
+        })
+        .collect())
 }
 
 #[flutter_rust_bridge::frb(init)]

@@ -26,7 +26,7 @@ async fn create_test_daemon() -> (FungiDaemon, TempDir) {
     config.file_transfer.proxy_ftp.enabled = false;
     config.file_transfer.proxy_webdav.enabled = false;
 
-    let daemon = FungiDaemon::start_with(Default::default(), config, keypair)
+    let daemon = FungiDaemon::start_with(Default::default(), config, keypair, Default::default())
         .await
         .expect("Failed to start test daemon");
 
@@ -70,13 +70,23 @@ async fn create_daemon_pair() -> (FungiDaemon, FungiDaemon, TempDir, TempDir) {
     client_config.file_transfer.proxy_ftp.enabled = false;
     client_config.file_transfer.proxy_webdav.enabled = false;
 
-    let client_daemon = FungiDaemon::start_with(Default::default(), client_config, client_key)
-        .await
-        .expect("Failed to start client daemon");
+    let client_daemon = FungiDaemon::start_with(
+        Default::default(),
+        client_config,
+        client_key,
+        Default::default(),
+    )
+    .await
+    .expect("Failed to start client daemon");
 
-    let server_daemon = FungiDaemon::start_with(Default::default(), server_config, server_key)
-        .await
-        .expect("Failed to start server daemon");
+    let server_daemon = FungiDaemon::start_with(
+        Default::default(),
+        server_config,
+        server_key,
+        Default::default(),
+    )
+    .await
+    .expect("Failed to start server daemon");
 
     // Connect client to server
     let server_peer_id = server_daemon.swarm_control().local_peer_id();

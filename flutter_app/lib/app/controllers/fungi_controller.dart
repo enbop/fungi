@@ -48,6 +48,8 @@ class FungiController extends GetxController {
 
   final currentTheme = ThemeOption.system.obs;
   final incomingAllowdPeers = <String>[].obs;
+  final incomingAllowedPeersWithInfo = <PeerWithInfo>[].obs;
+  final knownPeers = <PeerInfo>[].obs;
   final fileTransferServerState = FileTransferServerState(enabled: false).obs;
   final fileTransferClients = <FileTransferClient>[].obs;
 
@@ -84,16 +86,40 @@ class FungiController extends GetxController {
 
   void updateIncomingAllowedPeers() {
     incomingAllowdPeers.value = fungi.getIncomingAllowedPeersList();
+    incomingAllowedPeersWithInfo.value = fungi
+        .getIncomingAllowedPeersWithInfo();
   }
 
-  void addIncomingAllowedPeer(String peerId) {
+  void updateKnownPeers() {
+    knownPeers.value = fungi.getAllKnownPeers();
+  }
+
+  void addIncomingAllowedPeer(String peerId, String? alias) {
     fungi.addIncomingAllowedPeer(peerId: peerId);
     updateIncomingAllowedPeers();
+    // Also add to known peers
+
+    // Update the known peers list to reflect the new peer
+    addOrUpdateKnownPeer(peerId, alias);
   }
 
   void removeIncomingAllowedPeer(String peerId) {
     fungi.removeIncomingAllowedPeer(peerId: peerId);
     updateIncomingAllowedPeers();
+  }
+
+  void addOrUpdateKnownPeer(String peerId, String? hostname) {
+    fungi.addOrUpdateKnownPeer(peerId: peerId, hostname: hostname);
+    updateKnownPeers();
+  }
+
+  PeerInfo? getKnownPeerInfo(String peerId) {
+    return fungi.getKnownPeerInfo(peerId: peerId);
+  }
+
+  void removeKnownPeer(String peerId) {
+    fungi.removeKnownPeer(peerId: peerId);
+    updateKnownPeers();
   }
 
   Future<void> startFileTransferServer(String rootDir) async {
@@ -126,7 +152,7 @@ class FungiController extends GetxController {
 
   Future<void> addFileTransferClient({
     required bool enabled,
-    String? name,
+    required String name,
     required String peerId,
   }) async {
     await fungi.addFileTransferClient(
@@ -137,6 +163,8 @@ class FungiController extends GetxController {
     fileTransferClients.add(
       FileTransferClient(enabled: enabled, peerId: peerId, name: name),
     );
+    // add to known peers
+    addOrUpdateKnownPeer(peerId, name);
   }
 
   Future<void> enableFileTransferClient({
@@ -211,6 +239,7 @@ class FungiController extends GetxController {
         debugPrint('Failed to get proxy infos: $e');
       }
       updateIncomingAllowedPeers();
+      updateKnownPeers();
       // Load TCP tunneling config
       refreshTcpTunnelingConfig();
     } catch (e) {

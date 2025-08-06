@@ -38,13 +38,23 @@ async fn create_daemons() -> (FungiDaemon, FungiDaemon) {
             peer_id: server_peer_id,
         });
 
-    let client_daemon = FungiDaemon::start_with(Default::default(), client_config, client_key)
-        .await
-        .expect("Failed to start client daemon");
+    let client_daemon = FungiDaemon::start_with(
+        Default::default(),
+        client_config,
+        client_key,
+        Default::default(),
+    )
+    .await
+    .expect("Failed to start client daemon");
 
-    let server_daemon = FungiDaemon::start_with(Default::default(), server_config, server_key)
-        .await
-        .expect("Failed to start server daemon");
+    let server_daemon = FungiDaemon::start_with(
+        Default::default(),
+        server_config,
+        server_key,
+        Default::default(),
+    )
+    .await
+    .expect("Failed to start server daemon");
 
     // Connect client to server
     let server_peer_id = server_daemon.swarm_control().local_peer_id();

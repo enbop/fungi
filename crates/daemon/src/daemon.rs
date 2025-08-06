@@ -11,7 +11,7 @@ use crate::{
 use anyhow::Result;
 use fungi_config::{
     FungiConfig, FungiDir, file_transfer::FileTransferClient as FTCConfig,
-    file_transfer::FileTransferService as FTSConfig,
+    file_transfer::FileTransferService as FTSConfig, known_peers::KnownPeersConfig,
 };
 use fungi_swarm::{FungiSwarm, State, SwarmControl, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
@@ -30,6 +30,7 @@ struct TaskHandles {
 #[allow(dead_code)]
 pub struct FungiDaemon {
     config: Arc<Mutex<FungiConfig>>,
+    known_peers_config: Arc<Mutex<KnownPeersConfig>>,
     args: DaemonArgs,
 
     swarm_control: SwarmControl,
@@ -44,6 +45,10 @@ pub struct FungiDaemon {
 impl FungiDaemon {
     pub fn config(&self) -> Arc<Mutex<FungiConfig>> {
         self.config.clone()
+    }
+
+    pub fn peers_config(&self) -> Arc<Mutex<KnownPeersConfig>> {
+        self.known_peers_config.clone()
     }
 
     pub fn swarm_control(&self) -> &SwarmControl {
@@ -73,13 +78,16 @@ impl FungiDaemon {
         let config = FungiConfig::apply_from_dir(&fungi_dir)?;
         let keypair = get_keypair_from_dir(&fungi_dir)?;
 
-        Self::start_with(args, config, keypair).await
+        let known_peers_config = KnownPeersConfig::apply_from_dir(&fungi_dir)?;
+
+        Self::start_with(args, config, keypair, known_peers_config).await
     }
 
     pub async fn start_with(
         args: DaemonArgs,
         config: FungiConfig,
         keypair: Keypair,
+        known_peers_config: KnownPeersConfig,
     ) -> Result<Self> {
         let state = State::new(
             config
@@ -144,6 +152,7 @@ impl FungiDaemon {
         };
         Ok(Self {
             config: Arc::new(Mutex::new(config)),
+            known_peers_config: Arc::new(Mutex::new(known_peers_config)),
             args,
             swarm_control,
             mdns_control,

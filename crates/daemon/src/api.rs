@@ -2,6 +2,7 @@ use std::{collections::HashSet, net::IpAddr, path::PathBuf};
 
 use anyhow::{Result, bail};
 use fungi_config::file_transfer::{FileTransferClient, FtpProxy, WebdavProxy};
+use fungi_config::known_peers::PeerInfo;
 use libp2p::PeerId;
 
 use crate::{FungiDaemon, controls::mdns::DeviceInfo};
@@ -300,5 +301,49 @@ impl FungiDaemon {
             .await?;
 
         Ok(res)
+    }
+
+    pub fn get_all_known_peers(&self) -> Vec<PeerInfo> {
+        self.peers_config().lock().get_all_peers().clone()
+    }
+
+    pub fn add_or_update_known_peer(
+        &self,
+        peer_id: PeerId,
+        hostname: Option<String>,
+    ) -> Result<()> {
+        let current_peers_config = self.peers_config().lock().clone();
+        let updated_peers_config = current_peers_config.add_or_update_peer(peer_id, hostname)?;
+        *self.peers_config().lock() = updated_peers_config;
+        Ok(())
+    }
+
+    pub fn get_known_peer_info(&self, peer_id: PeerId) -> Option<PeerInfo> {
+        self.peers_config().lock().get_peer_info(&peer_id).cloned()
+    }
+
+    pub fn remove_known_peer(&self, peer_id: PeerId) -> Result<()> {
+        let current_peers_config = self.peers_config().lock().clone();
+        let updated_peers_config = current_peers_config.remove_peer(&peer_id)?;
+        *self.peers_config().lock() = updated_peers_config;
+        Ok(())
+    }
+
+    pub fn get_incoming_allowed_peers_with_info(&self) -> Vec<(String, Option<PeerInfo>)> {
+        let allowed_peers = self.get_incoming_allowed_peers_list();
+        let peers_config_guard = self.peers_config();
+        let peers_config = peers_config_guard.lock();
+
+        allowed_peers
+            .into_iter()
+            .map(|peer_id_str| {
+                let peer_info = if let Ok(peer_id) = peer_id_str.parse::<PeerId>() {
+                    peers_config.get_peer_info(&peer_id).cloned()
+                } else {
+                    None
+                };
+                (peer_id_str, peer_info)
+            })
+            .collect()
     }
 }

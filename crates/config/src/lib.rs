@@ -1,5 +1,6 @@
 pub mod file_transfer;
 mod init;
+pub mod known_peers;
 mod libp2p;
 pub mod tcp_tunneling;
 
