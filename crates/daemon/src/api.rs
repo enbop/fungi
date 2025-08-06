@@ -5,7 +5,7 @@ use fungi_config::file_transfer::{FileTransferClient, FtpProxy, WebdavProxy};
 use fungi_config::known_peers::PeerInfo;
 use libp2p::PeerId;
 
-use crate::{FungiDaemon, controls::mdns::DeviceInfo};
+use crate::FungiDaemon;
 
 impl FungiDaemon {
     pub fn host_name() -> Option<String> {
@@ -278,7 +278,7 @@ impl FungiDaemon {
     }
 
     // get local devices both available in mod mdns and libp2p
-    pub async fn get_local_devices(&self) -> Result<Vec<DeviceInfo>> {
+    pub async fn get_local_devices(&self) -> Result<Vec<PeerInfo>> {
         let local_devices = self.mdns_control().get_all_devices();
 
         let res = self
@@ -290,7 +290,7 @@ impl FungiDaemon {
                 for peer_id in libp2p_discovered_nodes {
                     peers_available_in_libp2p.insert(peer_id);
                 }
-                let mut res: Vec<DeviceInfo> = Vec::new();
+                let mut res: Vec<PeerInfo> = Vec::new();
                 for (peer_id, device_info) in local_devices {
                     if peers_available_in_libp2p.contains(&peer_id) {
                         res.push(device_info);

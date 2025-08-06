@@ -3,11 +3,11 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import '../../src/rust/api/fungi.dart' as fungi_api;
 
 class DeviceSelectorDialog {
-  static Future<fungi_api.DeviceInfo?> show({
+  static Future<fungi_api.PeerInfo?> show({
     required String title,
     String? dialogId,
   }) async {
-    return await SmartDialog.show<fungi_api.DeviceInfo>(
+    return await SmartDialog.show<fungi_api.PeerInfo>(
       tag: dialogId,
       builder: (context) =>
           DeviceSelectorDialogWidget(title: title, dialogId: dialogId),
@@ -35,7 +35,7 @@ class DeviceSelectorDialogWidget extends StatefulWidget {
 
 class _DeviceSelectorDialogWidgetState
     extends State<DeviceSelectorDialogWidget> {
-  List<fungi_api.DeviceInfo> devices = [];
+  List<fungi_api.PeerInfo> devices = [];
   bool isLoading = true;
   String? error;
 
@@ -287,9 +287,10 @@ class _DeviceSelectorDialogWidgetState
                   color: Colors.grey[600],
                 ),
               ),
-              if (device.ipAddress != null)
+              if (device.privateIps.isNotEmpty)
                 Text(
-                  'IP: ${device.ipAddress}',
+                  // TODO sort the private IPs
+                  'IP: ${device.privateIps.first}',
                   style: TextStyle(color: Colors.grey[600]),
                 ),
               Text(

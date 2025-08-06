@@ -1113,24 +1113,6 @@ impl SseDecode for bool {
     }
 }
 
-impl SseDecode for crate::api::fungi::DeviceInfo {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_peerId = <String>::sse_decode(deserializer);
-        let mut var_hostname = <Option<String>>::sse_decode(deserializer);
-        let mut var_os = <String>::sse_decode(deserializer);
-        let mut var_version = <String>::sse_decode(deserializer);
-        let mut var_ipAddress = <Option<String>>::sse_decode(deserializer);
-        return crate::api::fungi::DeviceInfo {
-            peer_id: var_peerId,
-            hostname: var_hostname,
-            os: var_os,
-            version: var_version,
-            ip_address: var_ipAddress,
-        };
-    }
-}
-
 impl SseDecode for crate::api::fungi::FileTransferClient {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1182,18 +1164,6 @@ impl SseDecode for Vec<String> {
         let mut ans_ = vec![];
         for idx_ in 0..len_ {
             ans_.push(<String>::sse_decode(deserializer));
-        }
-        return ans_;
-    }
-}
-
-impl SseDecode for Vec<crate::api::fungi::DeviceInfo> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut len_ = <i32>::sse_decode(deserializer);
-        let mut ans_ = vec![];
-        for idx_ in 0..len_ {
-            ans_.push(<crate::api::fungi::DeviceInfo>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -1311,33 +1281,26 @@ impl SseDecode for Option<crate::api::fungi::PeerInfo> {
     }
 }
 
-impl SseDecode for Option<u64> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        if (<bool>::sse_decode(deserializer)) {
-            return Some(<u64>::sse_decode(deserializer));
-        } else {
-            return None;
-        }
-    }
-}
-
 impl SseDecode for crate::api::fungi::PeerInfo {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_peerId = <String>::sse_decode(deserializer);
         let mut var_hostname = <Option<String>>::sse_decode(deserializer);
+        let mut var_os = <String>::sse_decode(deserializer);
         let mut var_publicIp = <Option<String>>::sse_decode(deserializer);
         let mut var_privateIps = <Vec<String>>::sse_decode(deserializer);
         let mut var_createdAt = <u64>::sse_decode(deserializer);
-        let mut var_lastConnected = <Option<u64>>::sse_decode(deserializer);
+        let mut var_lastConnected = <u64>::sse_decode(deserializer);
+        let mut var_version = <String>::sse_decode(deserializer);
         return crate::api::fungi::PeerInfo {
             peer_id: var_peerId,
             hostname: var_hostname,
+            os: var_os,
             public_ip: var_publicIp,
             private_ips: var_privateIps,
             created_at: var_createdAt,
             last_connected: var_lastConnected,
+            version: var_version,
         };
     }
 }
@@ -1519,27 +1482,6 @@ fn pde_ffi_dispatcher_sync_impl(
 // Section: rust2dart
 
 // Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::api::fungi::DeviceInfo {
-    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [
-            self.peer_id.into_into_dart().into_dart(),
-            self.hostname.into_into_dart().into_dart(),
-            self.os.into_into_dart().into_dart(),
-            self.version.into_into_dart().into_dart(),
-            self.ip_address.into_into_dart().into_dart(),
-        ]
-        .into_dart()
-    }
-}
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::fungi::DeviceInfo {}
-impl flutter_rust_bridge::IntoIntoDart<crate::api::fungi::DeviceInfo>
-    for crate::api::fungi::DeviceInfo
-{
-    fn into_into_dart(self) -> crate::api::fungi::DeviceInfo {
-        self
-    }
-}
-// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::fungi::FileTransferClient {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -1631,10 +1573,12 @@ impl flutter_rust_bridge::IntoDart for crate::api::fungi::PeerInfo {
         [
             self.peer_id.into_into_dart().into_dart(),
             self.hostname.into_into_dart().into_dart(),
+            self.os.into_into_dart().into_dart(),
             self.public_ip.into_into_dart().into_dart(),
             self.private_ips.into_into_dart().into_dart(),
             self.created_at.into_into_dart().into_dart(),
             self.last_connected.into_into_dart().into_dart(),
+            self.version.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1735,17 +1679,6 @@ impl SseEncode for bool {
     }
 }
 
-impl SseEncode for crate::api::fungi::DeviceInfo {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <String>::sse_encode(self.peer_id, serializer);
-        <Option<String>>::sse_encode(self.hostname, serializer);
-        <String>::sse_encode(self.os, serializer);
-        <String>::sse_encode(self.version, serializer);
-        <Option<String>>::sse_encode(self.ip_address, serializer);
-    }
-}
-
 impl SseEncode for crate::api::fungi::FileTransferClient {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1780,16 +1713,6 @@ impl SseEncode for Vec<String> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <String>::sse_encode(item, serializer);
-        }
-    }
-}
-
-impl SseEncode for Vec<crate::api::fungi::DeviceInfo> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <i32>::sse_encode(self.len() as _, serializer);
-        for item in self {
-            <crate::api::fungi::DeviceInfo>::sse_encode(item, serializer);
         }
     }
 }
@@ -1883,25 +1806,17 @@ impl SseEncode for Option<crate::api::fungi::PeerInfo> {
     }
 }
 
-impl SseEncode for Option<u64> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <bool>::sse_encode(self.is_some(), serializer);
-        if let Some(value) = self {
-            <u64>::sse_encode(value, serializer);
-        }
-    }
-}
-
 impl SseEncode for crate::api::fungi::PeerInfo {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.peer_id, serializer);
         <Option<String>>::sse_encode(self.hostname, serializer);
+        <String>::sse_encode(self.os, serializer);
         <Option<String>>::sse_encode(self.public_ip, serializer);
         <Vec<String>>::sse_encode(self.private_ips, serializer);
         <u64>::sse_encode(self.created_at, serializer);
-        <Option<u64>>::sse_encode(self.last_connected, serializer);
+        <u64>::sse_encode(self.last_connected, serializer);
+        <String>::sse_encode(self.version, serializer);
     }
 }
 

@@ -124,7 +124,7 @@ abstract class RustLibApi extends BaseApi {
 
   PeerInfo? crateApiFungiGetKnownPeerInfo({required String peerId});
 
-  Future<List<DeviceInfo>> crateApiFungiGetLocalDevices();
+  Future<List<PeerInfo>> crateApiFungiGetLocalDevices();
 
   TcpTunnelingConfig crateApiFungiGetTcpTunnelingConfig();
 
@@ -595,7 +595,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<List<DeviceInfo>> crateApiFungiGetLocalDevices() {
+  Future<List<PeerInfo>> crateApiFungiGetLocalDevices() {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -608,7 +608,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_list_device_info,
+          decodeSuccessData: sse_decode_list_peer_info,
           decodeErrorData: sse_decode_AnyhowException,
         ),
         constMeta: kCrateApiFungiGetLocalDevicesConstMeta,
@@ -1037,27 +1037,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  BigInt dco_decode_box_autoadd_u_64(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_u_64(raw);
-  }
-
-  @protected
-  DeviceInfo dco_decode_device_info(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
-    return DeviceInfo(
-      peerId: dco_decode_String(arr[0]),
-      hostname: dco_decode_opt_String(arr[1]),
-      os: dco_decode_String(arr[2]),
-      version: dco_decode_String(arr[3]),
-      ipAddress: dco_decode_opt_String(arr[4]),
-    );
-  }
-
-  @protected
   FileTransferClient dco_decode_file_transfer_client(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1101,12 +1080,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<String> dco_decode_list_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_String).toList();
-  }
-
-  @protected
-  List<DeviceInfo> dco_decode_list_device_info(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>).map(dco_decode_device_info).toList();
   }
 
   @protected
@@ -1171,24 +1144,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw == null ? null : dco_decode_box_autoadd_u_64(raw);
-  }
-
-  @protected
   PeerInfo dco_decode_peer_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return PeerInfo(
       peerId: dco_decode_String(arr[0]),
       hostname: dco_decode_opt_String(arr[1]),
-      publicIp: dco_decode_opt_String(arr[2]),
-      privateIps: dco_decode_list_String(arr[3]),
-      createdAt: dco_decode_u_64(arr[4]),
-      lastConnected: dco_decode_opt_box_autoadd_u_64(arr[5]),
+      os: dco_decode_String(arr[2]),
+      publicIp: dco_decode_opt_String(arr[3]),
+      privateIps: dco_decode_list_String(arr[4]),
+      createdAt: dco_decode_u_64(arr[5]),
+      lastConnected: dco_decode_u_64(arr[6]),
+      version: dco_decode_String(arr[7]),
     );
   }
 
@@ -1282,29 +1251,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_u_64(deserializer));
-  }
-
-  @protected
-  DeviceInfo sse_decode_device_info(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_peerId = sse_decode_String(deserializer);
-    var var_hostname = sse_decode_opt_String(deserializer);
-    var var_os = sse_decode_String(deserializer);
-    var var_version = sse_decode_String(deserializer);
-    var var_ipAddress = sse_decode_opt_String(deserializer);
-    return DeviceInfo(
-      peerId: var_peerId,
-      hostname: var_hostname,
-      os: var_os,
-      version: var_version,
-      ipAddress: var_ipAddress,
-    );
-  }
-
-  @protected
   FileTransferClient sse_decode_file_transfer_client(
     SseDeserializer deserializer,
   ) {
@@ -1351,18 +1297,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <String>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_String(deserializer));
-    }
-    return ans_;
-  }
-
-  @protected
-  List<DeviceInfo> sse_decode_list_device_info(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var len_ = sse_decode_i_32(deserializer);
-    var ans_ = <DeviceInfo>[];
-    for (var idx_ = 0; idx_ < len_; ++idx_) {
-      ans_.add(sse_decode_device_info(deserializer));
     }
     return ans_;
   }
@@ -1478,32 +1412,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  BigInt? sse_decode_opt_box_autoadd_u_64(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    if (sse_decode_bool(deserializer)) {
-      return (sse_decode_box_autoadd_u_64(deserializer));
-    } else {
-      return null;
-    }
-  }
-
-  @protected
   PeerInfo sse_decode_peer_info(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_peerId = sse_decode_String(deserializer);
     var var_hostname = sse_decode_opt_String(deserializer);
+    var var_os = sse_decode_String(deserializer);
     var var_publicIp = sse_decode_opt_String(deserializer);
     var var_privateIps = sse_decode_list_String(deserializer);
     var var_createdAt = sse_decode_u_64(deserializer);
-    var var_lastConnected = sse_decode_opt_box_autoadd_u_64(deserializer);
+    var var_lastConnected = sse_decode_u_64(deserializer);
+    var var_version = sse_decode_String(deserializer);
     return PeerInfo(
       peerId: var_peerId,
       hostname: var_hostname,
+      os: var_os,
       publicIp: var_publicIp,
       privateIps: var_privateIps,
       createdAt: var_createdAt,
       lastConnected: var_lastConnected,
+      version: var_version,
     );
   }
 
@@ -1601,22 +1528,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_64(self, serializer);
-  }
-
-  @protected
-  void sse_encode_device_info(DeviceInfo self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.peerId, serializer);
-    sse_encode_opt_String(self.hostname, serializer);
-    sse_encode_String(self.os, serializer);
-    sse_encode_String(self.version, serializer);
-    sse_encode_opt_String(self.ipAddress, serializer);
-  }
-
-  @protected
   void sse_encode_file_transfer_client(
     FileTransferClient self,
     SseSerializer serializer,
@@ -1653,18 +1564,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_String(item, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_list_device_info(
-    List<DeviceInfo> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    for (final item in self) {
-      sse_encode_device_info(item, serializer);
     }
   }
 
@@ -1770,24 +1669,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_opt_box_autoadd_u_64(BigInt? self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    sse_encode_bool(self != null, serializer);
-    if (self != null) {
-      sse_encode_box_autoadd_u_64(self, serializer);
-    }
-  }
-
-  @protected
   void sse_encode_peer_info(PeerInfo self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.peerId, serializer);
     sse_encode_opt_String(self.hostname, serializer);
+    sse_encode_String(self.os, serializer);
     sse_encode_opt_String(self.publicIp, serializer);
     sse_encode_list_String(self.privateIps, serializer);
     sse_encode_u_64(self.createdAt, serializer);
-    sse_encode_opt_box_autoadd_u_64(self.lastConnected, serializer);
+    sse_encode_u_64(self.lastConnected, serializer);
+    sse_encode_String(self.version, serializer);
   }
 
   @protected

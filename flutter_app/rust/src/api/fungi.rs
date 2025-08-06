@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::UNIX_EPOCH};
 
 use anyhow::{bail, Result};
 use flutter_rust_bridge::frb;
@@ -47,21 +47,15 @@ pub struct TcpTunnelingConfig {
     pub listening_rules: Vec<ListeningRule>,
 }
 
-pub struct DeviceInfo {
-    pub peer_id: String,
-    pub hostname: Option<String>,
-    pub os: String,
-    pub version: String,
-    pub ip_address: Option<String>,
-}
-
 pub struct PeerInfo {
     pub peer_id: String,
     pub hostname: Option<String>,
+    pub os: String,
     pub public_ip: Option<String>,
     pub private_ips: Vec<String>,
     pub created_at: u64,
-    pub last_connected: Option<u64>,
+    pub last_connected: u64,
+    pub version: String,
 }
 
 pub struct PeerWithInfo {
@@ -100,27 +94,25 @@ impl From<fungi_config::tcp_tunneling::ListeningRule> for ListeningRule {
     }
 }
 
-impl From<fungi_daemon::DeviceInfo> for DeviceInfo {
-    fn from(device: fungi_daemon::DeviceInfo) -> Self {
-        Self {
-            peer_id: device.peer_id().to_string(),
-            hostname: device.hostname().map(|s| s.clone()),
-            os: device.os().clone().into(),
-            version: device.version().to_string(),
-            ip_address: device.ip_address().map(|s| s.clone()),
-        }
-    }
-}
-
 impl From<fungi_config::known_peers::PeerInfo> for PeerInfo {
     fn from(peer: fungi_config::known_peers::PeerInfo) -> Self {
         Self {
             peer_id: peer.peer_id.to_string(),
             hostname: peer.hostname,
+            os: peer.os.into(),
             public_ip: peer.public_ip,
             private_ips: peer.private_ips,
-            created_at: peer.created_at,
-            last_connected: peer.last_connected,
+            created_at: peer
+                .created_at
+                .duration_since(UNIX_EPOCH)
+                .map(|v| v.as_micros() as u64)
+                .unwrap_or_default(),
+            last_connected: peer
+                .last_connected
+                .duration_since(UNIX_EPOCH)
+                .map(|v| v.as_micros() as u64)
+                .unwrap_or_default(),
+            version: peer.version,
         }
     }
 }
@@ -349,7 +341,7 @@ pub fn remove_tcp_listening_rule(rule_id: String) -> Result<()> {
     daemon.remove_tcp_listening_rule(rule_id)
 }
 
-pub async fn get_local_devices() -> Result<Vec<DeviceInfo>> {
+pub async fn get_local_devices() -> Result<Vec<PeerInfo>> {
     let daemon = with_daemon!();
     let devices = daemon.get_local_devices().await?;
     Ok(devices.into_iter().map(|d| d.into()).collect())

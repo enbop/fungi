@@ -4,47 +4,127 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
+    time::SystemTime,
 };
 
 pub const DEFAULT_PEERS_CONFIG_FILE: &str = "known_peers.toml";
+const MDNS_DEVICE_TIMEOUT_SECONDS: u64 = 300; // 5 minutes
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum Os {
+    Windows,
+    MacOS,
+    Linux,
+    Android,
+    IOS,
+    Unknown,
+}
+
+impl Os {
+    pub fn this_device() -> Self {
+        if cfg!(target_os = "windows") {
+            Os::Windows
+        } else if cfg!(target_os = "macos") {
+            Os::MacOS
+        } else if cfg!(target_os = "linux") {
+            Os::Linux
+        } else if cfg!(target_os = "android") {
+            Os::Android
+        } else if cfg!(target_os = "ios") {
+            Os::IOS
+        } else {
+            Os::Unknown
+        }
+    }
+}
+
+impl Into<String> for Os {
+    fn into(self) -> String {
+        match self {
+            Os::Windows => "Windows".to_string(),
+            Os::MacOS => "MacOS".to_string(),
+            Os::Linux => "Linux".to_string(),
+            Os::Android => "Android".to_string(),
+            Os::IOS => "iOS".to_string(),
+            Os::Unknown => "Unknown".to_string(),
+        }
+    }
+}
+
+impl TryFrom<&str> for Os {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "Windows" => Ok(Os::Windows),
+            "MacOS" => Ok(Os::MacOS),
+            "Linux" => Ok(Os::Linux),
+            "Android" => Ok(Os::Android),
+            "iOS" => Ok(Os::IOS),
+            _ => Err(format!("Unknown OS: {}", value)),
+        }
+    }
+}
+
+// use this for both mdns and known_peers
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PeerInfo {
     pub peer_id: PeerId,
     pub hostname: Option<String>,
+    pub os: Os,
     pub public_ip: Option<String>,
     pub private_ips: Vec<String>,
-    pub created_at: u64,
-    pub last_connected: Option<u64>,
+    pub created_at: SystemTime,
+    pub last_connected: SystemTime,
+    pub version: String,
 }
 
 impl PeerInfo {
     pub fn new(peer_id: PeerId, hostname: Option<String>) -> Self {
-        let created_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let version = std::env!("CARGO_PKG_VERSION").to_string();
 
         Self {
             peer_id,
             hostname,
+            os: Os::this_device(),
             public_ip: None,
             private_ips: Vec::new(),
-            created_at,
-            last_connected: None,
+            created_at: SystemTime::now(),
+            last_connected: SystemTime::now(),
+            version,
         }
     }
 
-    pub fn peer_id(&self) -> Result<PeerId, String> {
-        Ok(self.peer_id)
+    pub fn update_last_connected(&mut self) {
+        self.last_connected = SystemTime::now();
     }
 
-    pub fn update_last_connected(&mut self) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        self.last_connected = Some(now);
+    pub fn peer_id(&self) -> &PeerId {
+        &self.peer_id
+    }
+
+    pub fn hostname(&self) -> Option<&String> {
+        self.hostname.as_ref()
+    }
+
+    pub fn os(&self) -> &Os {
+        &self.os
+    }
+
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    pub fn created_at(&self) -> SystemTime {
+        self.created_at
+    }
+
+    pub fn is_expired(&self) -> bool {
+        if let Ok(elapsed) = self.created_at.elapsed() {
+            elapsed.as_secs() > MDNS_DEVICE_TIMEOUT_SECONDS
+        } else {
+            true // If we can't determine elapsed time, consider it expired
+        }
     }
 }
 
@@ -200,6 +280,6 @@ mod tests {
 
         let peer_info = updated_config.get_peer_info(&peer_id).unwrap();
         assert_eq!(peer_info.hostname, Some("host2".to_string()));
-        assert!(peer_info.last_connected.is_some());
+        assert!(peer_info.last_connected > peer_info.created_at);
     }
 }

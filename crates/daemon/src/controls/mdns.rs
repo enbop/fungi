@@ -1,132 +1,21 @@
 use std::{
     collections::HashMap,
-    sync::Arc,
-    sync::mpsc,
+    sync::{Arc, mpsc},
     time::{Duration, SystemTime},
+    vec,
 };
 
 use anyhow::Result;
+use fungi_config::known_peers::{Os, PeerInfo};
 use libp2p::PeerId;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use parking_lot::Mutex;
 
 const FUNGI_SERVICE_TYPE: &str = "_fungi._tcp.local.";
-const DEVICE_TIMEOUT_SECONDS: u64 = 300; // 5 minutes
-
-#[derive(Clone)]
-pub enum Os {
-    Windows,
-    MacOS,
-    Linux,
-    Android,
-    IOS,
-}
-
-impl Os {
-    pub fn this_device() -> Self {
-        if cfg!(target_os = "windows") {
-            Os::Windows
-        } else if cfg!(target_os = "macos") {
-            Os::MacOS
-        } else if cfg!(target_os = "linux") {
-            Os::Linux
-        } else if cfg!(target_os = "android") {
-            Os::Android
-        } else if cfg!(target_os = "ios") {
-            Os::IOS
-        } else {
-            Os::Linux
-        }
-    }
-}
-
-impl Into<String> for Os {
-    fn into(self) -> String {
-        match self {
-            Os::Windows => "Windows".to_string(),
-            Os::MacOS => "MacOS".to_string(),
-            Os::Linux => "Linux".to_string(),
-            Os::Android => "Android".to_string(),
-            Os::IOS => "iOS".to_string(),
-        }
-    }
-}
-
-impl TryFrom<&str> for Os {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "Windows" => Ok(Os::Windows),
-            "MacOS" => Ok(Os::MacOS),
-            "Linux" => Ok(Os::Linux),
-            "Android" => Ok(Os::Android),
-            "iOS" => Ok(Os::IOS),
-            _ => Err(format!("Unknown OS: {}", value)),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct DeviceInfo {
-    peer_id: PeerId,
-    hostname: Option<String>,
-    os: Os,
-    version: String,
-    ip_address: Option<String>,
-    created_at: SystemTime,
-}
-
-impl DeviceInfo {
-    pub fn new(peer_id: PeerId) -> Self {
-        let version = std::env!("CARGO_PKG_VERSION").to_string();
-
-        DeviceInfo {
-            peer_id,
-            hostname: fungi_util::sysinfo::System::host_name(),
-            os: Os::this_device(),
-            version,
-            ip_address: MdnsControl::get_local_ip(),
-            created_at: SystemTime::now(),
-        }
-    }
-
-    pub fn peer_id(&self) -> &PeerId {
-        &self.peer_id
-    }
-
-    pub fn hostname(&self) -> Option<&String> {
-        self.hostname.as_ref()
-    }
-
-    pub fn os(&self) -> &Os {
-        &self.os
-    }
-
-    pub fn version(&self) -> &str {
-        &self.version
-    }
-
-    pub fn ip_address(&self) -> Option<&String> {
-        self.ip_address.as_ref()
-    }
-
-    pub fn created_at(&self) -> SystemTime {
-        self.created_at
-    }
-
-    pub fn is_expired(&self) -> bool {
-        if let Ok(elapsed) = self.created_at.elapsed() {
-            elapsed.as_secs() > DEVICE_TIMEOUT_SECONDS
-        } else {
-            true // If we can't determine elapsed time, consider it expired
-        }
-    }
-}
 
 #[derive(Clone)]
 pub struct MdnsControl {
-    local_devices: Arc<Mutex<HashMap<PeerId, DeviceInfo>>>,
+    local_devices: Arc<Mutex<HashMap<PeerId, PeerInfo>>>,
     task: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
     shutdown_tx: Arc<Mutex<Option<mpsc::Sender<()>>>>,
 }
@@ -149,11 +38,11 @@ impl MdnsControl {
         let local_devices = Arc::clone(&self.local_devices);
         let task_handle = Arc::clone(&self.task);
 
-        let device_info = DeviceInfo::new(peer_id);
-        local_devices.lock().insert(peer_id, device_info.clone());
+        let current_device_info = PeerInfo::new(peer_id, fungi_util::sysinfo::System::host_name());
 
         let handle = std::thread::spawn(move || {
-            if let Err(e) = Self::run_mdns_service(peer_id, device_info, local_devices, shutdown_rx)
+            if let Err(e) =
+                Self::run_mdns_service(peer_id, current_device_info, local_devices, shutdown_rx)
             {
                 eprintln!("mDNS service error: {}", e);
             }
@@ -177,12 +66,12 @@ impl MdnsControl {
         self.local_devices.lock().clear();
     }
 
-    pub fn get_all_devices(&self) -> HashMap<PeerId, DeviceInfo> {
+    pub fn get_all_devices(&self) -> HashMap<PeerId, PeerInfo> {
         self.cleanup_expired_devices();
         self.local_devices.lock().clone()
     }
 
-    pub fn get_device(&self, peer_id: &PeerId) -> Option<DeviceInfo> {
+    pub fn get_device(&self, peer_id: &PeerId) -> Option<PeerInfo> {
         self.cleanup_expired_devices();
         self.local_devices.lock().get(peer_id).cloned()
     }
@@ -199,8 +88,8 @@ impl MdnsControl {
 
     fn run_mdns_service(
         peer_id: PeerId,
-        device_info: DeviceInfo,
-        local_devices: Arc<Mutex<HashMap<PeerId, DeviceInfo>>>,
+        device_info: PeerInfo,
+        local_devices: Arc<Mutex<HashMap<PeerId, PeerInfo>>>,
         shutdown_rx: mpsc::Receiver<()>,
     ) -> Result<()> {
         let mdns = ServiceDaemon::new()?;
@@ -307,7 +196,7 @@ impl MdnsControl {
         None
     }
 
-    fn parse_service_info(info: &mdns_sd::ServiceInfo) -> Option<DeviceInfo> {
+    fn parse_service_info(info: &mdns_sd::ServiceInfo) -> Option<PeerInfo> {
         let properties = info.get_properties();
 
         let peer_id_str = properties.get("peer_id")?.val_str();
@@ -319,21 +208,25 @@ impl MdnsControl {
         let version = properties.get("version")?.val_str().to_string();
 
         // Get IP address from service info
-        let ip_address = Some(info.get_addresses().iter().next()?.to_string());
+        let private_ips = Some(info.get_addresses().iter().next()?.to_string())
+            .map(|addr| vec![addr])
+            .unwrap_or_default();
 
-        Some(DeviceInfo {
+        Some(PeerInfo {
             peer_id,
             hostname,
             os,
             version,
-            ip_address,
+            public_ip: None,
+            private_ips,
             created_at: SystemTime::now(),
+            last_connected: SystemTime::now(),
         })
     }
 
     // TODO: check if this is working correctly
     fn _remove_device_by_fullname(
-        local_devices: &Arc<Mutex<HashMap<PeerId, DeviceInfo>>>,
+        local_devices: &Arc<Mutex<HashMap<PeerId, PeerInfo>>>,
         fullname: &str,
     ) {
         if let Some(instance_name) = fullname.split('.').next() {

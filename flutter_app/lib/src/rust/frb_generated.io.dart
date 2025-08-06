@@ -31,12 +31,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PeerInfo dco_decode_box_autoadd_peer_info(dynamic raw);
 
   @protected
-  BigInt dco_decode_box_autoadd_u_64(dynamic raw);
-
-  @protected
-  DeviceInfo dco_decode_device_info(dynamic raw);
-
-  @protected
   FileTransferClient dco_decode_file_transfer_client(dynamic raw);
 
   @protected
@@ -47,9 +41,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
-
-  @protected
-  List<DeviceInfo> dco_decode_list_device_info(dynamic raw);
 
   @protected
   List<FileTransferClient> dco_decode_list_file_transfer_client(dynamic raw);
@@ -77,9 +68,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PeerInfo? dco_decode_opt_box_autoadd_peer_info(dynamic raw);
-
-  @protected
-  BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw);
 
   @protected
   PeerInfo dco_decode_peer_info(dynamic raw);
@@ -118,12 +106,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PeerInfo sse_decode_box_autoadd_peer_info(SseDeserializer deserializer);
 
   @protected
-  BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
-
-  @protected
-  DeviceInfo sse_decode_device_info(SseDeserializer deserializer);
-
-  @protected
   FileTransferClient sse_decode_file_transfer_client(
     SseDeserializer deserializer,
   );
@@ -136,9 +118,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
-
-  @protected
-  List<DeviceInfo> sse_decode_list_device_info(SseDeserializer deserializer);
 
   @protected
   List<FileTransferClient> sse_decode_list_file_transfer_client(
@@ -174,9 +153,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PeerInfo? sse_decode_opt_box_autoadd_peer_info(SseDeserializer deserializer);
-
-  @protected
-  BigInt? sse_decode_opt_box_autoadd_u_64(SseDeserializer deserializer);
 
   @protected
   PeerInfo sse_decode_peer_info(SseDeserializer deserializer);
@@ -226,12 +202,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_device_info(DeviceInfo self, SseSerializer serializer);
-
-  @protected
   void sse_encode_file_transfer_client(
     FileTransferClient self,
     SseSerializer serializer,
@@ -248,12 +218,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_list_device_info(
-    List<DeviceInfo> self,
-    SseSerializer serializer,
-  );
 
   @protected
   void sse_encode_list_file_transfer_client(
@@ -299,9 +263,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     PeerInfo? self,
     SseSerializer serializer,
   );
-
-  @protected
-  void sse_encode_opt_box_autoadd_u_64(BigInt? self, SseSerializer serializer);
 
   @protected
   void sse_encode_peer_info(PeerInfo self, SseSerializer serializer);
