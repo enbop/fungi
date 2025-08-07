@@ -10,8 +10,9 @@ use crate::{
 };
 use anyhow::Result;
 use fungi_config::{
-    FungiConfig, FungiDir, file_transfer::FileTransferClient as FTCConfig,
-    file_transfer::FileTransferService as FTSConfig, known_peers::KnownPeersConfig,
+    FungiConfig, FungiDir, address_book::AddressBookConfig,
+    file_transfer::FileTransferClient as FTCConfig,
+    file_transfer::FileTransferService as FTSConfig,
 };
 use fungi_swarm::{FungiSwarm, State, SwarmControl, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
@@ -30,7 +31,7 @@ struct TaskHandles {
 #[allow(dead_code)]
 pub struct FungiDaemon {
     config: Arc<Mutex<FungiConfig>>,
-    known_peers_config: Arc<Mutex<KnownPeersConfig>>,
+    address_book_config: Arc<Mutex<AddressBookConfig>>,
     args: DaemonArgs,
 
     swarm_control: SwarmControl,
@@ -47,8 +48,8 @@ impl FungiDaemon {
         self.config.clone()
     }
 
-    pub fn peers_config(&self) -> Arc<Mutex<KnownPeersConfig>> {
-        self.known_peers_config.clone()
+    pub fn peers_config(&self) -> Arc<Mutex<AddressBookConfig>> {
+        self.address_book_config.clone()
     }
 
     pub fn swarm_control(&self) -> &SwarmControl {
@@ -78,16 +79,16 @@ impl FungiDaemon {
         let config = FungiConfig::apply_from_dir(&fungi_dir)?;
         let keypair = get_keypair_from_dir(&fungi_dir)?;
 
-        let known_peers_config = KnownPeersConfig::apply_from_dir(&fungi_dir)?;
+        let address_book_config = AddressBookConfig::apply_from_dir(&fungi_dir)?;
 
-        Self::start_with(args, config, keypair, known_peers_config).await
+        Self::start_with(args, config, keypair, address_book_config).await
     }
 
     pub async fn start_with(
         args: DaemonArgs,
         config: FungiConfig,
         keypair: Keypair,
-        known_peers_config: KnownPeersConfig,
+        address_book_config: AddressBookConfig,
     ) -> Result<Self> {
         let state = State::new(
             config
@@ -152,7 +153,7 @@ impl FungiDaemon {
         };
         Ok(Self {
             config: Arc::new(Mutex::new(config)),
-            known_peers_config: Arc::new(Mutex::new(known_peers_config)),
+            address_book_config: Arc::new(Mutex::new(address_book_config)),
             args,
             swarm_control,
             mdns_control,

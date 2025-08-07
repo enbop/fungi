@@ -7,7 +7,7 @@ use std::{
     time::SystemTime,
 };
 
-pub const DEFAULT_PEERS_CONFIG_FILE: &str = "known_peers.toml";
+pub const DEFAULT_PEERS_CONFIG_FILE: &str = "address_book.toml";
 const MDNS_DEVICE_TIMEOUT_SECONDS: u64 = 300; // 5 minutes
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -66,7 +66,7 @@ impl TryFrom<&str> for Os {
     }
 }
 
-// use this for both mdns and known_peers
+// use this for both mdns and address_book
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PeerInfo {
     pub peer_id: PeerId,
@@ -129,7 +129,7 @@ impl PeerInfo {
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct KnownPeersConfig {
+pub struct AddressBookConfig {
     #[serde(default)]
     pub peers: Vec<PeerInfo>,
 
@@ -137,7 +137,7 @@ pub struct KnownPeersConfig {
     config_file: PathBuf,
 }
 
-impl KnownPeersConfig {
+impl AddressBookConfig {
     pub fn config_file_path(&self) -> &Path {
         &self.config_file
     }
@@ -146,7 +146,7 @@ impl KnownPeersConfig {
         if config_file.exists() {
             return Ok(());
         }
-        let config = KnownPeersConfig::default();
+        let config = AddressBookConfig::default();
         let toml_string = toml::to_string(&config)?;
         std::fs::write(&config_file, toml_string)?;
         Ok(())
@@ -228,12 +228,12 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    fn create_temp_peers_config() -> (KnownPeersConfig, TempDir) {
+    fn create_temp_peers_config() -> (AddressBookConfig, TempDir) {
         let temp_dir = TempDir::new().unwrap();
         let config_dir = temp_dir.path().join("fungi-test");
         std::fs::create_dir_all(&config_dir).unwrap();
         (
-            KnownPeersConfig::apply_from_dir(&config_dir).unwrap(),
+            AddressBookConfig::apply_from_dir(&config_dir).unwrap(),
             temp_dir,
         )
     }
@@ -242,7 +242,7 @@ mod tests {
     fn test_init_peers_config_file() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join(DEFAULT_PEERS_CONFIG_FILE);
-        KnownPeersConfig::init_config_file(config_path.clone()).unwrap();
+        AddressBookConfig::init_config_file(config_path.clone()).unwrap();
         assert!(config_path.exists());
         let content = std::fs::read_to_string(&config_path).unwrap();
         assert!(content.contains("peers = []"));

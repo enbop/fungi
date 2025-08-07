@@ -1,8 +1,8 @@
 use std::{collections::HashSet, net::IpAddr, path::PathBuf};
 
 use anyhow::{Result, bail};
+use fungi_config::address_book::PeerInfo;
 use fungi_config::file_transfer::{FileTransferClient, FtpProxy, WebdavProxy};
-use fungi_config::known_peers::PeerInfo;
 use libp2p::PeerId;
 
 use crate::FungiDaemon;
@@ -303,7 +303,7 @@ impl FungiDaemon {
         Ok(res)
     }
 
-    pub fn get_all_known_peers(&self) -> Vec<PeerInfo> {
+    pub fn get_all_address_book(&self) -> Vec<PeerInfo> {
         self.peers_config().lock().get_all_peers().clone()
     }
 

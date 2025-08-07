@@ -49,7 +49,7 @@ class FungiController extends GetxController {
   final currentTheme = ThemeOption.system.obs;
   final incomingAllowdPeers = <String>[].obs;
   final incomingAllowedPeersWithInfo = <PeerWithInfo>[].obs;
-  final knownPeers = <PeerInfo>[].obs;
+  final AddressBook = <PeerInfo>[].obs;
   final fileTransferServerState = FileTransferServerState(enabled: false).obs;
   final fileTransferClients = <FileTransferClient>[].obs;
 
@@ -90,16 +90,16 @@ class FungiController extends GetxController {
         .getIncomingAllowedPeersWithInfo();
   }
 
-  void updateKnownPeers() {
-    knownPeers.value = fungi.getAllKnownPeers();
+  void updateAddressBook() {
+    AddressBook.value = fungi.getAllAddressBook();
   }
 
   void addIncomingAllowedPeer(String peerId, String? alias) {
     fungi.addIncomingAllowedPeer(peerId: peerId);
     updateIncomingAllowedPeers();
-    // Also add to known peers
+    // Also add to address books
 
-    // Update the known peers list to reflect the new peer
+    // Update the address books list to reflect the new peer
     addOrUpdateKnownPeer(peerId, alias);
   }
 
@@ -110,7 +110,7 @@ class FungiController extends GetxController {
 
   void addOrUpdateKnownPeer(String peerId, String? hostname) {
     fungi.addOrUpdateKnownPeer(peerId: peerId, hostname: hostname);
-    updateKnownPeers();
+    updateAddressBook();
   }
 
   PeerInfo? getKnownPeerInfo(String peerId) {
@@ -119,7 +119,7 @@ class FungiController extends GetxController {
 
   void removeKnownPeer(String peerId) {
     fungi.removeKnownPeer(peerId: peerId);
-    updateKnownPeers();
+    updateAddressBook();
   }
 
   Future<void> startFileTransferServer(String rootDir) async {
@@ -163,7 +163,7 @@ class FungiController extends GetxController {
     fileTransferClients.add(
       FileTransferClient(enabled: enabled, peerId: peerId, name: name),
     );
-    // add to known peers
+    // add to address books
     addOrUpdateKnownPeer(peerId, name);
   }
 
@@ -239,7 +239,7 @@ class FungiController extends GetxController {
         debugPrint('Failed to get proxy infos: $e');
       }
       updateIncomingAllowedPeers();
-      updateKnownPeers();
+      updateAddressBook();
       // Load TCP tunneling config
       refreshTcpTunnelingConfig();
     } catch (e) {

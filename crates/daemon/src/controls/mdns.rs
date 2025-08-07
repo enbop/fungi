@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::Result;
-use fungi_config::known_peers::{Os, PeerInfo};
+use fungi_config::address_book::{Os, PeerInfo};
 use libp2p::PeerId;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use parking_lot::Mutex;

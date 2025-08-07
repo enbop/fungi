@@ -124,8 +124,8 @@ void removeTcpListeningRule({required String ruleId}) =>
 Future<List<PeerInfo>> getLocalDevices() =>
     RustLib.instance.api.crateApiFungiGetLocalDevices();
 
-List<PeerInfo> getAllKnownPeers() =>
-    RustLib.instance.api.crateApiFungiGetAllKnownPeers();
+List<PeerInfo> getAllAddressBook() =>
+    RustLib.instance.api.crateApiFungiGetAllAddressBook();
 
 void addOrUpdateKnownPeer({required String peerId, String? hostname}) => RustLib
     .instance

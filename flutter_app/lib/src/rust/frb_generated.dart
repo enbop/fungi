@@ -64,7 +64,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.10.0';
 
   @override
-  int get rustContentHash => 1762734053;
+  int get rustContentHash => 484425731;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -108,9 +108,9 @@ abstract class RustLibApi extends BaseApi {
     required bool enabled,
   });
 
-  List<FileTransferClient> crateApiFungiGetAllFileTransferClients();
+  List<PeerInfo> crateApiFungiGetAllAddressBook();
 
-  List<PeerInfo> crateApiFungiGetAllKnownPeers();
+  List<FileTransferClient> crateApiFungiGetAllFileTransferClients();
 
   bool crateApiFungiGetFileTransferServiceEnabled();
 
@@ -400,12 +400,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  List<FileTransferClient> crateApiFungiGetAllFileTransferClients() {
+  List<PeerInfo> crateApiFungiGetAllAddressBook() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_peer_info,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiFungiGetAllAddressBookConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiFungiGetAllAddressBookConstMeta =>
+      const TaskConstMeta(debugName: "get_all_address_book", argNames: []);
+
+  @override
+  List<FileTransferClient> crateApiFungiGetAllFileTransferClients() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_file_transfer_client,
@@ -423,28 +445,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "get_all_file_transfer_clients",
         argNames: [],
       );
-
-  @override
-  List<PeerInfo> crateApiFungiGetAllKnownPeers() {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_list_peer_info,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kCrateApiFungiGetAllKnownPeersConstMeta,
-        argValues: [],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiFungiGetAllKnownPeersConstMeta =>
-      const TaskConstMeta(debugName: "get_all_known_peers", argNames: []);
 
   @override
   bool crateApiFungiGetFileTransferServiceEnabled() {

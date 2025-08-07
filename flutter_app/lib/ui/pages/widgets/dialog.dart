@@ -107,13 +107,13 @@ void showAddPeerDialog() {
                   icon: const Icon(Icons.devices_other),
                   tooltip: 'Select from known devices',
                   onPressed: () async {
-                    if (controller.knownPeers.isEmpty) {
+                    if (controller.AddressBook.isEmpty) {
                       SmartDialog.showToast('No known devices');
                       return;
                     }
-                    // TODO add showKnownPeersDialog
-                    // final selectedPeer = await showKnownPeersDialog(
-                    //   controller.knownPeers,
+                    // TODO add showAddressBookDialog
+                    // final selectedPeer = await showAddressBookDialog(
+                    //   controller.AddressBook,
                     // );
                     // if (selectedPeer != null) {
                     //   textPeerIdController.text = selectedPeer.peerId;
@@ -125,7 +125,7 @@ void showAddPeerDialog() {
                   icon: const Icon(Icons.devices),
                   tooltip: 'Select from network devices',
                   onPressed: () async {
-                    // TODO merge DeviceSelectorDialog with showKnownPeersDialog
+                    // TODO merge DeviceSelectorDialog with showAddressBookDialog
                     final selectedDevice = await DeviceSelectorDialog.show(
                       title: 'Select Network Device',
                       dialogId: 'device_selector_add_peer',

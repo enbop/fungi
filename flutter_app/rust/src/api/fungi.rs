@@ -94,8 +94,8 @@ impl From<fungi_config::tcp_tunneling::ListeningRule> for ListeningRule {
     }
 }
 
-impl From<fungi_config::known_peers::PeerInfo> for PeerInfo {
-    fn from(peer: fungi_config::known_peers::PeerInfo) -> Self {
+impl From<fungi_config::address_book::PeerInfo> for PeerInfo {
+    fn from(peer: fungi_config::address_book::PeerInfo) -> Self {
         Self {
             peer_id: peer.peer_id.to_string(),
             hostname: peer.hostname,
@@ -348,9 +348,9 @@ pub async fn get_local_devices() -> Result<Vec<PeerInfo>> {
 }
 
 #[frb(sync)]
-pub fn get_all_known_peers() -> Result<Vec<PeerInfo>> {
+pub fn get_all_address_book() -> Result<Vec<PeerInfo>> {
     let daemon = with_daemon!();
-    let peers = daemon.get_all_known_peers();
+    let peers = daemon.get_all_address_book();
     Ok(peers.into_iter().map(|p| p.into()).collect())
 }
 

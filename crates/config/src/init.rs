@@ -1,4 +1,4 @@
-use crate::{FungiConfig, FungiDir, known_peers::KnownPeersConfig};
+use crate::{FungiConfig, FungiDir, address_book::AddressBookConfig};
 use anyhow::Result;
 
 pub fn init(dirs: &impl FungiDir) -> Result<()> {
@@ -17,8 +17,8 @@ pub fn init(dirs: &impl FungiDir) -> Result<()> {
     // create config.toml
     FungiConfig::apply_from_dir(&fungi_dir)?;
 
-    // create known_peers.toml
-    KnownPeersConfig::apply_from_dir(&fungi_dir)?;
+    // create address_book.toml
+    AddressBookConfig::apply_from_dir(&fungi_dir)?;
 
     // create .keys
     fungi_util::keypair::init_keypair(&fungi_dir)?;

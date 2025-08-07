@@ -1,13 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:fungi_app/src/rust/api/fungi.dart';
 import '../../src/rust/api/fungi.dart' as fungi_api;
 
+import 'dart:math';
+
+Future<PeerInfo?> showAddressBookSelectorDialog() async {
+  final uniqueTag =
+      DateTime.now().millisecondsSinceEpoch.toString() +
+      Random().nextInt(100).toString();
+  return await SmartDialog.show<PeerInfo>(
+    tag: uniqueTag,
+    builder: (context) => DeviceSelectorDialogWidget(
+      title: "Select From Address Book",
+      dialogId: uniqueTag,
+    ),
+    alignment: Alignment.center,
+    maskColor: Colors.black54,
+    clickMaskDismiss: true,
+  );
+}
+
 class DeviceSelectorDialog {
-  static Future<fungi_api.PeerInfo?> show({
+  static Future<PeerInfo?> show({
     required String title,
     String? dialogId,
   }) async {
-    return await SmartDialog.show<fungi_api.PeerInfo>(
+    return await SmartDialog.show<PeerInfo>(
       tag: dialogId,
       builder: (context) =>
           DeviceSelectorDialogWidget(title: title, dialogId: dialogId),
