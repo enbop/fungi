@@ -3,7 +3,7 @@ import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart';
 import 'package:get/get.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
-import '../../widgets/device_selector_dialog.dart';
+import '../widgets/device_selector_dialog.dart';
 
 void showAllowedPeersList() {
   final controller = Get.find<FungiController>();

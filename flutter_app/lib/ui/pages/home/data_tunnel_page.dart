@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
-import 'package:fungi_app/ui/pages/widgets/dialog.dart';
-import 'package:fungi_app/ui/pages/widgets/text.dart';
-import 'package:fungi_app/ui/pages/widgets/enhanced_card.dart';
+import 'package:fungi_app/ui/widgets/dialogs.dart';
+import 'package:fungi_app/ui/widgets/text.dart';
+import 'package:fungi_app/ui/widgets/enhanced_card.dart';
 import 'package:get/get.dart';
 
 class DataTunnelPage extends GetView<FungiController> {

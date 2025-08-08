@@ -3,7 +3,7 @@ import 'package:fungi_app/src/rust/api/fungi.dart';
 import 'package:fungi_app/ui/pages/home/drive_page.dart';
 import 'package:fungi_app/ui/pages/home/data_tunnel_page.dart';
 import 'package:fungi_app/ui/pages/settings/settings.dart';
-import 'package:fungi_app/ui/pages/widgets/text.dart';
+import 'package:fungi_app/ui/widgets/text.dart';
 import 'package:get/get.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
 
