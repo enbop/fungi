@@ -3,9 +3,7 @@ import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:fungi_app/ui/pages/widgets/dialog.dart';
 import 'package:fungi_app/ui/pages/widgets/text.dart';
 import 'package:fungi_app/ui/pages/widgets/enhanced_card.dart';
-import 'package:fungi_app/ui/widgets/device_selector_dialog.dart';
 import 'package:get/get.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 class DataTunnelPage extends GetView<FungiController> {
   const DataTunnelPage({super.key});
@@ -68,7 +66,7 @@ class DataTunnelPage extends GetView<FungiController> {
         ),
         SizedBox(height: 10),
         TextButton.icon(
-          onPressed: () => _showAddForwardingRuleDialog(),
+          onPressed: () => showAddForwardingRuleDialog(),
           icon: Icon(Icons.add_circle),
           label: Text("Add Forwarding Rule"),
         ),
@@ -180,7 +178,7 @@ class DataTunnelPage extends GetView<FungiController> {
         ),
         SizedBox(height: 10),
         TextButton.icon(
-          onPressed: () => _showAddListeningRuleDialog(),
+          onPressed: () => showAddListeningRuleDialog(),
           icon: Icon(Icons.add_circle),
           label: Text("Add Listening Rule"),
         ),
@@ -249,213 +247,6 @@ class DataTunnelPage extends GetView<FungiController> {
                 ),
         ),
       ],
-    );
-  }
-
-  void _showAddForwardingRuleDialog() {
-    final localHostController = TextEditingController(text: "127.0.0.1");
-    final localPortController = TextEditingController();
-    final peerIdController = TextEditingController();
-    final remotePortController = TextEditingController();
-
-    SmartDialog.show(
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text("Add Port Forwarding Rule"),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  "Forward traffic from a local port to a remote device's port",
-                  style: Theme.of(context).textTheme.bodySmall?.apply(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withAlpha(150),
-                  ),
-                ),
-                SizedBox(height: 16),
-                TextField(
-                  controller: localHostController,
-                  decoration: InputDecoration(
-                    labelText: "Local Host",
-                    hintText: "127.0.0.1",
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                SizedBox(height: 12),
-                TextField(
-                  controller: localPortController,
-                  decoration: InputDecoration(
-                    labelText: "Local Port",
-                    hintText: "8080",
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-                SizedBox(height: 12),
-                TextField(
-                  controller: peerIdController,
-                  decoration: InputDecoration(
-                    labelText: "Remote Peer ID",
-                    hintText: "12D3KooW...",
-                    border: OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.devices),
-                      tooltip: 'Select from network devices',
-                      onPressed: () async {
-                        final selectedDevice = await DeviceSelectorDialog.show(
-                          title: 'Select Network Device',
-                          dialogId: 'device_selector_forwarding',
-                        );
-                        if (selectedDevice != null) {
-                          peerIdController.text = selectedDevice.peerId;
-                        }
-                      },
-                    ),
-                  ),
-                ),
-                SizedBox(height: 12),
-                TextField(
-                  controller: remotePortController,
-                  decoration: InputDecoration(
-                    labelText: "Remote Port",
-                    hintText: "8888",
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => SmartDialog.dismiss(),
-              child: Text("Cancel"),
-            ),
-            TextButton(
-              onPressed: () async {
-                final localHost = localHostController.text.trim();
-                final localPort = int.tryParse(localPortController.text.trim());
-                final peerId = peerIdController.text.trim();
-                final remotePort = int.tryParse(
-                  remotePortController.text.trim(),
-                );
-
-                if (localHost.isEmpty ||
-                    localPort == null ||
-                    peerId.isEmpty ||
-                    remotePort == null) {
-                  Get.snackbar(
-                    'Error',
-                    'Please fill in all fields with valid values',
-                    snackPosition: SnackPosition.BOTTOM,
-                    backgroundColor: Colors.red.withValues(alpha: 0.1),
-                    colorText: Colors.red,
-                  );
-                  return;
-                }
-
-                SmartDialog.dismiss();
-                await controller.addTcpForwardingRule(
-                  localHost: localHost,
-                  localPort: localPort,
-                  peerId: peerId,
-                  remotePort: remotePort,
-                );
-              },
-              child: Text("Add"),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showAddListeningRuleDialog() {
-    final localHostController = TextEditingController(text: "127.0.0.1");
-    final localPortController = TextEditingController();
-    final allowedPeersController = TextEditingController();
-
-    SmartDialog.show(
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text("Add Port Listening Rule"),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  "Expose a local service to remote devices through P2P tunneling",
-                  style: Theme.of(context).textTheme.bodySmall?.apply(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withAlpha(150),
-                  ),
-                ),
-                SizedBox(height: 16),
-                TextField(
-                  controller: localHostController,
-                  decoration: InputDecoration(
-                    labelText: "Local Host",
-                    hintText: "127.0.0.1",
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                SizedBox(height: 12),
-                TextField(
-                  controller: localPortController,
-                  decoration: InputDecoration(
-                    labelText: "Local Port",
-                    hintText: "8888",
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => SmartDialog.dismiss(),
-              child: Text("Cancel"),
-            ),
-            TextButton(
-              onPressed: () async {
-                final localHost = localHostController.text.trim();
-                final localPort = int.tryParse(localPortController.text.trim());
-                final allowedPeersText = allowedPeersController.text.trim();
-                final allowedPeers = allowedPeersText.isEmpty
-                    ? <String>[]
-                    : allowedPeersText
-                          .split(',')
-                          .map((e) => e.trim())
-                          .where((e) => e.isNotEmpty)
-                          .toList();
-
-                if (localHost.isEmpty || localPort == null) {
-                  Get.snackbar(
-                    'Error',
-                    'Please fill in all required fields with valid values',
-                    snackPosition: SnackPosition.BOTTOM,
-                    backgroundColor: Colors.red.withValues(alpha: 0.1),
-                    colorText: Colors.red,
-                  );
-                  return;
-                }
-
-                SmartDialog.dismiss();
-                await controller.addTcpListeningRule(
-                  localHost: localHost,
-                  localPort: localPort,
-                  allowedPeers: allowedPeers,
-                );
-              },
-              child: Text("Add"),
-            ),
-          ],
-        );
-      },
     );
   }
 }

@@ -265,17 +265,20 @@ class FungiController extends GetxController {
   Future<void> addTcpForwardingRule({
     required String localHost,
     required int localPort,
-    required String peerId,
     required int remotePort,
+    required PeerInfo peerInfo,
   }) async {
     try {
       await fungi.addTcpForwardingRule(
         localHost: localHost,
         localPort: localPort,
-        peerId: peerId,
+        peerId: peerInfo.peerId,
         remotePort: remotePort,
       );
       refreshTcpTunnelingConfig();
+
+      // add to address books
+      addressBookAddOrUpdate(peerInfo);
       Get.snackbar(
         'Success',
         'Forwarding rule added successfully',
