@@ -278,7 +278,7 @@ impl FungiDaemon {
     }
 
     // get local devices both available in mod mdns and libp2p
-    pub async fn get_local_devices(&self) -> Result<Vec<PeerInfo>> {
+    pub async fn mdns_get_local_devices(&self) -> Result<Vec<PeerInfo>> {
         let local_devices = self.mdns_control().get_all_devices();
 
         let res = self

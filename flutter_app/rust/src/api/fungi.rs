@@ -361,9 +361,9 @@ pub fn remove_tcp_listening_rule(rule_id: String) -> Result<()> {
     daemon.remove_tcp_listening_rule(rule_id)
 }
 
-pub async fn get_local_devices() -> Result<Vec<PeerInfo>> {
+pub async fn mdns_get_local_devices() -> Result<Vec<PeerInfo>> {
     let daemon = with_daemon!();
-    let devices = daemon.get_local_devices().await?;
+    let devices = daemon.mdns_get_local_devices().await?;
     Ok(devices.into_iter().map(|d| d.into()).collect())
 }
 

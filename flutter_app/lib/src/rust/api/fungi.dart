@@ -121,8 +121,8 @@ Future<String> addTcpListeningRule({
 void removeTcpListeningRule({required String ruleId}) =>
     RustLib.instance.api.crateApiFungiRemoveTcpListeningRule(ruleId: ruleId);
 
-Future<List<PeerInfo>> getLocalDevices() =>
-    RustLib.instance.api.crateApiFungiGetLocalDevices();
+Future<List<PeerInfo>> mdnsGetLocalDevices() =>
+    RustLib.instance.api.crateApiFungiMdnsGetLocalDevices();
 
 List<PeerInfo> getAllAddressBook() =>
     RustLib.instance.api.crateApiFungiGetAllAddressBook();
