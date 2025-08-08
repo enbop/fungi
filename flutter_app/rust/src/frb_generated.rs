@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.10.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 484425731;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -2065737160;
 
 // Section: executor
 
@@ -114,40 +114,6 @@ fn wire__crate__api__fungi__add_incoming_allowed_peer_impl(
             transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                 (move || {
                     let output_ok = crate::api::fungi::add_incoming_allowed_peer(api_peer_id)?;
-                    Ok(output_ok)
-                })(),
-            )
-        },
-    )
-}
-fn wire__crate__api__fungi__add_or_update_known_peer_impl(
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "add_or_update_known_peer",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_peer_id = <String>::sse_decode(&mut deserializer);
-            let api_hostname = <Option<String>>::sse_decode(&mut deserializer);
-            deserializer.end();
-            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                (move || {
-                    let output_ok =
-                        crate::api::fungi::add_or_update_known_peer(api_peer_id, api_hostname)?;
                     Ok(output_ok)
                 })(),
             )
@@ -239,6 +205,102 @@ fn wire__crate__api__fungi__add_tcp_listening_rule_impl(
                     .await,
                 )
             }
+        },
+    )
+}
+fn wire__crate__api__fungi__address_book_add_or_update_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "address_book_add_or_update",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_peer_info = <crate::api::fungi::PeerInfo>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                (move || {
+                    let output_ok = crate::api::fungi::address_book_add_or_update(api_peer_info)?;
+                    Ok(output_ok)
+                })(),
+            )
+        },
+    )
+}
+fn wire__crate__api__fungi__address_book_get_peer_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "address_book_get_peer",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_peer_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                (move || {
+                    let output_ok = crate::api::fungi::address_book_get_peer(api_peer_id)?;
+                    Ok(output_ok)
+                })(),
+            )
+        },
+    )
+}
+fn wire__crate__api__fungi__address_book_remove_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "address_book_remove",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_peer_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                (move || {
+                    let output_ok = crate::api::fungi::address_book_remove(api_peer_id)?;
+                    Ok(output_ok)
+                })(),
+            )
         },
     )
 }
@@ -531,38 +593,6 @@ fn wire__crate__api__fungi__get_incoming_allowed_peers_with_info_impl(
         },
     )
 }
-fn wire__crate__api__fungi__get_known_peer_info_impl(
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "get_known_peer_info",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_peer_id = <String>::sse_decode(&mut deserializer);
-            deserializer.end();
-            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                (move || {
-                    let output_ok = crate::api::fungi::get_known_peer_info(api_peer_id)?;
-                    Ok(output_ok)
-                })(),
-            )
-        },
-    )
-}
 fn wire__crate__api__fungi__get_local_devices_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -812,38 +842,6 @@ fn wire__crate__api__fungi__remove_incoming_allowed_peer_impl(
             transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                 (move || {
                     let output_ok = crate::api::fungi::remove_incoming_allowed_peer(api_peer_id)?;
-                    Ok(output_ok)
-                })(),
-            )
-        },
-    )
-}
-fn wire__crate__api__fungi__remove_known_peer_impl(
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "remove_known_peer",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_peer_id = <String>::sse_decode(&mut deserializer);
-            deserializer.end();
-            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                (move || {
-                    let output_ok = crate::api::fungi::remove_known_peer(api_peer_id)?;
                     Ok(output_ok)
                 })(),
             )
@@ -1285,6 +1283,7 @@ impl SseDecode for crate::api::fungi::PeerInfo {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_peerId = <String>::sse_decode(deserializer);
+        let mut var_alias = <Option<String>>::sse_decode(deserializer);
         let mut var_hostname = <Option<String>>::sse_decode(deserializer);
         let mut var_os = <String>::sse_decode(deserializer);
         let mut var_publicIp = <Option<String>>::sse_decode(deserializer);
@@ -1294,6 +1293,7 @@ impl SseDecode for crate::api::fungi::PeerInfo {
         let mut var_version = <String>::sse_decode(deserializer);
         return crate::api::fungi::PeerInfo {
             peer_id: var_peerId,
+            alias: var_alias,
             hostname: var_hostname,
             os: var_os,
             public_ip: var_publicIp,
@@ -1397,20 +1397,20 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        4 => {
+        3 => {
             wire__crate__api__fungi__add_tcp_forwarding_rule_impl(port, ptr, rust_vec_len, data_len)
         }
-        5 => {
+        4 => {
             wire__crate__api__fungi__add_tcp_listening_rule_impl(port, ptr, rust_vec_len, data_len)
         }
-        7 => wire__crate__api__fungi__enable_file_transfer_client_impl(
+        9 => wire__crate__api__fungi__enable_file_transfer_client_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        16 => wire__crate__api__fungi__get_local_devices_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__fungi__init_app_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__fungi__get_local_devices_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__fungi__init_app_impl(port, ptr, rust_vec_len, data_len),
         27 => wire__crate__api__fungi__start_file_transfer_service_impl(
             port,
             ptr,
@@ -1431,45 +1431,45 @@ fn pde_ffi_dispatcher_sync_impl(
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
         2 => wire__crate__api__fungi__add_incoming_allowed_peer_impl(ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__fungi__add_or_update_known_peer_impl(ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__fungi__config_file_path_impl(ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__fungi__get_all_address_book_impl(ptr, rust_vec_len, data_len),
-        9 => {
+        5 => wire__crate__api__fungi__address_book_add_or_update_impl(ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__fungi__address_book_get_peer_impl(ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__fungi__address_book_remove_impl(ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__fungi__config_file_path_impl(ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__fungi__get_all_address_book_impl(ptr, rust_vec_len, data_len),
+        11 => {
             wire__crate__api__fungi__get_all_file_transfer_clients_impl(ptr, rust_vec_len, data_len)
         }
-        10 => wire__crate__api__fungi__get_file_transfer_service_enabled_impl(
+        12 => wire__crate__api__fungi__get_file_transfer_service_enabled_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        11 => wire__crate__api__fungi__get_file_transfer_service_root_dir_impl(
+        13 => wire__crate__api__fungi__get_file_transfer_service_root_dir_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        12 => wire__crate__api__fungi__get_ftp_proxy_impl(ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__fungi__get_incoming_allowed_peers_list_impl(
+        14 => wire__crate__api__fungi__get_ftp_proxy_impl(ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__fungi__get_incoming_allowed_peers_list_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        14 => wire__crate__api__fungi__get_incoming_allowed_peers_with_info_impl(
+        16 => wire__crate__api__fungi__get_incoming_allowed_peers_with_info_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        15 => wire__crate__api__fungi__get_known_peer_info_impl(ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__fungi__get_tcp_tunneling_config_impl(ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__fungi__get_webdav_proxy_impl(ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__fungi__host_name_impl(ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__fungi__peer_id_impl(ptr, rust_vec_len, data_len),
-        22 => {
+        18 => wire__crate__api__fungi__get_tcp_tunneling_config_impl(ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__fungi__get_webdav_proxy_impl(ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__fungi__host_name_impl(ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__fungi__peer_id_impl(ptr, rust_vec_len, data_len),
+        23 => {
             wire__crate__api__fungi__remove_file_transfer_client_impl(ptr, rust_vec_len, data_len)
         }
-        23 => {
+        24 => {
             wire__crate__api__fungi__remove_incoming_allowed_peer_impl(ptr, rust_vec_len, data_len)
         }
-        24 => wire__crate__api__fungi__remove_known_peer_impl(ptr, rust_vec_len, data_len),
         25 => wire__crate__api__fungi__remove_tcp_forwarding_rule_impl(ptr, rust_vec_len, data_len),
         26 => wire__crate__api__fungi__remove_tcp_listening_rule_impl(ptr, rust_vec_len, data_len),
         29 => wire__crate__api__fungi__stop_file_transfer_service_impl(ptr, rust_vec_len, data_len),
@@ -1572,6 +1572,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::fungi::PeerInfo {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.peer_id.into_into_dart().into_dart(),
+            self.alias.into_into_dart().into_dart(),
             self.hostname.into_into_dart().into_dart(),
             self.os.into_into_dart().into_dart(),
             self.public_ip.into_into_dart().into_dart(),
@@ -1810,6 +1811,7 @@ impl SseEncode for crate::api::fungi::PeerInfo {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.peer_id, serializer);
+        <Option<String>>::sse_encode(self.alias, serializer);
         <Option<String>>::sse_encode(self.hostname, serializer);
         <String>::sse_encode(self.os, serializer);
         <Option<String>>::sse_encode(self.public_ip, serializer);

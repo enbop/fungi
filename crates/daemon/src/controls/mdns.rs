@@ -1,12 +1,12 @@
 use std::{
     collections::HashMap,
     sync::{Arc, mpsc},
-    time::{Duration, SystemTime},
+    time::Duration,
     vec,
 };
 
 use anyhow::Result;
-use fungi_config::address_book::{Os, PeerInfo};
+use fungi_config::address_book::PeerInfo;
 use libp2p::PeerId;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use parking_lot::Mutex;
@@ -29,7 +29,7 @@ impl MdnsControl {
         }
     }
 
-    pub fn start(&self, peer_id: PeerId) -> Result<()> {
+    pub fn start(&self, peer_info: PeerInfo) -> Result<()> {
         self.stop();
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel();
@@ -38,12 +38,8 @@ impl MdnsControl {
         let local_devices = Arc::clone(&self.local_devices);
         let task_handle = Arc::clone(&self.task);
 
-        let current_device_info = PeerInfo::new(peer_id, fungi_util::sysinfo::System::host_name());
-
         let handle = std::thread::spawn(move || {
-            if let Err(e) =
-                Self::run_mdns_service(peer_id, current_device_info, local_devices, shutdown_rx)
-            {
+            if let Err(e) = Self::run_mdns_service(peer_info, local_devices, shutdown_rx) {
                 eprintln!("mDNS service error: {}", e);
             }
         });
@@ -87,7 +83,6 @@ impl MdnsControl {
     }
 
     fn run_mdns_service(
-        peer_id: PeerId,
         device_info: PeerInfo,
         local_devices: Arc<Mutex<HashMap<PeerId, PeerInfo>>>,
         shutdown_rx: mpsc::Receiver<()>,
@@ -95,31 +90,25 @@ impl MdnsControl {
         let mdns = ServiceDaemon::new()?;
         let service_type = FUNGI_SERVICE_TYPE;
 
-        let local_ip = Self::get_local_ip().unwrap_or_else(|| "127.0.0.1".to_string());
-        let host_name = format!("{}.local.", local_ip);
-        let instance_name = peer_id.to_string();
+        let current_peer_id = device_info.peer_id;
+
+        let instance_name = current_peer_id.to_string();
         let port = 0;
 
-        let os_string: String = device_info.os().clone().into();
-        let peer_id_string = peer_id.to_string();
-        let hostname_str = device_info
-            .hostname()
-            .map(|s| s.as_str())
-            .unwrap_or("unknown");
-        let version_str = device_info.version();
+        let mut properties = Vec::new();
+        properties.push(("peer_id", current_peer_id.to_string()));
+        properties.push(("os", (&device_info.os).into()));
+        properties.push(("version", device_info.version.to_string()));
 
-        let properties = [
-            ("peer_id", peer_id_string.as_str()),
-            ("hostname", hostname_str),
-            ("os", os_string.as_str()),
-            ("version", version_str),
-        ];
+        if let Some(host_name) = device_info.hostname.as_ref() {
+            properties.push(("hostname", host_name.to_string()));
+        }
 
         let service_info = ServiceInfo::new(
             service_type,
             &instance_name,
-            &host_name,
-            &local_ip,
+            &device_info.hostname.unwrap_or_default(),
+            &device_info.private_ips.get(0).cloned().unwrap_or_default(),
             port,
             &properties[..],
         )?;
@@ -148,11 +137,11 @@ impl MdnsControl {
                 Ok(event) => match event {
                     ServiceEvent::ServiceResolved(info) => {
                         if let Some(remote_device) = Self::parse_service_info(&info) {
-                            if remote_device.peer_id != peer_id {
+                            if remote_device.peer_id != current_peer_id {
                                 log::debug!("Discovered device: {:?}", remote_device.peer_id);
                                 local_devices
                                     .lock()
-                                    .insert(remote_device.peer_id, remote_device);
+                                    .insert(remote_device.peer_id.to_owned(), remote_device);
                             }
                         }
                     }
@@ -184,44 +173,19 @@ impl MdnsControl {
         Ok(())
     }
 
-    fn get_local_ip() -> Option<String> {
-        if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
-            if let Ok(()) = socket.connect("8.8.8.8:80") {
-                if let Ok(addr) = socket.local_addr() {
-                    return Some(addr.ip().to_string());
-                }
-            }
-        }
-
-        None
-    }
-
     fn parse_service_info(info: &mdns_sd::ServiceInfo) -> Option<PeerInfo> {
         let properties = info.get_properties();
 
-        let peer_id_str = properties.get("peer_id")?.val_str();
-        let peer_id = peer_id_str.parse::<PeerId>().ok()?;
-
-        let hostname = properties.get("hostname").map(|s| s.val_str().to_string());
-        let os_str = properties.get("os")?.val_str();
-        let os = Os::try_from(os_str).ok()?;
-        let version = properties.get("version")?.val_str().to_string();
+        let mut peer_info: PeerInfo = properties.try_into().ok()?;
 
         // Get IP address from service info
         let private_ips = Some(info.get_addresses().iter().next()?.to_string())
             .map(|addr| vec![addr])
             .unwrap_or_default();
 
-        Some(PeerInfo {
-            peer_id,
-            hostname,
-            os,
-            version,
-            public_ip: None,
-            private_ips,
-            created_at: SystemTime::now(),
-            last_connected: SystemTime::now(),
-        })
+        peer_info.private_ips = private_ips;
+
+        Some(peer_info)
     }
 
     // TODO: check if this is working correctly

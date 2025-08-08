@@ -3,6 +3,7 @@ use libp2p_identity::PeerId;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
+    io,
     path::{Path, PathBuf},
     time::SystemTime,
 };
@@ -38,7 +39,7 @@ impl Os {
     }
 }
 
-impl Into<String> for Os {
+impl Into<String> for &Os {
     fn into(self) -> String {
         match self {
             Os::Windows => "Windows".to_string(),
@@ -51,17 +52,15 @@ impl Into<String> for Os {
     }
 }
 
-impl TryFrom<&str> for Os {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+impl From<&str> for Os {
+    fn from(value: &str) -> Self {
         match value {
-            "Windows" => Ok(Os::Windows),
-            "MacOS" => Ok(Os::MacOS),
-            "Linux" => Ok(Os::Linux),
-            "Android" => Ok(Os::Android),
-            "iOS" => Ok(Os::IOS),
-            _ => Err(format!("Unknown OS: {}", value)),
+            "Windows" => Os::Windows,
+            "MacOS" => Os::MacOS,
+            "Linux" => Os::Linux,
+            "Android" => Os::Android,
+            "iOS" => Os::IOS,
+            _ => Os::Unknown,
         }
     }
 }
@@ -69,54 +68,47 @@ impl TryFrom<&str> for Os {
 // use this for both mdns and address_book
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PeerInfo {
+    // set on local device
     pub peer_id: PeerId,
+    pub alias: Option<String>,
     pub hostname: Option<String>,
-    pub os: Os,
-    pub public_ip: Option<String>,
     pub private_ips: Vec<String>,
+    pub os: Os,
+    pub version: String,
+
+    // set on remote devices
+    pub public_ip: Option<String>,
     pub created_at: SystemTime,
     pub last_connected: SystemTime,
-    pub version: String,
 }
 
 impl PeerInfo {
-    pub fn new(peer_id: PeerId, hostname: Option<String>) -> Self {
+    pub fn this_device(peer_id: PeerId, hostname: Option<String>) -> Self {
         let version = std::env!("CARGO_PKG_VERSION").to_string();
-
+        let local_ip = fungi_util::get_local_ip();
+        let os = Os::this_device();
         Self {
             peer_id,
+            alias: None,
             hostname,
-            os: Os::this_device(),
+            os,
             public_ip: None,
-            private_ips: Vec::new(),
+            private_ips: local_ip.map(|ip| vec![ip]).unwrap_or_default(),
+            version,
             created_at: SystemTime::now(),
             last_connected: SystemTime::now(),
-            version,
         }
+    }
+
+    pub fn update_from(&mut self, other: Self) {
+        let created_at = self.created_at;
+        *self = other;
+        self.created_at = created_at; // Preserve original creation time
+        self.update_last_connected();
     }
 
     pub fn update_last_connected(&mut self) {
         self.last_connected = SystemTime::now();
-    }
-
-    pub fn peer_id(&self) -> &PeerId {
-        &self.peer_id
-    }
-
-    pub fn hostname(&self) -> Option<&String> {
-        self.hostname.as_ref()
-    }
-
-    pub fn os(&self) -> &Os {
-        &self.os
-    }
-
-    pub fn version(&self) -> &str {
-        &self.version
-    }
-
-    pub fn created_at(&self) -> SystemTime {
-        self.created_at
     }
 
     pub fn is_expired(&self) -> bool {
@@ -125,6 +117,48 @@ impl PeerInfo {
         } else {
             true // If we can't determine elapsed time, consider it expired
         }
+    }
+}
+
+impl TryFrom<&mdns_sd::TxtProperties> for PeerInfo {
+    type Error = io::Error;
+
+    fn try_from(properties: &mdns_sd::TxtProperties) -> std::result::Result<Self, Self::Error> {
+        let peer_id_str = properties
+            .get("peer_id")
+            .ok_or(io::Error::other("Missing peer_id property"))?
+            .val_str();
+        let peer_id = peer_id_str
+            .parse::<PeerId>()
+            .map_err(|_| io::Error::other(format!("Invalid peer_id: {}", peer_id_str)))?;
+
+        let hostname = properties.get("hostname").map(|s| s.val_str().to_string());
+        let os = properties
+            .get("os")
+            .map(|s| Os::from(s.val_str()))
+            .unwrap_or(Os::Unknown);
+        let version = properties
+            .get("version")
+            .map(|s| s.val_str().to_string())
+            .unwrap_or_default();
+        let public_ip = properties.get("public_ip").map(|s| s.val_str().to_string());
+
+        let private_ips = properties
+            .get("private_ips")
+            .map(|s| s.val_str().split(',').map(String::from).collect())
+            .unwrap_or_default();
+
+        Ok(PeerInfo {
+            peer_id,
+            alias: None,
+            hostname,
+            os,
+            public_ip,
+            private_ips,
+            version,
+            created_at: SystemTime::now(),
+            last_connected: SystemTime::now(),
+        })
     }
 }
 
@@ -185,17 +219,17 @@ impl AddressBookConfig {
         Ok(new_config)
     }
 
-    pub fn add_or_update_peer(&self, peer_id: PeerId, hostname: Option<String>) -> Result<Self> {
+    pub fn add_or_update_peer(&self, peer_info: PeerInfo) -> Result<Self> {
         self.update_and_save(|config| {
-            if let Some(existing_peer) = config.peers.iter_mut().find(|p| p.peer_id == peer_id) {
+            if let Some(existing_peer) = config
+                .peers
+                .iter_mut()
+                .find(|p| p.peer_id == peer_info.peer_id)
+            {
                 // Update existing peer
-                if hostname.is_some() && existing_peer.hostname != hostname {
-                    existing_peer.hostname = hostname;
-                }
-                existing_peer.update_last_connected();
+                existing_peer.update_from(peer_info.clone());
             } else {
                 // Add new peer
-                let peer_info = PeerInfo::new(peer_id, hostname);
                 config.peers.push(peer_info);
             }
         })
@@ -253,10 +287,19 @@ mod tests {
         let (config, _temp_dir) = create_temp_peers_config();
         let peer_id = PeerId::random();
         let hostname = Some("test-host".to_string());
+        let peer_info = PeerInfo {
+            peer_id,
+            alias: None,
+            hostname: hostname.clone(),
+            os: Os::this_device(),
+            public_ip: None,
+            private_ips: vec![],
+            version: "1.0.0".to_string(),
+            created_at: SystemTime::now(),
+            last_connected: SystemTime::now(),
+        };
 
-        let updated_config = config
-            .add_or_update_peer(peer_id, hostname.clone())
-            .unwrap();
+        let updated_config = config.add_or_update_peer(peer_info).unwrap();
 
         let peer_info = updated_config.get_peer_info(&peer_id).unwrap();
         assert_eq!(peer_info.peer_id, peer_id);
@@ -267,19 +310,36 @@ mod tests {
     fn test_update_existing_peer() {
         let (config, _temp_dir) = create_temp_peers_config();
         let peer_id = PeerId::random();
+        let initial_peer_info = PeerInfo {
+            peer_id,
+            alias: None,
+            hostname: Some("host1".to_string()),
+            os: Os::this_device(),
+            public_ip: None,
+            private_ips: vec![],
+            version: "1.0.0".to_string(),
+            created_at: SystemTime::now(),
+            last_connected: SystemTime::now(),
+        };
 
-        // Add peer first
-        let config = config
-            .add_or_update_peer(peer_id, Some("host1".to_string()))
+        let updated_config = config.add_or_update_peer(initial_peer_info).unwrap();
+        let updated_peer_info = PeerInfo {
+            peer_id,
+            alias: Some("alias1".to_string()),
+            hostname: Some("host2".to_string()),
+            os: Os::this_device(),
+            public_ip: None,
+            private_ips: vec![],
+            version: "1.0.1".to_string(),
+            created_at: SystemTime::now(),
+            last_connected: SystemTime::now(),
+        };
+        let updated_config = updated_config
+            .add_or_update_peer(updated_peer_info)
             .unwrap();
-
-        // Update with new hostname
-        let updated_config = config
-            .add_or_update_peer(peer_id, Some("host2".to_string()))
-            .unwrap();
-
         let peer_info = updated_config.get_peer_info(&peer_id).unwrap();
+        assert_eq!(peer_info.alias, Some("alias1".to_string()));
         assert_eq!(peer_info.hostname, Some("host2".to_string()));
-        assert!(peer_info.last_connected > peer_info.created_at);
+        assert_eq!(peer_info.version, "1.0.1");
     }
 }

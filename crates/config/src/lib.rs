@@ -32,6 +32,9 @@ pub struct FungiConfig {
     #[serde(default)]
     pub file_transfer: FileTransfer,
 
+    #[serde(default)]
+    custom_hostname: Option<String>,
+
     #[serde(skip)]
     config_file: PathBuf,
 }
@@ -85,6 +88,19 @@ impl FungiConfig {
         updater(&mut new_config);
         new_config.save_to_file()?;
         Ok(new_config)
+    }
+
+    pub fn get_hostname(&self) -> Option<String> {
+        self.custom_hostname
+            .as_ref()
+            .cloned()
+            .or(fungi_util::sysinfo::System::host_name())
+    }
+
+    pub fn set_custom_hostname(&self, hostname: Option<String>) -> Result<Self> {
+        self.update_and_save(|config| {
+            config.custom_hostname = hostname;
+        })
     }
 
     pub fn add_incoming_allowed_peer(&self, peer_id: &PeerId) -> Result<Self> {

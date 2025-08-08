@@ -303,35 +303,31 @@ impl FungiDaemon {
         Ok(res)
     }
 
-    pub fn get_all_address_book(&self) -> Vec<PeerInfo> {
-        self.peers_config().lock().get_all_peers().clone()
+    pub fn address_book_get_all(&self) -> Vec<PeerInfo> {
+        self.address_book().lock().get_all_peers().clone()
     }
 
-    pub fn add_or_update_known_peer(
-        &self,
-        peer_id: PeerId,
-        hostname: Option<String>,
-    ) -> Result<()> {
-        let current_peers_config = self.peers_config().lock().clone();
-        let updated_peers_config = current_peers_config.add_or_update_peer(peer_id, hostname)?;
-        *self.peers_config().lock() = updated_peers_config;
+    pub fn address_book_add_or_update(&self, peer_info: PeerInfo) -> Result<()> {
+        let current_peers_config = self.address_book().lock().clone();
+        let updated_peers_config = current_peers_config.add_or_update_peer(peer_info)?;
+        *self.address_book().lock() = updated_peers_config;
         Ok(())
     }
 
-    pub fn get_known_peer_info(&self, peer_id: PeerId) -> Option<PeerInfo> {
-        self.peers_config().lock().get_peer_info(&peer_id).cloned()
+    pub fn address_book_get_peer(&self, peer_id: PeerId) -> Option<PeerInfo> {
+        self.address_book().lock().get_peer_info(&peer_id).cloned()
     }
 
-    pub fn remove_known_peer(&self, peer_id: PeerId) -> Result<()> {
-        let current_peers_config = self.peers_config().lock().clone();
+    pub fn address_book_remove(&self, peer_id: PeerId) -> Result<()> {
+        let current_peers_config = self.address_book().lock().clone();
         let updated_peers_config = current_peers_config.remove_peer(&peer_id)?;
-        *self.peers_config().lock() = updated_peers_config;
+        *self.address_book().lock() = updated_peers_config;
         Ok(())
     }
 
     pub fn get_incoming_allowed_peers_with_info(&self) -> Vec<(String, Option<PeerInfo>)> {
         let allowed_peers = self.get_incoming_allowed_peers_list();
-        let peers_config_guard = self.peers_config();
+        let peers_config_guard = self.address_book();
         let peers_config = peers_config_guard.lock();
 
         allowed_peers

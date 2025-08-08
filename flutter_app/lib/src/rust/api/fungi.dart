@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `parse_peer_id`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`, `from`, `from`, `from`, `try_into`
 
 Future<void> startFungiDaemon() =>
     RustLib.instance.api.crateApiFungiStartFungiDaemon();
@@ -127,16 +127,16 @@ Future<List<PeerInfo>> getLocalDevices() =>
 List<PeerInfo> getAllAddressBook() =>
     RustLib.instance.api.crateApiFungiGetAllAddressBook();
 
-void addOrUpdateKnownPeer({required String peerId, String? hostname}) => RustLib
+void addressBookAddOrUpdate({required PeerInfo peerInfo}) => RustLib
     .instance
     .api
-    .crateApiFungiAddOrUpdateKnownPeer(peerId: peerId, hostname: hostname);
+    .crateApiFungiAddressBookAddOrUpdate(peerInfo: peerInfo);
 
-PeerInfo? getKnownPeerInfo({required String peerId}) =>
-    RustLib.instance.api.crateApiFungiGetKnownPeerInfo(peerId: peerId);
+PeerInfo? addressBookGetPeer({required String peerId}) =>
+    RustLib.instance.api.crateApiFungiAddressBookGetPeer(peerId: peerId);
 
-void removeKnownPeer({required String peerId}) =>
-    RustLib.instance.api.crateApiFungiRemoveKnownPeer(peerId: peerId);
+void addressBookRemove({required String peerId}) =>
+    RustLib.instance.api.crateApiFungiAddressBookRemove(peerId: peerId);
 
 List<PeerWithInfo> getIncomingAllowedPeersWithInfo() =>
     RustLib.instance.api.crateApiFungiGetIncomingAllowedPeersWithInfo();
@@ -246,6 +246,7 @@ class ListeningRule {
 
 class PeerInfo {
   final String peerId;
+  final String? alias;
   final String? hostname;
   final String os;
   final String? publicIp;
@@ -256,6 +257,7 @@ class PeerInfo {
 
   const PeerInfo({
     required this.peerId,
+    this.alias,
     this.hostname,
     required this.os,
     this.publicIp,
@@ -268,6 +270,7 @@ class PeerInfo {
   @override
   int get hashCode =>
       peerId.hashCode ^
+      alias.hashCode ^
       hostname.hashCode ^
       os.hashCode ^
       publicIp.hashCode ^
@@ -282,6 +285,7 @@ class PeerInfo {
       other is PeerInfo &&
           runtimeType == other.runtimeType &&
           peerId == other.peerId &&
+          alias == other.alias &&
           hostname == other.hostname &&
           os == other.os &&
           publicIp == other.publicIp &&

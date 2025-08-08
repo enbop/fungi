@@ -10,9 +10,9 @@ use crate::{
 };
 use anyhow::Result;
 use fungi_config::{
-    FungiConfig, FungiDir, address_book::AddressBookConfig,
-    file_transfer::FileTransferClient as FTCConfig,
-    file_transfer::FileTransferService as FTSConfig,
+    FungiConfig, FungiDir,
+    address_book::{AddressBookConfig, PeerInfo},
+    file_transfer::{FileTransferClient as FTCConfig, FileTransferService as FTSConfig},
 };
 use fungi_swarm::{FungiSwarm, State, SwarmControl, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
@@ -48,7 +48,7 @@ impl FungiDaemon {
         self.config.clone()
     }
 
-    pub fn peers_config(&self) -> Arc<Mutex<AddressBookConfig>> {
+    pub fn address_book(&self) -> Arc<Mutex<AddressBookConfig>> {
         self.address_book_config.clone()
     }
 
@@ -105,7 +105,8 @@ impl FungiDaemon {
             })
             .await?;
         let mdns_control = MdnsControl::new();
-        mdns_control.start(swarm_control.local_peer_id())?;
+        let peer_info = PeerInfo::this_device(swarm_control.local_peer_id(), config.get_hostname());
+        mdns_control.start(peer_info)?;
 
         let stream_control = swarm_control.stream_control().clone();
 

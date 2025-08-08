@@ -49,6 +49,7 @@ pub struct TcpTunnelingConfig {
 
 pub struct PeerInfo {
     pub peer_id: String,
+    pub alias: Option<String>,
     pub hostname: Option<String>,
     pub os: String,
     pub public_ip: Option<String>,
@@ -95,25 +96,44 @@ impl From<fungi_config::tcp_tunneling::ListeningRule> for ListeningRule {
 }
 
 impl From<fungi_config::address_book::PeerInfo> for PeerInfo {
-    fn from(peer: fungi_config::address_book::PeerInfo) -> Self {
+    fn from(info: fungi_config::address_book::PeerInfo) -> Self {
         Self {
-            peer_id: peer.peer_id.to_string(),
-            hostname: peer.hostname,
-            os: peer.os.into(),
-            public_ip: peer.public_ip,
-            private_ips: peer.private_ips,
-            created_at: peer
+            peer_id: info.peer_id.to_string(),
+            alias: info.alias,
+            hostname: info.hostname,
+            os: (&info.os).into(),
+            public_ip: info.public_ip,
+            private_ips: info.private_ips,
+            created_at: info
                 .created_at
                 .duration_since(UNIX_EPOCH)
                 .map(|v| v.as_micros() as u64)
                 .unwrap_or_default(),
-            last_connected: peer
+            last_connected: info
                 .last_connected
                 .duration_since(UNIX_EPOCH)
                 .map(|v| v.as_micros() as u64)
                 .unwrap_or_default(),
-            version: peer.version,
+            version: info.version,
         }
+    }
+}
+
+impl TryInto<fungi_config::address_book::PeerInfo> for PeerInfo {
+    type Error = anyhow::Error;
+
+    fn try_into(self) -> Result<fungi_config::address_book::PeerInfo> {
+        Ok(fungi_config::address_book::PeerInfo {
+            peer_id: self.peer_id.parse()?,
+            alias: self.alias,
+            hostname: self.hostname,
+            os: fungi_config::address_book::Os::from(self.os.as_str()),
+            public_ip: self.public_ip,
+            private_ips: self.private_ips,
+            created_at: UNIX_EPOCH + std::time::Duration::from_micros(self.created_at),
+            last_connected: UNIX_EPOCH + std::time::Duration::from_micros(self.last_connected),
+            version: self.version,
+        })
     }
 }
 
@@ -350,28 +370,28 @@ pub async fn get_local_devices() -> Result<Vec<PeerInfo>> {
 #[frb(sync)]
 pub fn get_all_address_book() -> Result<Vec<PeerInfo>> {
     let daemon = with_daemon!();
-    let peers = daemon.get_all_address_book();
+    let peers = daemon.address_book_get_all();
     Ok(peers.into_iter().map(|p| p.into()).collect())
 }
 
 #[frb(sync)]
-pub fn add_or_update_known_peer(peer_id: String, hostname: Option<String>) -> Result<()> {
+pub fn address_book_add_or_update(peer_info: PeerInfo) -> Result<()> {
     let daemon = with_daemon!();
-    daemon.add_or_update_known_peer(parse_peer_id(peer_id)?, hostname)
+    daemon.address_book_add_or_update(peer_info.try_into()?)
 }
 
 #[frb(sync)]
-pub fn get_known_peer_info(peer_id: String) -> Result<Option<PeerInfo>> {
+pub fn address_book_get_peer(peer_id: String) -> Result<Option<PeerInfo>> {
     let daemon = with_daemon!();
     Ok(daemon
-        .get_known_peer_info(parse_peer_id(peer_id)?)
+        .address_book_get_peer(parse_peer_id(peer_id)?)
         .map(|p| p.into()))
 }
 
 #[frb(sync)]
-pub fn remove_known_peer(peer_id: String) -> Result<()> {
+pub fn address_book_remove(peer_id: String) -> Result<()> {
     let daemon = with_daemon!();
-    daemon.remove_known_peer(parse_peer_id(peer_id)?)
+    daemon.address_book_remove(parse_peer_id(peer_id)?)
 }
 
 #[frb(sync)]
