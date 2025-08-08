@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart';
-import '../../src/rust/api/fungi.dart' as fungi_api;
+import 'package:get/get.dart';
 
 import 'dart:math';
 
 Future<PeerInfo?> showAddressBookSelectorDialog() async {
-  final uniqueTag =
+  final dialogId =
       DateTime.now().millisecondsSinceEpoch.toString() +
       Random().nextInt(100).toString();
+
+  final devices = Get.find<FungiController>().addressBook;
   return await SmartDialog.show<PeerInfo>(
-    tag: uniqueTag,
-    builder: (context) => DeviceSelectorDialogWidget(
-      title: "Select From Address Book",
-      dialogId: uniqueTag,
+    tag: dialogId,
+    builder: (context) => Obx(
+      () => DeviceSelectorDialogWidget(
+        title: "Select From Address Book",
+        dialogId: dialogId,
+        devices: devices,
+      ),
     ),
     alignment: Alignment.center,
     maskColor: Colors.black54,
@@ -21,79 +27,17 @@ Future<PeerInfo?> showAddressBookSelectorDialog() async {
   );
 }
 
-class DeviceSelectorDialog {
-  static Future<PeerInfo?> show({
-    required String title,
-    String? dialogId,
-  }) async {
-    return await SmartDialog.show<PeerInfo>(
-      tag: dialogId,
-      builder: (context) =>
-          DeviceSelectorDialogWidget(title: title, dialogId: dialogId),
-      alignment: Alignment.center,
-      maskColor: Colors.black54,
-      clickMaskDismiss: true,
-    );
-  }
-}
-
-class DeviceSelectorDialogWidget extends StatefulWidget {
+class DeviceSelectorDialogWidget extends StatelessWidget {
   final String title;
-  final String? dialogId;
+  final String dialogId;
+  final List<PeerInfo> devices;
 
   const DeviceSelectorDialogWidget({
     super.key,
     required this.title,
-    this.dialogId,
+    required this.dialogId,
+    required this.devices,
   });
-
-  @override
-  State<DeviceSelectorDialogWidget> createState() =>
-      _DeviceSelectorDialogWidgetState();
-}
-
-class _DeviceSelectorDialogWidgetState
-    extends State<DeviceSelectorDialogWidget> {
-  List<fungi_api.PeerInfo> devices = [];
-  bool isLoading = true;
-  String? error;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadDevices();
-  }
-
-  Future<void> _loadDevices() async {
-    try {
-      setState(() {
-        isLoading = true;
-        error = null;
-      });
-
-      final result = await fungi_api.getLocalDevices();
-
-      result.sort((a, b) {
-        final aName = a.hostname ?? 'Unknown';
-        final bName = b.hostname ?? 'Unknown';
-
-        if (aName == 'Unknown' && bName != 'Unknown') return 1;
-        if (bName == 'Unknown' && aName != 'Unknown') return -1;
-
-        return aName.compareTo(bName);
-      });
-
-      setState(() {
-        devices = result;
-        isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        error = e.toString();
-        isLoading = false;
-      });
-    }
-  }
 
   String _truncatePeerId(String peerId) {
     if (peerId.length <= 15) return peerId;
@@ -143,22 +87,14 @@ class _DeviceSelectorDialogWidgetState
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      widget.title,
+                      title,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                   IconButton(
-                    onPressed: _loadDevices,
-                    icon: Icon(
-                      Icons.refresh,
-                      color: Theme.of(context).primaryColor,
-                    ),
-                    tooltip: 'Refresh device list',
-                  ),
-                  IconButton(
-                    onPressed: () => SmartDialog.dismiss(tag: widget.dialogId),
+                    onPressed: () => SmartDialog.dismiss(tag: dialogId),
                     icon: const Icon(Icons.close),
                     tooltip: 'Close',
                   ),
@@ -176,7 +112,7 @@ class _DeviceSelectorDialogWidgetState
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed: () => SmartDialog.dismiss(tag: widget.dialogId),
+                    onPressed: () => SmartDialog.dismiss(tag: dialogId),
                     child: const Text('Cancel'),
                   ),
                 ],
@@ -189,56 +125,6 @@ class _DeviceSelectorDialogWidgetState
   }
 
   Widget _buildContent() {
-    if (isLoading) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Searching for network devices...'),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 48,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Failed to load device list',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                error!,
-                style: Theme.of(context).textTheme.bodySmall,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _loadDevices,
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     if (devices.isEmpty) {
       return const Center(
         child: Padding(
@@ -249,14 +135,8 @@ class _DeviceSelectorDialogWidgetState
               Icon(Icons.devices_other, size: 48, color: Colors.grey),
               SizedBox(height: 16),
               Text(
-                'No network devices found',
+                'No devices found',
                 style: TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Make sure target devices are powered on and connected to the same network',
-                style: TextStyle(fontSize: 14, color: Colors.grey),
-                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -320,7 +200,7 @@ class _DeviceSelectorDialogWidgetState
           ),
           trailing: const Icon(Icons.arrow_forward_ios, size: 16),
           onTap: () {
-            SmartDialog.dismiss(tag: widget.dialogId, result: device);
+            SmartDialog.dismiss(tag: dialogId, result: device);
           },
         );
       },

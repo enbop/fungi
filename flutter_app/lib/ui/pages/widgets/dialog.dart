@@ -107,7 +107,7 @@ void showAddPeerDialog() {
                   icon: const Icon(Icons.devices_other),
                   tooltip: 'Select from known devices',
                   onPressed: () async {
-                    if (controller.AddressBook.isEmpty) {
+                    if (controller.addressBook.isEmpty) {
                       SmartDialog.showToast('No known devices');
                       return;
                     }

@@ -49,7 +49,7 @@ class FungiController extends GetxController {
   final currentTheme = ThemeOption.system.obs;
   final incomingAllowdPeers = <String>[].obs;
   final incomingAllowedPeersWithInfo = <PeerWithInfo>[].obs;
-  final AddressBook = <PeerInfo>[].obs;
+  final addressBook = <PeerInfo>[].obs;
   final fileTransferServerState = FileTransferServerState(enabled: false).obs;
   final fileTransferClients = <FileTransferClient>[].obs;
 
@@ -91,7 +91,7 @@ class FungiController extends GetxController {
   }
 
   void updateAddressBook() {
-    AddressBook.value = fungi.getAllAddressBook();
+    addressBook.value = fungi.getAllAddressBook();
   }
 
   void addIncomingAllowedPeer(String peerId, String? alias) {
