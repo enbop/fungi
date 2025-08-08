@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
+import 'package:fungi_app/src/rust/api/fungi.dart';
 import 'package:get/get.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import '../../widgets/device_selector_dialog.dart';
@@ -74,7 +75,7 @@ void showAllowedPeersList() {
         ),
         actions: [
           TextButton(
-            onPressed: () => showAddPeerDialog(),
+            onPressed: () => showAddAllowedPeerDialog(),
             child: const Text('Add Peer'),
           ),
           TextButton(
@@ -87,9 +88,10 @@ void showAllowedPeersList() {
   );
 }
 
-void showAddPeerDialog() {
+void showAddAllowedPeerDialog() {
   final textPeerIdController = TextEditingController();
   final textAliasController = TextEditingController();
+  final Rx<PeerInfo> selectedPeer = PeerInfo.empty().obs;
   final errorMessage = RxString('');
   final controller = Get.find<FungiController>();
 
@@ -100,51 +102,41 @@ void showAddPeerDialog() {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.devices_other),
-                  tooltip: 'Select from known devices',
-                  onPressed: () async {
-                    if (controller.addressBook.isEmpty) {
-                      SmartDialog.showToast('No known devices');
-                      return;
-                    }
-                    // TODO add showAddressBookDialog
-                    // final selectedPeer = await showAddressBookDialog(
-                    //   controller.AddressBook,
-                    // );
-                    // if (selectedPeer != null) {
-                    //   textPeerIdController.text = selectedPeer.peerId;
-                    //   textAliasController.text = selectedPeer.hostname ?? '';
-                    // }
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.devices),
-                  tooltip: 'Select from network devices',
-                  onPressed: () async {
-                    // TODO merge DeviceSelectorDialog with showAddressBookDialog
-                    final selectedDevice = await DeviceSelectorDialog.show(
-                      title: 'Select Network Device',
-                      dialogId: 'device_selector_add_peer',
-                    );
-                    if (selectedDevice != null) {
-                      textPeerIdController.text = selectedDevice.peerId;
-                      textAliasController.text = selectedDevice.hostname ?? '';
-                    }
-                  },
-                ),
-              ],
+            TextButton.icon(
+              icon: const Icon(Icons.bookmarks_outlined),
+              label: const Text('Select from Address Book'),
+              onPressed: () async {
+                final newSelectedPeer = await showAddressBookSelectorDialog();
+                if (newSelectedPeer == null) return;
+                selectedPeer.value = newSelectedPeer;
+                textPeerIdController.text = selectedPeer.value.peerId;
+                textAliasController.text = selectedPeer.value.hostname ?? '';
+              },
             ),
-            TextField(
-              controller: textPeerIdController,
-              decoration: const InputDecoration(
-                labelText: 'Peer ID',
-                hintText: 'Enter peer ID',
+            TextButton.icon(
+              icon: const Icon(Icons.devices),
+              label: const Text('Select from Local Devices(mDNS)'),
+              onPressed: () async {
+                final newSelectedPeer =
+                    await showMdnsLocalDevicesSelectorDialog();
+                if (newSelectedPeer == null) return;
+                selectedPeer.value = newSelectedPeer;
+                textPeerIdController.text = selectedPeer.value.peerId;
+                textAliasController.text = selectedPeer.value.hostname ?? '';
+              },
+            ),
+            Obx(
+              () => TextField(
+                controller: textPeerIdController,
+                decoration: InputDecoration(
+                  labelText: 'Peer ID',
+                  hintText: 'Enter peer ID',
+                  helperText:
+                      selectedPeer.value.peerId == textPeerIdController.text
+                      ? selectedPeer.value.hostname
+                      : null,
+                ),
               ),
-              autofocus: true,
             ),
             const SizedBox(height: 8),
             TextField(
@@ -178,13 +170,18 @@ void showAddPeerDialog() {
                 errorMessage.value = 'Peer ID cannot be empty';
                 return;
               }
+
+              if (selectedPeer.value.peerId != textPeerIdController.text) {
+                // reset the selectedPeer
+                selectedPeer.value = PeerInfo.empty();
+              }
+
+              selectedPeer.value.peerId = textPeerIdController.text;
+              selectedPeer.value.alias = textAliasController.text.isEmpty
+                  ? null
+                  : textAliasController.text;
               try {
-                controller.addIncomingAllowedPeer(
-                  textPeerIdController.text,
-                  textAliasController.text.isNotEmpty
-                      ? textAliasController.text
-                      : null,
-                );
+                controller.addIncomingAllowedPeer(selectedPeer.value);
                 SmartDialog.dismiss();
               } catch (e) {
                 errorMessage.value = 'Failed to add peer: $e';
@@ -198,18 +195,14 @@ void showAddPeerDialog() {
   );
 }
 
-class Client {
-  final String peerId;
-  final String name;
-  final bool enabled;
-  Client({required this.peerId, required this.name, required this.enabled});
-}
-
-void showAddClientDialog(Future<void> Function(Client) onAddClient) {
-  final peerIdTextController = TextEditingController();
-  final nameTextController = TextEditingController();
+void showAddFileClientDialog() {
+  final textPeerIdController = TextEditingController();
+  final textAliasController = TextEditingController();
+  final Rx<PeerInfo> selectedPeer = PeerInfo.empty().obs;
   final enabled = RxBool(true);
   final errorMessage = RxString('');
+  final controller = Get.find<FungiController>();
+
   SmartDialog.show(
     builder: (context) {
       return AlertDialog(
@@ -217,39 +210,49 @@ void showAddClientDialog(Future<void> Function(Client) onAddClient) {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            TextButton.icon(
+              icon: const Icon(Icons.bookmarks_outlined),
+              label: const Text('Select from Address Book'),
+              onPressed: () async {
+                final newSelectedPeer = await showAddressBookSelectorDialog();
+                if (newSelectedPeer == null) return;
+                selectedPeer.value = newSelectedPeer;
+                textPeerIdController.text = selectedPeer.value.peerId;
+                textAliasController.text = selectedPeer.value.hostname ?? '';
+              },
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.devices),
+              label: const Text('Select from Local Devices(mDNS)'),
+              onPressed: () async {
+                final newSelectedPeer =
+                    await showMdnsLocalDevicesSelectorDialog();
+                if (newSelectedPeer == null) return;
+                selectedPeer.value = newSelectedPeer;
+                textPeerIdController.text = selectedPeer.value.peerId;
+                textAliasController.text = selectedPeer.value.hostname ?? '';
+              },
+            ),
             TextField(
-              controller: nameTextController,
+              controller: textPeerIdController,
+              decoration: InputDecoration(
+                labelText: 'Peer ID',
+                hintText: 'Enter peer ID',
+                helperText:
+                    selectedPeer.value.peerId == textPeerIdController.text
+                    ? selectedPeer.value.hostname
+                    : null,
+              ),
+              autofocus: true,
+            ),
+            TextField(
+              controller: textAliasController,
               decoration: const InputDecoration(
                 labelText: 'Device Alias',
                 hintText: 'Enter a device alias',
                 helperText:
                     'Device alias will be displayed as filename in mount directory',
               ),
-            ),
-            TextField(
-              controller: peerIdTextController,
-              decoration: InputDecoration(
-                labelText: 'Peer ID',
-                hintText: 'Enter peer ID',
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.devices),
-                  tooltip: 'Select from network devices',
-                  onPressed: () async {
-                    final selectedDevice = await DeviceSelectorDialog.show(
-                      title: 'Select Network Device',
-                      dialogId: 'device_selector_add_client',
-                    );
-                    if (selectedDevice != null) {
-                      peerIdTextController.text = selectedDevice.peerId;
-                      if (nameTextController.text.isEmpty &&
-                          selectedDevice.hostname != null) {
-                        nameTextController.text = selectedDevice.hostname!;
-                      }
-                    }
-                  },
-                ),
-              ),
-              autofocus: true,
             ),
             Row(
               children: [
@@ -286,21 +289,23 @@ void showAddClientDialog(Future<void> Function(Client) onAddClient) {
           ),
           TextButton(
             onPressed: () async {
-              if (peerIdTextController.text.isEmpty) {
+              if (textPeerIdController.text.isEmpty) {
                 errorMessage.value = 'Peer ID cannot be empty';
                 return;
               }
-              if (nameTextController.text.isEmpty) {
-                errorMessage.value = 'Name cannot be empty';
-                return;
+              if (selectedPeer.value.peerId != textPeerIdController.text) {
+                // reset the selectedPeer
+                selectedPeer.value = PeerInfo.empty();
               }
+              selectedPeer.value.peerId = textPeerIdController.text;
+              selectedPeer.value.alias = textAliasController.text.isEmpty
+                  ? null
+                  : textAliasController.text;
               try {
-                final client = Client(
-                  peerId: peerIdTextController.text,
-                  name: nameTextController.text,
+                await controller.addFileTransferClient(
                   enabled: enabled.value,
+                  peerInfo: selectedPeer.value,
                 );
-                await onAddClient(client);
                 SmartDialog.dismiss();
               } catch (e) {
                 errorMessage.value = 'Failed to add peer: $e';

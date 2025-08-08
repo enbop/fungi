@@ -68,13 +68,7 @@ class RemoteFileAccess extends GetView<FungiController> {
           ),
           SizedBox(height: 10),
           TextButton.icon(
-            onPressed: () => showAddClientDialog(
-              (Client client) => controller.addFileTransferClient(
-                enabled: client.enabled,
-                peerId: client.peerId,
-                name: client.name,
-              ),
-            ),
+            onPressed: () => showAddFileClientDialog(),
             icon: Icon(Icons.add_circle),
             label: Text("Add Remote Device"),
           ),

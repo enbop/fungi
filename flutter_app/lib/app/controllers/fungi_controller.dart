@@ -94,13 +94,13 @@ class FungiController extends GetxController {
     addressBook.value = fungi.getAllAddressBook();
   }
 
-  void addIncomingAllowedPeer(String peerId, String? alias) {
-    fungi.addIncomingAllowedPeer(peerId: peerId);
+  void addIncomingAllowedPeer(PeerInfo peerInfo) {
+    fungi.addIncomingAllowedPeer(peerId: peerInfo.peerId);
     updateIncomingAllowedPeers();
     // Also add to address books
 
     // Update the address books list to reflect the new peer
-    addOrUpdateKnownPeer(peerId, alias);
+    addressBookAddOrUpdate(peerInfo);
   }
 
   void removeIncomingAllowedPeer(String peerId) {
@@ -108,17 +108,17 @@ class FungiController extends GetxController {
     updateIncomingAllowedPeers();
   }
 
-  void addOrUpdateKnownPeer(String peerId, String? hostname) {
-    fungi.addOrUpdateKnownPeer(peerId: peerId, hostname: hostname);
+  void addressBookAddOrUpdate(PeerInfo peerInfo) {
+    fungi.addressBookAddOrUpdate(peerInfo: peerInfo);
     updateAddressBook();
   }
 
-  PeerInfo? getKnownPeerInfo(String peerId) {
-    return fungi.getKnownPeerInfo(peerId: peerId);
+  PeerInfo? addressBookGetPeer(String peerId) {
+    return fungi.addressBookGetPeer(peerId: peerId);
   }
 
-  void removeKnownPeer(String peerId) {
-    fungi.removeKnownPeer(peerId: peerId);
+  void addressBookRemove(String peerId) {
+    fungi.addressBookRemove(peerId: peerId);
     updateAddressBook();
   }
 
@@ -152,19 +152,22 @@ class FungiController extends GetxController {
 
   Future<void> addFileTransferClient({
     required bool enabled,
-    required String name,
-    required String peerId,
+    required PeerInfo peerInfo,
   }) async {
     await fungi.addFileTransferClient(
       enabled: enabled,
-      name: name,
-      peerId: peerId,
+      name: peerInfo.alias,
+      peerId: peerInfo.peerId,
     );
     fileTransferClients.add(
-      FileTransferClient(enabled: enabled, peerId: peerId, name: name),
+      FileTransferClient(
+        enabled: enabled,
+        peerId: peerInfo.peerId,
+        name: peerInfo.alias,
+      ),
     );
     // add to address books
-    addOrUpdateKnownPeer(peerId, name);
+    addressBookAddOrUpdate(peerInfo);
   }
 
   Future<void> enableFileTransferClient({

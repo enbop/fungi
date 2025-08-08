@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart';
+import 'package:fungi_app/src/rust/api/fungi.dart' as fungi;
 import 'package:get/get.dart';
 
 import 'dart:math';
@@ -17,6 +18,27 @@ Future<PeerInfo?> showAddressBookSelectorDialog() async {
     builder: (context) => Obx(
       () => DeviceSelectorDialogWidget(
         title: "Select From Address Book",
+        dialogId: dialogId,
+        devices: devices,
+      ),
+    ),
+    alignment: Alignment.center,
+    maskColor: Colors.black54,
+    clickMaskDismiss: true,
+  );
+}
+
+Future<PeerInfo?> showMdnsLocalDevicesSelectorDialog() async {
+  final dialogId =
+      DateTime.now().millisecondsSinceEpoch.toString() +
+      Random().nextInt(100).toString();
+
+  final devices = await fungi.mdnsGetLocalDevices();
+  return await SmartDialog.show<PeerInfo>(
+    tag: dialogId,
+    builder: (context) => Obx(
+      () => DeviceSelectorDialogWidget(
+        title: "Select From Local Devices(mDNS)",
         dialogId: dialogId,
         devices: devices,
       ),

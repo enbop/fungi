@@ -245,17 +245,17 @@ class ListeningRule {
 }
 
 class PeerInfo {
-  final String peerId;
-  final String? alias;
-  final String? hostname;
-  final String os;
-  final String? publicIp;
-  final List<String> privateIps;
-  final BigInt createdAt;
-  final BigInt lastConnected;
-  final String version;
+  String peerId;
+  String? alias;
+  String? hostname;
+  String os;
+  String? publicIp;
+  List<String> privateIps;
+  BigInt createdAt;
+  BigInt lastConnected;
+  String version;
 
-  const PeerInfo({
+  PeerInfo({
     required this.peerId,
     this.alias,
     this.hostname,
@@ -266,6 +266,17 @@ class PeerInfo {
     required this.lastConnected,
     required this.version,
   });
+
+  PeerInfo.empty()
+    : peerId = '',
+      alias = null,
+      hostname = null,
+      os = '',
+      publicIp = null,
+      privateIps = const [],
+      createdAt = BigInt.zero,
+      lastConnected = BigInt.zero,
+      version = '';
 
   @override
   int get hashCode =>
