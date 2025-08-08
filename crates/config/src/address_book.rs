@@ -101,9 +101,17 @@ impl PeerInfo {
     }
 
     pub fn update_from(&mut self, other: Self) {
-        let created_at = self.created_at;
+        let old_created_at = self.created_at;
+        let old_alias = self.alias.clone();
         *self = other;
-        self.created_at = created_at; // Preserve original creation time
+
+        // Preserve original alias if not set in the new info
+        if self.alias.is_none() {
+            self.alias = old_alias;
+        }
+
+        // Preserve original creation time
+        self.created_at = old_created_at;
         self.update_last_connected();
     }
 
