@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:fungi_app/app/routes/app_pages.dart';
+import 'package:fungi_app/app/tray_manager.dart';
 import 'package:fungi_app/src/rust/frb_generated.dart';
 import 'package:fungi_app/ui/pages/theme/app_theme.dart';
 import 'package:get/get.dart';
@@ -17,8 +18,16 @@ void main() async {
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.ensureInitialized();
-    await windowManager.setSize(const Size(600, 720));
-    await windowManager.center();
+
+    Get.put(AppTrayManager());
+
+    WindowOptions windowOptions = WindowOptions(
+      size: Size(600, 720),
+      center: true,
+    );
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+    });
   }
 
   Get.put(FungiController());

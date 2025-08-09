@@ -3,6 +3,7 @@ import 'package:fungi_app/src/rust/api/fungi.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart' as fungi;
+import 'package:window_manager/window_manager.dart';
 
 enum ThemeOption { light, dark, system }
 
@@ -45,8 +46,10 @@ class FungiController extends GetxController {
 
   final _storage = GetStorage();
   final _themeKey = 'theme_option';
+  final _preventCloseKey = 'prevent_close';
 
   final currentTheme = ThemeOption.system.obs;
+  final preventClose = false.obs;
   final incomingAllowdPeers = <String>[].obs;
   final incomingAllowedPeersWithInfo = <PeerWithInfo>[].obs;
   final addressBook = <PeerInfo>[].obs;
@@ -69,6 +72,7 @@ class FungiController extends GetxController {
     super.onInit();
     initFungi();
     loadThemeOption();
+    loadPreventClose();
   }
 
   void loadThemeOption() {
@@ -82,6 +86,29 @@ class FungiController extends GetxController {
     currentTheme.value = option;
     Get.changeThemeMode(option.themeMode);
     _storage.write(_themeKey, option.index);
+  }
+
+  Future<bool> loadPreventClose() async {
+    bool? savedPreventClose = _storage.read(_preventCloseKey);
+    if (savedPreventClose == null) {
+      savedPreventClose = true;
+      _storage.write(_preventCloseKey, savedPreventClose);
+    }
+    windowManager.setPreventClose(savedPreventClose);
+    final isPreventClose = await windowManager.isPreventClose();
+    assert(
+      isPreventClose == savedPreventClose,
+      'Prevent close state mismatch: $isPreventClose != $savedPreventClose',
+    );
+    preventClose.value = isPreventClose;
+    debugPrint('Prevent close state loaded: $isPreventClose');
+    return isPreventClose;
+  }
+
+  void changePreventClose(bool value) {
+    _storage.write(_preventCloseKey, value);
+    windowManager.setPreventClose(value);
+    preventClose.value = value;
   }
 
   void updateIncomingAllowedPeers() {

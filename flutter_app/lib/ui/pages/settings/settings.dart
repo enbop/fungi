@@ -11,54 +11,72 @@ class Settings extends GetView<FungiController> {
 
   @override
   Widget build(BuildContext context) {
-    return SettingsList(
-      platform: DevicePlatform.android,
-      sections: [
-        SettingsSection(
-          title: Text('Common'),
-          tiles: <SettingsTile>[
-            SettingsTile.navigation(
-              leading: Icon(Icons.language),
-              title: Text('Language'),
-              value: Text('English'),
-            ),
-            SettingsTile.navigation(
-              leading: Icon(Icons.format_paint),
-              title: Text('Theme'),
-              value: Obx(() => Text(controller.currentTheme.value.name)),
-              onPressed: (context) {
-                _showThemeDialog();
-              },
-            ),
-            SettingsTile.navigation(
-              leading: Icon(Icons.file_open),
-              title: Text('Config file path'),
-              value: Obx(() => Text(controller.configFilePath.value)),
-              onPressed: (context) {
-                Clipboard.setData(
-                  ClipboardData(text: controller.configFilePath.value),
-                );
-                SmartDialog.showToast('Path copied to clipboard');
-              },
-            ),
-          ],
-        ),
-        SettingsSection(
-          title: Text('Network'),
-          tiles: <SettingsTile>[
-            SettingsTile.navigation(
-              leading: Icon(Icons.security),
-              title: Text('Incoming Allowed Peers'),
-              value: Obx(
-                () => Text('${controller.incomingAllowdPeers.length} peers'),
+    return Obx(
+      () => SettingsList(
+        platform: DevicePlatform.android,
+        sections: [
+          SettingsSection(
+            title: Text('Common'),
+            tiles: <SettingsTile>[
+              SettingsTile.navigation(
+                leading: Icon(Icons.language),
+                title: Text('Language'),
+                value: Text('English'),
               ),
-              onPressed: (context) {
-                showAllowedPeersList();
-              },
-            ),
-          ],
-        ),
-      ],
+              SettingsTile.navigation(
+                leading: Icon(Icons.format_paint),
+                title: Text('Theme'),
+                value: Obx(() => Text(controller.currentTheme.value.name)),
+                onPressed: (context) {
+                  _showThemeDialog();
+                },
+              ),
+              SettingsTile.switchTile(
+                leading: Icon(Icons.close),
+                activeSwitchColor: Theme.of(context).colorScheme.primary,
+                description: Text(
+                  'Minimize the app to the system tray when the close button is pressed.',
+                  style: Theme.of(context).textTheme.labelSmall?.apply(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withAlpha(150),
+                  ),
+                ),
+                initialValue: controller.preventClose.value,
+                onToggle: (value) {
+                  controller.changePreventClose(value);
+                },
+                title: Text('Minimize to Tray'),
+              ),
+
+              SettingsTile.navigation(
+                leading: Icon(Icons.file_open),
+                title: Text('Config file path'),
+                value: Text(controller.configFilePath.value),
+                onPressed: (context) {
+                  Clipboard.setData(
+                    ClipboardData(text: controller.configFilePath.value),
+                  );
+                  SmartDialog.showToast('Path copied to clipboard');
+                },
+              ),
+            ],
+          ),
+          SettingsSection(
+            title: Text('Network'),
+            tiles: <SettingsTile>[
+              SettingsTile.navigation(
+                leading: Icon(Icons.security),
+                title: Text('Incoming Allowed Peers'),
+                value: Text('${controller.incomingAllowdPeers.length} peers'),
+                onPressed: (context) {
+                  showAllowedPeersList();
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
