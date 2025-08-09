@@ -117,14 +117,9 @@ class AppTrayManager extends GetxService with TrayListener, WindowListener {
 
   @override
   void onWindowClose() {
-    debugPrint(
-      'Window close event captured, hiding window... ${windowManager.isPreventClose()}',
-    );
     hideWindow();
   }
 
   @override
-  void onWindowMinimize() {
-    debugPrint('Window minimize event captured');
-  }
+  void onWindowMinimize() {}
 }

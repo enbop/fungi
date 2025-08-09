@@ -31,24 +31,6 @@ class Settings extends GetView<FungiController> {
                   _showThemeDialog();
                 },
               ),
-              SettingsTile.switchTile(
-                leading: Icon(Icons.close),
-                activeSwitchColor: Theme.of(context).colorScheme.primary,
-                description: Text(
-                  'Minimize the app to the system tray when the close button is pressed.',
-                  style: Theme.of(context).textTheme.labelSmall?.apply(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withAlpha(150),
-                  ),
-                ),
-                initialValue: controller.preventClose.value,
-                onToggle: (value) {
-                  controller.changePreventClose(value);
-                },
-                title: Text('Minimize to Tray'),
-              ),
-
               SettingsTile.navigation(
                 leading: Icon(Icons.file_open),
                 title: Text('Config file path'),
