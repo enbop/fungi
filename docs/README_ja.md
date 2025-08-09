@@ -124,7 +124,7 @@ cargo build --release --bin fungi
 
 #### Ubuntu
 ```bash
-sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libayatana-appindicator3-dev
 
 cd flutter_app
 flutter build linux --release
