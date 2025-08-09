@@ -9,7 +9,7 @@ use std::{
 };
 
 pub const DEFAULT_ADDRESS_BOOK_CONFIG_FILE: &str = "address_book.toml";
-const MDNS_DEVICE_TIMEOUT_SECONDS: u64 = 300; // 5 minutes
+const MDNS_DEVICE_TIMEOUT_SECONDS: u64 = 3600; // 60 minutes
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Os {

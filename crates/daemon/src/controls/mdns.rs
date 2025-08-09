@@ -145,17 +145,20 @@ impl MdnsControl {
                             }
                         }
                     }
-                    ServiceEvent::ServiceRemoved(_typ, _fullname) => {
-                        log::info!("Service removed: {} of type {}", _fullname, _typ);
-                        // Self::remove_device_by_fullname(&local_devices, &fullname);
+                    ServiceEvent::ServiceRemoved(typ, fullname) => {
+                        log::info!("Service removed: {} of type {}", fullname, typ);
+                        Self::remove_device_by_fullname(&local_devices, &fullname);
                     }
                     other_event => {
                         log::debug!("Received other mDNS event: {:?}", other_event);
                     }
                 },
-                Err(_) => {
-                    // Timeout or other error, continue to check shutdown signal
+                Err(flume::RecvTimeoutError::Timeout) => {
                     continue;
+                }
+                Err(flume::RecvTimeoutError::Disconnected) => {
+                    log::info!("mDNS receiver disconnected, stopping service");
+                    break;
                 }
             }
         }
@@ -179,8 +182,7 @@ impl MdnsControl {
         Some(peer_info)
     }
 
-    // TODO: check if this is working correctly
-    fn _remove_device_by_fullname(
+    fn remove_device_by_fullname(
         local_devices: &Arc<Mutex<HashMap<PeerId, PeerInfo>>>,
         fullname: &str,
     ) {

@@ -280,7 +280,7 @@ impl FungiDaemon {
     // get local devices both available in mod mdns and libp2p
     pub async fn mdns_get_local_devices(&self) -> Result<Vec<PeerInfo>> {
         let local_devices = self.mdns_control().get_all_devices();
-
+        log::info!("Found {} local devices in mDNS", local_devices.len());
         let res = self
             .swarm_control()
             .invoke_swarm(move |swarm| {
@@ -300,6 +300,7 @@ impl FungiDaemon {
             })
             .await?;
 
+        log::info!("Filtered {} local devices available in libp2p", res.len());
         Ok(res)
     }
 
