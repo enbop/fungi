@@ -195,22 +195,22 @@ class DeviceSelectorDialogWidget extends StatelessWidget {
             ],
           ),
           title: Text(
-            'Alias: ${device.alias ?? 'Unknown'}',
+            _truncatePeerId(device.peerId),
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Peer ID: ${_truncatePeerId(device.peerId)}',
+                'Hostname: ${device.hostname ?? 'Unknown'}',
                 style: TextStyle(
                   fontFamily: 'monospace',
                   color: Colors.grey[600],
                 ),
               ),
-              if (device.hostname != null && device.hostname!.isNotEmpty)
+              if (device.alias != null && device.alias!.isNotEmpty)
                 Text(
-                  'Hostname: ${device.hostname}',
+                  'Alias: ${device.alias}',
                   style: TextStyle(
                     fontFamily: 'monospace',
                     color: Colors.grey[600],
