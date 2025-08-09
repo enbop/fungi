@@ -12,15 +12,13 @@ Future<PeerInfo?> showAddressBookSelectorDialog() async {
       DateTime.now().millisecondsSinceEpoch.toString() +
       Random().nextInt(100).toString();
 
-  final devices = Get.find<FungiController>().addressBook;
+  final controller = Get.find<FungiController>();
   return await SmartDialog.show<PeerInfo>(
     tag: dialogId,
-    builder: (context) => Obx(
-      () => DeviceSelectorDialogWidget(
-        title: "Select From Address Book",
-        dialogId: dialogId,
-        devices: devices,
-      ),
+    builder: (context) => DeviceSelectorDialogWidget(
+      title: "Select From Address Book",
+      dialogId: dialogId,
+      devices: controller.addressBook,
     ),
     alignment: Alignment.center,
     maskColor: Colors.black54,
@@ -36,12 +34,10 @@ Future<PeerInfo?> showMdnsLocalDevicesSelectorDialog() async {
   final devices = await fungi.mdnsGetLocalDevices();
   return await SmartDialog.show<PeerInfo>(
     tag: dialogId,
-    builder: (context) => Obx(
-      () => DeviceSelectorDialogWidget(
-        title: "Select From Local Devices(mDNS)",
-        dialogId: dialogId,
-        devices: devices,
-      ),
+    builder: (context) => DeviceSelectorDialogWidget(
+      title: "Select From Local Devices(mDNS)",
+      dialogId: dialogId,
+      devices: devices,
     ),
     alignment: Alignment.center,
     maskColor: Colors.black54,
@@ -210,7 +206,6 @@ class DeviceSelectorDialogWidget extends StatelessWidget {
               ),
               if (device.privateIps.isNotEmpty)
                 Text(
-                  // TODO sort the private IPs
                   'IP: ${device.privateIps.first}',
                   style: TextStyle(color: Colors.grey[600]),
                 ),

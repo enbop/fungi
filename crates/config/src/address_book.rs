@@ -8,7 +8,7 @@ use std::{
     time::SystemTime,
 };
 
-pub const DEFAULT_PEERS_CONFIG_FILE: &str = "address_book.toml";
+pub const DEFAULT_ADDRESS_BOOK_CONFIG_FILE: &str = "address_book.toml";
 const MDNS_DEVICE_TIMEOUT_SECONDS: u64 = 300; // 5 minutes
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -195,7 +195,7 @@ impl AddressBookConfig {
     }
 
     pub fn apply_from_dir(fungi_dir: &Path) -> Result<Self> {
-        let config_file = fungi_dir.join(DEFAULT_PEERS_CONFIG_FILE);
+        let config_file = fungi_dir.join(DEFAULT_ADDRESS_BOOK_CONFIG_FILE);
         if !config_file.exists() {
             Self::init_config_file(config_file.clone())?;
         }
@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn test_init_peers_config_file() {
         let temp_dir = TempDir::new().unwrap();
-        let config_path = temp_dir.path().join(DEFAULT_PEERS_CONFIG_FILE);
+        let config_path = temp_dir.path().join(DEFAULT_ADDRESS_BOOK_CONFIG_FILE);
         AddressBookConfig::init_config_file(config_path.clone()).unwrap();
         assert!(config_path.exists());
         let content = std::fs::read_to_string(&config_path).unwrap();

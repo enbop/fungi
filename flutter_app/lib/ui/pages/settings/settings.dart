@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
-import 'package:fungi_app/ui/pages/widgets/dialog.dart';
+import 'package:fungi_app/ui/widgets/dialogs.dart';
 import 'package:get/get.dart';
 import 'package:settings_ui/settings_ui.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';

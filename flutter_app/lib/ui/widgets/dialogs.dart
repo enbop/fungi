@@ -100,6 +100,7 @@ void showAddAllowedPeerDialog() {
       return AlertDialog(
         title: const Text('Add Peer'),
         content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             TextButton.icon(
@@ -209,6 +210,7 @@ void showAddFileClientDialog() {
         title: const Text('Add Peer'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             TextButton.icon(
               icon: const Icon(Icons.bookmarks_outlined),
@@ -338,6 +340,7 @@ void showAddForwardingRuleDialog() {
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 "Forward traffic from a local port to a remote device's port",
