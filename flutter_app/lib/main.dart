@@ -24,6 +24,7 @@ void main() async {
     WindowOptions windowOptions = WindowOptions(
       size: Size(600, 720),
       center: true,
+      skipTaskbar: false,
     );
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.show();
