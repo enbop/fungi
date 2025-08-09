@@ -146,15 +146,6 @@ impl MdnsControl {
                         }
                     }
                     ServiceEvent::ServiceRemoved(_typ, _fullname) => {
-                        // TODO using this patch may cause too many ServiceRemoved events
-                        // Cargo.toml
-                        // [patch.crates-io]
-                        // # workaround for fixing the build error on macOS
-                        // if-watch = { git = "https://github.com/Heap-Hop/if-watch.git", branch = "no_system_configuration_on_macos" }
-
-                        // since we have the expired check, workaround to ignore this event
-
-                        // https://github.com/keepsimple1/mdns-sd/issues/363
                         log::info!("Service removed: {} of type {}", _fullname, _typ);
                         // Self::remove_device_by_fullname(&local_devices, &fullname);
                     }

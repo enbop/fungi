@@ -38,7 +38,8 @@ parking_lot = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
 tempfile = "3.20.0"
 env_logger = "0.11"
-mdns-sd = "0.13.11"
+# https://github.com/keepsimple1/mdns-sd/issues/363
+mdns-sd = { git = "https://github.com/keepsimple1/mdns-sd", rev = "1b194de004e7290eff8c116f3e0cb88fadf2f03e" }
 flume = "0.11.1"
 
 [dev-dependencies]
