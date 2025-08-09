@@ -1,5 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:fungi_app/ui/pages/home/home_page.dart';
 import 'package:fungi_app/ui/widgets/dialogs.dart';
@@ -35,9 +37,39 @@ class RemoteFileAccess extends GetView<FungiController> {
             value: "",
             valueWidget: Obx(
               () => controller.ftpProxy.value.enabled
-                  ? SelectableText(
-                      "ftp://${controller.ftpProxy.value.host}:${controller.ftpProxy.value.port}",
-                      style: Theme.of(context).textTheme.bodySmall,
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SelectableText(
+                          "ftp://${controller.ftpProxy.value.host}:${controller.ftpProxy.value.port}",
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: 'Copy',
+                          waitDuration: const Duration(milliseconds: 500),
+                          child: GestureDetector(
+                            onTap: () async {
+                              await Clipboard.setData(
+                                ClipboardData(
+                                  text:
+                                      "ftp://${controller.ftpProxy.value.host}:${controller.ftpProxy.value.port}",
+                                ),
+                              );
+                              SmartDialog.showToast(
+                                'FTP URL copied to clipboard',
+                              );
+                            },
+                            child: Icon(
+                              Icons.copy,
+                              size: 14,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withAlpha(150),
+                            ),
+                          ),
+                        ),
+                      ],
                     )
                   : Text(
                       "Disabled",
@@ -53,9 +85,39 @@ class RemoteFileAccess extends GetView<FungiController> {
             value: "",
             valueWidget: Obx(
               () => controller.webdavProxy.value.enabled
-                  ? SelectableText(
-                      "http://${controller.webdavProxy.value.host}:${controller.webdavProxy.value.port}",
-                      style: Theme.of(context).textTheme.bodySmall,
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SelectableText(
+                          "http://${controller.webdavProxy.value.host}:${controller.webdavProxy.value.port}",
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: 'Copy',
+                          waitDuration: const Duration(milliseconds: 500),
+                          child: GestureDetector(
+                            onTap: () async {
+                              await Clipboard.setData(
+                                ClipboardData(
+                                  text:
+                                      "http://${controller.webdavProxy.value.host}:${controller.webdavProxy.value.port}",
+                                ),
+                              );
+                              SmartDialog.showToast(
+                                'WebDAV URL copied to clipboard',
+                              );
+                            },
+                            child: Icon(
+                              Icons.copy,
+                              size: 14,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withAlpha(150),
+                            ),
+                          ),
+                        ),
+                      ],
                     )
                   : Text(
                       "Disabled",

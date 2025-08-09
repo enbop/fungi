@@ -16,16 +16,31 @@ class TruncatedId extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Click to copy: $id',
-      waitDuration: const Duration(milliseconds: 500),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          onTap: () => _copyToClipboard(context),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Tooltip(
+          message: id,
+          waitDuration: const Duration(milliseconds: 500),
           child: Text(truncatedId, style: style),
         ),
-      ),
+        const SizedBox(width: 4),
+        Tooltip(
+          message: 'Copy',
+          waitDuration: const Duration(milliseconds: 500),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () => _copyToClipboard(context),
+              child: Icon(
+                Icons.copy,
+                size: 12,
+                color: Theme.of(context).colorScheme.onSurface.withAlpha(150),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
