@@ -48,6 +48,8 @@ class FungiController extends GetxController {
 
   final currentTheme = ThemeOption.system.obs;
   final incomingAllowdPeers = <String>[].obs;
+  final incomingAllowedPeersWithInfo = <PeerWithInfo>[].obs;
+  final addressBook = <PeerInfo>[].obs;
   final fileTransferServerState = FileTransferServerState(enabled: false).obs;
   final fileTransferClients = <FileTransferClient>[].obs;
 
@@ -84,16 +86,40 @@ class FungiController extends GetxController {
 
   void updateIncomingAllowedPeers() {
     incomingAllowdPeers.value = fungi.getIncomingAllowedPeersList();
+    incomingAllowedPeersWithInfo.value = fungi
+        .getIncomingAllowedPeersWithInfo();
   }
 
-  void addIncomingAllowedPeer(String peerId) {
-    fungi.addIncomingAllowedPeer(peerId: peerId);
+  void updateAddressBook() {
+    addressBook.value = fungi.getAllAddressBook();
+  }
+
+  void addIncomingAllowedPeer(PeerInfo peerInfo) {
+    fungi.addIncomingAllowedPeer(peerId: peerInfo.peerId);
     updateIncomingAllowedPeers();
+    // Also add to address books
+
+    // Update the address books list to reflect the new peer
+    addressBookAddOrUpdate(peerInfo);
   }
 
   void removeIncomingAllowedPeer(String peerId) {
     fungi.removeIncomingAllowedPeer(peerId: peerId);
     updateIncomingAllowedPeers();
+  }
+
+  void addressBookAddOrUpdate(PeerInfo peerInfo) {
+    fungi.addressBookAddOrUpdate(peerInfo: peerInfo);
+    updateAddressBook();
+  }
+
+  PeerInfo? addressBookGetPeer(String peerId) {
+    return fungi.addressBookGetPeer(peerId: peerId);
+  }
+
+  void addressBookRemove(String peerId) {
+    fungi.addressBookRemove(peerId: peerId);
+    updateAddressBook();
   }
 
   Future<void> startFileTransferServer(String rootDir) async {
@@ -126,17 +152,22 @@ class FungiController extends GetxController {
 
   Future<void> addFileTransferClient({
     required bool enabled,
-    String? name,
-    required String peerId,
+    required PeerInfo peerInfo,
   }) async {
     await fungi.addFileTransferClient(
       enabled: enabled,
-      name: name,
-      peerId: peerId,
+      name: peerInfo.alias,
+      peerId: peerInfo.peerId,
     );
     fileTransferClients.add(
-      FileTransferClient(enabled: enabled, peerId: peerId, name: name),
+      FileTransferClient(
+        enabled: enabled,
+        peerId: peerInfo.peerId,
+        name: peerInfo.alias,
+      ),
     );
+    // add to address books
+    addressBookAddOrUpdate(peerInfo);
   }
 
   Future<void> enableFileTransferClient({
@@ -211,6 +242,7 @@ class FungiController extends GetxController {
         debugPrint('Failed to get proxy infos: $e');
       }
       updateIncomingAllowedPeers();
+      updateAddressBook();
       // Load TCP tunneling config
       refreshTcpTunnelingConfig();
     } catch (e) {
@@ -233,22 +265,25 @@ class FungiController extends GetxController {
   Future<void> addTcpForwardingRule({
     required String localHost,
     required int localPort,
-    required String peerId,
     required int remotePort,
+    required PeerInfo peerInfo,
   }) async {
     try {
       await fungi.addTcpForwardingRule(
         localHost: localHost,
         localPort: localPort,
-        peerId: peerId,
+        peerId: peerInfo.peerId,
         remotePort: remotePort,
       );
       refreshTcpTunnelingConfig();
+
+      // add to address books
+      addressBookAddOrUpdate(peerInfo);
       Get.snackbar(
         'Success',
         'Forwarding rule added successfully',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green.withOpacity(0.1),
+        backgroundColor: Colors.green.withValues(alpha: 0.1),
         colorText: Colors.green,
       );
     } catch (e) {
@@ -256,7 +291,7 @@ class FungiController extends GetxController {
         'Error',
         'Failed to add forwarding rule: $e',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red.withOpacity(0.1),
+        backgroundColor: Colors.red.withValues(alpha: 0.1),
         colorText: Colors.red,
       );
     }
@@ -270,7 +305,7 @@ class FungiController extends GetxController {
         'Success',
         'Forwarding rule removed successfully',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green.withOpacity(0.1),
+        backgroundColor: Colors.green.withValues(alpha: 0.1),
         colorText: Colors.green,
       );
     } catch (e) {
@@ -278,7 +313,7 @@ class FungiController extends GetxController {
         'Error',
         'Failed to remove forwarding rule: $e',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red.withOpacity(0.1),
+        backgroundColor: Colors.red.withValues(alpha: 0.1),
         colorText: Colors.red,
       );
     }
@@ -300,7 +335,7 @@ class FungiController extends GetxController {
         'Success',
         'Listening rule added successfully',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green.withOpacity(0.1),
+        backgroundColor: Colors.green.withValues(alpha: 0.1),
         colorText: Colors.green,
       );
     } catch (e) {
@@ -308,7 +343,7 @@ class FungiController extends GetxController {
         'Error',
         'Failed to add listening rule: $e',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red.withOpacity(0.1),
+        backgroundColor: Colors.red.withValues(alpha: 0.1),
         colorText: Colors.red,
       );
     }
@@ -322,7 +357,7 @@ class FungiController extends GetxController {
         'Success',
         'Listening rule removed successfully',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green.withOpacity(0.1),
+        backgroundColor: Colors.green.withValues(alpha: 0.1),
         colorText: Colors.green,
       );
     } catch (e) {
@@ -330,7 +365,7 @@ class FungiController extends GetxController {
         'Error',
         'Failed to remove listening rule: $e',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red.withOpacity(0.1),
+        backgroundColor: Colors.red.withValues(alpha: 0.1),
         colorText: Colors.red,
       );
     }

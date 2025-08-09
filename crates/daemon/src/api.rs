@@ -1,6 +1,7 @@
-use std::{net::IpAddr, path::PathBuf};
+use std::{collections::HashSet, net::IpAddr, path::PathBuf};
 
 use anyhow::{Result, bail};
+use fungi_config::address_book::PeerInfo;
 use fungi_config::file_transfer::{FileTransferClient, FtpProxy, WebdavProxy};
 use libp2p::PeerId;
 
@@ -274,5 +275,71 @@ impl FungiDaemon {
 
     pub fn get_tcp_tunneling_config(&self) -> fungi_config::tcp_tunneling::TcpTunneling {
         self.config().lock().tcp_tunneling.clone()
+    }
+
+    // get local devices both available in mod mdns and libp2p
+    pub async fn mdns_get_local_devices(&self) -> Result<Vec<PeerInfo>> {
+        let local_devices = self.mdns_control().get_all_devices();
+
+        let res = self
+            .swarm_control()
+            .invoke_swarm(move |swarm| {
+                let mut peers_available_in_libp2p = HashSet::new();
+                let libp2p_discovered_nodes = swarm.behaviour().mdns.discovered_nodes();
+                // peer_id from libp2p_discovered_nodes maybe duplicated
+                for peer_id in libp2p_discovered_nodes {
+                    peers_available_in_libp2p.insert(peer_id);
+                }
+                let mut res: Vec<PeerInfo> = Vec::new();
+                for (peer_id, device_info) in local_devices {
+                    if peers_available_in_libp2p.contains(&peer_id) {
+                        res.push(device_info);
+                    }
+                }
+                res
+            })
+            .await?;
+
+        Ok(res)
+    }
+
+    pub fn address_book_get_all(&self) -> Vec<PeerInfo> {
+        self.address_book().lock().get_all_peers().clone()
+    }
+
+    pub fn address_book_add_or_update(&self, peer_info: PeerInfo) -> Result<()> {
+        let current_peers_config = self.address_book().lock().clone();
+        let updated_peers_config = current_peers_config.add_or_update_peer(peer_info)?;
+        *self.address_book().lock() = updated_peers_config;
+        Ok(())
+    }
+
+    pub fn address_book_get_peer(&self, peer_id: PeerId) -> Option<PeerInfo> {
+        self.address_book().lock().get_peer_info(&peer_id).cloned()
+    }
+
+    pub fn address_book_remove(&self, peer_id: PeerId) -> Result<()> {
+        let current_peers_config = self.address_book().lock().clone();
+        let updated_peers_config = current_peers_config.remove_peer(&peer_id)?;
+        *self.address_book().lock() = updated_peers_config;
+        Ok(())
+    }
+
+    pub fn get_incoming_allowed_peers_with_info(&self) -> Vec<(String, Option<PeerInfo>)> {
+        let allowed_peers = self.get_incoming_allowed_peers_list();
+        let peers_config_guard = self.address_book();
+        let peers_config = peers_config_guard.lock();
+
+        allowed_peers
+            .into_iter()
+            .map(|peer_id_str| {
+                let peer_info = if let Ok(peer_id) = peer_id_str.parse::<PeerId>() {
+                    peers_config.get_peer_info(&peer_id).cloned()
+                } else {
+                    None
+                };
+                (peer_id_str, peer_info)
+            })
+            .collect()
     }
 }

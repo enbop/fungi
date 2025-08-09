@@ -2,13 +2,17 @@ use std::{net::IpAddr, sync::Arc, time::Duration};
 
 use crate::{
     DaemonArgs,
-    controls::{FileTransferClientsControl, FileTransferServiceControl, TcpTunnelingControl},
+    controls::{
+        FileTransferClientsControl, FileTransferServiceControl, TcpTunnelingControl,
+        mdns::MdnsControl,
+    },
     listeners::FungiDaemonRpcServer,
 };
 use anyhow::Result;
 use fungi_config::{
-    FungiConfig, FungiDir, file_transfer::FileTransferClient as FTCConfig,
-    file_transfer::FileTransferService as FTSConfig,
+    FungiConfig, FungiDir,
+    address_book::{AddressBookConfig, PeerInfo},
+    file_transfer::{FileTransferClient as FTCConfig, FileTransferService as FTSConfig},
 };
 use fungi_swarm::{FungiSwarm, State, SwarmControl, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
@@ -27,9 +31,11 @@ struct TaskHandles {
 #[allow(dead_code)]
 pub struct FungiDaemon {
     config: Arc<Mutex<FungiConfig>>,
+    address_book_config: Arc<Mutex<AddressBookConfig>>,
     args: DaemonArgs,
 
     swarm_control: SwarmControl,
+    mdns_control: MdnsControl,
     fts_control: FileTransferServiceControl,
     ftc_control: FileTransferClientsControl,
     tcp_tunneling_control: TcpTunnelingControl,
@@ -40,6 +46,10 @@ pub struct FungiDaemon {
 impl FungiDaemon {
     pub fn config(&self) -> Arc<Mutex<FungiConfig>> {
         self.config.clone()
+    }
+
+    pub fn address_book(&self) -> Arc<Mutex<AddressBookConfig>> {
+        self.address_book_config.clone()
     }
 
     pub fn swarm_control(&self) -> &SwarmControl {
@@ -58,6 +68,10 @@ impl FungiDaemon {
         &self.tcp_tunneling_control
     }
 
+    pub fn mdns_control(&self) -> &MdnsControl {
+        &self.mdns_control
+    }
+
     pub async fn start(args: DaemonArgs) -> Result<Self> {
         let fungi_dir = args.fungi_dir();
         println!("Fungi directory: {fungi_dir:?}");
@@ -65,13 +79,16 @@ impl FungiDaemon {
         let config = FungiConfig::apply_from_dir(&fungi_dir)?;
         let keypair = get_keypair_from_dir(&fungi_dir)?;
 
-        Self::start_with(args, config, keypair).await
+        let address_book_config = AddressBookConfig::apply_from_dir(&fungi_dir)?;
+
+        Self::start_with(args, config, keypair, address_book_config).await
     }
 
     pub async fn start_with(
         args: DaemonArgs,
         config: FungiConfig,
         keypair: Keypair,
+        address_book_config: AddressBookConfig,
     ) -> Result<Self> {
         let state = State::new(
             config
@@ -87,6 +104,9 @@ impl FungiDaemon {
                 apply_listen(swarm, &config);
             })
             .await?;
+        let mdns_control = MdnsControl::new();
+        let peer_info = PeerInfo::this_device(swarm_control.local_peer_id(), config.get_hostname());
+        mdns_control.start(peer_info)?;
 
         let stream_control = swarm_control.stream_control().clone();
 
@@ -134,8 +154,10 @@ impl FungiDaemon {
         };
         Ok(Self {
             config: Arc::new(Mutex::new(config)),
+            address_book_config: Arc::new(Mutex::new(address_book_config)),
             args,
             swarm_control,
+            mdns_control,
             fts_control,
             ftc_control,
             tcp_tunneling_control,

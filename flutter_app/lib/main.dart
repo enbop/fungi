@@ -6,20 +6,21 @@ import 'package:fungi_app/ui/pages/theme/app_theme.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'dart:io';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   await RustLib.init();
   await GetStorage.init();
-  
+
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.ensureInitialized();
     await windowManager.setSize(const Size(600, 720));
     await windowManager.center();
   }
-  
+
   Get.put(FungiController());
   runApp(const MyApp());
 }
@@ -37,6 +38,8 @@ class MyApp extends GetView<FungiController> {
         themeMode: controller.currentTheme.value.themeMode,
         initialRoute: AppPages.initial,
         getPages: AppPages.routes,
+        navigatorObservers: [FlutterSmartDialog.observer],
+        builder: FlutterSmartDialog.init(),
       ),
     );
   }

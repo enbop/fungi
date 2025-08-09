@@ -1,4 +1,5 @@
 mod file_transfer;
+pub mod mdns;
 mod tcp_tunneling;
 
 pub use file_transfer::FileTransferServiceControl;

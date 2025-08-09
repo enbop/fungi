@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `parse_peer_id`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`, `from`, `from`, `from`, `try_into`
 
 Future<void> startFungiDaemon() =>
     RustLib.instance.api.crateApiFungiStartFungiDaemon();
@@ -121,6 +121,26 @@ Future<String> addTcpListeningRule({
 void removeTcpListeningRule({required String ruleId}) =>
     RustLib.instance.api.crateApiFungiRemoveTcpListeningRule(ruleId: ruleId);
 
+Future<List<PeerInfo>> mdnsGetLocalDevices() =>
+    RustLib.instance.api.crateApiFungiMdnsGetLocalDevices();
+
+List<PeerInfo> getAllAddressBook() =>
+    RustLib.instance.api.crateApiFungiGetAllAddressBook();
+
+void addressBookAddOrUpdate({required PeerInfo peerInfo}) => RustLib
+    .instance
+    .api
+    .crateApiFungiAddressBookAddOrUpdate(peerInfo: peerInfo);
+
+PeerInfo? addressBookGetPeer({required String peerId}) =>
+    RustLib.instance.api.crateApiFungiAddressBookGetPeer(peerId: peerId);
+
+void addressBookRemove({required String peerId}) =>
+    RustLib.instance.api.crateApiFungiAddressBookRemove(peerId: peerId);
+
+List<PeerWithInfo> getIncomingAllowedPeersWithInfo() =>
+    RustLib.instance.api.crateApiFungiGetIncomingAllowedPeersWithInfo();
+
 class FileTransferClient {
   final bool enabled;
   final String? name;
@@ -222,6 +242,86 @@ class ListeningRule {
           host == other.host &&
           port == other.port &&
           allowedPeers == other.allowedPeers;
+}
+
+class PeerInfo {
+  String peerId;
+  String? alias;
+  String? hostname;
+  String os;
+  String? publicIp;
+  List<String> privateIps;
+  BigInt createdAt;
+  BigInt lastConnected;
+  String version;
+
+  PeerInfo({
+    required this.peerId,
+    this.alias,
+    this.hostname,
+    required this.os,
+    this.publicIp,
+    required this.privateIps,
+    required this.createdAt,
+    required this.lastConnected,
+    required this.version,
+  });
+
+  PeerInfo.empty()
+    : peerId = '',
+      alias = null,
+      hostname = null,
+      os = '',
+      publicIp = null,
+      privateIps = const [],
+      createdAt = BigInt.zero,
+      lastConnected = BigInt.zero,
+      version = '';
+
+  @override
+  int get hashCode =>
+      peerId.hashCode ^
+      alias.hashCode ^
+      hostname.hashCode ^
+      os.hashCode ^
+      publicIp.hashCode ^
+      privateIps.hashCode ^
+      createdAt.hashCode ^
+      lastConnected.hashCode ^
+      version.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PeerInfo &&
+          runtimeType == other.runtimeType &&
+          peerId == other.peerId &&
+          alias == other.alias &&
+          hostname == other.hostname &&
+          os == other.os &&
+          publicIp == other.publicIp &&
+          privateIps == other.privateIps &&
+          createdAt == other.createdAt &&
+          lastConnected == other.lastConnected &&
+          version == other.version;
+}
+
+class PeerWithInfo {
+  final String peerId;
+  final PeerInfo? peerInfo;
+
+  const PeerWithInfo({required this.peerId, this.peerInfo});
+
+  @override
+  int get hashCode => peerId.hashCode ^ peerInfo.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PeerWithInfo &&
+          runtimeType == other.runtimeType &&
+          peerId == other.peerId &&
+          peerInfo == other.peerInfo;
 }
 
 class TcpTunnelingConfig {

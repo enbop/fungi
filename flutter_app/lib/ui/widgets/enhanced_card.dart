@@ -28,7 +28,7 @@ class EnhancedCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(borderRadius),
         side: BorderSide(
-          color: effectiveAccentColor.withOpacity(0.3),
+          color: effectiveAccentColor.withValues(alpha: 0.3),
           width: borderWidth,
         ),
       ),
@@ -39,7 +39,7 @@ class EnhancedCard extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              effectiveAccentColor.withOpacity(gradientOpacity),
+              effectiveAccentColor.withValues(alpha: gradientOpacity),
               Theme.of(context).colorScheme.surface,
             ],
           ),

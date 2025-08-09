@@ -30,6 +30,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  PeerInfo dco_decode_box_autoadd_peer_info(dynamic raw);
+
+  @protected
   FileTransferClient dco_decode_file_transfer_client(dynamic raw);
 
   @protected
@@ -51,6 +54,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<ListeningRule> dco_decode_list_listening_rule(dynamic raw);
 
   @protected
+  List<PeerInfo> dco_decode_list_peer_info(dynamic raw);
+
+  @protected
+  List<PeerWithInfo> dco_decode_list_peer_with_info(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
@@ -60,10 +69,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
+  PeerInfo? dco_decode_opt_box_autoadd_peer_info(dynamic raw);
+
+  @protected
+  PeerInfo dco_decode_peer_info(dynamic raw);
+
+  @protected
+  PeerWithInfo dco_decode_peer_with_info(dynamic raw);
+
+  @protected
   TcpTunnelingConfig dco_decode_tcp_tunneling_config(dynamic raw);
 
   @protected
   int dco_decode_u_16(dynamic raw);
+
+  @protected
+  BigInt dco_decode_u_64(dynamic raw);
 
   @protected
   int dco_decode_u_8(dynamic raw);
@@ -82,6 +103,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  PeerInfo sse_decode_box_autoadd_peer_info(SseDeserializer deserializer);
 
   @protected
   FileTransferClient sse_decode_file_transfer_client(
@@ -113,6 +137,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<PeerInfo> sse_decode_list_peer_info(SseDeserializer deserializer);
+
+  @protected
+  List<PeerWithInfo> sse_decode_list_peer_with_info(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
@@ -122,12 +154,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
+  PeerInfo? sse_decode_opt_box_autoadd_peer_info(SseDeserializer deserializer);
+
+  @protected
+  PeerInfo sse_decode_peer_info(SseDeserializer deserializer);
+
+  @protected
+  PeerWithInfo sse_decode_peer_with_info(SseDeserializer deserializer);
+
+  @protected
   TcpTunnelingConfig sse_decode_tcp_tunneling_config(
     SseDeserializer deserializer,
   );
 
   @protected
   int sse_decode_u_16(SseDeserializer deserializer);
+
+  @protected
+  BigInt sse_decode_u_64(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_8(SseDeserializer deserializer);
@@ -152,6 +196,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_peer_info(
+    PeerInfo self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_file_transfer_client(
@@ -190,6 +240,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_peer_info(List<PeerInfo> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_peer_with_info(
+    List<PeerWithInfo> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
     SseSerializer serializer,
@@ -202,6 +261,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_peer_info(
+    PeerInfo? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_peer_info(PeerInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_peer_with_info(PeerWithInfo self, SseSerializer serializer);
+
+  @protected
   void sse_encode_tcp_tunneling_config(
     TcpTunnelingConfig self,
     SseSerializer serializer,
@@ -209,6 +280,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_u_16(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_64(BigInt self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_8(int self, SseSerializer serializer);

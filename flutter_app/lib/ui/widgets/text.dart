@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 class TruncatedId extends StatelessWidget {
   final String id;
@@ -34,12 +35,7 @@ class TruncatedId extends StatelessWidget {
       onCopied!();
     } else {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('ID copied to clipboard'),
-            duration: Duration(seconds: 1),
-          ),
-        );
+        SmartDialog.showToast('ID copied to clipboard');
       }
     }
   }

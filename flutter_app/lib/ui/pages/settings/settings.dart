@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
-import 'package:fungi_app/ui/pages/widgets/dialog.dart';
+import 'package:fungi_app/ui/widgets/dialogs.dart';
 import 'package:get/get.dart';
 import 'package:settings_ui/settings_ui.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 class Settings extends GetView<FungiController> {
   const Settings({super.key});
@@ -26,7 +27,7 @@ class Settings extends GetView<FungiController> {
               title: Text('Theme'),
               value: Obx(() => Text(controller.currentTheme.value.name)),
               onPressed: (context) {
-                _showThemeDialog(context);
+                _showThemeDialog();
               },
             ),
             SettingsTile.navigation(
@@ -37,12 +38,7 @@ class Settings extends GetView<FungiController> {
                 Clipboard.setData(
                   ClipboardData(text: controller.configFilePath.value),
                 );
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Path copied to clipboard'),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
+                SmartDialog.showToast('Path copied to clipboard');
               },
             ),
           ],
@@ -57,7 +53,7 @@ class Settings extends GetView<FungiController> {
                 () => Text('${controller.incomingAllowdPeers.length} peers'),
               ),
               onPressed: (context) {
-                showAllowedPeersList(context);
+                showAllowedPeersList();
               },
             ),
           ],
@@ -66,9 +62,8 @@ class Settings extends GetView<FungiController> {
     );
   }
 
-  void _showThemeDialog(BuildContext context) {
-    showDialog(
-      context: context,
+  void _showThemeDialog() {
+    SmartDialog.show(
       builder: (context) {
         return AlertDialog(
           title: Text('Select Theme'),
@@ -83,20 +78,20 @@ class Settings extends GetView<FungiController> {
                   onChanged: (ThemeOption? value) {
                     if (value != null) {
                       controller.changeTheme(value);
-                      Navigator.pop(context);
+                      SmartDialog.dismiss();
                     }
                   },
                 ),
                 onTap: () {
                   controller.changeTheme(option);
-                  Navigator.pop(context);
+                  SmartDialog.dismiss();
                 },
               );
             }).toList(),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => SmartDialog.dismiss(),
               child: Text('Cancel'),
             ),
           ],

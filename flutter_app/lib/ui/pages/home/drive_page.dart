@@ -2,9 +2,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:fungi_app/ui/pages/home/home_page.dart';
-import 'package:fungi_app/ui/pages/widgets/dialog.dart';
-import 'package:fungi_app/ui/pages/widgets/text.dart';
-import 'package:fungi_app/ui/pages/widgets/enhanced_card.dart';
+import 'package:fungi_app/ui/widgets/dialogs.dart';
+import 'package:fungi_app/ui/widgets/text.dart';
+import 'package:fungi_app/ui/widgets/enhanced_card.dart';
 import 'package:get/get.dart';
 
 class RemoteFileAccess extends GetView<FungiController> {
@@ -68,14 +68,7 @@ class RemoteFileAccess extends GetView<FungiController> {
           ),
           SizedBox(height: 10),
           TextButton.icon(
-            onPressed: () => showAddClientDialog(
-              context,
-              (Client client) => controller.addFileTransferClient(
-                enabled: client.enabled,
-                peerId: client.peerId,
-                name: client.name,
-              ),
-            ),
+            onPressed: () => showAddFileClientDialog(),
             icon: Icon(Icons.add_circle),
             label: Text("Add Remote Device"),
           ),
@@ -249,7 +242,7 @@ class FileServer extends GetView<FungiController> {
                 ),
                 IconButton(
                   onPressed: () {
-                    showAllowedPeersList(context);
+                    showAllowedPeersList();
                   },
                   icon: Icon(Icons.edit, size: 15),
                 ),

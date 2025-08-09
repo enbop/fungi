@@ -12,6 +12,7 @@ libp2p-identity = { workspace = true }
 multiaddr = "0.18"
 fungi-util = { path = "../util" }
 anyhow = { workspace = true }
+mdns-sd = "0.13.11"
 
 [dev-dependencies]
 tempfile = "3.20.0"

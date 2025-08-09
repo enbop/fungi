@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::UNIX_EPOCH};
 
 use anyhow::{bail, Result};
 use flutter_rust_bridge::frb;
@@ -47,6 +47,23 @@ pub struct TcpTunnelingConfig {
     pub listening_rules: Vec<ListeningRule>,
 }
 
+pub struct PeerInfo {
+    pub peer_id: String,
+    pub alias: Option<String>,
+    pub hostname: Option<String>,
+    pub os: String,
+    pub public_ip: Option<String>,
+    pub private_ips: Vec<String>,
+    pub created_at: u64,
+    pub last_connected: u64,
+    pub version: String,
+}
+
+pub struct PeerWithInfo {
+    pub peer_id: String,
+    pub peer_info: Option<PeerInfo>,
+}
+
 impl From<fungi_config::file_transfer::FileTransferClient> for FileTransferClient {
     fn from(client: fungi_config::file_transfer::FileTransferClient) -> Self {
         Self {
@@ -75,6 +92,48 @@ impl From<fungi_config::tcp_tunneling::ListeningRule> for ListeningRule {
             port: rule.port,
             allowed_peers: Default::default(), // TODO: add support for allowed peers
         }
+    }
+}
+
+impl From<fungi_config::address_book::PeerInfo> for PeerInfo {
+    fn from(info: fungi_config::address_book::PeerInfo) -> Self {
+        Self {
+            peer_id: info.peer_id.to_string(),
+            alias: info.alias,
+            hostname: info.hostname,
+            os: (&info.os).into(),
+            public_ip: info.public_ip,
+            private_ips: info.private_ips,
+            created_at: info
+                .created_at
+                .duration_since(UNIX_EPOCH)
+                .map(|v| v.as_micros() as u64)
+                .unwrap_or_default(),
+            last_connected: info
+                .last_connected
+                .duration_since(UNIX_EPOCH)
+                .map(|v| v.as_micros() as u64)
+                .unwrap_or_default(),
+            version: info.version,
+        }
+    }
+}
+
+impl TryInto<fungi_config::address_book::PeerInfo> for PeerInfo {
+    type Error = anyhow::Error;
+
+    fn try_into(self) -> Result<fungi_config::address_book::PeerInfo> {
+        Ok(fungi_config::address_book::PeerInfo {
+            peer_id: self.peer_id.parse()?,
+            alias: self.alias,
+            hostname: self.hostname,
+            os: fungi_config::address_book::Os::from(self.os.as_str()),
+            public_ip: self.public_ip,
+            private_ips: self.private_ips,
+            created_at: UNIX_EPOCH + std::time::Duration::from_micros(self.created_at),
+            last_connected: UNIX_EPOCH + std::time::Duration::from_micros(self.last_connected),
+            version: self.version,
+        })
     }
 }
 
@@ -300,6 +359,52 @@ pub async fn add_tcp_listening_rule(
 pub fn remove_tcp_listening_rule(rule_id: String) -> Result<()> {
     let daemon = with_daemon!();
     daemon.remove_tcp_listening_rule(rule_id)
+}
+
+pub async fn mdns_get_local_devices() -> Result<Vec<PeerInfo>> {
+    let daemon = with_daemon!();
+    let devices = daemon.mdns_get_local_devices().await?;
+    Ok(devices.into_iter().map(|d| d.into()).collect())
+}
+
+#[frb(sync)]
+pub fn get_all_address_book() -> Result<Vec<PeerInfo>> {
+    let daemon = with_daemon!();
+    let peers = daemon.address_book_get_all();
+    Ok(peers.into_iter().map(|p| p.into()).collect())
+}
+
+#[frb(sync)]
+pub fn address_book_add_or_update(peer_info: PeerInfo) -> Result<()> {
+    let daemon = with_daemon!();
+    daemon.address_book_add_or_update(peer_info.try_into()?)
+}
+
+#[frb(sync)]
+pub fn address_book_get_peer(peer_id: String) -> Result<Option<PeerInfo>> {
+    let daemon = with_daemon!();
+    Ok(daemon
+        .address_book_get_peer(parse_peer_id(peer_id)?)
+        .map(|p| p.into()))
+}
+
+#[frb(sync)]
+pub fn address_book_remove(peer_id: String) -> Result<()> {
+    let daemon = with_daemon!();
+    daemon.address_book_remove(parse_peer_id(peer_id)?)
+}
+
+#[frb(sync)]
+pub fn get_incoming_allowed_peers_with_info() -> Result<Vec<PeerWithInfo>> {
+    let daemon = with_daemon!();
+    let peers_with_info = daemon.get_incoming_allowed_peers_with_info();
+    Ok(peers_with_info
+        .into_iter()
+        .map(|(peer_id, peer_info)| PeerWithInfo {
+            peer_id,
+            peer_info: peer_info.map(|p| p.into()),
+        })
+        .collect())
 }
 
 #[flutter_rust_bridge::frb(init)]
