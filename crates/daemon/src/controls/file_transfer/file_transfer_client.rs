@@ -615,7 +615,7 @@ pub async fn start_webdav_proxy_service(
                 )
                 .await
             {
-                eprintln!("Failed serving: {err:?}");
+                log::error!("Failed serving: {err:?}");
             }
         });
     }

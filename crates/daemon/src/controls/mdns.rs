@@ -40,7 +40,7 @@ impl MdnsControl {
 
         let handle = std::thread::spawn(move || {
             if let Err(e) = Self::run_mdns_service(peer_info, local_devices, shutdown_rx) {
-                eprintln!("mDNS service error: {}", e);
+                log::error!("mDNS service error: {}", e);
             }
         });
 
@@ -107,7 +107,7 @@ impl MdnsControl {
         let service_info = ServiceInfo::new(
             service_type,
             &instance_name,
-            &device_info.hostname.unwrap_or_default(),
+            &format!("{}.local.", instance_name),
             &device_info.private_ips.get(0).cloned().unwrap_or_default(),
             port,
             &properties[..],
@@ -138,7 +138,7 @@ impl MdnsControl {
                     ServiceEvent::ServiceResolved(info) => {
                         if let Some(remote_device) = Self::parse_service_info(&info) {
                             if remote_device.peer_id != current_peer_id {
-                                log::debug!("Discovered device: {:?}", remote_device.peer_id);
+                                log::info!("Discovered device: {:?}", remote_device.peer_id);
                                 local_devices
                                     .lock()
                                     .insert(remote_device.peer_id.to_owned(), remote_device);
@@ -155,7 +155,7 @@ impl MdnsControl {
                         // since we have the expired check, workaround to ignore this event
 
                         // https://github.com/keepsimple1/mdns-sd/issues/363
-                        // log::info!("Service removed: {} of type {}", fullname, typ);
+                        log::info!("Service removed: {} of type {}", _fullname, _typ);
                         // Self::remove_device_by_fullname(&local_devices, &fullname);
                     }
                     other_event => {
