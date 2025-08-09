@@ -48,7 +48,9 @@ class AppTrayManager extends GetxService with TrayListener, WindowListener {
 
   Future<void> _setTrayIcon() async {
     await trayManager.setIcon(
-      "assets/images/tray_icon.png",
+      Platform.isWindows
+          ? "assets/images/app_icon.ico"
+          : "assets/images/tray_icon.png",
       isTemplate: Platform.isMacOS,
     );
   }
