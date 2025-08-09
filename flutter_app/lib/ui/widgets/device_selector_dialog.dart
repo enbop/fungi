@@ -38,6 +38,7 @@ Future<PeerInfo?> showMdnsLocalDevicesSelectorDialog() async {
       title: "Select From Local Devices(mDNS)",
       dialogId: dialogId,
       devices: devices,
+      showOnlineStatus: true,
     ),
     alignment: Alignment.center,
     maskColor: Colors.black54,
@@ -49,12 +50,14 @@ class DeviceSelectorDialogWidget extends StatelessWidget {
   final String title;
   final String dialogId;
   final List<PeerInfo> devices;
+  final bool showOnlineStatus;
 
   const DeviceSelectorDialogWidget({
     super.key,
     required this.title,
     required this.dialogId,
     required this.devices,
+    this.showOnlineStatus = false,
   });
 
   String _truncatePeerId(String peerId) {
@@ -174,24 +177,25 @@ class DeviceSelectorDialogWidget extends StatelessWidget {
               Icon(
                 _getOsIcon(device.os),
                 size: 32,
-                color: Theme.of(context).primaryColor,
+                color: Theme.of(context).secondaryHeaderColor,
               ),
-              Positioned(
-                right: -2,
-                top: -2,
-                child: Container(
-                  width: 12,
-                  height: 12,
-                  decoration: const BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
+              if (showOnlineStatus)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: const BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           title: Text(
-            device.hostname ?? 'Unknown',
+            'Alias: ${device.alias ?? 'Unknown'}',
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           subtitle: Column(
@@ -204,13 +208,21 @@ class DeviceSelectorDialogWidget extends StatelessWidget {
                   color: Colors.grey[600],
                 ),
               ),
+              if (device.hostname != null && device.hostname!.isNotEmpty)
+                Text(
+                  'Hostname: ${device.hostname}',
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    color: Colors.grey[600],
+                  ),
+                ),
               if (device.privateIps.isNotEmpty)
                 Text(
                   'IP: ${device.privateIps.first}',
                   style: TextStyle(color: Colors.grey[600]),
                 ),
               Text(
-                device.os,
+                'OS: ${device.os}',
                 style: TextStyle(color: Colors.grey[500], fontSize: 12),
               ),
             ],

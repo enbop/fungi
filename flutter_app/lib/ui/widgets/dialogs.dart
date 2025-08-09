@@ -126,6 +126,7 @@ void showAddAllowedPeerDialog() {
                 textAliasController.text = selectedPeer.value.hostname ?? '';
               },
             ),
+            SizedBox(height: 8),
             Obx(
               () => TextField(
                 controller: textPeerIdController,
@@ -235,6 +236,7 @@ void showAddFileClientDialog() {
                 textAliasController.text = selectedPeer.value.hostname ?? '';
               },
             ),
+            SizedBox(height: 8),
             Obx(
               () => TextField(
                 controller: textPeerIdController,
@@ -370,12 +372,12 @@ void showAddForwardingRuleDialog() {
                   peerIdController.text = selectedPeer.value.peerId;
                 },
               ),
+              SizedBox(height: 8),
               TextField(
                 controller: localHostController,
                 decoration: InputDecoration(
                   labelText: "Local Host",
                   hintText: "127.0.0.1",
-                  border: OutlineInputBorder(),
                 ),
               ),
               SizedBox(height: 12),
@@ -384,7 +386,6 @@ void showAddForwardingRuleDialog() {
                 decoration: InputDecoration(
                   labelText: "Local Port",
                   hintText: "8080",
-                  border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
               ),
@@ -395,7 +396,6 @@ void showAddForwardingRuleDialog() {
                   decoration: InputDecoration(
                     labelText: "Remote Peer ID",
                     hintText: "12D3KooW...",
-                    border: OutlineInputBorder(),
                     helperText:
                         selectedPeer.value.peerId == peerIdController.text
                         ? selectedPeer.value.hostname
@@ -409,7 +409,6 @@ void showAddForwardingRuleDialog() {
                 decoration: InputDecoration(
                   labelText: "Remote Port",
                   hintText: "8888",
-                  border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
               ),
@@ -502,7 +501,6 @@ void showAddListeningRuleDialog() {
                 decoration: InputDecoration(
                   labelText: "Local Host",
                   hintText: "127.0.0.1",
-                  border: OutlineInputBorder(),
                 ),
               ),
               SizedBox(height: 12),
@@ -511,7 +509,6 @@ void showAddListeningRuleDialog() {
                 decoration: InputDecoration(
                   labelText: "Local Port",
                   hintText: "8888",
-                  border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
               ),
