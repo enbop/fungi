@@ -124,7 +124,7 @@ The binary will be located at:
 
 #### Ubuntu
 ```
-sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libayatana-appindicator3-dev
 
 cd flutter_app
 flutter build linux --release
