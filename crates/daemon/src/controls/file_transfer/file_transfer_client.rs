@@ -682,7 +682,7 @@ pub async fn start_webdav_proxy_service(
 fn convert_string_to_utf8_unix_path_buf(path: &str) -> Utf8PathBuf<Utf8UnixEncoding> {
     #[cfg(windows)]
     {
-        let windows_path = Utf8Path::<Utf8WindowsEncoding>::new(path);
+        let windows_path = Utf8Path::<typed_path::Utf8WindowsEncoding>::new(path);
         return windows_path.with_encoding::<Utf8UnixEncoding>();
     }
     #[cfg(not(windows))]
