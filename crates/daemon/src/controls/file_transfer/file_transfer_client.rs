@@ -3,7 +3,7 @@ use std::{
     convert::Infallible,
     net::IpAddr,
     ops::{Deref, DerefMut},
-    path::{Component, Path, PathBuf},
+    path::PathBuf,
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -20,6 +20,9 @@ use parking_lot::Mutex;
 use tarpc::{context, serde_transport, tokio_serde::formats::Bincode};
 use tokio::net::TcpListener;
 use tokio_util::{codec::LengthDelimitedCodec, compat::FuturesAsyncReadCompatExt as _};
+use typed_path::{
+    Utf8Component, Utf8Components, Utf8Path, Utf8PathBuf, Utf8UnixComponents, Utf8UnixEncoding,
+};
 
 use crate::controls::file_transfer::FileTransferRpcClient;
 
@@ -206,14 +209,14 @@ fn connect_file_transfer_rpc(stream: Stream) -> FileTransferRpcClient {
     FileTransferRpcClient::new(Default::default(), transport).spawn()
 }
 impl FileTransferClientsControl {
-    fn is_root_path(path: &Path) -> bool {
-        let components: Vec<_> = path.components().collect();
-        matches!(
-            components.as_slice(),
-            [] | [Component::CurDir]
-                | [Component::RootDir]
-                | [Component::CurDir, Component::RootDir]
-        )
+    fn is_root_path(mut components: Utf8UnixComponents<'_>) -> bool {
+        let Some(first) = components.next() else {
+            return true; // empty path is considered root
+        };
+        if components.next().is_some() {
+            return false; // more than one component means it's not root
+        }
+        first.is_root() || first.is_current() || first.is_empty()
     }
 
     fn map_rpc_error(&self, peer_id: &PeerId) -> fungi_fs::FileSystemError {
@@ -227,44 +230,39 @@ impl FileTransferClientsControl {
         fungi_fs::FileSystemError::ConnectionBroken
     }
 
-    async fn extract_client_and_path(
+    async fn extract_client_and_path<'a>(
         &self,
-        path: PathBuf,
-    ) -> anyhow::Result<(ConnectedClient, PathBuf)> {
-        let components: Vec<Component> = path.components().collect();
-
-        let meaningful_components: Vec<&str> = components
-            .iter()
-            .filter_map(|c| match c {
-                Component::Normal(name) => name.to_str(),
-                _ => None,
-            })
-            .collect();
-
-        if meaningful_components.is_empty() {
-            bail!("Cannot perform operation on root directory. Please specify a client directory.");
+        mut components: Utf8UnixComponents<'a>,
+    ) -> anyhow::Result<(ConnectedClient, Utf8UnixComponents<'a>)> {
+        let mut client_name = components
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("No client specified in path"))?;
+        if client_name.is_empty() {
+            return Err(anyhow::anyhow!("Empty path"));
         }
-
-        let client_name = meaningful_components[0];
-        let client = self.get_client(client_name).await?;
-
-        let remaining_path = if meaningful_components.len() > 1 {
-            meaningful_components[1..].iter().collect::<PathBuf>()
-        } else {
-            PathBuf::from(".")
-        };
+        // remove the first component if it is root or current
+        // "/Test" to "Test"
+        if client_name.is_root() || client_name.is_current() {
+            client_name = components
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("No client specified in path"))?;
+        }
+        let client = self.get_client(client_name.as_str()).await?;
 
         log::debug!(
             "Extracted client: {} and remaining path: {}",
             client_name,
-            remaining_path.display()
+            components.as_str()
         );
 
-        Ok((client, remaining_path))
+        Ok((client, components))
     }
 
-    pub async fn metadata(&self, path: PathBuf) -> fungi_fs::Result<fungi_fs::Metadata> {
-        if Self::is_root_path(&path) {
+    pub async fn metadata(&self, path_os_string: String) -> fungi_fs::Result<fungi_fs::Metadata> {
+        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+        let components: Utf8UnixComponents<'_> = unix_path.components();
+
+        if Self::is_root_path(components.clone()) {
             return Ok(fungi_fs::Metadata {
                 is_dir: true,
                 is_file: false,
@@ -281,7 +279,7 @@ impl FileTransferClientsControl {
             });
         }
 
-        let (client, remaining_path) = match self.extract_client_and_path(path).await {
+        let (client, remaining_components) = match self.extract_client_and_path(components).await {
             Ok(result) => result,
             Err(e) => {
                 return Err(fungi_fs::FileSystemError::Other {
@@ -292,13 +290,19 @@ impl FileTransferClientsControl {
 
         client
             .rpc_client
-            .metadata(context::current(), remaining_path)
+            .metadata(
+                context::current(),
+                remaining_components.as_str().to_string(),
+            )
             .await
             .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
-    pub async fn list(&self, path: PathBuf) -> fungi_fs::Result<Vec<fungi_fs::DirEntry>> {
-        if Self::is_root_path(&path) {
+    pub async fn list(&self, path_os_string: String) -> fungi_fs::Result<Vec<fungi_fs::DirEntry>> {
+        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+        let components: Utf8UnixComponents<'_> = unix_path.components();
+
+        if Self::is_root_path(components.clone()) {
             let clients = self.clients.lock();
             let mut result = Vec::new();
 
@@ -326,7 +330,7 @@ impl FileTransferClientsControl {
             return Ok(result);
         }
 
-        let (client, remaining_path) = match self.extract_client_and_path(path).await {
+        let (client, remaining_components) = match self.extract_client_and_path(components).await {
             Ok(result) => result,
             Err(e) => {
                 return Err(fungi_fs::FileSystemError::Other {
@@ -336,19 +340,25 @@ impl FileTransferClientsControl {
         };
 
         client
-            .list(context::current(), remaining_path)
+            .list(
+                context::current(),
+                remaining_components.as_str().to_string(),
+            )
             .await
             .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
-    pub async fn get(&self, path: PathBuf, start_pos: u64) -> fungi_fs::Result<Vec<u8>> {
-        if Self::is_root_path(&path) {
+    pub async fn get(&self, path_os_string: String, start_pos: u64) -> fungi_fs::Result<Vec<u8>> {
+        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+        let components: Utf8UnixComponents<'_> = unix_path.components();
+
+        if Self::is_root_path(components.clone()) {
             return Err(fungi_fs::FileSystemError::Other {
                 message: "Cannot read from root directory".to_string(),
             });
         }
 
-        let (client, remaining_path) = match self.extract_client_and_path(path).await {
+        let (client, remaining_path) = match self.extract_client_and_path(components).await {
             Ok(result) => result,
             Err(e) => {
                 return Err(fungi_fs::FileSystemError::Other {
@@ -358,7 +368,11 @@ impl FileTransferClientsControl {
         };
 
         client
-            .get(context::current(), remaining_path, start_pos)
+            .get(
+                context::current(),
+                remaining_path.as_str().to_string(),
+                start_pos,
+            )
             .await
             .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
@@ -366,16 +380,19 @@ impl FileTransferClientsControl {
     pub async fn put(
         &self,
         bytes: Vec<u8>,
-        path: PathBuf,
+        path_os_string: String,
         start_pos: u64,
     ) -> fungi_fs::Result<u64> {
-        if Self::is_root_path(&path) {
+        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+        let components: Utf8UnixComponents<'_> = unix_path.components();
+
+        if Self::is_root_path(components.clone()) {
             return Err(fungi_fs::FileSystemError::Other {
                 message: "Cannot write to root directory".to_string(),
             });
         }
 
-        let (client, remaining_path) = match self.extract_client_and_path(path).await {
+        let (client, remaining_components) = match self.extract_client_and_path(components).await {
             Ok(result) => result,
             Err(e) => {
                 return Err(fungi_fs::FileSystemError::Other {
@@ -385,126 +402,28 @@ impl FileTransferClientsControl {
         };
 
         client
-            .put(context::current(), bytes, remaining_path, start_pos)
+            .put(
+                context::current(),
+                bytes,
+                remaining_components.as_str().to_string(),
+                start_pos,
+            )
             .await
             .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
-    pub async fn del(&self, path: PathBuf) -> fungi_fs::Result<()> {
-        if Self::is_root_path(&path) {
+    pub async fn del(&self, path_os_string: String) -> fungi_fs::Result<()> {
+        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+        let components: Utf8UnixComponents<'_> = unix_path.components();
+
+        if Self::is_root_path(components.clone()) {
             return Err(fungi_fs::FileSystemError::Other {
                 message: "Cannot delete root directory".to_string(),
             });
         }
 
-        let (client, remaining_path) = match self.extract_client_and_path(path).await {
-            Ok(result) => result,
-            Err(e) => {
-                return Err(fungi_fs::FileSystemError::Other {
-                    message: e.to_string(),
-                });
-            }
-        };
-
-        if remaining_path.to_string_lossy() == "." {
-            return Err(fungi_fs::FileSystemError::Other {
-                message: "Cannot delete client root directory".to_string(),
-            });
-        }
-
-        client
-            .del(context::current(), remaining_path)
-            .await
-            .map_err(|_| self.map_rpc_error(&client.peer_id))?
-    }
-
-    pub async fn rmd(&self, path: PathBuf) -> fungi_fs::Result<()> {
-        if Self::is_root_path(&path) {
-            return Err(fungi_fs::FileSystemError::Other {
-                message: "Cannot remove root directory".to_string(),
-            });
-        }
-
-        let (client, remaining_path) = match self.extract_client_and_path(path).await {
-            Ok(result) => result,
-            Err(e) => {
-                return Err(fungi_fs::FileSystemError::Other {
-                    message: e.to_string(),
-                });
-            }
-        };
-
-        if remaining_path.to_string_lossy() == "." {
-            return Err(fungi_fs::FileSystemError::Other {
-                message: "Cannot remove client root directory".to_string(),
-            });
-        }
-
-        client
-            .rmd(context::current(), remaining_path)
-            .await
-            .map_err(|_| self.map_rpc_error(&client.peer_id))?
-    }
-
-    pub async fn mkd(&self, path: PathBuf) -> fungi_fs::Result<()> {
-        if Self::is_root_path(&path) {
-            return Err(fungi_fs::FileSystemError::Other {
-                message: "Cannot create directory in root".to_string(),
-            });
-        }
-
-        let (client, remaining_path) = match self.extract_client_and_path(path).await {
-            Ok(result) => result,
-            Err(e) => {
-                return Err(fungi_fs::FileSystemError::Other {
-                    message: e.to_string(),
-                });
-            }
-        };
-
-        client
-            .mkd(context::current(), remaining_path)
-            .await
-            .map_err(|_| self.map_rpc_error(&client.peer_id))?
-    }
-
-    pub async fn rename(&self, from: PathBuf, to: PathBuf) -> fungi_fs::Result<()> {
-        if Self::is_root_path(&from) || Self::is_root_path(&to) {
-            return Err(fungi_fs::FileSystemError::Other {
-                message: "Cannot rename root directory".to_string(),
-            });
-        }
-
-        let from_components: Vec<_> = from
-            .components()
-            .filter_map(|c| match c {
-                Component::Normal(name) => name.to_str(),
-                _ => None,
-            })
-            .collect();
-
-        let to_components: Vec<_> = to
-            .components()
-            .filter_map(|c| match c {
-                Component::Normal(name) => name.to_str(),
-                _ => None,
-            })
-            .collect();
-
-        if from_components.len() <= 1 || to_components.len() <= 1 {
-            return Err(fungi_fs::FileSystemError::Other {
-                message: "Cannot rename client directories at the top level".to_string(),
-            });
-        }
-
-        if from_components[0] != to_components[0] {
-            return Err(fungi_fs::FileSystemError::Other {
-                message: "Cannot rename across different clients".to_string(),
-            });
-        }
-
-        let (from_client, from_remaining_path) =
-            match self.extract_client_and_path(from.clone()).await {
+        let (client, mut remaining_components) =
+            match self.extract_client_and_path(components).await {
                 Ok(result) => result,
                 Err(e) => {
                     return Err(fungi_fs::FileSystemError::Other {
@@ -513,33 +432,81 @@ impl FileTransferClientsControl {
                 }
             };
 
-        let (_to_client, to_remaining_path) = match self.extract_client_and_path(to.clone()).await {
-            Ok(result) => result,
-            Err(e) => {
-                return Err(fungi_fs::FileSystemError::Other {
-                    message: e.to_string(),
-                });
-            }
+        let path_str = remaining_components.as_str().to_string();
+
+        let Some(first) = remaining_components.next() else {
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "No path specified for deletion".to_string(),
+            });
         };
 
-        if from_remaining_path.to_string_lossy() == "." {
+        if remaining_components.next().is_none() {
+            if first.is_root() || first.is_current() || first.is_empty() {
+                return Err(fungi_fs::FileSystemError::Other {
+                    message: "Cannot delete root or current directory".to_string(),
+                });
+            }
+        }
+
+        client
+            .del(context::current(), path_str)
+            .await
+            .map_err(|_| self.map_rpc_error(&client.peer_id))?
+    }
+
+    pub async fn rmd(&self, path_os_string: String) -> fungi_fs::Result<()> {
+        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+        let components: Utf8UnixComponents<'_> = unix_path.components();
+
+        if Self::is_root_path(components.clone()) {
             return Err(fungi_fs::FileSystemError::Other {
-                message: "Cannot rename client root directory".to_string(),
+                message: "Cannot remove root directory".to_string(),
             });
         }
 
-        from_client
-            .rename(context::current(), from_remaining_path, to_remaining_path)
-            .await
-            .map_err(|_| self.map_rpc_error(&from_client.peer_id))?
-    }
+        let (client, mut remaining_components) =
+            match self.extract_client_and_path(components).await {
+                Ok(result) => result,
+                Err(e) => {
+                    return Err(fungi_fs::FileSystemError::Other {
+                        message: e.to_string(),
+                    });
+                }
+            };
 
-    pub async fn cwd(&self, path: PathBuf) -> fungi_fs::Result<()> {
-        if Self::is_root_path(&path) {
-            return Ok(());
+        let path_str = remaining_components.as_str().to_string();
+
+        let Some(first) = remaining_components.next() else {
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "No path specified for deletion".to_string(),
+            });
+        };
+
+        if remaining_components.next().is_none() {
+            if first.is_root() || first.is_current() || first.is_empty() {
+                return Err(fungi_fs::FileSystemError::Other {
+                    message: "Cannot delete root or current directory".to_string(),
+                });
+            }
         }
 
-        let (client, remaining_path) = match self.extract_client_and_path(path).await {
+        client
+            .rmd(context::current(), path_str)
+            .await
+            .map_err(|_| self.map_rpc_error(&client.peer_id))?
+    }
+
+    pub async fn mkd(&self, path_os_string: String) -> fungi_fs::Result<()> {
+        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+        let components: Utf8UnixComponents<'_> = unix_path.components();
+
+        if Self::is_root_path(components.clone()) {
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot create directory in root".to_string(),
+            });
+        }
+
+        let (client, remaining_components) = match self.extract_client_and_path(components).await {
             Ok(result) => result,
             Err(e) => {
                 return Err(fungi_fs::FileSystemError::Other {
@@ -549,7 +516,98 @@ impl FileTransferClientsControl {
         };
 
         client
-            .cwd(context::current(), remaining_path)
+            .mkd(
+                context::current(),
+                remaining_components.as_str().to_string(),
+            )
+            .await
+            .map_err(|_| self.map_rpc_error(&client.peer_id))?
+    }
+
+    pub async fn rename(
+        &self,
+        from_os_string: String,
+        to_os_string: String,
+    ) -> fungi_fs::Result<()> {
+        let from_path = convert_string_to_utf8_unix_path_buf(&from_os_string).normalize();
+        let from_components: Utf8UnixComponents<'_> = from_path.components();
+
+        let to_path = convert_string_to_utf8_unix_path_buf(&to_os_string).normalize();
+        let to_components: Utf8UnixComponents<'_> = to_path.components();
+
+        if Self::is_root_path(from_components.clone()) || Self::is_root_path(to_components.clone())
+        {
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot rename root directory".to_string(),
+            });
+        }
+
+        let from_components_vec: Vec<_> = from_components.clone().collect();
+        let to_components_vec: Vec<_> = to_components.clone().collect();
+        if from_components_vec.len() <= 1 || to_components_vec.len() <= 1 {
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot rename client directories at the top level".to_string(),
+            });
+        }
+
+        if from_components_vec[0] != to_components_vec[0] {
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot rename across different clients".to_string(),
+            });
+        }
+
+        let (from_client, from_remaining_components) =
+            match self.extract_client_and_path(from_components).await {
+                Ok(result) => result,
+                Err(e) => {
+                    return Err(fungi_fs::FileSystemError::Other {
+                        message: e.to_string(),
+                    });
+                }
+            };
+
+        let (_to_client, to_remaining_components) =
+            match self.extract_client_and_path(to_components).await {
+                Ok(result) => result,
+                Err(e) => {
+                    return Err(fungi_fs::FileSystemError::Other {
+                        message: e.to_string(),
+                    });
+                }
+            };
+
+        from_client
+            .rename(
+                context::current(),
+                from_remaining_components.as_str().to_string(),
+                to_remaining_components.as_str().to_string(),
+            )
+            .await
+            .map_err(|_| self.map_rpc_error(&from_client.peer_id))?
+    }
+
+    pub async fn cwd(&self, path_os_string: String) -> fungi_fs::Result<()> {
+        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+        let components: Utf8UnixComponents<'_> = unix_path.components();
+
+        if Self::is_root_path(components.clone()) {
+            return Ok(());
+        }
+
+        let (client, remaining_components) = match self.extract_client_and_path(components).await {
+            Ok(result) => result,
+            Err(e) => {
+                return Err(fungi_fs::FileSystemError::Other {
+                    message: e.to_string(),
+                });
+            }
+        };
+
+        client
+            .cwd(
+                context::current(),
+                remaining_components.as_str().to_string(),
+            )
             .await
             .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
@@ -621,517 +679,44 @@ pub async fn start_webdav_proxy_service(
     }
 }
 
+fn convert_string_to_utf8_unix_path_buf(path: &str) -> Utf8PathBuf<Utf8UnixEncoding> {
+    #[cfg(windows)]
+    {
+        let windows_path = Utf8Path::<Utf8WindowsEncoding>::new(path);
+        return windows_path.with_encoding::<Utf8UnixEncoding>();
+    }
+    #[cfg(not(windows))]
+    {
+        return Utf8Path::<Utf8UnixEncoding>::new(path).with_encoding();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     #[test]
     fn test_is_root_path() {
         // Test various root path representations
-        assert!(FileTransferClientsControl::is_root_path(Path::new(".")));
-        assert!(FileTransferClientsControl::is_root_path(Path::new("./")));
-        assert!(FileTransferClientsControl::is_root_path(Path::new("/")));
-        assert!(FileTransferClientsControl::is_root_path(Path::new("")));
+        let path = convert_string_to_utf8_unix_path_buf(".");
+        assert!(FileTransferClientsControl::is_root_path(path.components()));
+        let path = convert_string_to_utf8_unix_path_buf("./");
+        assert!(FileTransferClientsControl::is_root_path(path.components()));
+        let path = convert_string_to_utf8_unix_path_buf("/");
+        assert!(FileTransferClientsControl::is_root_path(path.components()));
+        let path = convert_string_to_utf8_unix_path_buf("");
+        assert!(FileTransferClientsControl::is_root_path(path.components()));
 
         // Test non-root paths
-        assert!(!FileTransferClientsControl::is_root_path(Path::new(
-            "client1"
-        )));
-        assert!(!FileTransferClientsControl::is_root_path(Path::new(
-            "client1/file.txt"
-        )));
-        assert!(!FileTransferClientsControl::is_root_path(Path::new(
-            "./client1"
-        )));
-        assert!(!FileTransferClientsControl::is_root_path(Path::new(
-            "/client1"
-        )));
-        assert!(!FileTransferClientsControl::is_root_path(Path::new(
-            "client1/subdir/file.txt"
-        )));
-    }
-
-    #[test]
-    fn test_path_component_extraction() {
-        // Test extracting components from various path formats
-        let test_cases = vec![
-            ("client1", vec!["client1"]),
-            ("client1/file.txt", vec!["client1", "file.txt"]),
-            ("./client1/file.txt", vec!["client1", "file.txt"]),
-            ("/client1/file.txt", vec!["client1", "file.txt"]),
-            (
-                "client1/subdir/file.txt",
-                vec!["client1", "subdir", "file.txt"],
-            ),
-            ("client1/subdir/", vec!["client1", "subdir"]),
-        ];
-
-        for (path_str, expected) in test_cases {
-            let path = PathBuf::from(path_str);
-            let components: Vec<&str> = path
-                .components()
-                .filter_map(|c| match c {
-                    Component::Normal(name) => name.to_str(),
-                    _ => None,
-                })
-                .collect();
-
-            assert_eq!(components, expected, "Failed for path: {path_str}");
-        }
-    }
-
-    #[test]
-    fn test_path_component_extraction_empty_paths() {
-        let empty_paths = vec!["", ".", "./", "/"];
-
-        for path_str in empty_paths {
-            let path = PathBuf::from(path_str);
-            let components: Vec<&str> = path
-                .components()
-                .filter_map(|c| match c {
-                    Component::Normal(name) => name.to_str(),
-                    _ => None,
-                })
-                .collect();
-
-            assert!(
-                components.is_empty(),
-                "Path '{path_str}' should have no meaningful components"
-            );
-        }
-    }
-
-    #[test]
-    fn test_remaining_path_construction() {
-        // Test remaining path construction logic
-        let test_cases = vec![
-            (vec!["client1"], "."),
-            (vec!["client1", "file.txt"], "file.txt"),
-            (
-                vec!["client1", "subdir", "file.txt"],
-                if cfg!(windows) {
-                    "subdir\\file.txt"
-                } else {
-                    "subdir/file.txt"
-                },
-            ),
-            (
-                vec!["client1", "subdir", "nested", "file.txt"],
-                if cfg!(windows) {
-                    "subdir\\nested\\file.txt"
-                } else {
-                    "subdir/nested/file.txt"
-                },
-            ),
-        ];
-
-        for (components, expected) in test_cases {
-            let remaining_path = if components.len() > 1 {
-                components[1..].iter().collect::<PathBuf>()
-            } else {
-                PathBuf::from(".")
-            };
-
-            assert_eq!(
-                remaining_path.to_string_lossy(),
-                expected,
-                "Failed for components: {components:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn test_cross_platform_path_handling() {
-        // Test that our component-based approach works consistently across platforms
-        #[cfg(windows)]
-        {
-            let path = PathBuf::from(r"client1\subdir\file.txt");
-            let components: Vec<&str> = path
-                .components()
-                .filter_map(|c| match c {
-                    Component::Normal(name) => name.to_str(),
-                    _ => None,
-                })
-                .collect();
-            assert_eq!(components, vec!["client1", "subdir", "file.txt"]);
-        }
-
-        #[cfg(unix)]
-        {
-            let path = PathBuf::from("client1/subdir/file.txt");
-            let components: Vec<&str> = path
-                .components()
-                .filter_map(|c| match c {
-                    Component::Normal(name) => name.to_str(),
-                    _ => None,
-                })
-                .collect();
-            assert_eq!(components, vec!["client1", "subdir", "file.txt"]);
-        }
-    }
-
-    #[test]
-    fn test_special_path_components() {
-        // Test handling of special path components
-        let path = PathBuf::from("./client1/../client2/./file.txt");
-        let components: Vec<Component> = path.components().collect();
-
-        // Check that we can identify different component types
-        let normal_components: Vec<&str> = components
-            .iter()
-            .filter_map(|c| match c {
-                Component::Normal(name) => name.to_str(),
-                _ => None,
-            })
-            .collect();
-
-        // Should only extract "client1", "client2", "file.txt", ignoring "." and ".."
-        assert_eq!(normal_components, vec!["client1", "client2", "file.txt"]);
-    }
-
-    #[test]
-    fn test_rename_path_validation_logic() {
-        // Test the logic used in rename method for path validation
-        let test_cases = vec![
-            ("client1/file1.txt", "client1/file2.txt", true), // Same client, should be valid
-            ("client1/dir1/file.txt", "client1/dir2/file.txt", true), // Same client, different dirs
-            ("client1/file.txt", "client2/file.txt", false), // Different clients, should be invalid
-        ];
-
-        for (from_path, to_path, should_be_valid) in test_cases {
-            let from = PathBuf::from(from_path);
-            let to = PathBuf::from(to_path);
-
-            let from_components: Vec<&str> = from
-                .components()
-                .filter_map(|c| match c {
-                    Component::Normal(name) => name.to_str(),
-                    _ => None,
-                })
-                .collect();
-
-            let to_components: Vec<&str> = to
-                .components()
-                .filter_map(|c| match c {
-                    Component::Normal(name) => name.to_str(),
-                    _ => None,
-                })
-                .collect();
-
-            let is_same_client = from_components.first() == to_components.first()
-                && from_components.len() > 1
-                && to_components.len() > 1;
-
-            assert_eq!(
-                is_same_client, should_be_valid,
-                "Validation failed for {from_path} -> {to_path}"
-            );
-        }
-    }
-
-    #[test]
-    fn test_client_directory_detection() {
-        // Test detection of top-level client directory operations
-        let test_cases = vec![
-            ("client1", true),           // Top-level client directory
-            ("client1/", true),          // Top-level client directory with trailing slash
-            ("client1/file.txt", false), // File within client directory
-            ("client1/subdir", false),   // Subdirectory within client
-        ];
-
-        for (path_str, is_top_level) in test_cases {
-            let path = PathBuf::from(path_str);
-            let components: Vec<&str> = path
-                .components()
-                .filter_map(|c| match c {
-                    Component::Normal(name) => name.to_str(),
-                    _ => None,
-                })
-                .collect();
-
-            let is_client_dir = components.len() == 1;
-            assert_eq!(
-                is_client_dir, is_top_level,
-                "Client directory detection failed for: {path_str}"
-            );
-        }
-    }
-
-    #[test]
-    fn test_windows_path_separators() {
-        // Test handling of Windows-style path separators
-        // Note: This test will behave differently on Windows vs Unix systems
-        let path = PathBuf::from("client1\\subdir\\file.txt");
-        let components: Vec<&str> = path
-            .components()
-            .filter_map(|c| match c {
-                Component::Normal(name) => name.to_str(),
-                _ => None,
-            })
-            .collect();
-
-        // On Windows, this should split into separate components
-        // On Unix, the backslashes are treated as part of the filename
-        #[cfg(windows)]
-        assert_eq!(components, vec!["client1", "subdir", "file.txt"]);
-
-        #[cfg(unix)]
-        assert_eq!(components, vec!["client1\\subdir\\file.txt"]);
-    }
-
-    #[test]
-    fn test_path_normalization() {
-        // Test that our approach handles various path formats consistently
-        let path_variants = vec![
-            "client1/file.txt",
-            "./client1/file.txt",
-            "/client1/file.txt",
-            "client1//file.txt", // Double slash
-        ];
-
-        for path_str in path_variants {
-            let path = PathBuf::from(path_str);
-            let components: Vec<&str> = path
-                .components()
-                .filter_map(|c| match c {
-                    Component::Normal(name) => name.to_str(),
-                    _ => None,
-                })
-                .collect();
-
-            // All should result in the same components
-            assert_eq!(
-                components,
-                vec!["client1", "file.txt"],
-                "Path normalization failed for: {path_str}"
-            );
-        }
-    }
-
-    #[test]
-    fn test_windows_specific_root_paths() {
-        // Test Windows-specific root path representations
-        let windows_root_paths = vec![
-            "\\",   // Windows root
-            ".\\",  // Current directory with Windows separator
-            "\\\\", // UNC path start (treated as root in our context)
-        ];
-
-        for path_str in windows_root_paths {
-            let path = PathBuf::from(path_str);
-            let is_root = FileTransferClientsControl::is_root_path(&path);
-
-            // On Windows, these should be treated as root paths
-            // On Unix, backslashes are treated as regular characters
-            #[cfg(windows)]
-            assert!(
-                is_root,
-                "Windows path '{}' should be recognized as root",
-                path_str
-            );
-
-            // On Unix, we might not recognize these as root, which is acceptable
-            // since they would be invalid paths anyway
-            #[cfg(unix)]
-            {
-                // Just ensure the function doesn't panic
-                let _ = is_root;
-            }
-        }
-    }
-
-    #[test]
-    fn test_windows_vs_unix_path_differences() {
-        // Test paths that behave differently on Windows vs Unix
-        let test_cases = vec![
-            ("client1\\file.txt", vec!["client1", "file.txt"]), // Should work on Windows
-            (".\\client1\\file.txt", vec!["client1", "file.txt"]), // Windows current dir
-            ("\\client1\\file.txt", vec!["client1", "file.txt"]), // Windows absolute
-        ];
-
-        for (path_str, _expected_on_windows) in test_cases {
-            let path = PathBuf::from(path_str);
-            let components: Vec<&str> = path
-                .components()
-                .filter_map(|c| match c {
-                    Component::Normal(name) => name.to_str(),
-                    _ => None,
-                })
-                .collect();
-
-            #[cfg(windows)]
-            assert_eq!(
-                components, _expected_on_windows,
-                "Windows path parsing failed for: {}",
-                path_str
-            );
-
-            #[cfg(unix)]
-            {
-                // On Unix, backslashes are part of the filename
-                // So "client1\file.txt" becomes a single component "client1\file.txt"
-                match path_str {
-                    "client1\\file.txt" => {
-                        assert_eq!(components, vec!["client1\\file.txt"]);
-                    }
-                    ".\\client1\\file.txt" => {
-                        assert_eq!(components, vec![".\\client1\\file.txt"]);
-                    }
-                    "\\client1\\file.txt" => {
-                        assert_eq!(components, vec!["\\client1\\file.txt"]);
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn test_mixed_path_separators() {
-        // Test paths with mixed separators (both / and \)
-        let mixed_paths = vec![
-            "client1/subdir\\file.txt",
-            "client1\\subdir/file.txt",
-            "./client1\\file.txt",
-            ".\\client1/file.txt",
-        ];
-
-        for path_str in mixed_paths {
-            let path = PathBuf::from(path_str);
-            let components: Vec<&str> = path
-                .components()
-                .filter_map(|c| match c {
-                    Component::Normal(name) => name.to_str(),
-                    _ => None,
-                })
-                .collect();
-
-            // Ensure we always extract at least one component
-            assert!(
-                !components.is_empty(),
-                "Should extract at least one component from: {path_str}"
-            );
-
-            // On Windows, should properly separate components; on Unix, backslashes are part of filename
-            let first_component = components[0];
-
-            #[cfg(windows)]
-            {
-                // On Windows, should extract clean client name
-                assert!(
-                    first_component == "client1",
-                    "Windows: First component should be client1, got: {} from path: {}",
-                    first_component,
-                    path_str
-                );
-            }
-
-            #[cfg(unix)]
-            {
-                // On Unix, backslashes are treated as part of the filename
-                // So we just check that we have meaningful content
-                assert!(
-                    first_component.contains("client1"),
-                    "Unix: First component should contain client1, got: {first_component} from path: {path_str}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_edge_case_paths() {
-        // Test various edge cases that might break path parsing
-        let edge_cases = vec![
-            "",            // Empty path
-            ".",           // Current directory
-            "..",          // Parent directory
-            "/",           // Unix root
-            "\\",          // Windows root (on Unix this is just a backslash filename)
-            "./",          // Current directory with trailing slash
-            "../",         // Parent directory with trailing slash
-            "client1/",    // Client with trailing slash
-            "client1\\",   // Client with Windows trailing slash
-            "//client1",   // Double slash prefix
-            "\\\\client1", // Windows UNC-style path
-        ];
-
-        for path_str in edge_cases {
-            let path = PathBuf::from(path_str);
-
-            // Test that is_root_path doesn't panic
-            let is_root = FileTransferClientsControl::is_root_path(&path);
-
-            // Test that component extraction doesn't panic
-            let components: Vec<&str> = path
-                .components()
-                .filter_map(|c| match c {
-                    Component::Normal(name) => name.to_str(),
-                    _ => None,
-                })
-                .collect();
-
-            // For paths that should be root, verify they're detected correctly
-            match path_str {
-                "" | "." | "./" | "/" => {
-                    assert!(is_root, "Path '{path_str}' should be detected as root");
-                    assert!(
-                        components.is_empty(),
-                        "Root path '{path_str}' should have no normal components"
-                    );
-                }
-                _ => {
-                    // Non-root paths should have components or be properly handled
-                    if !is_root {
-                        // If not root, should either have components or be a special case
-                        let has_meaningful_content = !components.is_empty()
-                            || path_str.contains("..")
-                            || (cfg!(unix) && path_str.contains("\\")); // Backslashes on Unix
-
-                        assert!(
-                            has_meaningful_content || path_str.len() <= 2,
-                            "Non-root path '{path_str}' should have meaningful content or be very short"
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn test_unicode_and_special_characters() {
-        // Test paths with Unicode and special characters
-        let special_paths = vec![
-            "客户端1/文件.txt",                  // Chinese characters
-            "client1/файл.txt",                  // Cyrillic characters
-            "client1/file with spaces.txt",      // Spaces
-            "client1/file-with-dashes.txt",      // Dashes
-            "client1/file_with_underscores.txt", // Underscores
-            "client1/file.with.dots.txt",        // Multiple dots
-        ];
-
-        for path_str in special_paths {
-            let path = PathBuf::from(path_str);
-            let components: Vec<&str> = path
-                .components()
-                .filter_map(|c| match c {
-                    Component::Normal(name) => name.to_str(),
-                    _ => None,
-                })
-                .collect();
-
-            // Should always have at least 2 components (client and file)
-            assert!(
-                components.len() >= 2,
-                "Special character path should have at least 2 components: {path_str}"
-            );
-
-            // Verify we can extract the client name correctly
-            let client_name = components[0];
-            assert!(
-                !client_name.is_empty(),
-                "Client name should not be empty for path: {path_str}"
-            );
-        }
+        let path = convert_string_to_utf8_unix_path_buf("client1");
+        assert!(!FileTransferClientsControl::is_root_path(path.components()));
+        let path = convert_string_to_utf8_unix_path_buf("client1/file.txt");
+        assert!(!FileTransferClientsControl::is_root_path(path.components()));
+        let path = convert_string_to_utf8_unix_path_buf("./client1");
+        assert!(!FileTransferClientsControl::is_root_path(path.components()));
+        let path = convert_string_to_utf8_unix_path_buf("/client1");
+        assert!(!FileTransferClientsControl::is_root_path(path.components()));
+        let path = convert_string_to_utf8_unix_path_buf("client1/subdir/file.txt");
+        assert!(!FileTransferClientsControl::is_root_path(path.components()));
     }
 }

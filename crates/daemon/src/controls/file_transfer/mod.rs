@@ -8,27 +8,26 @@ pub use file_transfer_client::{
 };
 pub use file_transfer_service::FileTransferServiceControl;
 use fungi_fs::{DirEntry, Metadata, Result};
-use std::path::PathBuf;
 
 #[tarpc::service]
 pub trait FileTransferRpc {
-    async fn metadata(path: PathBuf) -> Result<Metadata>;
+    async fn metadata(unix_path: String) -> Result<Metadata>;
 
-    async fn list(path: PathBuf) -> Result<Vec<DirEntry>>;
+    async fn list(unix_path: String) -> Result<Vec<DirEntry>>;
 
-    async fn get(path: PathBuf, start_pos: u64) -> Result<Vec<u8>>;
+    async fn get(unix_path: String, start_pos: u64) -> Result<Vec<u8>>;
 
-    async fn put(bytes: Vec<u8>, path: PathBuf, start_pos: u64) -> Result<u64>;
+    async fn put(bytes: Vec<u8>, unix_path: String, start_pos: u64) -> Result<u64>;
 
-    async fn del(path: PathBuf) -> Result<()>;
+    async fn del(unix_path: String) -> Result<()>;
 
-    async fn rmd(path: PathBuf) -> Result<()>;
+    async fn rmd(unix_path: String) -> Result<()>;
 
-    async fn mkd(path: PathBuf) -> Result<()>;
+    async fn mkd(unix_path: String) -> Result<()>;
 
-    async fn rename(from: PathBuf, to: PathBuf) -> Result<()>;
+    async fn rename(from: String, to: String) -> Result<()>;
 
-    async fn cwd(path: PathBuf) -> Result<()>;
+    async fn cwd(unix_path: String) -> Result<()>;
 
     async fn is_windows() -> bool;
 }

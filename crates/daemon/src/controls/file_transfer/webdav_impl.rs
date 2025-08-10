@@ -1,8 +1,4 @@
-use std::{
-    io::SeekFrom,
-    path::{Path, PathBuf},
-    pin::Pin,
-};
+use std::{io::SeekFrom, pin::Pin};
 
 use dav_server::{
     davpath::DavPath,
@@ -37,7 +33,7 @@ impl DavMetaData for DavMetaDataImpl {
 
 #[derive(Debug)]
 struct DavFileImpl {
-    path: PathBuf,
+    path_os_string: String,
     clients_ctrl: FileTransferClientsControl,
     position: u64,
     data: Option<Vec<u8>>,
@@ -47,12 +43,12 @@ struct DavFileImpl {
 impl DavFile for DavFileImpl {
     fn metadata(&mut self) -> FsFuture<Box<dyn DavMetaData>> {
         async move {
-            log::info!("DavFile Getting metadata for file: {}", self.path.display());
+            log::info!("DavFile Getting metadata for file: {}", self.path_os_string);
             let meta = self
                 .clients_ctrl
-                .metadata(self.path.clone())
+                .metadata(self.path_os_string.clone())
                 .await
-                .map_err(|e| map_error(e, "metadata", &self.path))?;
+                .map_err(|e| map_error(e, "metadata", &self.path_os_string))?;
             Ok(Box::new(DavMetaDataImpl(meta)) as Box<dyn DavMetaData>)
         }
         .boxed()
@@ -70,9 +66,9 @@ impl DavFile for DavFileImpl {
 
             let _written = self
                 .clients_ctrl
-                .put(bytes, self.path.clone(), self.position)
+                .put(bytes, self.path_os_string.clone(), self.position)
                 .await
-                .map_err(|e| map_error(e, "write_buf", &self.path))?;
+                .map_err(|e| map_error(e, "write_buf", &self.path_os_string))?;
 
             self.position += bytes_len as u64;
             Ok(())
@@ -91,9 +87,9 @@ impl DavFile for DavFileImpl {
 
             let _written = self
                 .clients_ctrl
-                .put(bytes, self.path.clone(), self.position)
+                .put(bytes, self.path_os_string.clone(), self.position)
                 .await
-                .map_err(|e| map_error(e, "write_bytes", &self.path))?;
+                .map_err(|e| map_error(e, "write_bytes", &self.path_os_string))?;
             self.position += buf.len() as u64;
             Ok(())
         }
@@ -105,9 +101,9 @@ impl DavFile for DavFileImpl {
             if self.data.is_none() {
                 let data = self
                     .clients_ctrl
-                    .get(self.path.clone(), self.position)
+                    .get(self.path_os_string.clone(), self.position)
                     .await
-                    .map_err(|e| map_error(e, "read_bytes", &self.path))?;
+                    .map_err(|e| map_error(e, "read_bytes", &self.path_os_string))?;
                 self.data = Some(data);
             }
 
@@ -156,9 +152,9 @@ impl DavFile for DavFileImpl {
                 SeekFrom::End(_) => {
                     let meta = self
                         .clients_ctrl
-                        .metadata(self.path.clone())
+                        .metadata(self.path_os_string.clone())
                         .await
-                        .map_err(|e| map_error(e, "seek", &self.path))?;
+                        .map_err(|e| map_error(e, "seek", &self.path_os_string))?;
 
                     if let SeekFrom::End(offset) = pos {
                         if offset >= 0 {
@@ -210,73 +206,72 @@ impl DavFileSystem for FileTransferClientsControl {
         path: &'a DavPath,
         options: OpenOptions,
     ) -> FsFuture<'a, Box<dyn DavFile>> {
-        let path_str = path.as_rel_ospath();
-        let path_buf = PathBuf::from(path_str.to_string_lossy().to_string());
+        let path_os_string = path.to_string();
         let clients_ctrl = self.clone();
 
         log::info!(
             "Opening file: {} with options: {:?}",
-            path_buf.display(),
+            path_os_string,
             options
         );
         async move {
             // Check if file should exist for read-only operations
             if options.read && !options.write && !options.create {
                 let _meta = clients_ctrl
-                    .metadata(path_buf.clone())
+                    .metadata(path_os_string.clone())
                     .await
-                    .map_err(|e| map_error(e, "open", &path_buf))?;
+                    .map_err(|e| map_error(e, "open", &path_os_string))?;
             }
 
             // For create_new, file must not exist
             if options.create_new {
-                match clients_ctrl.metadata(path_buf.clone()).await {
+                match clients_ctrl.metadata(path_os_string.clone()).await {
                     Ok(_) => return Err(FsError::Exists),
                     Err(fungi_fs::FileSystemError::NotFound { .. }) => {
                         // File doesn't exist, which is what we want
                     }
-                    Err(e) => return Err(map_error(e, "open", &path_buf)),
+                    Err(e) => return Err(map_error(e, "open", &path_os_string)),
                 }
             }
 
             // For write operations, we might need to handle file creation
             if options.write && options.create {
-                match clients_ctrl.metadata(path_buf.clone()).await {
+                match clients_ctrl.metadata(path_os_string.clone()).await {
                     Ok(_) => {
-                        log::debug!("File {} exists, will write to it", path_buf.display());
+                        log::debug!("File {} exists, will write to it", path_os_string);
                         // If truncate is requested, truncate the file
                         if options.truncate {
-                            log::debug!("Truncating existing file: {}", path_buf.display());
+                            log::debug!("Truncating existing file: {}", path_os_string);
                             let empty_data = Vec::new();
                             clients_ctrl
-                                .put(empty_data, path_buf.clone(), 0)
+                                .put(empty_data, path_os_string.clone(), 0)
                                 .await
-                                .map_err(|e| map_error(e, "truncate_file", &path_buf))?;
+                                .map_err(|e| map_error(e, "truncate_file", &path_os_string))?;
                         }
                     }
                     Err(fungi_fs::FileSystemError::NotFound { .. }) => {
                         log::debug!(
                             "File {} doesn't exist, will create on first write",
-                            path_buf.display()
+                            path_os_string
                         );
                         // For WebDAV, we often need to create the file immediately
                         // especially if it's a PUT request
                         if options.truncate || !options.append {
-                            log::debug!("Creating empty file: {}", path_buf.display());
+                            log::debug!("Creating empty file: {}", path_os_string);
                             let empty_data = Vec::new();
                             clients_ctrl
-                                .put(empty_data, path_buf.clone(), 0)
+                                .put(empty_data, path_os_string.clone(), 0)
                                 .await
-                                .map_err(|e| map_error(e, "create_file", &path_buf))?;
-                            log::info!("Successfully created empty file: {}", path_buf.display());
+                                .map_err(|e| map_error(e, "create_file", &path_os_string))?;
+                            log::info!("Successfully created empty file: {}", path_os_string);
                         }
                     }
-                    Err(e) => return Err(map_error(e, "open", &path_buf)),
+                    Err(e) => return Err(map_error(e, "open", &path_os_string)),
                 }
             }
 
             let file = DavFileImpl {
-                path: path_buf,
+                path_os_string,
                 clients_ctrl,
                 // position: if options.truncate { 0 } else { 0 }, // TODO: handle append mode properly
                 position: 0,
@@ -290,90 +285,82 @@ impl DavFileSystem for FileTransferClientsControl {
     }
 
     fn create_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
-        let path_buf = PathBuf::from(path.as_rel_ospath());
+        let path_os_string = path.to_string();
         let client = self.clone();
 
-        log::info!("Creating directory: {}", path_buf.display());
+        log::info!("Creating directory: {}", path_os_string);
         async move {
             client
-                .mkd(path_buf.clone())
+                .mkd(path_os_string.clone())
                 .await
-                .map_err(|e| map_error(e, "create_dir", &path_buf))?;
+                .map_err(|e| map_error(e, "create_dir", &path_os_string))?;
             Ok(())
         }
         .boxed()
     }
 
     fn remove_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
-        let path_buf = PathBuf::from(path.as_rel_ospath());
+        let path_os_string = path.to_string();
         let client = self.clone();
 
-        log::info!("Removing directory: {}", path_buf.display());
+        log::info!("Removing directory: {}", path_os_string);
         async move {
             client
-                .rmd(path_buf.clone())
+                .rmd(path_os_string.clone())
                 .await
-                .map_err(|e| map_error(e, "remove_dir", &path_buf))?;
+                .map_err(|e| map_error(e, "remove_dir", &path_os_string))?;
             Ok(())
         }
         .boxed()
     }
 
     fn remove_file<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
-        let path_buf = PathBuf::from(path.as_rel_ospath());
+        let path_os_string = path.to_string();
         let client = self.clone();
 
-        log::info!("Removing file: {}", path_buf.display());
+        log::info!("Removing file: {}", path_os_string);
         async move {
             client
-                .del(path_buf.clone())
+                .del(path_os_string.clone())
                 .await
-                .map_err(|e| map_error(e, "remove_file", &path_buf))?;
+                .map_err(|e| map_error(e, "remove_file", &path_os_string))?;
             Ok(())
         }
         .boxed()
     }
 
     fn rename<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<'a, ()> {
-        let from_buf = PathBuf::from(from.as_rel_ospath());
-        let to_buf = PathBuf::from(to.as_rel_ospath());
+        let from_os_string = from.to_string();
+        let to_os_string = to.to_string();
         let client = self.clone();
 
-        log::info!(
-            "Renaming from: {} to: {}",
-            from_buf.display(),
-            to_buf.display()
-        );
+        log::info!("Renaming from: {} to: {}", from_os_string, to_os_string);
         async move {
             client
-                .rename(from_buf.clone(), to_buf.clone())
+                .rename(from_os_string.clone(), to_os_string.clone())
                 .await
-                .map_err(|e| map_error(e, "rename", &from_buf))?;
+                .map_err(|e| map_error(e, "rename", &from_os_string))?;
             Ok(())
         }
         .boxed()
     }
 
     fn copy<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<'a, ()> {
-        let from_buf = PathBuf::from(from.as_rel_ospath());
-        let to_buf = PathBuf::from(to.as_rel_ospath());
+        let from_os_string = from.to_string();
+        let to_os_string = to.to_string();
         let client = self.clone();
 
-        log::info!(
-            "Copying from: {} to: {}",
-            from_buf.display(),
-            to_buf.display()
-        );
+        log::info!("Copying from: {} to: {}", from_os_string, to_os_string);
         async move {
             let data = client
-                .get(from_buf.clone(), 0)
+                .get(from_os_string.clone(), 0)
                 .await
-                .map_err(|e| map_error(e, "copy (read)", &from_buf))?;
+                .map_err(|e| map_error(e, "copy (read)", &from_os_string))?;
 
             client
-                .put(data, to_buf.clone(), 0)
+                .put(data, to_os_string.clone(), 0)
                 .await
-                .map_err(|e| map_error(e, "copy (write)", &to_buf))?;
+                .map_err(|e| map_error(e, "copy (write)", &to_os_string))?;
 
             Ok(())
         }
@@ -387,15 +374,14 @@ impl DavFileSystem for FileTransferClientsControl {
     ) -> FsFuture<'a, FsStream<Box<dyn dav_server::fs::DavDirEntry>>> {
         let client = self.clone();
 
-        let mut path_buf = PathBuf::from(".");
-        path_buf.push(path.as_rel_ospath());
+        let path_os_string = path.to_string();
 
-        log::info!("Reading directory: {}", path_buf.display());
+        log::info!("Reading directory: {}", path_os_string);
         async move {
             let entries = client
-                .list(path_buf.clone())
+                .list(path_os_string.clone())
                 .await
-                .map_err(|e| map_error(e, "read_dir", &path_buf))?;
+                .map_err(|e| map_error(e, "read_dir", &path_os_string))?;
 
             let stream = stream::iter(entries).map(|entry| {
                 let name = entry.name;
@@ -418,16 +404,13 @@ impl DavFileSystem for FileTransferClientsControl {
 
     fn metadata<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
         let client_ctrl = self.clone();
-
-        let mut path_buf = PathBuf::from(".");
-        path_buf.push(path.as_rel_ospath());
-
-        log::info!("Getting metadata for path: {} {}", path, path_buf.display());
+        let path_string = path.to_string();
+        log::info!("Getting metadata for path: {path_string}");
         async move {
             let meta = client_ctrl
-                .metadata(path_buf.clone())
+                .metadata(path_string.clone())
                 .await
-                .map_err(|e| map_error(e, "metadata", &path_buf))?;
+                .map_err(|e| map_error(e, "metadata", &path_string))?;
 
             Ok(Box::new(DavMetaDataImpl(meta)) as Box<dyn DavMetaData>)
         }
@@ -435,14 +418,9 @@ impl DavFileSystem for FileTransferClientsControl {
     }
 }
 
-fn map_error(err: fungi_fs::FileSystemError, op: &str, path: &Path) -> FsError {
+fn map_error(err: fungi_fs::FileSystemError, op: &str, path: &str) -> FsError {
     use fungi_fs::FileSystemError;
-    log::error!(
-        "FileSystem error during {}: {} at path: {}",
-        op,
-        err,
-        path.display()
-    );
+    log::error!("FileSystem error during {}: {} at path: {}", op, err, path);
     match err {
         FileSystemError::NotFound { .. } => FsError::NotFound,
         FileSystemError::PermissionDenied { .. } => FsError::Forbidden,

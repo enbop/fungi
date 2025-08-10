@@ -18,7 +18,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         _user: &User,
         path: P,
     ) -> libunftp::storage::Result<Self::Metadata> {
-        let path = path.as_ref().to_path_buf();
+        let path = path.as_ref().to_string_lossy().to_string();
         self.metadata(path).await.map_err(map_error)
     }
 
@@ -29,7 +29,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
     ) -> libunftp::storage::Result<
         Vec<libunftp::storage::Fileinfo<std::path::PathBuf, Self::Metadata>>,
     > {
-        let path = path.as_ref().to_path_buf();
+        let path = path.as_ref().to_string_lossy().to_string();
         let file_infos = self.list(path).await.map_err(map_error)?;
 
         Ok(file_infos
@@ -47,7 +47,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         path: P,
         start_pos: u64,
     ) -> libunftp::storage::Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
-        let path = path.as_ref().to_path_buf();
+        let path = path.as_ref().to_string_lossy().to_string();
         let bytes = self.get(path, start_pos).await.map_err(map_error)?;
 
         let cursor = std::io::Cursor::new(bytes);
@@ -64,7 +64,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         path: P,
         start_pos: u64,
     ) -> libunftp::storage::Result<u64> {
-        let path = path.as_ref().to_path_buf();
+        let path = path.as_ref().to_string_lossy().to_string();
 
         let mut buffer = Vec::new();
         tokio::io::copy(&mut bytes, &mut buffer)
@@ -81,7 +81,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         _user: &User,
         path: P,
     ) -> libunftp::storage::Result<()> {
-        let path = path.as_ref().to_path_buf();
+        let path = path.as_ref().to_string_lossy().to_string();
         self.del(path).await.map_err(map_error)
     }
 
@@ -90,7 +90,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         _user: &User,
         path: P,
     ) -> libunftp::storage::Result<()> {
-        let path = path.as_ref().to_path_buf();
+        let path = path.as_ref().to_string_lossy().to_string();
         self.rmd(path).await.map_err(map_error)
     }
 
@@ -99,7 +99,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         _user: &User,
         path: P,
     ) -> libunftp::storage::Result<()> {
-        let path = path.as_ref().to_path_buf();
+        let path = path.as_ref().to_string_lossy().to_string();
         self.mkd(path).await.map_err(map_error)
     }
 
@@ -109,8 +109,8 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         from: P,
         to: P,
     ) -> libunftp::storage::Result<()> {
-        let from = from.as_ref().to_path_buf();
-        let to = to.as_ref().to_path_buf();
+        let from = from.as_ref().to_string_lossy().to_string();
+        let to = to.as_ref().to_string_lossy().to_string();
         self.rename(from, to).await.map_err(map_error)
     }
 
@@ -119,7 +119,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         _user: &User,
         path: P,
     ) -> libunftp::storage::Result<()> {
-        let path = path.as_ref().to_path_buf();
+        let path = path.as_ref().to_string_lossy().to_string();
         self.cwd(path).await.map_err(map_error)
     }
 }

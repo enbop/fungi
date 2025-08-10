@@ -31,15 +31,15 @@ pub struct FileTransferRpcService {
 }
 
 impl super::FileTransferRpc for FileTransferRpcService {
-    async fn metadata(self, _context: Context, path: PathBuf) -> Result<fungi_fs::Metadata> {
+    async fn metadata(self, _context: Context, path: String) -> Result<fungi_fs::Metadata> {
         self.fs.metadata(path).await
     }
 
-    async fn list(self, _context: Context, path: PathBuf) -> Result<Vec<fungi_fs::DirEntry>> {
+    async fn list(self, _context: Context, path: String) -> Result<Vec<fungi_fs::DirEntry>> {
         self.fs.list_dir(path).await
     }
 
-    async fn get(self, _context: Context, path: PathBuf, start_pos: u64) -> Result<Vec<u8>> {
+    async fn get(self, _context: Context, path: String, start_pos: u64) -> Result<Vec<u8>> {
         if start_pos == 0 {
             self.fs.read_to_vec(path).await
         } else {
@@ -51,7 +51,7 @@ impl super::FileTransferRpc for FileTransferRpcService {
         self,
         _context: Context,
         bytes: Vec<u8>,
-        path: PathBuf,
+        path: String,
         start_pos: u64,
     ) -> Result<u64> {
         self.fs
@@ -59,24 +59,24 @@ impl super::FileTransferRpc for FileTransferRpcService {
             .await
     }
 
-    async fn del(self, _context: Context, path: PathBuf) -> Result<()> {
+    async fn del(self, _context: Context, path: String) -> Result<()> {
         self.fs.remove_file(path).await
     }
 
-    async fn rmd(self, _context: Context, path: PathBuf) -> Result<()> {
+    async fn rmd(self, _context: Context, path: String) -> Result<()> {
         self.fs.remove_dir(path).await
     }
 
-    async fn mkd(self, _context: Context, path: PathBuf) -> Result<()> {
+    async fn mkd(self, _context: Context, path: String) -> Result<()> {
         self.fs.create_dir_all(path).await
     }
 
-    async fn rename(self, _context: Context, from: PathBuf, to: PathBuf) -> Result<()> {
+    async fn rename(self, _context: Context, from: String, to: String) -> Result<()> {
         self.fs.rename(from, to).await
     }
 
     // TODO: remove this
-    async fn cwd(self, _context: Context, _path: PathBuf) -> Result<()> {
+    async fn cwd(self, _context: Context, _path: String) -> Result<()> {
         // CWD operation doesn't make sense for our filesystem
         // Just return success for compatibility
         Ok(())
