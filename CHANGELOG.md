@@ -1,0 +1,30 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [0.3.1] - 2025-08-11
+
+### Added
+- **Select from Local Devices (mDNS)**: Quick device selection for devices currently online in the same local network
+- **Select from Address Book**: Each manually added device is automatically saved to the Address Book for quick re-selection in future sessions
+
+### Fixed
+- **Windows File Transfer**: Fixed incorrect file transfer path handling on Windows systems
+
+## [0.3.0] - 2024-07-25
+
+### Added
+- **Complete Flutter UI**: Full graphical user interface with cross-platform desktop support (macOS, Windows, Linux)
+- **File Transfer System**: End-to-end encrypted file sharing between devices with FTP/WebDAV mounting support
+- **Port Forwarding**: End-to-end encrypted TCP port tunneling between devices
+- **Default Relay Server**: Built-in relay server with automatic P2P fallback for improved connectivity
+- **mDNS Device Discovery**: Automatic device discovery for local networks
+- **Cross-platform Support**: Ready for macOS, Windows, and Linux
+
+### Removed
+- **WASI Module**: Temporarily removed for this release
+
+### Changed
+- **Release Format**: Now available in two versions:
+  - `fungi-cli`: Command-line interface for server deployments
+  - `fungi-app`: Graphical user interface for desktop users

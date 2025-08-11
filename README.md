@@ -56,6 +56,7 @@ Available in two versions:
 **Prerequisites**: 
 1. Launch `Fungi App` on both devices
 2. Click on each device's `PeerID` at the top of the app to automatically copy it and save them
+   - **Tip**: You can also use "Select from Local Devices (mDNS)" to quickly choose devices that are currently online in the same local network
 
 > File Transfer and Port Forwarding are independent features. You can use either one without the other based on your needs.
 
@@ -98,8 +99,6 @@ Use any FTP or WebDAV client on Device A to access the directory of Device B.
 Connect `localhost:9090` on Device A to reach the service running on Device B's port `8080`.
 
 ---
-
-> More convenient mDNS local device discovery features are coming soon.
 
 ### Quick Start (fungi-cli)
 
