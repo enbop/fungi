@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 - **Select from Local Devices (mDNS)**: Quick device selection for devices currently online in the same local network
 - **Select from Address Book**: Each manually added device is automatically saved to the Address Book for quick re-selection in future sessions
+- **Minimize to tray**
 
 ### Fixed
 - **Windows File Transfer**: Fixed incorrect file transfer path handling on Windows systems
