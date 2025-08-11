@@ -63,21 +63,18 @@ impl MdnsControl {
     }
 
     pub fn get_all_devices(&self) -> HashMap<PeerId, PeerInfo> {
-        self.cleanup_expired_devices();
         self.local_devices.lock().clone()
     }
 
     pub fn get_device(&self, peer_id: &PeerId) -> Option<PeerInfo> {
-        self.cleanup_expired_devices();
         self.local_devices.lock().get(peer_id).cloned()
     }
 
     pub fn get_device_count(&self) -> usize {
-        self.cleanup_expired_devices();
         self.local_devices.lock().len()
     }
 
-    fn cleanup_expired_devices(&self) {
+    fn _cleanup_expired_devices(&self) {
         let mut devices = self.local_devices.lock();
         devices.retain(|_, device| !device.is_expired());
     }

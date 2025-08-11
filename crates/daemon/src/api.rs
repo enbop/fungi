@@ -1,4 +1,4 @@
-use std::{collections::HashSet, net::IpAddr, path::PathBuf};
+use std::{net::IpAddr, path::PathBuf};
 
 use anyhow::{Result, bail};
 use fungi_config::address_book::PeerInfo;
@@ -277,31 +277,15 @@ impl FungiDaemon {
         self.config().lock().tcp_tunneling.clone()
     }
 
-    // get local devices both available in mod mdns and libp2p
     pub async fn mdns_get_local_devices(&self) -> Result<Vec<PeerInfo>> {
-        let local_devices = self.mdns_control().get_all_devices();
-        log::info!("Found {} local devices in mDNS", local_devices.len());
-        let res = self
-            .swarm_control()
-            .invoke_swarm(move |swarm| {
-                let mut peers_available_in_libp2p = HashSet::new();
-                let libp2p_discovered_nodes = swarm.behaviour().mdns.discovered_nodes();
-                // peer_id from libp2p_discovered_nodes maybe duplicated
-                for peer_id in libp2p_discovered_nodes {
-                    peers_available_in_libp2p.insert(peer_id);
-                }
-                let mut res: Vec<PeerInfo> = Vec::new();
-                for (peer_id, device_info) in local_devices {
-                    if peers_available_in_libp2p.contains(&peer_id) {
-                        res.push(device_info);
-                    }
-                }
-                res
-            })
-            .await?;
-
-        log::info!("Filtered {} local devices available in libp2p", res.len());
-        Ok(res)
+        let local_devices = self
+            .mdns_control()
+            .get_all_devices()
+            .values()
+            .into_iter()
+            .cloned()
+            .collect();
+        Ok(local_devices)
     }
 
     pub fn address_book_get_all(&self) -> Vec<PeerInfo> {
