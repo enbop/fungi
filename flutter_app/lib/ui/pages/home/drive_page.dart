@@ -1,9 +1,12 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
 import 'package:fungi_app/ui/pages/home/home_page.dart';
+import 'package:fungi_app/ui/utils/macos_scoped_resource.dart';
 import 'package:fungi_app/ui/widgets/dialogs.dart';
 import 'package:fungi_app/ui/widgets/text.dart';
 import 'package:fungi_app/ui/widgets/enhanced_card.dart';
@@ -283,6 +286,18 @@ class FileServer extends GetView<FungiController> {
                       return;
                     }
                     debugPrint('Selected directory: $selectedDirectory');
+                    if (Platform.isMacOS) {
+                      await saveLastFileTransferServerRootDirBookmark(
+                        selectedDirectory,
+                      );
+                    }
+                    if (selectedDirectory ==
+                        controller.fileTransferServerState.value.rootDir) {
+                      SmartDialog.showToast(
+                        'Selected directory is already set.',
+                      );
+                      return;
+                    }
                     await controller.startFileTransferServer(selectedDirectory);
                   },
                   icon: Icon(Icons.edit, size: 15),
