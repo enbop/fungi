@@ -55,7 +55,9 @@ class MyApp extends GetView<FungiController> {
         initialRoute: AppPages.initial,
         getPages: AppPages.routes,
         navigatorObservers: [FlutterSmartDialog.observer],
-        builder: FlutterSmartDialog.init(),
+        builder: (context, child) {
+          return FlutterSmartDialog.init()(context, SafeArea(child: child!));
+        },
       ),
     );
   }
