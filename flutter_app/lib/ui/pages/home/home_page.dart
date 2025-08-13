@@ -60,69 +60,78 @@ class HomeHeader extends GetView<FungiController> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final statusBarHeight = MediaQuery.of(context).viewPadding.top;
 
     return Container(
       decoration: BoxDecoration(color: colorScheme.primaryContainer),
-      child: Obx(
-        () => Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 20),
-              child: Image.asset(
-                'assets/images/logo.png',
-                width: 50,
-                height: 50,
-                color: colorScheme.primary,
-              ),
-            ),
-            Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        children: [
+          SizedBox(height: statusBarHeight),
+          Obx(
+            () => Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                LabeledText(
-                  label: 'Hostname',
-                  labelStyle: TextStyle(
-                    fontSize: 12,
-                    color: colorScheme.surfaceTint,
-                    fontWeight: FontWeight.bold,
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 5,
+                    horizontal: 20,
                   ),
-                  value: hostName() ?? "Unknown",
-                  style: const TextStyle(fontSize: 12),
-                ),
-                LabeledText(
-                  label: 'Peer ID',
-                  labelStyle: TextStyle(
-                    fontSize: 12,
-                    color: colorScheme.surfaceTint,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  value: controller.peerId.value.substring(0, 5),
-                  valueWidget: TruncatedId(
-                    id: controller.peerId.value,
-                    style: const TextStyle(fontSize: 12),
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    width: 50,
+                    height: 50,
+                    color: colorScheme.primary,
                   ),
                 ),
-                LabeledText(
-                  label: 'Service state',
-                  labelStyle: TextStyle(
-                    fontSize: 12,
-                    color: colorScheme.surfaceTint,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  value: controller.isServiceRunning.value ? "ON" : "OFF",
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: controller.isServiceRunning.value
-                        ? Colors.green
-                        : Colors.red,
-                  ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    LabeledText(
+                      label: 'Hostname',
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.surfaceTint,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      value: hostName() ?? "Unknown",
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    LabeledText(
+                      label: 'Peer ID',
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.surfaceTint,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      value: controller.peerId.value.substring(0, 5),
+                      valueWidget: TruncatedId(
+                        id: controller.peerId.value,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    LabeledText(
+                      label: 'Service state',
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.surfaceTint,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      value: controller.isServiceRunning.value ? "ON" : "OFF",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: controller.isServiceRunning.value
+                            ? Colors.green
+                            : Colors.red,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
