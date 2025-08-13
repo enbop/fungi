@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.10.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 407359668;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1262530318;
 
 // Section: executor
 
@@ -718,6 +718,38 @@ fn wire__crate__api__fungi__init_app_impl(
         },
     )
 }
+fn wire__crate__api__fungi__init_mobile_device_name_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "init_mobile_device_name",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api__name = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok({
+                    crate::api::fungi::init_mobile_device_name(api__name);
+                })?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__fungi__mdns_get_local_devices_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -971,11 +1003,13 @@ fn wire__crate__api__fungi__start_fungi_daemon_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_fungi_dir = <Option<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
-                        let output_ok = crate::api::fungi::start_fungi_daemon().await?;
+                        let output_ok =
+                            crate::api::fungi::start_fungi_daemon(api_fungi_dir).await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -1410,16 +1444,16 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         20 => wire__crate__api__fungi__init_app_impl(port, ptr, rust_vec_len, data_len),
-        21 => {
+        22 => {
             wire__crate__api__fungi__mdns_get_local_devices_impl(port, ptr, rust_vec_len, data_len)
         }
-        27 => wire__crate__api__fungi__start_file_transfer_service_impl(
+        28 => wire__crate__api__fungi__start_file_transfer_service_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        28 => wire__crate__api__fungi__start_fungi_daemon_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__fungi__start_fungi_daemon_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1465,18 +1499,19 @@ fn pde_ffi_dispatcher_sync_impl(
         17 => wire__crate__api__fungi__get_tcp_tunneling_config_impl(ptr, rust_vec_len, data_len),
         18 => wire__crate__api__fungi__get_webdav_proxy_impl(ptr, rust_vec_len, data_len),
         19 => wire__crate__api__fungi__host_name_impl(ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__fungi__peer_id_impl(ptr, rust_vec_len, data_len),
-        23 => {
+        21 => wire__crate__api__fungi__init_mobile_device_name_impl(ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__fungi__peer_id_impl(ptr, rust_vec_len, data_len),
+        24 => {
             wire__crate__api__fungi__remove_file_transfer_client_impl(ptr, rust_vec_len, data_len)
         }
-        24 => {
+        25 => {
             wire__crate__api__fungi__remove_incoming_allowed_peer_impl(ptr, rust_vec_len, data_len)
         }
-        25 => wire__crate__api__fungi__remove_tcp_forwarding_rule_impl(ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__fungi__remove_tcp_listening_rule_impl(ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__fungi__stop_file_transfer_service_impl(ptr, rust_vec_len, data_len),
-        30 => wire__crate__api__fungi__update_ftp_proxy_impl(ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__fungi__update_webdav_proxy_impl(ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__fungi__remove_tcp_forwarding_rule_impl(ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__fungi__remove_tcp_listening_rule_impl(ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__fungi__stop_file_transfer_service_impl(ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__fungi__update_ftp_proxy_impl(ptr, rust_vec_len, data_len),
+        32 => wire__crate__api__fungi__update_webdav_proxy_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

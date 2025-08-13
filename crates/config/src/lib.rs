@@ -94,7 +94,7 @@ impl FungiConfig {
         self.custom_hostname
             .as_ref()
             .cloned()
-            .or(fungi_util::sysinfo::System::host_name())
+            .or(fungi_util::get_hostname())
     }
 
     pub fn set_custom_hostname(&self, hostname: Option<String>) -> Result<Self> {

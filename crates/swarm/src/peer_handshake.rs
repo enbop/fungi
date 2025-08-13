@@ -14,7 +14,8 @@ impl Default for PeerHandshakePayload {
 impl PeerHandshakePayload {
     pub fn new() -> Self {
         Self {
-            host_name: fungi_util::sysinfo::System::host_name(),
+            // TODO: use [FungiConfig::get_hostname]
+            host_name: fungi_util::get_hostname(),
         }
     }
 

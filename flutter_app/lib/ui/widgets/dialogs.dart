@@ -5,6 +5,20 @@ import 'package:get/get.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import '../widgets/device_selector_dialog.dart';
 
+PeerInfo emptyPeerInfo() {
+  return PeerInfo(
+    peerId: '',
+    alias: null,
+    hostname: null,
+    os: '',
+    publicIp: null,
+    privateIps: [],
+    createdAt: BigInt.zero,
+    lastConnected: BigInt.zero,
+    version: '',
+  );
+}
+
 void showAllowedPeersList() {
   final controller = Get.find<FungiController>();
   SmartDialog.show(
@@ -91,7 +105,7 @@ void showAllowedPeersList() {
 void showAddAllowedPeerDialog() {
   final textPeerIdController = TextEditingController();
   final textAliasController = TextEditingController();
-  final Rx<PeerInfo> selectedPeer = PeerInfo.empty().obs;
+  final Rx<PeerInfo> selectedPeer = emptyPeerInfo().obs;
   final errorMessage = RxString('');
   final controller = Get.find<FungiController>();
 
@@ -175,7 +189,7 @@ void showAddAllowedPeerDialog() {
 
               if (selectedPeer.value.peerId != textPeerIdController.text) {
                 // reset the selectedPeer
-                selectedPeer.value = PeerInfo.empty();
+                selectedPeer.value = emptyPeerInfo();
               }
 
               selectedPeer.value.peerId = textPeerIdController.text;
@@ -200,7 +214,7 @@ void showAddAllowedPeerDialog() {
 void showAddFileClientDialog() {
   final textPeerIdController = TextEditingController();
   final textAliasController = TextEditingController();
-  final Rx<PeerInfo> selectedPeer = PeerInfo.empty().obs;
+  final Rx<PeerInfo> selectedPeer = emptyPeerInfo().obs;
   final enabled = RxBool(true);
   final errorMessage = RxString('');
   final controller = Get.find<FungiController>();
@@ -301,7 +315,7 @@ void showAddFileClientDialog() {
               }
               if (selectedPeer.value.peerId != textPeerIdController.text) {
                 // reset the selectedPeer
-                selectedPeer.value = PeerInfo.empty();
+                selectedPeer.value = emptyPeerInfo();
               }
               selectedPeer.value.peerId = textPeerIdController.text;
               selectedPeer.value.alias = textAliasController.text.isEmpty
@@ -330,7 +344,7 @@ void showAddForwardingRuleDialog() {
   final localPortController = TextEditingController();
   final peerIdController = TextEditingController();
   final remotePortController = TextEditingController();
-  final Rx<PeerInfo> selectedPeer = PeerInfo.empty().obs;
+  final Rx<PeerInfo> selectedPeer = emptyPeerInfo().obs;
   final errorMessage = RxString('');
 
   final controller = Get.find<FungiController>();
@@ -449,7 +463,7 @@ void showAddForwardingRuleDialog() {
 
               if (selectedPeer.value.peerId != peerIdController.text) {
                 // reset the selectedPeer
-                selectedPeer.value = PeerInfo.empty();
+                selectedPeer.value = emptyPeerInfo();
               }
 
               selectedPeer.value.peerId = peerIdController.text;

@@ -5,6 +5,7 @@ import 'package:fungi_app/app/tray_manager.dart';
 import 'package:fungi_app/src/rust/frb_generated.dart';
 import 'package:fungi_app/ui/pages/theme/app_theme.dart';
 import 'package:fungi_app/ui/utils/macos_scoped_resource.dart';
+import 'package:fungi_app/ui/utils/mobile_info.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:window_manager/window_manager.dart';
@@ -16,6 +17,8 @@ void main() async {
 
   await RustLib.init();
   await GetStorage.init();
+
+  await initMobile();
 
   if (Platform.isMacOS) {
     lastFileAccessingSecurityScopedResource();

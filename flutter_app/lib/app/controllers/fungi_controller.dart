@@ -1,8 +1,12 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart' as fungi;
+import 'package:path_provider/path_provider.dart';
 
 enum ThemeOption { light, dark, system }
 
@@ -203,7 +207,13 @@ class FungiController extends GetxController {
 
   Future<void> initFungi() async {
     try {
+      if (Platform.isAndroid) {
+        final appDocumentsDir = await getApplicationDocumentsDirectory();
+        final fungiDir = p.join(appDocumentsDir.absolute.path, 'fungi');
+        await fungi.startFungiDaemon(fungiDir: fungiDir);
+      }
       await fungi.startFungiDaemon();
+
       isServiceRunning.value = true;
       debugPrint('Fungi Daemon started');
 

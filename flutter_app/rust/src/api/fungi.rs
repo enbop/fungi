@@ -47,8 +47,11 @@ pub struct TcpTunnelingConfig {
     pub listening_rules: Vec<ListeningRule>,
 }
 
+#[frb]
 pub struct PeerInfo {
+    #[frb(non_final)]
     pub peer_id: String,
+    #[frb(non_final)]
     pub alias: Option<String>,
     pub hostname: Option<String>,
     pub os: String,
@@ -152,13 +155,13 @@ fn parse_peer_id(peer_id: String) -> Result<PeerId> {
         .map_err(|_| anyhow::anyhow!("WrongPeerId"))
 }
 
-pub async fn start_fungi_daemon() -> Result<()> {
+pub async fn start_fungi_daemon(fungi_dir: Option<String>) -> Result<()> {
     if FUNGI_DAEMON.lock().is_some() {
         log::warn!("Fungi daemon is already running.");
         return Ok(());
     }
 
-    let args = fungi_daemon::DaemonArgs::default();
+    let args = fungi_daemon::DaemonArgs { fungi_dir };
     fungi_config::init(&args).unwrap();
 
     let daemon = fungi_daemon::FungiDaemon::start(args).await?;
@@ -173,7 +176,14 @@ pub async fn start_fungi_daemon() -> Result<()> {
 
 #[frb(sync)]
 pub fn host_name() -> Option<String> {
-    FungiDaemon::host_name()
+    let daemon = FUNGI_DAEMON.lock().clone()?;
+    daemon.host_name()
+}
+
+#[frb(sync)]
+pub fn init_mobile_device_name(_name: String) {
+    #[cfg(target_os = "android")]
+    FungiDaemon::init_mobile_device_name(_name);
 }
 
 #[frb(sync)]
