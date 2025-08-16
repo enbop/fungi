@@ -271,11 +271,14 @@ class FileServer extends GetView<FungiController> {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 SizedBox(width: 5),
-                SelectableText(
-                  controller.fileTransferServerState.value.rootDir != null
-                      ? controller.fileTransferServerState.value.rootDir!
-                      : "Not set",
-                  style: Theme.of(context).textTheme.bodyMedium,
+                Expanded(
+                  child: SelectableText(
+                    controller.fileTransferServerState.value.rootDir != null
+                        ? controller.fileTransferServerState.value.rootDir!
+                        : "Not set",
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: null,
+                  ),
                 ),
                 IconButton(
                   onPressed: () async {

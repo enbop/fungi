@@ -421,5 +421,12 @@ pub fn get_incoming_allowed_peers_with_info() -> Result<Vec<PeerWithInfo>> {
 pub fn init_app() {
     // Default utilities - feel free to customize
     // flutter_rust_bridge::setup_default_user_utils();
-    env_logger::init();
+
+    #[cfg(target_os = "android")]
+    android_logger::init_once(
+        android_logger::Config::default().with_max_level(log::LevelFilter::Info),
+    );
+
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    env_logger::try_init().ok();
 }

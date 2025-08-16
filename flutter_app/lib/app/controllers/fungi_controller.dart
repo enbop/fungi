@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:fungi_app/app/foreground_task.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart';
@@ -74,6 +76,24 @@ class FungiController extends GetxController {
     super.onInit();
     initFungi();
     loadThemeOption();
+
+    if (Platform.isAndroid) {
+      FlutterForegroundTask.addTaskDataCallback(onReceiveTaskData);
+      (() async {
+        // TODO
+        await Future.delayed(const Duration(seconds: 5));
+        requestForegroundPermissions();
+        initForegroundService();
+        startForegroundService();
+      })();
+    }
+  }
+
+  @override
+  void dispose() {
+    // Remove a callback to receive data sent from the TaskHandler.
+    FlutterForegroundTask.removeTaskDataCallback(onReceiveTaskData);
+    super.dispose();
   }
 
   void loadThemeOption() {
