@@ -19,7 +19,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         path: P,
     ) -> libunftp::storage::Result<Self::Metadata> {
         let path = path.as_ref().to_string_lossy().to_string();
-        self.metadata(path).await.map_err(map_error)
+        self.metadata(&path).await.map_err(map_error)
     }
 
     async fn list<P: AsRef<std::path::Path> + Send + Debug>(
@@ -30,7 +30,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         Vec<libunftp::storage::Fileinfo<std::path::PathBuf, Self::Metadata>>,
     > {
         let path = path.as_ref().to_string_lossy().to_string();
-        let file_infos = self.list(path).await.map_err(map_error)?;
+        let file_infos = self.list(&path).await.map_err(map_error)?;
 
         Ok(file_infos
             .into_iter()
@@ -48,7 +48,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         start_pos: u64,
     ) -> libunftp::storage::Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
         let path = path.as_ref().to_string_lossy().to_string();
-        let bytes = self.get(path, start_pos).await.map_err(map_error)?;
+        let bytes = self.get(&path, start_pos).await.map_err(map_error)?;
 
         let cursor = std::io::Cursor::new(bytes);
         Ok(Box::new(cursor) as Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>)
@@ -73,7 +73,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
                 libunftp::storage::Error::new(libunftp::storage::ErrorKind::LocalError, e)
             })?;
 
-        self.put(buffer, path, start_pos).await.map_err(map_error)
+        self.put(buffer, &path, start_pos).await.map_err(map_error)
     }
 
     async fn del<P: AsRef<std::path::Path> + Send + Debug>(
@@ -82,7 +82,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         path: P,
     ) -> libunftp::storage::Result<()> {
         let path = path.as_ref().to_string_lossy().to_string();
-        self.del(path).await.map_err(map_error)
+        self.del(&path).await.map_err(map_error)
     }
 
     async fn rmd<P: AsRef<std::path::Path> + Send + Debug>(
@@ -91,7 +91,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         path: P,
     ) -> libunftp::storage::Result<()> {
         let path = path.as_ref().to_string_lossy().to_string();
-        self.rmd(path).await.map_err(map_error)
+        self.rmd(&path).await.map_err(map_error)
     }
 
     async fn mkd<P: AsRef<std::path::Path> + Send + Debug>(
@@ -100,7 +100,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         path: P,
     ) -> libunftp::storage::Result<()> {
         let path = path.as_ref().to_string_lossy().to_string();
-        self.mkd(path).await.map_err(map_error)
+        self.mkd(&path).await.map_err(map_error)
     }
 
     async fn rename<P: AsRef<std::path::Path> + Send + Debug>(
@@ -111,7 +111,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
     ) -> libunftp::storage::Result<()> {
         let from = from.as_ref().to_string_lossy().to_string();
         let to = to.as_ref().to_string_lossy().to_string();
-        self.rename(from, to).await.map_err(map_error)
+        self.rename(&from, &to).await.map_err(map_error)
     }
 
     async fn cwd<P: AsRef<std::path::Path> + Send + Debug>(
@@ -120,7 +120,7 @@ impl<User: UserDetail> StorageBackend<User> for FileTransferClientsControl {
         path: P,
     ) -> libunftp::storage::Result<()> {
         let path = path.as_ref().to_string_lossy().to_string();
-        self.cwd(path).await.map_err(map_error)
+        self.cwd(&path).await.map_err(map_error)
     }
 }
 

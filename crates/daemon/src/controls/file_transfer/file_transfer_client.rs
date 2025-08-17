@@ -258,8 +258,8 @@ impl FileTransferClientsControl {
         Ok((client, components))
     }
 
-    pub async fn metadata(&self, path_os_string: String) -> fungi_fs::Result<fungi_fs::Metadata> {
-        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+    pub async fn metadata(&self, path_os_string: &str) -> fungi_fs::Result<fungi_fs::Metadata> {
+        let unix_path = convert_string_to_utf8_unix_path_buf(path_os_string).normalize();
         let components: Utf8UnixComponents<'_> = unix_path.components();
 
         if Self::is_root_path(components.clone()) {
@@ -298,8 +298,8 @@ impl FileTransferClientsControl {
             .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
-    pub async fn list(&self, path_os_string: String) -> fungi_fs::Result<Vec<fungi_fs::DirEntry>> {
-        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+    pub async fn list(&self, path_os_string: &str) -> fungi_fs::Result<Vec<fungi_fs::DirEntry>> {
+        let unix_path = convert_string_to_utf8_unix_path_buf(path_os_string).normalize();
         let components: Utf8UnixComponents<'_> = unix_path.components();
 
         if Self::is_root_path(components.clone()) {
@@ -348,7 +348,7 @@ impl FileTransferClientsControl {
             .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
-    pub async fn get(&self, path_os_string: String, start_pos: u64) -> fungi_fs::Result<Vec<u8>> {
+    pub async fn get(&self, path_os_string: &str, start_pos: u64) -> fungi_fs::Result<Vec<u8>> {
         let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
         let components: Utf8UnixComponents<'_> = unix_path.components();
 
@@ -380,10 +380,10 @@ impl FileTransferClientsControl {
     pub async fn put(
         &self,
         bytes: Vec<u8>,
-        path_os_string: String,
+        path_os_string: &str,
         start_pos: u64,
     ) -> fungi_fs::Result<u64> {
-        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+        let unix_path = convert_string_to_utf8_unix_path_buf(path_os_string).normalize();
         let components: Utf8UnixComponents<'_> = unix_path.components();
 
         if Self::is_root_path(components.clone()) {
@@ -412,8 +412,8 @@ impl FileTransferClientsControl {
             .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
-    pub async fn del(&self, path_os_string: String) -> fungi_fs::Result<()> {
-        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+    pub async fn del(&self, path_os_string: &str) -> fungi_fs::Result<()> {
+        let unix_path = convert_string_to_utf8_unix_path_buf(path_os_string).normalize();
         let components: Utf8UnixComponents<'_> = unix_path.components();
 
         if Self::is_root_path(components.clone()) {
@@ -454,8 +454,8 @@ impl FileTransferClientsControl {
             .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
-    pub async fn rmd(&self, path_os_string: String) -> fungi_fs::Result<()> {
-        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+    pub async fn rmd(&self, path_os_string: &str) -> fungi_fs::Result<()> {
+        let unix_path = convert_string_to_utf8_unix_path_buf(path_os_string).normalize();
         let components: Utf8UnixComponents<'_> = unix_path.components();
 
         if Self::is_root_path(components.clone()) {
@@ -496,8 +496,8 @@ impl FileTransferClientsControl {
             .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
-    pub async fn mkd(&self, path_os_string: String) -> fungi_fs::Result<()> {
-        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+    pub async fn mkd(&self, path_os_string: &str) -> fungi_fs::Result<()> {
+        let unix_path = convert_string_to_utf8_unix_path_buf(path_os_string).normalize();
         let components: Utf8UnixComponents<'_> = unix_path.components();
 
         if Self::is_root_path(components.clone()) {
@@ -524,15 +524,11 @@ impl FileTransferClientsControl {
             .map_err(|_| self.map_rpc_error(&client.peer_id))?
     }
 
-    pub async fn rename(
-        &self,
-        from_os_string: String,
-        to_os_string: String,
-    ) -> fungi_fs::Result<()> {
-        let from_path = convert_string_to_utf8_unix_path_buf(&from_os_string).normalize();
+    pub async fn rename(&self, from_os_string: &str, to_os_string: &str) -> fungi_fs::Result<()> {
+        let from_path = convert_string_to_utf8_unix_path_buf(from_os_string).normalize();
         let from_components: Utf8UnixComponents<'_> = from_path.components();
 
-        let to_path = convert_string_to_utf8_unix_path_buf(&to_os_string).normalize();
+        let to_path = convert_string_to_utf8_unix_path_buf(to_os_string).normalize();
         let to_components: Utf8UnixComponents<'_> = to_path.components();
 
         if Self::is_root_path(from_components.clone()) || Self::is_root_path(to_components.clone())
@@ -586,8 +582,8 @@ impl FileTransferClientsControl {
             .map_err(|_| self.map_rpc_error(&from_client.peer_id))?
     }
 
-    pub async fn cwd(&self, path_os_string: String) -> fungi_fs::Result<()> {
-        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+    pub async fn cwd(&self, path_os_string: &str) -> fungi_fs::Result<()> {
+        let unix_path = convert_string_to_utf8_unix_path_buf(path_os_string).normalize();
         let components: Utf8UnixComponents<'_> = unix_path.components();
 
         if Self::is_root_path(components.clone()) {
@@ -642,6 +638,7 @@ pub async fn start_webdav_proxy_service(
         .filesystem(Box::new(client))
         // TODO macos finder needs the locking support. https://sabre.io/dav/clients/finder/
         .locksystem(FakeLs::new())
+        .read_buf_size(40960)
         .build_handler();
 
     let addr = format!("{host}:{port}");
