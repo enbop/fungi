@@ -1,0 +1,113 @@
+name: "Android Release"
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  AWS_LC_SYS_PREBUILT_NASM: "1"
+  ANDROID_NDK_VERSION: "29.0.13846066"
+
+jobs:
+  android_release_build:
+    name: Android release build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.6'
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 33
+          build-tools: 34.0.0
+          cmake: 3.22.1
+          ndk: ${{ env.ANDROID_NDK_VERSION }}
+
+      - name: Setup Android environment variables
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${{ env.ANDROID_NDK_VERSION }}" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/${{ env.ANDROID_NDK_VERSION }}" >> $GITHUB_ENV
+          echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/${{ env.ANDROID_NDK_VERSION }}" >> $GITHUB_ENV
+
+      - name: Install Rust
+        shell: bash
+        run: |
+          rustup update stable --no-self-update && rustup default stable
+          rustup target add aarch64-linux-android
+
+      - name: Setup Rust for Android
+        run: |
+          echo "[target.aarch64-linux-android]" >> ~/.cargo/config.toml
+          echo "linker = \"$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang\"" >> ~/.cargo/config.toml
+          echo "ar = \"$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar\"" >> ~/.cargo/config.toml
+
+      - name: Flutter dependencies
+        run: flutter pub get
+        working-directory: ./flutter_app
+
+      - name: Build Android APK
+        working-directory: ./flutter_app
+        run: |
+          flutter build apk --release --target-platform android-arm64
+
+      - name: Build Android App Bundle (AAB)
+        working-directory: ./flutter_app
+        run: |
+          flutter build appbundle --release --target-platform android-arm64
+
+      - name: List build outputs
+        working-directory: ./flutter_app
+        run: |
+          echo "APK files:"
+          ls -la build/app/outputs/flutter-apk/
+          echo "AAB files:"
+          ls -la build/app/outputs/bundle/release/
+
+      - name: Archive Android APK
+        working-directory: ./flutter_app
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk ../fungi-app-android-arm64.apk
+
+      - name: Archive Android App Bundle
+        working-directory: ./flutter_app
+        run: |
+          cp build/app/outputs/bundle/release/app-release.aab ../fungi-app-android-arm64.aab
+
+      - name: Update nightly release
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit nightly --title "Nightly Build" --notes "Latest development build from commit ${{ github.sha }} ($(date))" || true
+
+      - name: Upload Android artifacts to release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RELEASE_TAG="nightly"
+          else
+            RELEASE_TAG="${{ github.ref_name }}"
+          fi
+          
+          echo "Uploading to release: $RELEASE_TAG"
+          
+          # Upload APK
+          gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-app-android-arm64.apk
+          
+          # Upload AAB
+          gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-app-android-arm64.aab
