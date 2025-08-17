@@ -44,6 +44,11 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
+        <!-- Foreground service notification icon -->
+        <meta-data
+            android:name="logo_transparent_white"
+            android:resource="@drawable/logo_transparent_white" />
+
         <!-- Warning: Do not change service name. -->
         <service 
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"

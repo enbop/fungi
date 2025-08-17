@@ -102,8 +102,8 @@ void initForegroundService() {
     ),
     foregroundTaskOptions: ForegroundTaskOptions(
       eventAction: ForegroundTaskEventAction.repeat(5000),
-      autoRunOnBoot: true,
-      autoRunOnMyPackageReplaced: true,
+      autoRunOnBoot: false,
+      autoRunOnMyPackageReplaced: false,
       allowWakeLock: true,
       allowWifiLock: true,
     ),
@@ -121,8 +121,9 @@ Future<ServiceRequestResult> startForegroundService() async {
       serviceId: 256,
       notificationTitle: 'Foreground Service is running',
       notificationText: 'Tap to return to the app',
-      // TODO change notificationIcon
-      notificationIcon: null,
+      notificationIcon: NotificationIcon(
+        metaDataName: 'logo_transparent_white',
+      ),
       notificationButtons: [
         const NotificationButton(id: 'btn_hello', text: 'hello'),
       ],
@@ -130,4 +131,8 @@ Future<ServiceRequestResult> startForegroundService() async {
       callback: startCallback,
     );
   }
+}
+
+Future<ServiceRequestResult> stopForegroundService() async {
+  return FlutterForegroundTask.stopService();
 }
