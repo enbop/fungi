@@ -6,6 +6,7 @@ import 'package:fungi_app/ui/pages/settings/settings.dart';
 import 'package:fungi_app/ui/widgets/text.dart';
 import 'package:get/get.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
+import 'dart:io';
 
 class LabeledText extends StatelessWidget {
   final String label;
@@ -60,69 +61,125 @@ class HomeHeader extends GetView<FungiController> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final statusBarHeight = MediaQuery.of(context).viewPadding.top;
 
     return Container(
       decoration: BoxDecoration(color: colorScheme.primaryContainer),
-      child: Obx(
-        () => Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 20),
-              child: Image.asset(
-                'assets/images/logo.png',
-                width: 50,
-                height: 50,
-                color: colorScheme.primary,
-              ),
-            ),
-            Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        children: [
+          SizedBox(height: statusBarHeight),
+          Obx(
+            () => Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                LabeledText(
-                  label: 'Hostname',
-                  labelStyle: TextStyle(
-                    fontSize: 12,
-                    color: colorScheme.surfaceTint,
-                    fontWeight: FontWeight.bold,
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 5,
+                    horizontal: 20,
                   ),
-                  value: hostName() ?? "Unknown",
-                  style: const TextStyle(fontSize: 12),
-                ),
-                LabeledText(
-                  label: 'Peer ID',
-                  labelStyle: TextStyle(
-                    fontSize: 12,
-                    color: colorScheme.surfaceTint,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  value: controller.peerId.value.substring(0, 5),
-                  valueWidget: TruncatedId(
-                    id: controller.peerId.value,
-                    style: const TextStyle(fontSize: 12),
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    width: 50,
+                    height: 50,
+                    color: colorScheme.primary,
                   ),
                 ),
-                LabeledText(
-                  label: 'Service state',
-                  labelStyle: TextStyle(
-                    fontSize: 12,
-                    color: colorScheme.surfaceTint,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  value: controller.isServiceRunning.value ? "ON" : "OFF",
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: controller.isServiceRunning.value
-                        ? Colors.green
-                        : Colors.red,
-                  ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    LabeledText(
+                      label: 'Hostname',
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.surfaceTint,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      value: hostName() ?? "Unknown",
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    LabeledText(
+                      label: 'Peer ID',
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.surfaceTint,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      value: controller.peerId.value.substring(0, 5),
+                      valueWidget: TruncatedId(
+                        id: controller.peerId.value,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    LabeledText(
+                      label: 'Service state',
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.surfaceTint,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      value: controller.isServiceRunning.value ? "ON" : "OFF",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: controller.isServiceRunning.value
+                            ? Colors.green
+                            : Colors.red,
+                      ),
+                    ),
+                    // Android background service toggle
+                    if (Platform.isAndroid) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 120,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Run in Background',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colorScheme.surfaceTint,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            ':  ',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colorScheme.surfaceTint,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(
+                            height: 18,
+                            child: FittedBox(
+                              fit: BoxFit.fill,
+                              child: Switch(
+                                value:
+                                    controller.isForegroundServiceRunning.value,
+                                onChanged: (value) async {
+                                  await controller.toggleForegroundService();
+                                },
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                padding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -143,16 +200,11 @@ class HomePage extends StatelessWidget {
             child: DefaultTabController(
               initialIndex: 0,
               length: 3,
-              child: Scaffold(
-                backgroundColor: Colors.transparent,
-                appBar: PreferredSize(
-                  preferredSize: const Size.fromHeight(
-                    kMinInteractiveDimension - 15,
-                  ),
-                  child: AppBar(
-                    backgroundColor: colorScheme.primaryContainer,
-                    automaticallyImplyLeading: false,
-                    bottom: TabBar(
+              child: Column(
+                children: [
+                  Container(
+                    color: colorScheme.primaryContainer,
+                    child: TabBar(
                       tabs: const <Widget>[
                         Tab(text: "File Transfer", height: 30),
                         Tab(text: "Data Tunnel", height: 30),
@@ -161,14 +213,16 @@ class HomePage extends StatelessWidget {
                       indicatorColor: colorScheme.primary,
                     ),
                   ),
-                ),
-                body: const TabBarView(
-                  children: <Widget>[
-                    SingleChildScrollView(child: FileTransferPage()),
-                    SingleChildScrollView(child: DataTunnelPage()),
-                    Settings(),
-                  ],
-                ),
+                  Expanded(
+                    child: const TabBarView(
+                      children: <Widget>[
+                        SingleChildScrollView(child: FileTransferPage()),
+                        SingleChildScrollView(child: DataTunnelPage()),
+                        Settings(),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

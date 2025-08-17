@@ -95,7 +95,8 @@ class CargoKitPlugin implements Plugin<Project> {
    private Plugin _findFlutterPlugin(Map projects) {
         for (project in projects) {
             for (plugin in project.value.getPlugins()) {
-                if (plugin.class.name == "FlutterPlugin") {
+                // https://github.com/irondash/cargokit/issues/93#issuecomment-2847494058
+                if (plugin.class.name == "com.flutter.gradle.FlutterPlugin") {
                     return plugin;
                 }
             }
@@ -132,12 +133,14 @@ class CargoKitPlugin implements Plugin<Project> {
             def jniLibs = project.android.sourceSets.maybeCreate(buildType).jniLibs;
             jniLibs.srcDir(new File(cargoOutputDir))
 
-            def platforms = plugin.getTargetPlatforms().collect()
+            // https://github.com/irondash/cargokit/issues/93#issuecomment-2847494058
+            def platforms = com.flutter.gradle.FlutterPluginUtils.getTargetPlatforms(project).collect()
 
             // Same thing addFlutterDependencies does in flutter.gradle
             if (buildType == "debug") {
-                platforms.add("android-x86")
-                platforms.add("android-x64")
+                // skip emulator platforms, cannot build aws-lc-sys for them
+                // platforms.add("android-x86")
+                // platforms.add("android-x64")
             }
 
             // The task name depends on plugin properties, which are not available

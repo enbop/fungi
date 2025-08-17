@@ -121,6 +121,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "android_logger"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbb4e440d04be07da1f1bf44fb4495ebd58669372fe0cffa6e48595ac5bd88a3"
+dependencies = [
+ "android_log-sys",
+ "env_filter",
+ "log",
+]
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1281,7 +1292,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff1d2ad18166cead8c1b92b1c00e64aacc32e6ebd1ac95f77089c276c9c6bd8c"
 dependencies = [
  "allo-isolate",
- "android_logger",
+ "android_logger 0.13.3",
  "anyhow",
  "build-target",
  "bytemuck",
@@ -3880,6 +3891,7 @@ dependencies = [
 name = "rust_lib_fungi_app"
 version = "0.1.0"
 dependencies = [
+ "android_logger 0.15.1",
  "anyhow",
  "env_logger 0.11.8",
  "flutter_rust_bridge",

@@ -8,8 +8,15 @@ use libp2p::PeerId;
 use crate::FungiDaemon;
 
 impl FungiDaemon {
-    pub fn host_name() -> Option<String> {
-        fungi_util::sysinfo::System::host_name()
+    pub fn host_name(&self) -> Option<String> {
+        self.config().lock().get_hostname()
+    }
+
+    #[cfg(target_os = "android")]
+    pub fn init_mobile_device_name(name: String) {
+        {
+            fungi_util::init_mobile_device_name(name);
+        }
     }
 
     pub fn peer_id(&self) -> String {

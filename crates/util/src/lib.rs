@@ -2,7 +2,12 @@ pub mod ipc;
 pub mod keypair;
 pub mod protocols;
 
-pub use sysinfo;
+#[cfg(target_os = "android")]
+mod mobile_device_info;
+#[cfg(target_os = "android")]
+pub use mobile_device_info::init_mobile_device_name;
+
+use sysinfo;
 
 pub fn get_local_ip() -> Option<String> {
     if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
@@ -13,4 +18,13 @@ pub fn get_local_ip() -> Option<String> {
         }
     }
     None
+}
+
+pub fn get_hostname() -> Option<String> {
+    #[cfg(target_os = "android")]
+    {
+        return mobile_device_info::get_mobile_device_name();
+    }
+    #[cfg(not(target_os = "android"))]
+    sysinfo::System::host_name()
 }

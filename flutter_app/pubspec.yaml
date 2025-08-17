@@ -44,6 +44,11 @@ dependencies:
   window_manager: ^0.4.3
   flutter_smart_dialog: ^4.9.8+9
   tray_manager: ^0.5.0
+  macos_secure_bookmarks: ^0.2.1
+  device_info_plus: ^11.5.0
+  path_provider: ^2.1.5
+  path: ^1.9.1
+  flutter_foreground_task: ^9.1.0
 
 dev_dependencies:
   flutter_test:

@@ -9,10 +9,13 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These functions are ignored because they are not marked as `pub`: `parse_peer_id`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`, `from`, `from`, `from`, `try_into`
 
-Future<void> startFungiDaemon() =>
-    RustLib.instance.api.crateApiFungiStartFungiDaemon();
+Future<void> startFungiDaemon({String? fungiDir}) =>
+    RustLib.instance.api.crateApiFungiStartFungiDaemon(fungiDir: fungiDir);
 
 String? hostName() => RustLib.instance.api.crateApiFungiHostName();
+
+void initMobileDeviceName({required String name}) =>
+    RustLib.instance.api.crateApiFungiInitMobileDeviceName(name: name);
 
 String peerId() => RustLib.instance.api.crateApiFungiPeerId();
 
@@ -247,13 +250,13 @@ class ListeningRule {
 class PeerInfo {
   String peerId;
   String? alias;
-  String? hostname;
-  String os;
-  String? publicIp;
-  List<String> privateIps;
-  BigInt createdAt;
-  BigInt lastConnected;
-  String version;
+  final String? hostname;
+  final String os;
+  final String? publicIp;
+  final List<String> privateIps;
+  final BigInt createdAt;
+  final BigInt lastConnected;
+  final String version;
 
   PeerInfo({
     required this.peerId,
@@ -266,17 +269,6 @@ class PeerInfo {
     required this.lastConnected,
     required this.version,
   });
-
-  PeerInfo.empty()
-    : peerId = '',
-      alias = null,
-      hostname = null,
-      os = '',
-      publicIp = null,
-      privateIps = const [],
-      createdAt = BigInt.zero,
-      lastConnected = BigInt.zero,
-      version = '';
 
   @override
   int get hashCode =>

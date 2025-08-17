@@ -1,8 +1,14 @@
+import 'dart:io';
+
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:fungi_app/app/foreground_task.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart' as fungi;
+import 'package:path_provider/path_provider.dart';
 
 enum ThemeOption { light, dark, system }
 
@@ -42,9 +48,11 @@ class FungiController extends GetxController {
   final isServiceRunning = false.obs;
   final peerId = ''.obs;
   final configFilePath = ''.obs;
+  final isForegroundServiceRunning = false.obs;
 
   final _storage = GetStorage();
   final _themeKey = 'theme_option';
+  final _foregroundServiceKey = 'foreground_service_enabled';
 
   final currentTheme = ThemeOption.system.obs;
   final preventClose = false.obs;
@@ -70,6 +78,78 @@ class FungiController extends GetxController {
     super.onInit();
     initFungi();
     loadThemeOption();
+
+    if (Platform.isAndroid) {
+      FlutterForegroundTask.addTaskDataCallback(onReceiveTaskData);
+      // Check current foreground service status
+      checkForegroundServiceStatus();
+      // Load and restore previous foreground service state
+      loadForegroundServiceState();
+    }
+  }
+
+  @override
+  void dispose() {
+    // Remove a callback to receive data sent from the TaskHandler.
+    FlutterForegroundTask.removeTaskDataCallback(onReceiveTaskData);
+    super.dispose();
+  }
+
+  // Foreground service control methods
+  Future<void> toggleForegroundService() async {
+    if (isForegroundServiceRunning.value) {
+      await stopForegroundServiceController();
+    } else {
+      await startForegroundServiceController();
+    }
+  }
+
+  Future<void> startForegroundServiceController() async {
+    try {
+      await requestForegroundPermissions();
+      initForegroundService();
+      await startForegroundService();
+      isForegroundServiceRunning.value = true;
+      saveForegroundServiceState(true);
+      debugPrint('Foreground service started successfully');
+    } catch (e) {
+      debugPrint('Failed to start foreground service: $e');
+    }
+  }
+
+  Future<void> stopForegroundServiceController() async {
+    try {
+      await stopForegroundService();
+      isForegroundServiceRunning.value = false;
+      saveForegroundServiceState(false);
+      debugPrint('Foreground service stopped successfully');
+    } catch (e) {
+      debugPrint('Failed to stop foreground service: $e');
+    }
+  }
+
+  Future<void> checkForegroundServiceStatus() async {
+    if (Platform.isAndroid) {
+      final isRunning = await FlutterForegroundTask.isRunningService;
+      isForegroundServiceRunning.value = isRunning;
+    }
+  }
+
+  void saveForegroundServiceState(bool enabled) {
+    _storage.write(_foregroundServiceKey, enabled);
+  }
+
+  void loadForegroundServiceState() {
+    final savedState = _storage.read(_foregroundServiceKey);
+    if (savedState != null && savedState is bool) {
+      // Only restore if the service was enabled before
+      if (savedState) {
+        (() async {
+          await Future.delayed(const Duration(seconds: 1));
+          await startForegroundServiceController();
+        })();
+      }
+    }
   }
 
   void loadThemeOption() {
@@ -203,7 +283,13 @@ class FungiController extends GetxController {
 
   Future<void> initFungi() async {
     try {
+      if (Platform.isAndroid) {
+        final appDocumentsDir = await getApplicationDocumentsDirectory();
+        final fungiDir = p.join(appDocumentsDir.absolute.path, 'fungi');
+        await fungi.startFungiDaemon(fungiDir: fungiDir);
+      }
       await fungi.startFungiDaemon();
+
       isServiceRunning.value = true;
       debugPrint('Fungi Daemon started');
 
