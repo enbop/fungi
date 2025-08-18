@@ -21,7 +21,7 @@ async fn create_daemons() -> (FungiDaemon, FungiDaemon) {
         .push(client_peer_id);
     server_config.network.listen_tcp_port = SERVER_TCP_PORT;
     server_config.file_transfer.server.enabled = true;
-    server_config.file_transfer.server.shared_root_dir = PathBuf::from("/tmp");
+    server_config.file_transfer.server.shared_root_dir = PathBuf::from(".");
 
     server_config.file_transfer.proxy_ftp.enabled = false;
     server_config.file_transfer.proxy_webdav.enabled = false;
@@ -60,11 +60,11 @@ async fn create_daemons() -> (FungiDaemon, FungiDaemon) {
     let server_peer_id = server_daemon.swarm_control().local_peer_id();
     let server_addr = format!("/ip4/127.0.0.1/tcp/{SERVER_TCP_PORT}/p2p/{server_peer_id}");
 
-    server_daemon
-        .swarm_control()
-        .listen_relay(get_default_relay_addr())
-        .await
-        .unwrap();
+    // server_daemon
+    //     .swarm_control()
+    //     .listen_relay(get_default_relay_addr())
+    //     .await
+    //     .unwrap();
 
     client_daemon
         .swarm_control()

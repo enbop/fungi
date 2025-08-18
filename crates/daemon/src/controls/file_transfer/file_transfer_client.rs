@@ -131,11 +131,12 @@ impl FileTransferClientsControl {
     async fn connect_client(&self, peer_id: PeerId) -> anyhow::Result<FileTransferRpcClient> {
         self.swarm_control.connect(peer_id).await?;
         let mut stream_control = self.swarm_control.stream_control().clone();
-        let Ok(stream) = stream_control
+        let stream = match stream_control
             .open_stream(peer_id, FUNGI_FILE_TRANSFER_PROTOCOL)
             .await
-        else {
-            bail!("Failed to open stream to peer {}", peer_id);
+        {
+            Ok(stream) => stream,
+            Err(e) => bail!("Failed to open stream to peer {}: {}", peer_id, e),
         };
         let client = connect_file_transfer_rpc(stream);
 
