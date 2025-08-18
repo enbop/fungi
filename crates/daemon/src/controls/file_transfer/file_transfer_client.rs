@@ -17,7 +17,7 @@ use hyper::{server::conn::http1, service::service_fn};
 use hyper_util::rt::TokioIo;
 use libp2p::{PeerId, Stream};
 use parking_lot::Mutex;
-use tarpc::{context, serde_transport, tokio_serde::formats::Bincode};
+use tarpc::{client::RpcError, context, serde_transport, tokio_serde::formats::Bincode};
 use tokio::net::TcpListener;
 use tokio_util::{codec::LengthDelimitedCodec, compat::FuturesAsyncReadCompatExt as _};
 use typed_path::{
@@ -220,15 +220,20 @@ impl FileTransferClientsControl {
         first.is_root() || first.is_current() || first.is_empty()
     }
 
-    fn map_rpc_error(&self, peer_id: &PeerId) -> fungi_fs::FileSystemError {
-        log::warn!("Client {peer_id} disconnected");
-        let mut lock = self.clients.lock();
-        for (_key, (id, state)) in lock.iter_mut() {
-            if id == peer_id {
-                *state = FileClientState::Disconnected;
+    fn map_rpc_error(&self, rpc_error: RpcError, peer_id: &PeerId) -> fungi_fs::FileSystemError {
+        match rpc_error {
+            RpcError::Shutdown => {
+                log::warn!("Client {peer_id} disconnected");
+                let mut lock = self.clients.lock();
+                for (_key, (id, state)) in lock.iter_mut() {
+                    if id == peer_id {
+                        *state = FileClientState::Disconnected;
+                    }
+                }
+                fungi_fs::FileSystemError::ConnectionBroken
             }
+            e => fungi_fs::FileSystemError::Other { message: e.to_string() },
         }
-        fungi_fs::FileSystemError::ConnectionBroken
     }
 
     async fn extract_client_and_path<'a>(
@@ -296,7 +301,7 @@ impl FileTransferClientsControl {
                 remaining_components.as_str().to_string(),
             )
             .await
-            .map_err(|_| self.map_rpc_error(&client.peer_id))?
+            .map_err(|e| self.map_rpc_error(e, &client.peer_id))?
     }
 
     pub async fn list(&self, path_os_string: &str) -> fungi_fs::Result<Vec<fungi_fs::DirEntry>> {
@@ -346,7 +351,7 @@ impl FileTransferClientsControl {
                 remaining_components.as_str().to_string(),
             )
             .await
-            .map_err(|_| self.map_rpc_error(&client.peer_id))?
+            .map_err(|e| self.map_rpc_error(e, &client.peer_id))?
     }
 
     pub async fn get(&self, path_os_string: &str, start_pos: u64) -> fungi_fs::Result<Vec<u8>> {
@@ -375,7 +380,7 @@ impl FileTransferClientsControl {
                 start_pos,
             )
             .await
-            .map_err(|_| self.map_rpc_error(&client.peer_id))?
+            .map_err(|e| self.map_rpc_error(e, &client.peer_id))?
     }
 
     pub async fn put(
@@ -410,7 +415,7 @@ impl FileTransferClientsControl {
                 start_pos,
             )
             .await
-            .map_err(|_| self.map_rpc_error(&client.peer_id))?
+            .map_err(|e| self.map_rpc_error(e, &client.peer_id))?
     }
 
     pub async fn del(&self, path_os_string: &str) -> fungi_fs::Result<()> {
@@ -452,7 +457,7 @@ impl FileTransferClientsControl {
         client
             .del(context::current(), path_str)
             .await
-            .map_err(|_| self.map_rpc_error(&client.peer_id))?
+            .map_err(|e| self.map_rpc_error(e, &client.peer_id))?
     }
 
     pub async fn rmd(&self, path_os_string: &str) -> fungi_fs::Result<()> {
@@ -494,7 +499,7 @@ impl FileTransferClientsControl {
         client
             .rmd(context::current(), path_str)
             .await
-            .map_err(|_| self.map_rpc_error(&client.peer_id))?
+            .map_err(|e| self.map_rpc_error(e, &client.peer_id))?
     }
 
     pub async fn mkd(&self, path_os_string: &str) -> fungi_fs::Result<()> {
@@ -522,7 +527,7 @@ impl FileTransferClientsControl {
                 remaining_components.as_str().to_string(),
             )
             .await
-            .map_err(|_| self.map_rpc_error(&client.peer_id))?
+            .map_err(|e| self.map_rpc_error(e, &client.peer_id))?
     }
 
     pub async fn rename(&self, from_os_string: &str, to_os_string: &str) -> fungi_fs::Result<()> {
@@ -580,7 +585,7 @@ impl FileTransferClientsControl {
                 to_remaining_components.as_str().to_string(),
             )
             .await
-            .map_err(|_| self.map_rpc_error(&from_client.peer_id))?
+            .map_err(|e| self.map_rpc_error(e, &from_client.peer_id))?
     }
 
     pub async fn cwd(&self, path_os_string: &str) -> fungi_fs::Result<()> {
@@ -606,7 +611,7 @@ impl FileTransferClientsControl {
                 remaining_components.as_str().to_string(),
             )
             .await
-            .map_err(|_| self.map_rpc_error(&client.peer_id))?
+            .map_err(|e| self.map_rpc_error(e, &client.peer_id))?
     }
 }
 
@@ -639,7 +644,7 @@ pub async fn start_webdav_proxy_service(
         .filesystem(Box::new(client))
         // TODO macos finder needs the locking support. https://sabre.io/dav/clients/finder/
         .locksystem(FakeLs::new())
-        // .read_buf_size(40960)
+        .read_buf_size(8192)
         .build_handler();
 
     let addr = format!("{host}:{port}");
