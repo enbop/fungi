@@ -44,7 +44,6 @@ struct DavFileImpl {
     path_os_string: String,
     client: ConnectedClient,
     position: u64,
-    data: Option<Vec<u8>>,
     options: OpenOptions,
 }
 
@@ -133,38 +132,20 @@ impl DavFile for DavFileImpl {
             self.position
         );
         async move {
-            if self.data.is_none() {
-                let data = self
-                    .client
-                    .get(
-                        Context::current(),
-                        self.path_os_string.clone(),
-                        self.position,
-                    )
-                    .await
-                    .map_err(|_rpc_error| FsError::GeneralFailure)?
-                    .map_err(|e| map_error(e, "read_bytes", &self.path_os_string))?;
-                self.data = Some(data);
-            }
+            let data = self
+                .client
+                .get_chunk(
+                    Context::current(),
+                    self.path_os_string.clone(),
+                    self.position,
+                    count as u64,
+                )
+                .await
+                .map_err(|_rpc_error| FsError::GeneralFailure)?
+                .map_err(|e| map_error(e, "read_bytes", &self.path_os_string))?;
 
-            let data = self.data.as_ref().unwrap();
-            let available = data.len();
-
-            if available == 0 {
-                return Ok(Bytes::new());
-            }
-
-            let to_read = std::cmp::min(count, available);
-            let bytes = Bytes::copy_from_slice(&data[..to_read]);
-
-            self.position += to_read as u64;
-            if to_read < available {
-                self.data = Some(data[to_read..].to_vec());
-            } else {
-                self.data = None;
-            }
-
-            Ok(bytes)
+            self.position += data.len() as u64;
+            Ok(Bytes::from(data))
         }
         .boxed()
     }
@@ -179,7 +160,6 @@ impl DavFile for DavFileImpl {
             match pos {
                 SeekFrom::Start(offset) => {
                     self.position = offset;
-                    self.data = None;
                 }
                 SeekFrom::Current(offset) => {
                     if offset >= 0 {
@@ -192,7 +172,6 @@ impl DavFile for DavFileImpl {
                             self.position = 0;
                         }
                     }
-                    self.data = None;
                 }
                 SeekFrom::End(_) => {
                     let meta = self
@@ -214,7 +193,6 @@ impl DavFile for DavFileImpl {
                             }
                         }
                     }
-                    self.data = None;
                 }
             }
             Ok(self.position)
@@ -315,7 +293,6 @@ impl DavFileSystem for FileTransferClientsControl {
                 path_os_string: real_path_os_string,
                 client,
                 position: 0,
-                data: None,
                 options,
             };
 

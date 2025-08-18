@@ -47,6 +47,10 @@ impl super::FileTransferRpc for FileTransferRpcService {
         }
     }
 
+    async fn get_chunk(self, _context: Context, path: String, start_pos: u64, length: u64) -> Result<Vec<u8>> {
+        self.fs.read_chunk(path, start_pos, length).await
+    }
+
     async fn put(
         self,
         _context: Context,

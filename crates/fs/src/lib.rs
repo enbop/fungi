@@ -597,6 +597,34 @@ impl FileSystem {
         }
     }
 
+    /// Read a specific chunk of bytes from a file starting at a position
+    pub async fn read_chunk<P: AsRef<Path>>(
+        &self,
+        path: P,
+        start_pos: u64,
+        length: u64,
+    ) -> Result<Vec<u8>> {
+        let options = OpenOptions::new().read(true);
+        let mut file = self.open(path, &options).await?;
+
+        file.seek(SeekFrom::Start(start_pos))
+            .await
+            .map_err(|e| FileSystemError::Io {
+                message: format!("Failed to seek: {e}"),
+            })?;
+
+        let mut buffer = vec![0u8; length as usize];
+        let bytes_read = file.read(&mut buffer)
+            .await
+            .map_err(|e| FileSystemError::Io {
+                message: format!("Failed to read: {e}"),
+            })?;
+
+        // Resize buffer to actual bytes read
+        buffer.truncate(bytes_read);
+        Ok(buffer)
+    }
+
     /// Write data to file at a specific position
     pub async fn write_at_position<P: AsRef<Path>, R>(
         &self,

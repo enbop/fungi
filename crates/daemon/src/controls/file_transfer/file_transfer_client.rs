@@ -383,6 +383,36 @@ impl FileTransferClientsControl {
             .map_err(|e| self.map_rpc_error(e, &client.peer_id))?
     }
 
+    pub async fn get_chunk(&self, path_os_string: &str, start_pos: u64, length: u64) -> fungi_fs::Result<Vec<u8>> {
+        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+        let components: Utf8UnixComponents<'_> = unix_path.components();
+
+        if Self::is_root_path(components.clone()) {
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot read from root directory".to_string(),
+            });
+        }
+
+        let (client, remaining_path) = match self.extract_client_and_path(components).await {
+            Ok(result) => result,
+            Err(e) => {
+                return Err(fungi_fs::FileSystemError::Other {
+                    message: e.to_string(),
+                });
+            }
+        };
+
+        client
+            .get_chunk(
+                context::current(),
+                remaining_path.as_str().to_string(),
+                start_pos,
+                length,
+            )
+            .await
+            .map_err(|e| self.map_rpc_error(e, &client.peer_id))?
+    }
+
     pub async fn put(
         &self,
         bytes: Vec<u8>,
@@ -642,9 +672,7 @@ pub async fn start_webdav_proxy_service(
 ) {
     let dav_server = DavHandler::builder()
         .filesystem(Box::new(client))
-        // TODO macos finder needs the locking support. https://sabre.io/dav/clients/finder/
         .locksystem(FakeLs::new())
-        .read_buf_size(8192)
         .build_handler();
 
     let addr = format!("{host}:{port}");
