@@ -254,13 +254,6 @@ impl FileTransferClientsControl {
                 .ok_or_else(|| anyhow::anyhow!("No client specified in path"))?;
         }
         let client = self.get_client(client_name.as_str()).await?;
-
-        log::debug!(
-            "Extracted client: {} and remaining path: {}",
-            client_name,
-            components.as_str()
-        );
-
         Ok((client, components))
     }
 
@@ -349,35 +342,6 @@ impl FileTransferClientsControl {
             .list(
                 context::current(),
                 remaining_components.as_str().to_string(),
-            )
-            .await
-            .map_err(|e| self.map_rpc_error(e, &client.peer_id))?
-    }
-
-    pub async fn get(&self, path_os_string: &str, start_pos: u64) -> fungi_fs::Result<Vec<u8>> {
-        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
-        let components: Utf8UnixComponents<'_> = unix_path.components();
-
-        if Self::is_root_path(components.clone()) {
-            return Err(fungi_fs::FileSystemError::Other {
-                message: "Cannot read from root directory".to_string(),
-            });
-        }
-
-        let (client, remaining_path) = match self.extract_client_and_path(components).await {
-            Ok(result) => result,
-            Err(e) => {
-                return Err(fungi_fs::FileSystemError::Other {
-                    message: e.to_string(),
-                });
-            }
-        };
-
-        client
-            .get(
-                context::current(),
-                remaining_path.as_str().to_string(),
-                start_pos,
             )
             .await
             .map_err(|e| self.map_rpc_error(e, &client.peer_id))?

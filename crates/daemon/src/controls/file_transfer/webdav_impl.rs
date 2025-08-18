@@ -377,13 +377,26 @@ impl DavFileSystem for FileTransferClientsControl {
             to_os_string
         );
         async move {
-            let data = client
-                .get(&from_os_string, 0)
-                .await
-                .map_err(|e| map_error(e, "copy (read)", &from_os_string))?;
+            // Read entire file for copy operation using chunked reading
+            let mut all_data = Vec::new();
+            let mut current_pos = 0u64;
+            const CHUNK_SIZE: u64 = 64 * 1024; // 64KB chunks
+            
+            loop {
+                let chunk = client
+                    .get_chunk(&from_os_string, current_pos, CHUNK_SIZE)
+                    .await
+                    .map_err(|e| map_error(e, "copy (read chunk)", &from_os_string))?;
+                    
+                if chunk.is_empty() {
+                    break;
+                }
+                current_pos += chunk.len() as u64;
+                all_data.extend(chunk);
+            }
 
             client
-                .put(data, &to_os_string, 0)
+                .put(all_data, &to_os_string, 0)
                 .await
                 .map_err(|e| map_error(e, "copy (write)", &to_os_string))?;
 

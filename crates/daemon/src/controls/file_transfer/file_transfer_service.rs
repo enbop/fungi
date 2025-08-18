@@ -39,14 +39,6 @@ impl super::FileTransferRpc for FileTransferRpcService {
         self.fs.list_dir(path).await
     }
 
-    async fn get(self, _context: Context, path: String, start_pos: u64) -> Result<Vec<u8>> {
-        if start_pos == 0 {
-            self.fs.read_to_vec(path).await
-        } else {
-            self.fs.read_from_position(path, start_pos).await
-        }
-    }
-
     async fn get_chunk(self, _context: Context, path: String, start_pos: u64, length: u64) -> Result<Vec<u8>> {
         self.fs.read_chunk(path, start_pos, length).await
     }

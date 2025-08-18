@@ -15,8 +15,6 @@ pub trait FileTransferRpc {
 
     async fn list(unix_path: String) -> Result<Vec<DirEntry>>;
 
-    async fn get(unix_path: String, start_pos: u64) -> Result<Vec<u8>>;
-
     async fn get_chunk(unix_path: String, start_pos: u64, length: u64) -> Result<Vec<u8>>;
 
     async fn put(bytes: Vec<u8>, unix_path: String, start_pos: u64) -> Result<u64>;
