@@ -1,6 +1,5 @@
 use fungi_config::FungiConfig;
 use fungi_daemon::FungiDaemon;
-use fungi_swarm::get_default_relay_addr;
 use libp2p::identity::Keypair;
 use tempfile::TempDir;
 
