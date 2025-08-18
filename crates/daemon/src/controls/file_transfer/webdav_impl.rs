@@ -10,6 +10,12 @@ use dav_server::{
 use futures::{FutureExt, Stream, StreamExt, future, stream};
 use hyper::StatusCode;
 use libp2p::bytes::Bytes;
+use tarpc::context::Context;
+use typed_path::{Utf8Component, Utf8Components, Utf8UnixComponents};
+
+use crate::controls::file_transfer::file_transfer_client::{
+    ConnectedClient, convert_string_to_utf8_unix_path_buf,
+};
 
 use super::FileTransferClientsControl;
 
@@ -34,8 +40,9 @@ impl DavMetaData for DavMetaDataImpl {
 
 #[derive(Debug)]
 struct DavFileImpl {
+    // real path without client prefix
     path_os_string: String,
-    clients_ctrl: FileTransferClientsControl,
+    client: ConnectedClient,
     position: u64,
     data: Option<Vec<u8>>,
     options: OpenOptions,
@@ -49,9 +56,10 @@ impl DavFile for DavFileImpl {
         );
         async move {
             let meta = self
-                .clients_ctrl
-                .metadata(&self.path_os_string)
+                .client
+                .metadata(Context::current(), self.path_os_string.clone())
                 .await
+                .map_err(|_rpc_error| FsError::GeneralFailure)?
                 .map_err(|e| map_error(e, "metadata", &self.path_os_string))?;
             Ok(Box::new(DavMetaDataImpl(meta)) as Box<dyn DavMetaData>)
         }
@@ -68,15 +76,16 @@ impl DavFile for DavFileImpl {
             self.position
         );
         async move {
-            // If this is the first write and we have create permission, ensure file exists
-            if self.position == 0 && self.options.create {
-                log::debug!("First write to file, ensuring it exists");
-            }
-
             let _written = self
-                .clients_ctrl
-                .put(bytes, &self.path_os_string, self.position)
+                .client
+                .put(
+                    Context::current(),
+                    bytes,
+                    self.path_os_string.clone(),
+                    self.position,
+                )
                 .await
+                .map_err(|_rpc_error| FsError::GeneralFailure)?
                 .map_err(|e| map_error(e, "write_buf", &self.path_os_string))?;
 
             self.position += bytes_len as u64;
@@ -100,9 +109,15 @@ impl DavFile for DavFileImpl {
             }
 
             let _written = self
-                .clients_ctrl
-                .put(bytes, &self.path_os_string, self.position)
+                .client
+                .put(
+                    Context::current(),
+                    bytes,
+                    self.path_os_string.clone(),
+                    self.position,
+                )
                 .await
+                .map_err(|_rpc_error| FsError::GeneralFailure)?
                 .map_err(|e| map_error(e, "write_bytes", &self.path_os_string))?;
             self.position += buf.len() as u64;
             Ok(())
@@ -120,9 +135,14 @@ impl DavFile for DavFileImpl {
         async move {
             if self.data.is_none() {
                 let data = self
-                    .clients_ctrl
-                    .get(&self.path_os_string, self.position)
+                    .client
+                    .get(
+                        Context::current(),
+                        self.path_os_string.clone(),
+                        self.position,
+                    )
                     .await
+                    .map_err(|_rpc_error| FsError::GeneralFailure)?
                     .map_err(|e| map_error(e, "read_bytes", &self.path_os_string))?;
                 self.data = Some(data);
             }
@@ -176,9 +196,10 @@ impl DavFile for DavFileImpl {
                 }
                 SeekFrom::End(_) => {
                     let meta = self
-                        .clients_ctrl
-                        .metadata(&self.path_os_string)
+                        .client
+                        .metadata(Context::current(), self.path_os_string.clone())
                         .await
+                        .map_err(|_rpc_error| FsError::GeneralFailure)?
                         .map_err(|e| map_error(e, "seek", &self.path_os_string))?;
 
                     if let SeekFrom::End(offset) = pos {
@@ -242,65 +263,57 @@ impl DavFileSystem for FileTransferClientsControl {
             options
         );
         async move {
-            // Check if file should exist for read-only operations
-            if options.read && !options.write && !options.create {
-                let _meta = clients_ctrl
-                    .metadata(&path_os_string)
-                    .await
-                    .map_err(|e| map_error(e, "open", &path_os_string))?;
+            let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+            let mut components: Utf8UnixComponents<'_> = unix_path.components();
+            let mut client_name = components.next().ok_or_else(|| FsError::GeneralFailure)?;
+            // remove the first component if it is root or current
+            // "/Test" to "Test"
+            if client_name.is_root() || client_name.is_current() {
+                client_name = components.next().ok_or_else(|| FsError::GeneralFailure)?;
             }
+
+            let client = clients_ctrl
+                .get_client(&client_name.to_string())
+                .await
+                .map_err(|e| {
+                    log::error!("Failed to get file transfer client: {}", e);
+                    FsError::GeneralFailure
+                })?;
+            let real_path_os_string = components.as_str().to_string();
+
+            let meta_res = client
+                .metadata(Context::current(), real_path_os_string.clone())
+                .await
+                .map_err(|_rpc_error| FsError::GeneralFailure)?;
 
             // For create_new, file must not exist
             if options.create_new {
-                match clients_ctrl.metadata(&path_os_string).await {
-                    Ok(_) => return Err(FsError::Exists),
-                    Err(fungi_fs::FileSystemError::NotFound { .. }) => {
-                        // File doesn't exist, which is what we want
-                    }
-                    Err(e) => return Err(map_error(e, "open", &path_os_string)),
+                if meta_res.is_ok() {
+                    return Err(FsError::Exists);
                 }
             }
 
             // For write operations, we might need to handle file creation
             if options.write && options.create {
-                match clients_ctrl.metadata(&path_os_string).await {
-                    Ok(_) => {
-                        log::debug!("File {} exists, will write to it", path_os_string);
-                        // If truncate is requested, truncate the file
-                        if options.truncate {
-                            log::debug!("Truncating existing file: {}", path_os_string);
-                            let empty_data = Vec::new();
-                            clients_ctrl
-                                .put(empty_data, &path_os_string, 0)
-                                .await
-                                .map_err(|e| map_error(e, "truncate_file", &path_os_string))?;
-                        }
-                    }
-                    Err(fungi_fs::FileSystemError::NotFound { .. }) => {
-                        log::debug!(
-                            "File {} doesn't exist, will create on first write",
-                            path_os_string
-                        );
-                        // For WebDAV, we often need to create the file immediately
-                        // especially if it's a PUT request
-                        if options.truncate || !options.append {
-                            log::debug!("Creating empty file: {}", path_os_string);
-                            let empty_data = Vec::new();
-                            clients_ctrl
-                                .put(empty_data, &path_os_string, 0)
-                                .await
-                                .map_err(|e| map_error(e, "create_file", &path_os_string))?;
-                            log::info!("Successfully created empty file: {}", path_os_string);
-                        }
-                    }
-                    Err(e) => return Err(map_error(e, "open", &path_os_string)),
+                if meta_res.is_err() && options.create {
+                    log::debug!("File {} doesn't exist, will create it", path_os_string);
+                    let empty_data = Vec::new();
+                    client
+                        .put(
+                            Context::current(),
+                            empty_data,
+                            real_path_os_string.clone(),
+                            0,
+                        )
+                        .await
+                        .map_err(|_rpc_error| FsError::GeneralFailure)?
+                        .map_err(|e| map_error(e, "create_file", &real_path_os_string))?;
+                    log::info!("Successfully created empty file: {}", real_path_os_string);
                 }
             }
-
             let file = DavFileImpl {
-                path_os_string,
-                clients_ctrl,
-                // position: if options.truncate { 0 } else { 0 }, // TODO: handle append mode properly
+                path_os_string: real_path_os_string,
+                client,
                 position: 0,
                 data: None,
                 options,

@@ -28,7 +28,7 @@ use crate::controls::file_transfer::FileTransferRpcClient;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
-struct ConnectedClient {
+pub struct ConnectedClient {
     peer_id: Arc<PeerId>,
     is_windows: bool,
     rpc_client: FileTransferRpcClient,
@@ -142,7 +142,7 @@ impl FileTransferClientsControl {
         Ok(client)
     }
 
-    async fn get_client(&self, name: &str) -> anyhow::Result<ConnectedClient> {
+    pub async fn get_client(&self, name: &str) -> anyhow::Result<ConnectedClient> {
         let Some((peer_id, fc)) = self.clients.lock().get(name).cloned() else {
             bail!("File transfer client with name '{}' not found", name);
         };
@@ -638,7 +638,7 @@ pub async fn start_webdav_proxy_service(
         .filesystem(Box::new(client))
         // TODO macos finder needs the locking support. https://sabre.io/dav/clients/finder/
         .locksystem(FakeLs::new())
-        .read_buf_size(40960)
+        // .read_buf_size(40960)
         .build_handler();
 
     let addr = format!("{host}:{port}");
@@ -676,7 +676,7 @@ pub async fn start_webdav_proxy_service(
     }
 }
 
-fn convert_string_to_utf8_unix_path_buf(path: &str) -> Utf8PathBuf<Utf8UnixEncoding> {
+pub fn convert_string_to_utf8_unix_path_buf(path: &str) -> Utf8PathBuf<Utf8UnixEncoding> {
     #[cfg(windows)]
     {
         let windows_path = Utf8Path::<typed_path::Utf8WindowsEncoding>::new(path);
