@@ -49,6 +49,7 @@ dependencies:
   path_provider: ^2.1.5
   path: ^1.9.1
   flutter_foreground_task: ^9.1.0
+  permission_handler: ^12.0.1
 
 dev_dependencies:
   flutter_test:

@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:fungi_app/src/rust/api/fungi.dart' as fungi;
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 enum ThemeOption { light, dark, system }
 
@@ -205,6 +206,20 @@ class FungiController extends GetxController {
 
   Future<void> startFileTransferServer(String rootDir) async {
     try {
+      if (Platform.isAndroid) {
+        final status = await Permission.manageExternalStorage.request();
+        if (!status.isGranted) {
+          Get.snackbar(
+            'Permission required',
+            'Please try again and grant "Manage External Storage" permission to use File Transfer Server.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.red.withValues(alpha: 0.1),
+            colorText: Colors.red,
+          );
+          return;
+        }
+      }
+
       await fungi.startFileTransferService(rootDir: rootDir);
       fileTransferServerState.value.enabled = true;
       fileTransferServerState.value.error = null;
