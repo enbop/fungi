@@ -153,7 +153,7 @@ flutter build windows --release
 | macOS    | ✅ 就绪 |
 | Windows  | ✅ 就绪 |
 | Linux    | ✅ 就绪 |
-| Android  | 🚧 开发中 |
+| Android  | ✅ 就绪 |
 | iOS      | 🚧 开发中 |
 
 ## 贡献
