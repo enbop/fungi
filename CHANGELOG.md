@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.2] - 2025-08-19
+
+### Added
+
+- **Android Support**: Initial support for Android platform.
+
+### Fixed
+
+- Resolved issues with reading files via WebDAV/FTP.
+
 ## [0.3.1] - 2025-08-11
 
 ### Added
