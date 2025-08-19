@@ -44,7 +44,33 @@ struct DavFileImpl {
     path_os_string: String,
     client: ConnectedClient,
     position: u64,
-    options: OpenOptions,
+}
+
+impl DavFileImpl {
+    fn write_chunk(&mut self, chunk: Vec<u8>) -> FsFuture<()> {
+        let len = chunk.len();
+        log::debug!(
+            "DavFile: Writing {} bytes to file: {} at position: {}",
+            len,
+            self.path_os_string,
+            self.position
+        );
+        async move {
+            self.client
+                .put(
+                    Context::current(),
+                    chunk,
+                    self.path_os_string.clone(),
+                    self.position,
+                )
+                .await
+                .map_err(|_rpc_error| FsError::GeneralFailure)?
+                .map_err(|e| map_error(e, "write_chunk", &self.path_os_string))?;
+            self.position += len as u64;
+            Ok(())
+        }
+        .boxed()
+    }
 }
 
 impl DavFile for DavFileImpl {
@@ -67,61 +93,12 @@ impl DavFile for DavFileImpl {
 
     fn write_buf(&mut self, buf: Box<dyn libp2p::bytes::Buf + Send>) -> FsFuture<()> {
         let bytes = buf.chunk().to_vec();
-        let bytes_len = bytes.len();
-        log::debug!(
-            "DavFile: Writing {} bytes to file: {} at position: {}",
-            bytes_len,
-            self.path_os_string,
-            self.position
-        );
-        async move {
-            let _written = self
-                .client
-                .put(
-                    Context::current(),
-                    bytes,
-                    self.path_os_string.clone(),
-                    self.position,
-                )
-                .await
-                .map_err(|_rpc_error| FsError::GeneralFailure)?
-                .map_err(|e| map_error(e, "write_buf", &self.path_os_string))?;
-
-            self.position += bytes_len as u64;
-            Ok(())
-        }
-        .boxed()
+        self.write_chunk(bytes)
     }
 
     fn write_bytes(&mut self, buf: libp2p::bytes::Bytes) -> FsFuture<()> {
         let bytes = buf.to_vec();
-        log::debug!(
-            "DavFile: Writing {} bytes to file: {} at position: {}",
-            bytes.len(),
-            self.path_os_string,
-            self.position
-        );
-        async move {
-            // If this is the first write and we have create permission, ensure file exists
-            if self.position == 0 && self.options.create {
-                log::debug!("First write to file, ensuring it exists");
-            }
-
-            let _written = self
-                .client
-                .put(
-                    Context::current(),
-                    bytes,
-                    self.path_os_string.clone(),
-                    self.position,
-                )
-                .await
-                .map_err(|_rpc_error| FsError::GeneralFailure)?
-                .map_err(|e| map_error(e, "write_bytes", &self.path_os_string))?;
-            self.position += buf.len() as u64;
-            Ok(())
-        }
-        .boxed()
+        self.write_chunk(bytes)
     }
 
     fn read_bytes(&mut self, count: usize) -> FsFuture<libp2p::bytes::Bytes> {
@@ -293,7 +270,6 @@ impl DavFileSystem for FileTransferClientsControl {
                 path_os_string: real_path_os_string,
                 client,
                 position: 0,
-                options,
             };
 
             Ok(Box::new(file) as Box<dyn DavFile>)
@@ -381,13 +357,13 @@ impl DavFileSystem for FileTransferClientsControl {
             let mut all_data = Vec::new();
             let mut current_pos = 0u64;
             const CHUNK_SIZE: u64 = 64 * 1024; // 64KB chunks
-            
+
             loop {
                 let chunk = client
                     .get_chunk(&from_os_string, current_pos, CHUNK_SIZE)
                     .await
                     .map_err(|e| map_error(e, "copy (read chunk)", &from_os_string))?;
-                    
+
                 if chunk.is_empty() {
                     break;
                 }
