@@ -79,9 +79,27 @@ pub async fn run(args: RelayArgs) -> Result<()> {
         })?
         .build();
 
-    println!("Local peer id: {:?}", swarm.local_peer_id());
+    let peer_id = swarm.local_peer_id().clone();
+    println!("Local peer id: {}", swarm.local_peer_id().to_string());
+
     listen_all_interfaces(&mut swarm, tcp_listen_port, udp_listen_port)?;
-    add_external_address(&mut swarm, public_ip, tcp_listen_port, udp_listen_port)?;
+
+    let tcp_listen_addr = Multiaddr::empty()
+        .with(Protocol::from(public_ip))
+        .with(Protocol::Tcp(tcp_listen_port));
+    let udp_listen_addr = Multiaddr::empty()
+        .with(Protocol::from(public_ip))
+        .with(Protocol::Udp(udp_listen_port))
+        .with(Protocol::QuicV1);
+
+    add_external_address(&mut swarm, tcp_listen_addr.clone(), udp_listen_addr.clone())?;
+
+    let tcp_listen_addr = tcp_listen_addr.with_p2p(peer_id).expect("with_p2p failed");
+    let udp_listen_addr = udp_listen_addr.with_p2p(peer_id).expect("with_p2p failed");
+    println!("Added external addresses: ");
+    println!("{tcp_listen_addr}");
+    println!("{udp_listen_addr}");
+
     listen_relay_handshake_protocol(swarm.behaviour().stream.new_control());
 
     loop {
@@ -130,21 +148,11 @@ fn listen_all_interfaces(
 
 fn add_external_address(
     swarm: &mut Swarm<Behaviour>,
-    public_ip: IpAddr,
-    tcp_listen_port: u16,
-    udp_listen_port: u16,
+    tcp_listen_addr: Multiaddr,
+    udp_listen_addr: Multiaddr,
 ) -> Result<()> {
-    swarm.add_external_address(
-        Multiaddr::empty()
-            .with(Protocol::from(public_ip))
-            .with(Protocol::Tcp(tcp_listen_port)),
-    );
-    swarm.add_external_address(
-        Multiaddr::empty()
-            .with(Protocol::from(public_ip))
-            .with(Protocol::Udp(udp_listen_port))
-            .with(Protocol::QuicV1),
-    );
+    swarm.add_external_address(tcp_listen_addr);
+    swarm.add_external_address(udp_listen_addr);
     Ok(())
 }
 
