@@ -10,7 +10,11 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Default, Parser)]
 pub struct DaemonArgs {
-    #[clap(short, long, help = "Path to the Fungi directory")]
+    #[clap(
+        short,
+        long,
+        help = "Path to the Fungi config directory, defaults to ~/.fungi"
+    )]
     pub fungi_dir: Option<String>,
 }
 

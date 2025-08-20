@@ -1,7 +1,6 @@
 use anyhow::Result;
 pub use fungi_daemon::DaemonArgs;
 use fungi_daemon::FungiDaemon;
-use fungi_swarm::get_default_relay_addr;
 
 pub async fn run(args: DaemonArgs) -> Result<()> {
     fungi_config::init(&args).unwrap();
@@ -19,9 +18,9 @@ pub async fn run(args: DaemonArgs) -> Result<()> {
         .unwrap();
     println!("Network info: {network_info:?}");
 
-    if let Err(e) = swarm_control.listen_relay(get_default_relay_addr()).await {
-        log::error!("Failed to listen on relay: {e:?}");
-    };
+    if !daemon.config().lock().network.disable_relay {
+        swarm_control.listen_relay().await;
+    }
 
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {

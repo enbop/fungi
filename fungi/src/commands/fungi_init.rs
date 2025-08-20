@@ -6,7 +6,11 @@ use fungi_config::{DEFAULT_FUNGI_DIR, FungiDir};
 
 #[derive(Debug, Clone, Default, Parser)]
 pub struct InitArgs {
-    #[clap(short, long, help = "Path to the Fungi directory")]
+    #[clap(
+        short,
+        long,
+        help = "Path to the Fungi config directory, defaults to ~/.fungi"
+    )]
     pub fungi_dir: Option<String>,
 }
 
