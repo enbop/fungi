@@ -9,7 +9,7 @@ use libp2p::{
     mdns,
     multiaddr::Protocol,
     noise,
-    swarm::{DialError, SwarmEvent},
+    swarm::{DialError, SwarmEvent, dial_opts::DialOpts},
     tcp, yamux,
 };
 use parking_lot::{Mutex, RwLock};
@@ -231,13 +231,14 @@ impl SwarmControl {
                                 "Dialing {peer_id} with relay address {:?}",
                                 relay_addresses
                             );
+                            let mut full_addrs = Vec::new();
                             for relay_addr in relay_addresses.iter() {
-                                swarm.add_peer_address(
-                                    peer_id,
+                                full_addrs.push(
                                     peer_addr_with_relay(peer_id, relay_addr.clone()),
                                 );
                             }
-                            swarm.dial(peer_id)?;
+                            let dial_opts = DialOpts::peer_id(peer_id).addresses(full_addrs).build();
+                            swarm.dial(dial_opts)?;
                         }
                         _ => return Err(e),
                     }
