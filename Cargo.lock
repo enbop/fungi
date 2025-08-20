@@ -1381,6 +1381,7 @@ dependencies = [
  "home",
  "interprocess",
  "libp2p",
+ "libp2p-stream",
  "log",
  "rand 0.8.5",
  "serde",

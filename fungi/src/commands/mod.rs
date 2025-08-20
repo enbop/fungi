@@ -1,5 +1,6 @@
 pub mod fungi_daemon;
 pub mod fungi_init;
+pub mod fungi_relay;
 use clap::{Parser, Subcommand};
 
 /// A platform built for seamless multi-device integration
@@ -8,22 +9,14 @@ use clap::{Parser, Subcommand};
 pub struct FungiArgs {
     #[command(subcommand)]
     pub command: Commands,
-    // #[arg(short, long)]
-    // pub fungi_dir: Option<String>,
 }
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     /// Start a Fungi daemon
     Daemon(fungi_daemon::DaemonArgs),
+    /// Initialize a Fungi configuration, and generate a keypair
     Init(fungi_init::InitArgs),
+    /// Start a simple Fungi relay server
+    Relay(fungi_relay::RelayArgs),
 }
-
-// impl FungiDir for FungiArgs {
-//     fn fungi_dir(&self) -> PathBuf {
-//         self.fungi_dir
-//             .as_ref()
-//             .map(PathBuf::from)
-//             .unwrap_or_else(|| home::home_dir().unwrap().join(DEFAULT_FUNGI_DIR))
-//     }
-// }

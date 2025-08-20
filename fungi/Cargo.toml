@@ -27,3 +27,4 @@ interprocess = { workspace = true }
 rand = { workspace = true }
 anyhow = { workspace = true }
 tarpc = { workspace = true }
+libp2p-stream = { workspace = true }
