@@ -1367,7 +1367,7 @@ checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
 name = "fungi"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1392,7 +1392,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-config"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "fungi-util",
@@ -1406,7 +1406,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-daemon"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1457,7 +1457,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-swarm"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "async-result",
@@ -1476,7 +1476,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-util"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "futures",

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.3] - 2025-08-20
+
+### Added
+
+- **Self-hosted relay server**: [#8](https://github.com/enbop/fungi/pull/8) Now you can simply use `fungi relay -p ${SERVER_PUBLIC_IP}` to start a self-hosted relay server.
+
+### Fixed
+
+- Relay could not be used in the Desktop GUI.
+
 ## [0.3.2] - 2025-08-19
 
 ### Added
