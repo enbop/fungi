@@ -99,8 +99,17 @@ impl FungiDaemon {
                 .collect(),
         );
 
+        let relay_addrs = match (
+            config.network.disable_relay,
+            config.network.custom_relay_addresses.is_empty(),
+        ) {
+            (true, _) => Vec::new(),
+            (false, true) => fungi_swarm::get_default_relay_addrs(),
+            (false, false) => config.network.custom_relay_addresses.clone(),
+        };
+
         let (swarm_control, swarm_task) =
-            FungiSwarm::start_swarm(keypair, state.clone(), |swarm| {
+            FungiSwarm::start_swarm(keypair, state.clone(), relay_addrs, |swarm| {
                 apply_listen(swarm, &config);
             })
             .await?;

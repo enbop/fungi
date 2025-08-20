@@ -129,6 +129,7 @@ pub struct SwarmControl {
     local_peer_id: Arc<PeerId>,
     swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
     stream_control: libp2p_stream::Control,
+    relay_addresses: Arc<Vec<Multiaddr>>,
 
     state: State,
 }
@@ -138,12 +139,14 @@ impl SwarmControl {
         local_peer_id: Arc<PeerId>,
         swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
         stream_control: libp2p_stream::Control,
+        relay_addresses: Arc<Vec<Multiaddr>>,
         state: State,
     ) -> Self {
         Self {
             local_peer_id,
             swarm_caller_tx,
             stream_control,
+            relay_addresses,
             state,
         }
     }
@@ -207,6 +210,7 @@ impl SwarmControl {
 
         let (completer, res) = AsyncResult::new_split::<std::result::Result<(), DialError>>();
 
+        let relay_addresses = self.relay_addresses.clone();
         let dial_result = self
             .invoke_swarm(move |swarm| {
                 if swarm.is_connected(&peer_id) {
@@ -217,11 +221,23 @@ impl SwarmControl {
                 if let Err(e) = swarm.dial(peer_id) {
                     match e {
                         DialError::NoAddresses => {
+                            if relay_addresses.is_empty() {
+                                log::warn!("No addresses to dial {peer_id} and no relay addresses available");
+                                return Err(DialError::NoAddresses);
+                            }
                             // TODO: add a rendezvous server
                             // dial with relay when no mDNS addresses are available
-                            let addr = peer_addr_with_relay(peer_id, get_default_relay_addr());
-                            log::info!("Dialing {peer_id} with relay address {addr}");
-                            swarm.dial(addr)?;
+                            log::info!(
+                                "Dialing {peer_id} with relay address {:?}",
+                                relay_addresses
+                            );
+                            for relay_addr in relay_addresses.iter() {
+                                swarm.add_peer_address(
+                                    peer_id,
+                                    peer_addr_with_relay(peer_id, relay_addr.clone()),
+                                );
+                            }
+                            swarm.dial(peer_id)?;
                         }
                         _ => return Err(e),
                     }
@@ -272,7 +288,19 @@ impl SwarmControl {
         Ok(*res)
     }
 
-    pub async fn listen_relay(&self, relay_addr: Multiaddr) -> Result<()> {
+    pub fn relay_addresses(&self) -> Arc<Vec<Multiaddr>> {
+        self.relay_addresses.clone()
+    }
+
+    pub async fn listen_relay(&self) {
+        for relay_addr in self.relay_addresses.iter() {
+            if let Err(e) = self.listen_relay_by_addr(relay_addr.clone()).await {
+                log::error!("Failed to listen on relay address {relay_addr:?}: {e:?}");
+            }
+        }
+    }
+
+    async fn listen_relay_by_addr(&self, relay_addr: Multiaddr) -> Result<()> {
         let relay_peer = relay_addr
             .iter()
             .find_map(|p| {
@@ -327,6 +355,7 @@ impl FungiSwarm {
     pub async fn start_swarm(
         keypair: Keypair,
         state: State,
+        relay_addresses: Vec<Multiaddr>,
         apply: impl FnOnce(&mut TSwarm),
     ) -> Result<(SwarmControl, JoinHandle<()>)> {
         let mdns =
@@ -361,6 +390,7 @@ impl FungiSwarm {
                 Arc::new(local_peer_id),
                 swarm_caller_tx,
                 stream_control,
+                Arc::new(relay_addresses),
                 state,
             ),
             task_handle,
@@ -433,10 +463,15 @@ impl FungiSwarm {
     }
 }
 
-pub fn get_default_relay_addr() -> Multiaddr {
-    "/ip4/160.16.206.21/tcp/30001/p2p/16Uiu2HAmGXFS6aYsKKYRkEDo1tNigZKN8TAYrsfSnEdC5sZLNkiE"
-        .parse()
-        .unwrap()
+pub fn get_default_relay_addrs() -> Vec<Multiaddr> {
+    vec![
+        "/ip4/160.16.206.21/tcp/30001/p2p/16Uiu2HAmGXFS6aYsKKYRkEDo1tNigZKN8TAYrsfSnEdC5sZLNkiE"
+            .parse()
+            .unwrap(),
+        "/ip4/160.16.206.21/udp/30001/quic-v1/p2p/16Uiu2HAmGXFS6aYsKKYRkEDo1tNigZKN8TAYrsfSnEdC5sZLNkiE"
+            .parse()
+            .unwrap(),
+    ]
 }
 
 pub fn peer_addr_with_relay(peer_id: PeerId, relay: Multiaddr) -> Multiaddr {
