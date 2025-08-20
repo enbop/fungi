@@ -341,6 +341,7 @@ impl SwarmControl {
             bail!("Handshake failed: empty response");
         };
 
+        println!("Listening on relay address: {relay_addr:?}");
         // 2. listen on relay
         self.invoke_swarm(|swarm| swarm.listen_on(relay_addr.with(Protocol::P2pCircuit)))
             .await??;
