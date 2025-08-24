@@ -42,7 +42,7 @@ Built with Rust (using [rust-libp2p](https://github.com/libp2p/rust-libp2p) for 
 
 **Local Network**: Devices automatically discover each other via mDNS - no setup needed.
 
-**Internet**: Attempts NAT hole punching for direct P2P connections. If successful, data flows directly between devices; otherwise uses relay server. All traffic is end-to-end encrypted - relay server only sees encrypted data packets. By default, we provide a relay server.
+**Internet**: Attempts NAT hole punching for direct P2P connections. If successful, data flows directly between devices; otherwise uses relay server. All traffic is end-to-end encrypted - relay server only sees encrypted data packets. By default, we provide a relay server. You can also set up your [own relay server](https://fungi.rs/docs/self_hosted_relay).
 
 ## Download
 [Get the latest release](https://github.com/enbop/fungi/releases):
@@ -102,7 +102,7 @@ Connect `localhost:9090` on Device A to reach the service running on Device B's 
 
 ### Quick Start (fungi-cli)
 
-See the [CLI Service Quick Start Guide](docs/cli_service_quick_start.md).
+See the [CLI Service Quick Start Guide](https://fungi.rs/docs/cli_service_quick_start).
 
 ## Build from Source
 
