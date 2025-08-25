@@ -12,8 +12,8 @@
 <p align="center" style="font-size: 0.9rem; color: #666;">ファイル転送 • ポートフォワーディング • クロスデバイス統合（近日公開）</p>
 
 <p align="center">
-  <a href="../README.md">🇺🇸 English</a> •
-  <a href="README_zh.md">🇨🇳 简体中文</a>
+  <a href="../README.md">English</a> •
+  <a href="README_zh.md">简体中文</a>
 </p>
 
 <div align="center">
@@ -166,4 +166,4 @@ flutter build windows --release
 
 ## ライセンス
 
-Apache License 2.0 - 詳細は[LICENSE](../LICENSE)をご覧ください。
+Apache License 2.0

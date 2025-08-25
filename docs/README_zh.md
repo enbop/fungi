@@ -12,8 +12,8 @@
 <p align="center" style="font-size: 0.9rem; color: #666;">文件传输 • 端口转发 • 跨设备集成（即将推出）</p>
 
 <p align="center">
-  <a href="../README.md">🇺🇸 English</a> •
-  <a href="README_ja.md">🇯🇵 日本語</a>
+  <a href="../README.md">English</a> •
+  <a href="README_ja.md">日本語</a>
 </p>
 
 <div align="center">
@@ -166,4 +166,4 @@ flutter build windows --release
 
 ## 许可证
 
-Apache License 2.0 - 详见 [LICENSE](../LICENSE)。
+Apache License 2.0

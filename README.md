@@ -12,8 +12,8 @@
 <p align="center" style="font-size: 0.9rem; color: #666;">File Transfer • Port Forwarding • Cross-Device Integration (Coming Soon)</p>
 
 <p align="center">
-  <a href="docs/README_zh.md">🇨🇳 简体中文</a> •
-  <a href="docs/README_ja.md">🇯🇵 日本語</a>
+  <a href="docs/README_zh.md">简体中文</a> •
+  <a href="docs/README_ja.md">日本語</a>
 </p>
 
 <div align="center">
@@ -29,14 +29,35 @@ Fungi lets you securely connect and manage multiple devices through P2P connecti
 
 Built with Rust (using [rust-libp2p](https://github.com/libp2p/rust-libp2p) for p2p) and Flutter for cross-platform UI.
 
+## Why Fungi?
+
+🚀 **Zero Configuration P2P** - Direct device-to-device connections with automatic NAT traversal, no public IP required
+
+🛡️ **Security First** - End-to-end encryption with PeerID-based authentication and whitelist access control
+
+🌐 **Gateway Architecture** - Turn any device into a gateway for services and files across your network
+
+⚡ **Works Everywhere** - Local network auto-discovery via mDNS, seamless internet connectivity with relay fallback
+
+🔧 **Self-hosted Ready** - Use our free relay server or deploy your own
+
+📦 **Lightweight NAS** - Transform any device into a personal cloud storage with WebDAV/FTP mounting
+
+🎯 **Cross-Platform** - Support for desktop (Windows/macOS/Linux), mobile (Android), ARM devices (Raspberry Pi, Orange Pi...)
+
 ### What You Can Do
 
 📁 **File Transfer**
 - Mount remote folders as local drives (FTP/WebDAV)
+- Access files from any device like a lightweight NAS
 
 🔗 **Port Forwarding** 
+- Forward SSH, RDP, and any TCP service without VPS
+- Secure tunneling between devices
 
 🔮 **Cross-Device Integration** *(Coming Soon)*
+- Remote computing and command execution
+- WASI sandbox for cross-platform app deployment
 
 ## How It Works
 
@@ -166,4 +187,4 @@ We welcome all contributions:
 
 ## License
 
-Apache License 2.0 - see [LICENSE](LICENSE) for details.
+Apache License 2.0
