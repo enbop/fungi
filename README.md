@@ -12,7 +12,7 @@
 <p align="center" style="font-size: 0.9rem; color: #666;">File Transfer • Port Forwarding • Cross-Device Integration (Coming Soon)</p>
 
 <p align="center">
-  <a href="docs/README_zh.md">简体中文</a> •
+  <a href="docs/README_zh_CN.md">简体中文</a> •
   <a href="docs/README_ja.md">日本語</a>
 </p>
 
