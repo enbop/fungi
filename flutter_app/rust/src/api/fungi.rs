@@ -170,10 +170,6 @@ pub async fn start_fungi_daemon(fungi_dir: Option<String>) -> Result<()> {
         daemon.swarm_control().local_peer_id()
     );
 
-    if !daemon.config().lock().network.disable_relay {
-        daemon.swarm_control().listen_relay().await;
-    }
-
     *FUNGI_DAEMON.lock() = Some(Arc::new(daemon));
     Ok(())
 }

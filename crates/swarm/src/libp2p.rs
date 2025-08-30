@@ -292,63 +292,6 @@ impl SwarmControl {
     pub fn relay_addresses(&self) -> Arc<Vec<Multiaddr>> {
         self.relay_addresses.clone()
     }
-
-    pub async fn listen_relay(&self) {
-        for relay_addr in self.relay_addresses.iter() {
-            if let Err(e) = self.listen_relay_by_addr(relay_addr.clone()).await {
-                log::error!("Failed to listen on relay address {relay_addr:?}: {e:?}");
-            }
-        }
-    }
-
-    async fn listen_relay_by_addr(&self, relay_addr: Multiaddr) -> Result<()> {
-        let relay_peer = relay_addr
-            .iter()
-            .find_map(|p| {
-                if let Protocol::P2p(peer_id) = p {
-                    Some(peer_id)
-                } else {
-                    None
-                }
-            })
-            .ok_or_else(|| anyhow::anyhow!("Invalid relay address"))?;
-
-        // 1. handshake with relay
-        // https://github.com/libp2p/rust-libp2p/blob/9a45db3f82b760c93099e66ec77a7a772d1f6cd3/examples/dcutr/src/main.rs#L139
-        // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
-        // our local public address and (b) enable a freshly started relay to learn its public address.
-        let relay_addr_cl = relay_addr.clone();
-        self.invoke_swarm(|swarm| swarm.dial(relay_addr_cl))
-            .await??;
-        let Ok(stream_result) = tokio::time::timeout(
-            Duration::from_secs(3),
-            self.stream_control
-                .clone()
-                .open_stream(relay_peer, FUNGI_RELAY_HANDSHAKE_PROTOCOL),
-        )
-        .await
-        else {
-            bail!("Handshake timeout")
-        };
-        let mut stream = match stream_result {
-            Ok(stream) => stream,
-            Err(e) => bail!("Handshake failed: {:?}", e),
-        };
-        let mut buf = [0u8; 32];
-        // TODO
-        // implement a proper handshake protocol, currently just read the response to make sure both sides are reachable
-        let n = stream.read(&mut buf).await?;
-        if n < 1 {
-            bail!("Handshake failed: empty response");
-        };
-
-        println!("Listening on relay address: {relay_addr:?}");
-        // 2. listen on relay
-        self.invoke_swarm(|swarm| swarm.listen_on(relay_addr.with(Protocol::P2pCircuit)))
-            .await??;
-
-        Ok(())
-    }
 }
 
 pub struct FungiSwarm;
@@ -385,14 +328,20 @@ impl FungiSwarm {
 
         let (swarm_caller_tx, swarm_caller_rx) = mpsc::unbounded_channel::<SwarmAsyncCall>();
 
-        let task_handle = Self::spawn_swarm(swarm, swarm_caller_rx);
+        let relay_addresses = Arc::new(relay_addresses);
+        let task_handle = Self::spawn_swarm(
+            swarm,
+            swarm_caller_rx,
+            stream_control.clone(),
+            relay_addresses.clone(),
+        );
 
         Ok((
             SwarmControl::new(
                 Arc::new(local_peer_id),
                 swarm_caller_tx,
                 stream_control,
-                Arc::new(relay_addresses),
+                relay_addresses,
                 state,
             ),
             task_handle,
@@ -402,18 +351,27 @@ impl FungiSwarm {
     pub fn spawn_swarm(
         swarm: TSwarm,
         swarm_caller_rx: UnboundedReceiver<SwarmAsyncCall>,
+        stream_control: libp2p_stream::Control,
+        relay_addresses: Arc<Vec<Multiaddr>>,
     ) -> JoinHandle<()> {
-        let swarm_task = tokio::spawn(swarm_loop(swarm, swarm_caller_rx));
+        let swarm_task = tokio::spawn(swarm_loop(
+            swarm,
+            swarm_caller_rx,
+            stream_control,
+            relay_addresses,
+        ));
         async fn swarm_loop(
             mut swarm: TSwarm,
             mut swarm_caller_rx: UnboundedReceiver<SwarmAsyncCall>,
+            mut stream_control: libp2p_stream::Control,
+            relay_addresses: Arc<Vec<Multiaddr>>,
         ) {
             loop {
                 tokio::select! {
                     swarm_events = swarm.select_next_some() => {
                         match swarm_events {
                             SwarmEvent::NewListenAddr { address, .. } => {
-                                println!("Listening on {address:?}");
+                                handle_new_listen_addr(&mut swarm, &mut stream_control, &relay_addresses, address).await;
                             },
                             SwarmEvent::NewExternalAddrCandidate { address, .. } => {
                                 log::info!("New external address candidate: {address:?}");
@@ -463,6 +421,126 @@ impl FungiSwarm {
 
         swarm_task
     }
+}
+
+async fn handle_new_listen_addr(
+    swarm: &mut TSwarm,
+    stream_control: &mut libp2p_stream::Control,
+    relay_addrs: &Arc<Vec<Multiaddr>>,
+    new_addr: Multiaddr,
+) {
+    println!("Listening on {new_addr:?}");
+
+    if new_addr.to_string().contains("p2p-circuit") {
+        return;
+    }
+    let mut new_addr_iter = new_addr.iter();
+
+    let should_listen_relay = match new_addr_iter.next() {
+        Some(Protocol::Ip4(addr)) => {
+            !addr.is_loopback()
+                && !addr.is_broadcast()
+                && !addr.is_multicast()
+                && !addr.is_unspecified()
+        }
+        Some(Protocol::Ip6(addr)) => {
+            !addr.is_loopback()
+                && !addr.is_unicast_link_local()
+                && !addr.is_unique_local()
+                && !addr.is_multicast()
+                && !addr.is_unspecified()
+        }
+        _ => false,
+    };
+    if should_listen_relay {
+        match new_addr_iter.next() {
+            Some(Protocol::Tcp(_)) => {
+                listen_tcp_relays(swarm, stream_control, relay_addrs.clone()).await;
+            }
+            Some(Protocol::Udp(_)) => {
+                listen_udp_relays(swarm, stream_control, relay_addrs.clone()).await;
+            }
+            _ => {}
+        }
+    }
+}
+
+async fn listen_tcp_relays(
+    swarm: &mut TSwarm,
+    stream_control: &mut libp2p_stream::Control,
+    relay_addrs: Arc<Vec<Multiaddr>>,
+) {
+    for relay_addr in relay_addrs.iter() {
+        if !relay_addr.to_string().contains("/tcp/") {
+            continue;
+        }
+        if let Err(e) = listen_relay_by_addr(swarm, stream_control, relay_addr.clone()).await {
+            log::error!("Failed to listen on relay address {relay_addr:?}: {e:?}");
+        }
+    }
+}
+
+async fn listen_udp_relays(
+    swarm: &mut TSwarm,
+    stream_control: &mut libp2p_stream::Control,
+    relay_addrs: Arc<Vec<Multiaddr>>,
+) {
+    for relay_addr in relay_addrs.iter() {
+        if !relay_addr.to_string().contains("/udp/") {
+            continue;
+        }
+        if let Err(e) = listen_relay_by_addr(swarm, stream_control, relay_addr.clone()).await {
+            log::error!("Failed to listen on relay address {relay_addr:?}: {e:?}");
+        }
+    }
+}
+
+async fn listen_relay_by_addr(
+    swarm: &mut TSwarm,
+    stream_control: &mut libp2p_stream::Control,
+    relay_addr: Multiaddr,
+) -> Result<()> {
+    let relay_peer = relay_addr
+        .iter()
+        .find_map(|p| {
+            if let Protocol::P2p(peer_id) = p {
+                Some(peer_id)
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| anyhow::anyhow!("Invalid relay address"))?;
+
+    // 1. dial to relay server will retrieve and update local public address (sent to SwarmEvent::NewExternalAddrCandidate) automatically
+    let relay_addr_cl = relay_addr.clone();
+    swarm.dial(relay_addr_cl)?;
+
+    // 2. We have to establish a connection with the relay server before listen_on P2pCircuit
+    let Ok(stream_result) = tokio::time::timeout(
+        Duration::from_secs(5),
+        stream_control.open_stream(relay_peer, FUNGI_RELAY_HANDSHAKE_PROTOCOL),
+    )
+    .await
+    else {
+        bail!("Handshake timeout")
+    };
+    let mut stream = match stream_result {
+        Ok(stream) => stream,
+        Err(e) => bail!("Handshake failed: {:?}", e),
+    };
+    let mut buf = [0u8; 32];
+    // TODO
+    // implement a proper handshake protocol, currently just read the response to make sure both sides are reachable
+    let n = stream.read(&mut buf).await?;
+    if n < 1 {
+        bail!("Handshake failed: empty response");
+    };
+
+    // 3. listen on relay
+    println!("Listening on relay address: {relay_addr:?}");
+    swarm.listen_on(relay_addr.with(Protocol::P2pCircuit))?;
+
+    Ok(())
 }
 
 pub fn get_default_relay_addrs() -> Vec<Multiaddr> {
