@@ -20,7 +20,10 @@ use std::{
     any::Any,
     collections::{HashMap, HashSet},
     ops::Deref,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 use thiserror::Error;
@@ -32,6 +35,31 @@ use tokio::{
 // Relay connection retry constants
 const RELAY_RETRY_MAX_ATTEMPTS: u32 = 4;
 const RELAY_RETRY_BASE_DELAY_MS: u64 = 500;
+
+/// Simple RAII guard to ensure atomic bool is reset when task completes
+struct TaskGuard {
+    flag: Arc<AtomicBool>,
+}
+
+impl TaskGuard {
+    /// Try to acquire the task lock atomically (set to true)
+    fn try_acquire(flag: Arc<AtomicBool>) -> Option<Self> {
+        if flag
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
+            Some(Self { flag })
+        } else {
+            None
+        }
+    }
+}
+
+impl Drop for TaskGuard {
+    fn drop(&mut self) {
+        self.flag.store(false, Ordering::SeqCst);
+    }
+}
 
 #[derive(Error, Debug)]
 pub enum ConnectError {
@@ -136,7 +164,17 @@ pub struct SwarmControl {
     local_peer_id: Arc<PeerId>,
     swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
     stream_control: libp2p_stream::Control,
-    relay_addresses: Arc<Vec<Multiaddr>>,
+
+    /// Relay server addresses with connection state tracking
+    ///
+    /// Each entry contains:
+    /// - Multiaddr: relay server network address
+    /// - Arc<AtomicBool>: task running state flag
+    ///   - true: connection task is currently running
+    ///   - false: idle, ready for new connection attempts
+    ///
+    /// Prevents duplicate connection attempts to the same relay server
+    relay_addresses_state: Arc<Vec<(Multiaddr, Arc<AtomicBool>)>>,
 
     state: State,
 }
@@ -146,14 +184,20 @@ impl SwarmControl {
         local_peer_id: Arc<PeerId>,
         swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
         stream_control: libp2p_stream::Control,
-        relay_addresses: Arc<Vec<Multiaddr>>,
+        relay_addresses: Vec<Multiaddr>,
         state: State,
     ) -> Self {
+        let relay_addresses_state = Arc::new(
+            relay_addresses
+                .into_iter()
+                .map(|addr| (addr, Arc::new(AtomicBool::new(false))))
+                .collect(),
+        );
         Self {
             local_peer_id,
             swarm_caller_tx,
             stream_control,
-            relay_addresses,
+            relay_addresses_state,
             state,
         }
     }
@@ -217,7 +261,7 @@ impl SwarmControl {
 
         let (completer, res) = AsyncResult::new_split::<std::result::Result<(), DialError>>();
 
-        let relay_addresses = self.relay_addresses.clone();
+        let relay_addresses_state = self.relay_addresses_state.clone();
         let dial_result = self
             .invoke_swarm(move |swarm| {
                 if swarm.is_connected(&peer_id) {
@@ -228,7 +272,7 @@ impl SwarmControl {
                 if let Err(e) = swarm.dial(peer_id) {
                     match e {
                         DialError::NoAddresses => {
-                            if relay_addresses.is_empty() {
+                            if relay_addresses_state.is_empty() {
                                 log::warn!("No addresses to dial {peer_id} and no relay addresses available");
                                 return Err(DialError::NoAddresses);
                             }
@@ -236,10 +280,10 @@ impl SwarmControl {
                             // dial with relay when no mDNS addresses are available
                             log::info!(
                                 "Dialing {peer_id} with relay address {:?}",
-                                relay_addresses
+                                relay_addresses_state.iter().map(|(addr, _)| addr).collect::<Vec<_>>()
                             );
                             let mut full_addrs = Vec::new();
-                            for relay_addr in relay_addresses.iter() {
+                            for (relay_addr, _) in relay_addresses_state.iter() {
                                 full_addrs.push(
                                     peer_addr_with_relay(peer_id, relay_addr.clone()),
                                 );
@@ -295,10 +339,6 @@ impl SwarmControl {
         .map_err(|_| anyhow::anyhow!("Swarm call failed: downcast error"))?;
         Ok(*res)
     }
-
-    pub fn relay_addresses(&self) -> Arc<Vec<Multiaddr>> {
-        self.relay_addresses.clone()
-    }
 }
 
 pub struct FungiSwarm;
@@ -336,8 +376,6 @@ impl FungiSwarm {
         let (swarm_caller_tx, swarm_caller_rx) = mpsc::unbounded_channel::<SwarmAsyncCall>();
         let (swarm_event_tx, swarm_event_rx) =
             mpsc::unbounded_channel::<SwarmEvent<FungiBehavioursEvent>>();
-
-        let relay_addresses = Arc::new(relay_addresses);
 
         let swarm_fut = Self::swarm_loop(swarm, swarm_caller_rx, swarm_event_tx);
         let swarm_control = SwarmControl::new(
@@ -465,12 +503,25 @@ fn handle_new_listen_addr(swarm_control: &SwarmControl, new_addr: Multiaddr) {
         _ => false,
     };
     if should_listen_relay {
-        let relay_addrs = swarm_control.relay_addresses();
+        let relay_addresses_state = swarm_control.relay_addresses_state.clone();
 
-        fn spawn_listen_task(swarm_control: &SwarmControl, relay_addr: &Multiaddr) {
+        fn spawn_listen_task(
+            swarm_control: &SwarmControl,
+            relay_addr: &Multiaddr,
+            is_running: &Arc<AtomicBool>,
+        ) {
+            let Some(_guard) = TaskGuard::try_acquire(is_running.clone()) else {
+                return;
+            };
+
             let swarm_control_cl = swarm_control.clone();
             let relay_addr_cl = relay_addr.clone();
+
             tokio::spawn(async move {
+                // move _guard to this async task
+                // and it will set the flag to false when the task is dropped
+                let _guard = _guard;
+
                 for attempt in 1..=RELAY_RETRY_MAX_ATTEMPTS {
                     match listen_relay_by_addr(swarm_control_cl.clone(), relay_addr_cl.clone())
                         .await
@@ -486,7 +537,6 @@ fn handle_new_listen_addr(swarm_control: &SwarmControl, new_addr: Multiaddr) {
                                 "Failed to connect to relay {relay_addr_cl:?} on attempt {attempt}: {e}"
                             );
                             if attempt < RELAY_RETRY_MAX_ATTEMPTS {
-                                // Exponential backoff: base_delay * 2^(attempt-1)
                                 let delay = Duration::from_millis(
                                     RELAY_RETRY_BASE_DELAY_MS * (1 << (attempt - 1)),
                                 );
@@ -495,6 +545,7 @@ fn handle_new_listen_addr(swarm_control: &SwarmControl, new_addr: Multiaddr) {
                         }
                     }
                 }
+
                 log::error!(
                     "Failed to connect to relay {relay_addr_cl:?} after {RELAY_RETRY_MAX_ATTEMPTS} attempts"
                 );
@@ -503,19 +554,19 @@ fn handle_new_listen_addr(swarm_control: &SwarmControl, new_addr: Multiaddr) {
 
         match new_addr_iter.next() {
             Some(Protocol::Tcp(_)) => {
-                for relay_addr in relay_addrs.iter() {
+                for (relay_addr, is_running) in relay_addresses_state.iter() {
                     if !relay_addr.to_string().contains("/tcp/") {
                         continue;
                     }
-                    spawn_listen_task(swarm_control, relay_addr);
+                    spawn_listen_task(swarm_control, relay_addr, is_running);
                 }
             }
             Some(Protocol::Udp(_)) => {
-                for relay_addr in relay_addrs.iter() {
+                for (relay_addr, is_running) in relay_addresses_state.iter() {
                     if !relay_addr.to_string().contains("/udp/") {
                         continue;
                     }
-                    spawn_listen_task(swarm_control, &relay_addr);
+                    spawn_listen_task(swarm_control, relay_addr, is_running);
                 }
             }
             _ => {}
