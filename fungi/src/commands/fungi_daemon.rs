@@ -18,10 +18,6 @@ pub async fn run(args: DaemonArgs) -> Result<()> {
         .unwrap();
     println!("Network info: {network_info:?}");
 
-    if !daemon.config().lock().network.disable_relay {
-        swarm_control.listen_relay().await;
-    }
-
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {
             println!("Shutting down Fungi daemon...");
