@@ -1,4 +1,4 @@
-use std::{net::IpAddr, sync::Arc, time::Duration};
+use std::{net::{IpAddr, Ipv4Addr, Ipv6Addr}, sync::Arc, time::Duration};
 
 use crate::{
     DaemonArgs,
@@ -16,7 +16,7 @@ use fungi_config::{
 };
 use fungi_swarm::{FungiSwarm, State, SwarmControl, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
-use libp2p::identity::Keypair;
+use libp2p::{identity::Keypair, multiaddr::Protocol, Multiaddr};
 use parking_lot::Mutex;
 use tokio::task::JoinHandle;
 
@@ -369,21 +369,26 @@ impl FungiDaemon {
 }
 
 fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) {
-    swarm
-        .listen_on(
-            format!("/ip4/0.0.0.0/tcp/{}", config.network.listen_tcp_port)
-                .parse()
-                .expect("address should be valid"),
-        )
-        .unwrap();
-    swarm
-        .listen_on(
-            format!(
-                "/ip4/0.0.0.0/udp/{}/quic-v1",
-                config.network.listen_udp_port
-            )
-            .parse()
-            .expect("address should be valid"),
-        )
-        .unwrap();
+    swarm.listen_on(
+        Multiaddr::empty()
+            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+            .with(Protocol::Tcp(config.network.listen_tcp_port)),
+    ).unwrap();
+    swarm.listen_on(
+        Multiaddr::empty()
+            .with(Protocol::from(Ipv6Addr::UNSPECIFIED))
+            .with(Protocol::Tcp(config.network.listen_tcp_port)),
+    ).unwrap();
+    swarm.listen_on(
+        Multiaddr::empty()
+            .with(Protocol::from(Ipv6Addr::UNSPECIFIED))
+            .with(Protocol::Udp(config.network.listen_udp_port))
+            .with(Protocol::QuicV1),
+    ).unwrap();
+    swarm.listen_on(
+        Multiaddr::empty()
+            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+            .with(Protocol::Udp(config.network.listen_udp_port))
+            .with(Protocol::QuicV1),
+    ).unwrap();
 }
