@@ -589,8 +589,14 @@ async fn listen_relay_by_addr(swarm_control: SwarmControl, relay_addr: Multiaddr
     // 1. dial to relay server will retrieve and update local public address (sent to SwarmEvent::NewExternalAddrCandidate) automatically
     let relay_addr_cl = relay_addr.clone();
     swarm_control
-        .invoke_swarm(move |swarm| swarm.dial(relay_addr_cl))
-        .await??;
+        .invoke_swarm(move |swarm| {
+            if !swarm.is_connected(&relay_peer) {
+                if let Err(e) = swarm.dial(relay_addr_cl) {
+                    log::error!("Failed to dial relay address {relay_peer}: {e}");
+                }
+            }
+        })
+        .await?;
 
     // 2. We have to establish a connection with the relay server before listen_on P2pCircuit
     let Ok(stream_result) = tokio::time::timeout(
