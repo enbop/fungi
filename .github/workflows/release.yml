@@ -144,13 +144,21 @@ jobs:
           cd build/windows/x64/runner/Release
           tar -czf ../../../../../../fungi-app-${{ matrix.platform-name }}.tar.gz .
 
-      - name: Update nightly release
+      - name: Delete old nightly release
         if: github.event_name == 'workflow_dispatch' && matrix.platform-name == 'linux-x86_64'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release edit nightly --title "Nightly Build" --notes "Latest development build from commit ${{ github.sha }} ($(date))"
+          gh release delete nightly --yes || true
+
+      - name: Create new nightly release
+        if: github.event_name == 'workflow_dispatch' && matrix.platform-name == 'linux-x86_64'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create nightly --title "Nightly Build" --notes "Latest development build from commit ${{ github.sha }} ($(date))" --prerelease
 
       - name: GH publish
         shell: bash
