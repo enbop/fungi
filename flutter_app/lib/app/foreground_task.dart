@@ -101,11 +101,11 @@ void initForegroundService() {
       playSound: false,
     ),
     foregroundTaskOptions: ForegroundTaskOptions(
-      eventAction: ForegroundTaskEventAction.repeat(5000),
+      eventAction: ForegroundTaskEventAction.repeat(30000),
       autoRunOnBoot: false,
       autoRunOnMyPackageReplaced: false,
-      allowWakeLock: true,
-      allowWifiLock: true,
+      allowWakeLock: false,
+      allowWifiLock: false,
     ),
   );
 }
