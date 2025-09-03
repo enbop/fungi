@@ -145,7 +145,7 @@ jobs:
           tar -czf ../../../../../../fungi-app-${{ matrix.platform-name }}.tar.gz .
 
       - name: Delete old nightly release
-        if: github.event_name == 'workflow_dispatch' && matrix.platform-name == 'linux-x86_64'
+        if: github.event_name == 'workflow_dispatch' && matrix.platform-name == 'linux-aarch64'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -153,7 +153,7 @@ jobs:
           gh release delete nightly --yes || true
 
       - name: Create new nightly release
-        if: github.event_name == 'workflow_dispatch' && matrix.platform-name == 'linux-x86_64'
+        if: github.event_name == 'workflow_dispatch' && matrix.platform-name == 'linux-aarch64'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
