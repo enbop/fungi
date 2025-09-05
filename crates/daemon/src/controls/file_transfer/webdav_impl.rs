@@ -36,6 +36,54 @@ impl DavMetaData for DavMetaDataImpl {
     fn is_dir(&self) -> bool {
         self.0.is_dir
     }
+
+    fn is_file(&self) -> bool {
+        self.0.is_file
+    }
+
+    fn is_symlink(&self) -> bool {
+        self.0.is_symlink
+    }
+
+    fn created(&self) -> dav_server::fs::FsResult<std::time::SystemTime> {
+        self.0
+            .created
+            .ok_or(dav_server::fs::FsError::NotImplemented)
+    }
+
+    fn accessed(&self) -> dav_server::fs::FsResult<std::time::SystemTime> {
+        self.0
+            .accessed
+            .ok_or(dav_server::fs::FsError::NotImplemented)
+    }
+
+    fn status_changed(&self) -> dav_server::fs::FsResult<std::time::SystemTime> {
+        self.0
+            .modified
+            .ok_or(dav_server::fs::FsError::NotImplemented)
+    }
+
+    fn executable(&self) -> dav_server::fs::FsResult<bool> {
+        Ok((self.0.permissions & 0o111) != 0)
+    }
+
+    fn etag(&self) -> Option<String> {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        if let Some(modified) = self.0.modified {
+            if let Ok(duration) = modified.duration_since(UNIX_EPOCH) {
+                let timestamp_us =
+                    duration.as_secs() * 1_000_000 + duration.subsec_nanos() as u64 / 1000;
+
+                if self.0.is_file && self.0.len > 0 {
+                    return Some(format!("{:x}-{:x}", self.0.len, timestamp_us));
+                } else {
+                    return Some(format!("{:x}", timestamp_us));
+                }
+            }
+        }
+        None
+    }
 }
 
 #[derive(Debug)]
@@ -200,6 +248,18 @@ impl DavDirEntry for DavDirEntryImpl {
             Ok(Box::new(meta) as Box<dyn DavMetaData>)
         }
         .boxed()
+    }
+
+    fn is_dir(&self) -> FsFuture<bool> {
+        async move { Ok(self.metadata.is_dir) }.boxed()
+    }
+
+    fn is_file(&self) -> FsFuture<bool> {
+        async move { Ok(self.metadata.is_file) }.boxed()
+    }
+
+    fn is_symlink(&self) -> FsFuture<bool> {
+        async move { Ok(self.metadata.is_symlink) }.boxed()
     }
 }
 
