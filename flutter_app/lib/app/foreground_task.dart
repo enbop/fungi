@@ -124,9 +124,6 @@ Future<ServiceRequestResult> startForegroundService() async {
       notificationIcon: NotificationIcon(
         metaDataName: 'logo_transparent_white',
       ),
-      notificationButtons: [
-        const NotificationButton(id: 'btn_hello', text: 'hello'),
-      ],
       notificationInitialRoute: '/',
       callback: startCallback,
     );
