@@ -66,6 +66,8 @@ enum FileClientState {
 pub struct FileTransferClientsControl {
     swarm_control: SwarmControl,
     clients: Arc<Mutex<HashMap<String, (PeerId, FileClientState)>>>,
+    /// Write buffer size for WebDAV operations
+    write_buffer_size: usize,
 }
 
 impl std::fmt::Debug for FileTransferClientsControl {
@@ -76,11 +78,22 @@ impl std::fmt::Debug for FileTransferClientsControl {
 }
 
 impl FileTransferClientsControl {
+    const DEFAULT_WRITE_BUFFER_SIZE: usize = 1 * 1024 * 1024; // 1 MB
+
     pub fn new(swarm_control: SwarmControl) -> Self {
+        Self::new_with_buffer_size(swarm_control, Self::DEFAULT_WRITE_BUFFER_SIZE)
+    }
+
+    pub fn new_with_buffer_size(swarm_control: SwarmControl, write_buffer_size: usize) -> Self {
         Self {
             swarm_control,
             clients: Arc::new(Mutex::new(HashMap::new())),
+            write_buffer_size,
         }
+    }
+
+    pub fn write_buffer_size(&self) -> usize {
+        self.write_buffer_size
     }
 
     pub async fn connect_and_get_host_name(
@@ -232,7 +245,9 @@ impl FileTransferClientsControl {
                 }
                 fungi_fs::FileSystemError::ConnectionBroken
             }
-            e => fungi_fs::FileSystemError::Other { message: e.to_string() },
+            e => fungi_fs::FileSystemError::Other {
+                message: e.to_string(),
+            },
         }
     }
 
@@ -347,7 +362,12 @@ impl FileTransferClientsControl {
             .map_err(|e| self.map_rpc_error(e, &client.peer_id))?
     }
 
-    pub async fn get_chunk(&self, path_os_string: &str, start_pos: u64, length: u64) -> fungi_fs::Result<Vec<u8>> {
+    pub async fn get_chunk(
+        &self,
+        path_os_string: &str,
+        start_pos: u64,
+        length: u64,
+    ) -> fungi_fs::Result<Vec<u8>> {
         let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
         let components: Utf8UnixComponents<'_> = unix_path.components();
 

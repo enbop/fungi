@@ -68,7 +68,7 @@ impl DavMetaData for DavMetaDataImpl {
     }
 
     fn etag(&self) -> Option<String> {
-        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::time::UNIX_EPOCH;
 
         if let Some(modified) = self.0.modified {
             if let Ok(duration) = modified.duration_since(UNIX_EPOCH) {
@@ -92,32 +92,106 @@ struct DavFileImpl {
     path_os_string: String,
     client: ConnectedClient,
     position: u64,
+    // Write buffer to accumulate data before sending
+    write_buffer: Vec<u8>,
+    // Buffer size limit
+    buffer_size: usize,
+    // The file position where the buffer starts
+    buffer_start_position: u64,
 }
 
 impl DavFileImpl {
-    fn write_chunk(&mut self, chunk: Vec<u8>) -> FsFuture<()> {
-        let len = chunk.len();
+    /// Flush the write buffer to remote storage
+    fn flush_buffer(&mut self) -> FsFuture<()> {
+        if self.write_buffer.is_empty() {
+            return async { Ok(()) }.boxed();
+        }
+
+        let buffer_data = std::mem::take(&mut self.write_buffer);
+        let len = buffer_data.len();
+        let position = self.buffer_start_position;
+
         log::debug!(
-            "DavFile: Writing {} bytes to file: {} at position: {}",
+            "DavFile: Flushing {} bytes to file: {} at position: {}",
             len,
             self.path_os_string,
-            self.position
+            position
         );
+
+        let client = self.client.clone();
+        let path = self.path_os_string.clone();
+
+        // Update buffer start position for next buffer
+        self.buffer_start_position = self.position;
+
         async move {
-            self.client
-                .put(
-                    Context::current(),
-                    chunk,
-                    self.path_os_string.clone(),
-                    self.position,
-                )
+            client
+                .put(Context::current(), buffer_data, path.clone(), position)
                 .await
                 .map_err(|_rpc_error| FsError::GeneralFailure)?
-                .map_err(|e| map_error(e, "write_chunk", &self.path_os_string))?;
-            self.position += len as u64;
+                .map_err(|e| map_error(e, "flush_buffer", &path))?;
             Ok(())
         }
         .boxed()
+    }
+
+    /// Add data to write buffer, flushing if necessary
+    fn write_chunk(&mut self, chunk: Vec<u8>) -> FsFuture<()> {
+        let len = chunk.len();
+        log::debug!(
+            "DavFile: Writing {} bytes to file: {} at position: {} (buffer: {}/{}, buffer_start: {})",
+            len,
+            self.path_os_string,
+            self.position,
+            self.write_buffer.len(),
+            self.buffer_size,
+            self.buffer_start_position
+        );
+
+        // If buffer is empty, set the start position
+        if self.write_buffer.is_empty() {
+            self.buffer_start_position = self.position;
+        }
+
+        // Check if adding this chunk would exceed buffer size and current buffer is not empty
+        if !self.write_buffer.is_empty() && self.write_buffer.len() + len >= self.buffer_size {
+            // Need to flush current buffer first, then start a new buffer with this chunk
+            let client = self.client.clone();
+            let path = self.path_os_string.clone();
+            let buffer_data = std::mem::take(&mut self.write_buffer);
+            let buffer_position = self.buffer_start_position;
+
+            // Start new buffer with current chunk
+            self.buffer_start_position = self.position;
+            self.write_buffer.extend(chunk);
+            self.position += len as u64;
+
+            async move {
+                client
+                    .put(
+                        Context::current(),
+                        buffer_data,
+                        path.clone(),
+                        buffer_position,
+                    )
+                    .await
+                    .map_err(|_rpc_error| FsError::GeneralFailure)?
+                    .map_err(|e| map_error(e, "write_chunk_flush", &path))?;
+                Ok(())
+            }
+            .boxed()
+        } else {
+            // Add to buffer
+            self.write_buffer.extend(chunk);
+            self.position += len as u64;
+
+            // Check if we need to flush after adding
+            if self.write_buffer.len() >= self.buffer_size {
+                self.flush_buffer()
+            } else {
+                async { Ok(()) }.boxed()
+            }
+        }
     }
 }
 
@@ -177,57 +251,129 @@ impl DavFile for DavFileImpl {
 
     fn seek(&mut self, pos: SeekFrom) -> FsFuture<u64> {
         log::debug!(
-            "DavFile: Seeking to position: {:?} in file: {}",
+            "DavFile: Seeking to position: {:?} in file: {} (current buffer: {} bytes)",
             pos,
-            self.path_os_string
+            self.path_os_string,
+            self.write_buffer.len()
         );
-        async move {
-            match pos {
-                SeekFrom::Start(offset) => {
-                    self.position = offset;
-                }
-                SeekFrom::Current(offset) => {
-                    if offset >= 0 {
-                        self.position += offset as u64;
-                    } else {
-                        let offset = offset.unsigned_abs();
-                        if self.position >= offset {
-                            self.position -= offset;
-                        } else {
-                            self.position = 0;
-                        }
-                    }
-                }
-                SeekFrom::End(_) => {
-                    let meta = self
-                        .client
-                        .metadata(Context::current(), self.path_os_string.clone())
-                        .await
-                        .map_err(|_rpc_error| FsError::GeneralFailure)?
-                        .map_err(|e| map_error(e, "seek", &self.path_os_string))?;
 
-                    if let SeekFrom::End(offset) = pos {
+        // If there's buffered data, we need to flush it first
+        if !self.write_buffer.is_empty() {
+            let client = self.client.clone();
+            let path = self.path_os_string.clone();
+            let buffer_data = std::mem::take(&mut self.write_buffer);
+            let buffer_position = self.buffer_start_position;
+
+            async move {
+                // Flush the buffer first
+                client
+                    .put(
+                        Context::current(),
+                        buffer_data,
+                        path.clone(),
+                        buffer_position,
+                    )
+                    .await
+                    .map_err(|_rpc_error| FsError::GeneralFailure)?
+                    .map_err(|e| map_error(e, "seek_flush", &path))?;
+
+                // Now perform the seek operation
+                match pos {
+                    SeekFrom::Start(offset) => {
+                        self.position = offset;
+                    }
+                    SeekFrom::Current(offset) => {
                         if offset >= 0 {
-                            self.position = meta.len + offset as u64;
+                            self.position += offset as u64;
                         } else {
                             let offset = offset.unsigned_abs();
-                            if meta.len >= offset {
-                                self.position = meta.len - offset;
+                            if self.position >= offset {
+                                self.position -= offset;
                             } else {
                                 self.position = 0;
                             }
                         }
                     }
+                    SeekFrom::End(_) => {
+                        let meta = client
+                            .metadata(Context::current(), path.clone())
+                            .await
+                            .map_err(|_rpc_error| FsError::GeneralFailure)?
+                            .map_err(|e| map_error(e, "seek", &path))?;
+
+                        if let SeekFrom::End(offset) = pos {
+                            if offset >= 0 {
+                                self.position = meta.len + offset as u64;
+                            } else {
+                                let offset = offset.unsigned_abs();
+                                if meta.len >= offset {
+                                    self.position = meta.len - offset;
+                                } else {
+                                    self.position = 0;
+                                }
+                            }
+                        }
+                    }
                 }
+
+                // Update buffer start position for future writes
+                self.buffer_start_position = self.position;
+                Ok(self.position)
             }
-            Ok(self.position)
+            .boxed()
+        } else {
+            // No buffered data, just perform the seek
+            async move {
+                match pos {
+                    SeekFrom::Start(offset) => {
+                        self.position = offset;
+                    }
+                    SeekFrom::Current(offset) => {
+                        if offset >= 0 {
+                            self.position += offset as u64;
+                        } else {
+                            let offset = offset.unsigned_abs();
+                            if self.position >= offset {
+                                self.position -= offset;
+                            } else {
+                                self.position = 0;
+                            }
+                        }
+                    }
+                    SeekFrom::End(_) => {
+                        let meta = self
+                            .client
+                            .metadata(Context::current(), self.path_os_string.clone())
+                            .await
+                            .map_err(|_rpc_error| FsError::GeneralFailure)?
+                            .map_err(|e| map_error(e, "seek", &self.path_os_string))?;
+
+                        if let SeekFrom::End(offset) = pos {
+                            if offset >= 0 {
+                                self.position = meta.len + offset as u64;
+                            } else {
+                                let offset = offset.unsigned_abs();
+                                if meta.len >= offset {
+                                    self.position = meta.len - offset;
+                                } else {
+                                    self.position = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Update buffer start position for future writes
+                self.buffer_start_position = self.position;
+                Ok(self.position)
+            }
+            .boxed()
         }
-        .boxed()
     }
 
     fn flush(&mut self) -> FsFuture<()> {
         log::debug!("DavFile: Flushing file: {}", self.path_os_string);
-        async { Ok(()) }.boxed()
+        self.flush_buffer()
     }
 }
 
@@ -330,6 +476,9 @@ impl DavFileSystem for FileTransferClientsControl {
                 path_os_string: real_path_os_string,
                 client,
                 position: 0,
+                write_buffer: Vec::new(),
+                buffer_size: clients_ctrl.write_buffer_size(),
+                buffer_start_position: 0,
             };
 
             Ok(Box::new(file) as Box<dyn DavFile>)
