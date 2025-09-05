@@ -5,6 +5,7 @@ on:
   push:
     tags:
       - "v*"
+      - "nightly"
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -91,7 +92,7 @@ jobs:
           cp build/app/outputs/bundle/release/app-release.aab ../fungi-app-android-arm64.aab
 
       - name: Update nightly release
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || github.ref_name == 'nightly'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -103,7 +104,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.ref_name }}" = "nightly" ]; then
             RELEASE_TAG="nightly"
           else
             RELEASE_TAG="${{ github.ref_name }}"

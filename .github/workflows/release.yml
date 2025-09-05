@@ -5,6 +5,7 @@ on:
   push:
     tags:
       - "v*"
+      - "nightly"
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -144,28 +145,20 @@ jobs:
           cd build/windows/x64/runner/Release
           tar -czf ../../../../../../fungi-app-${{ matrix.platform-name }}.tar.gz .
 
-      - name: Delete old nightly release
-        if: github.event_name == 'workflow_dispatch' && matrix.platform-name == 'linux-aarch64'
+      - name: Update nightly release notes
+        if: (github.event_name == 'workflow_dispatch' || github.ref_name == 'nightly') && matrix.platform-name == 'linux-x86_64'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release delete nightly --yes || true
-
-      - name: Create new nightly release
-        if: github.event_name == 'workflow_dispatch' && matrix.platform-name == 'linux-aarch64'
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create nightly --title "Nightly Build" --notes "Latest development build from commit ${{ github.sha }} ($(date))" --prerelease
+          gh release edit nightly --title "Nightly Build" --notes "Latest development build from commit ${{ github.sha }} ($(date))" || true
 
       - name: GH publish
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.ref_name }}" = "nightly" ]; then
             RELEASE_TAG="nightly"
           else
             RELEASE_TAG="${{ github.ref_name }}"
