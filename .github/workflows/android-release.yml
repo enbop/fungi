@@ -87,18 +87,18 @@ jobs:
         run: |
           echo "APK files:"
           ls -la build/app/outputs/flutter-apk/
-          echo "AAB files:"
-          ls -la build/app/outputs/bundle/release/
+          # echo "AAB files:"
+          # ls -la build/app/outputs/bundle/release/
 
       - name: Archive Android APK
         working-directory: ./flutter_app
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk ../fungi-app-android-arm64.apk
 
-      - name: Archive Android App Bundle
-        working-directory: ./flutter_app
-        run: |
-          cp build/app/outputs/bundle/release/app-release.aab ../fungi-app-android-arm64.aab
+      # - name: Archive Android App Bundle
+      #   working-directory: ./flutter_app
+      #   run: |
+      #     cp build/app/outputs/bundle/release/app-release.aab ../fungi-app-android-arm64.aab
 
       - name: Update nightly release
         if: github.event_name == 'workflow_dispatch' || github.ref_name == 'nightly'
@@ -124,5 +124,5 @@ jobs:
           # Upload APK
           gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-app-android-arm64.apk
           
-          # Upload AAB
-          gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-app-android-arm64.aab
+          # # Upload AAB
+          # gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-app-android-arm64.aab
