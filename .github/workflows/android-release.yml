@@ -63,15 +63,24 @@ jobs:
         run: flutter pub get
         working-directory: ./flutter_app
 
+      - name: Setup Android signing
+        run: |
+          echo "${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
+          echo "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> android/key.properties
+          echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> android/key.properties  
+          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> android/key.properties
+          echo "storeFile=upload-keystore.jks" >> android/key.properties
+        working-directory: ./flutter_app
+
       - name: Build Android APK
         working-directory: ./flutter_app
         run: |
           flutter build apk --release --target-platform android-arm64
 
-      - name: Build Android App Bundle (AAB)
-        working-directory: ./flutter_app
-        run: |
-          flutter build appbundle --release --target-platform android-arm64
+      # - name: Build Android App Bundle (AAB)
+      #   working-directory: ./flutter_app
+      #   run: |
+      #     flutter build appbundle --release --target-platform android-arm64
 
       - name: List build outputs
         working-directory: ./flutter_app
