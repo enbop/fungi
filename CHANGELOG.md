@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.4] - 2025-09-09
+
+### Fixed
+
+- Disabled wakelock for Android to conserve battery life
+- Fixed auto-listening to relay servers when network environment changes [#10](https://github.com/enbop/fungi/issues/10)
+- Resolved slow file transfer issue [#5](https://github.com/enbop/fungi/issues/5)
+
 ## [0.3.3] - 2025-08-20
 
 ### Added
