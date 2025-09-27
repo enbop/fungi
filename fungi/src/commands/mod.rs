@@ -1,6 +1,7 @@
 pub mod fungi_daemon;
 pub mod fungi_init;
 pub mod fungi_relay;
+pub mod fungi_wasi;
 use clap::{Parser, Subcommand};
 
 /// A platform built for seamless multi-device integration
@@ -19,4 +20,6 @@ pub enum Commands {
     Init(fungi_init::InitArgs),
     /// Start a simple Fungi relay server
     Relay(fungi_relay::RelayArgs),
+    /// Run a WASI module
+    Run(fungi_wasi::WasiArgs),
 }

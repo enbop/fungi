@@ -1,0 +1,12 @@
+[package]
+name = "fungi-wasi"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+wasmtime = "37"
+wasmtime-wasi = "37"
+anyhow = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["full"] }

@@ -20,6 +20,7 @@ fungi-config = { path = "../crates/config" }
 fungi-daemon = { path = "../crates/daemon" }
 fungi-swarm = { path = "../crates/swarm" }
 fungi-util = { path = "../crates/util" }
+fungi-wasi = { path = "../crates/wasi" }
 libp2p = { workspace = true }
 futures = { workspace = true }
 bincode = { workspace = true }
