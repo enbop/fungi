@@ -12,6 +12,7 @@ async fn main() -> Result<()> {
         Commands::Init(args) => fungi_init::run(args).await?,
         Commands::Relay(args) => fungi_relay::run(args).await?,
         Commands::Run(args) => fungi_wasi::run(args).await?,
+        Commands::Control(args) => fungi_control::execute(args).await,
     }
     Ok(())
 }

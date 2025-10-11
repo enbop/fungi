@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package fungi_daemon;
+
+service FungiDaemon {
+  rpc Hostname(Empty) returns (HostnameResponse) {}
+}
+
+message Empty {}
+
+message HostnameResponse { optional string hostname = 1; }

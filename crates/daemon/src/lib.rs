@@ -1,7 +1,6 @@
 mod api;
 mod controls;
 mod daemon;
-pub mod listeners;
 
 use clap::Parser;
 pub use daemon::FungiDaemon;

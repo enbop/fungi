@@ -9,6 +9,7 @@ members = [
     "crates/util",
     "crates/fs",
     "crates/wasi",
+    "crates/daemon-grpc",
     "flutter_app/rust",
 ]
 
