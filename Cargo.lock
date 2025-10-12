@@ -565,9 +565,9 @@ dependencies = [
 
 [[package]]
 name = "bytemuck"
-version = "1.23.1"
+version = "1.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c76a5792e44e4abe34d3abf15636779261d45a7450612059293d1d2cfc63422"
+checksum = "1fbdf580320f38b612e485521afda1ee26d10cc9884efaaa750d383e13e3c5f4"
 
 [[package]]
 name = "byteorder"
@@ -1808,7 +1808,9 @@ name = "fungi-daemon-grpc"
 version = "0.3.4"
 dependencies = [
  "anyhow",
+ "fungi-config",
  "fungi-daemon",
+ "libp2p-identity",
  "prost",
  "tonic",
  "tonic-prost",
