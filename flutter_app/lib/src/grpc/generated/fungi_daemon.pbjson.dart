@@ -26,33 +26,25 @@ final $typed_data.Uint8List emptyDescriptor = $convert.base64Decode(
 const HostnameResponse$json = {
   '1': 'HostnameResponse',
   '2': [
-    {'1': 'hostname', '3': 1, '4': 1, '5': 9, '9': 0, '10': 'hostname', '17': true},
-  ],
-  '8': [
-    {'1': '_hostname'},
+    {'1': 'hostname', '3': 1, '4': 1, '5': 9, '10': 'hostname'},
   ],
 };
 
 /// Descriptor for `HostnameResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List hostnameResponseDescriptor = $convert.base64Decode(
-    'ChBIb3N0bmFtZVJlc3BvbnNlEh8KCGhvc3RuYW1lGAEgASgJSABSCGhvc3RuYW1liAEBQgsKCV'
-    '9ob3N0bmFtZQ==');
+    'ChBIb3N0bmFtZVJlc3BvbnNlEhoKCGhvc3RuYW1lGAEgASgJUghob3N0bmFtZQ==');
 
 @$core.Deprecated('Use startFungiDaemonRequestDescriptor instead')
 const StartFungiDaemonRequest$json = {
   '1': 'StartFungiDaemonRequest',
   '2': [
-    {'1': 'fungi_dir', '3': 1, '4': 1, '5': 9, '9': 0, '10': 'fungiDir', '17': true},
-  ],
-  '8': [
-    {'1': '_fungi_dir'},
+    {'1': 'fungi_dir', '3': 1, '4': 1, '5': 9, '10': 'fungiDir'},
   ],
 };
 
 /// Descriptor for `StartFungiDaemonRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List startFungiDaemonRequestDescriptor = $convert.base64Decode(
-    'ChdTdGFydEZ1bmdpRGFlbW9uUmVxdWVzdBIgCglmdW5naV9kaXIYASABKAlIAFIIZnVuZ2lEaX'
-    'KIAQFCDAoKX2Z1bmdpX2Rpcg==');
+    'ChdTdGFydEZ1bmdpRGFlbW9uUmVxdWVzdBIbCglmdW5naV9kaXIYASABKAlSCGZ1bmdpRGly');
 
 @$core.Deprecated('Use peerIdResponseDescriptor instead')
 const PeerIdResponse$json = {
@@ -83,14 +75,14 @@ final $typed_data.Uint8List configFilePathResponseDescriptor = $convert.base64De
 const IncomingAllowedPeersListResponse$json = {
   '1': 'IncomingAllowedPeersListResponse',
   '2': [
-    {'1': 'peer_ids', '3': 1, '4': 3, '5': 9, '10': 'peerIds'},
+    {'1': 'peers', '3': 1, '4': 3, '5': 11, '6': '.fungi_daemon.PeerInfo', '10': 'peers'},
   ],
 };
 
 /// Descriptor for `IncomingAllowedPeersListResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List incomingAllowedPeersListResponseDescriptor = $convert.base64Decode(
-    'CiBJbmNvbWluZ0FsbG93ZWRQZWVyc0xpc3RSZXNwb25zZRIZCghwZWVyX2lkcxgBIAMoCVIHcG'
-    'Vlcklkcw==');
+    'CiBJbmNvbWluZ0FsbG93ZWRQZWVyc0xpc3RSZXNwb25zZRIsCgVwZWVycxgBIAMoCzIWLmZ1bm'
+    'dpX2RhZW1vbi5QZWVySW5mb1IFcGVlcnM=');
 
 @$core.Deprecated('Use addIncomingAllowedPeerRequestDescriptor instead')
 const AddIncomingAllowedPeerRequest$json = {
@@ -117,36 +109,6 @@ const RemoveIncomingAllowedPeerRequest$json = {
 final $typed_data.Uint8List removeIncomingAllowedPeerRequestDescriptor = $convert.base64Decode(
     'CiBSZW1vdmVJbmNvbWluZ0FsbG93ZWRQZWVyUmVxdWVzdBIXCgdwZWVyX2lkGAEgASgJUgZwZW'
     'VySWQ=');
-
-@$core.Deprecated('Use peerWithInfoDescriptor instead')
-const PeerWithInfo$json = {
-  '1': 'PeerWithInfo',
-  '2': [
-    {'1': 'peer_id', '3': 1, '4': 1, '5': 9, '10': 'peerId'},
-    {'1': 'peer_info', '3': 2, '4': 1, '5': 11, '6': '.fungi_daemon.PeerInfo', '9': 0, '10': 'peerInfo', '17': true},
-  ],
-  '8': [
-    {'1': '_peer_info'},
-  ],
-};
-
-/// Descriptor for `PeerWithInfo`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List peerWithInfoDescriptor = $convert.base64Decode(
-    'CgxQZWVyV2l0aEluZm8SFwoHcGVlcl9pZBgBIAEoCVIGcGVlcklkEjgKCXBlZXJfaW5mbxgCIA'
-    'EoCzIWLmZ1bmdpX2RhZW1vbi5QZWVySW5mb0gAUghwZWVySW5mb4gBAUIMCgpfcGVlcl9pbmZv');
-
-@$core.Deprecated('Use incomingAllowedPeersWithInfoResponseDescriptor instead')
-const IncomingAllowedPeersWithInfoResponse$json = {
-  '1': 'IncomingAllowedPeersWithInfoResponse',
-  '2': [
-    {'1': 'peers', '3': 1, '4': 3, '5': 11, '6': '.fungi_daemon.PeerWithInfo', '10': 'peers'},
-  ],
-};
-
-/// Descriptor for `IncomingAllowedPeersWithInfoResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List incomingAllowedPeersWithInfoResponseDescriptor = $convert.base64Decode(
-    'CiRJbmNvbWluZ0FsbG93ZWRQZWVyc1dpdGhJbmZvUmVzcG9uc2USMAoFcGVlcnMYASADKAsyGi'
-    '5mdW5naV9kYWVtb24uUGVlcldpdGhJbmZvUgVwZWVycw==');
 
 @$core.Deprecated('Use fileTransferServiceEnabledResponseDescriptor instead')
 const FileTransferServiceEnabledResponse$json = {
@@ -192,19 +154,15 @@ const AddFileTransferClientRequest$json = {
   '1': 'AddFileTransferClientRequest',
   '2': [
     {'1': 'enabled', '3': 1, '4': 1, '5': 8, '10': 'enabled'},
-    {'1': 'name', '3': 2, '4': 1, '5': 9, '9': 0, '10': 'name', '17': true},
+    {'1': 'name', '3': 2, '4': 1, '5': 9, '10': 'name'},
     {'1': 'peer_id', '3': 3, '4': 1, '5': 9, '10': 'peerId'},
-  ],
-  '8': [
-    {'1': '_name'},
   ],
 };
 
 /// Descriptor for `AddFileTransferClientRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List addFileTransferClientRequestDescriptor = $convert.base64Decode(
     'ChxBZGRGaWxlVHJhbnNmZXJDbGllbnRSZXF1ZXN0EhgKB2VuYWJsZWQYASABKAhSB2VuYWJsZW'
-    'QSFwoEbmFtZRgCIAEoCUgAUgRuYW1liAEBEhcKB3BlZXJfaWQYAyABKAlSBnBlZXJJZEIHCgVf'
-    'bmFtZQ==');
+    'QSEgoEbmFtZRgCIAEoCVIEbmFtZRIXCgdwZWVyX2lkGAMgASgJUgZwZWVySWQ=');
 
 @$core.Deprecated('Use removeFileTransferClientRequestDescriptor instead')
 const RemoveFileTransferClientRequest$json = {
@@ -238,18 +196,15 @@ const FileTransferClient$json = {
   '1': 'FileTransferClient',
   '2': [
     {'1': 'enabled', '3': 1, '4': 1, '5': 8, '10': 'enabled'},
-    {'1': 'name', '3': 2, '4': 1, '5': 9, '9': 0, '10': 'name', '17': true},
+    {'1': 'name', '3': 2, '4': 1, '5': 9, '10': 'name'},
     {'1': 'peer_id', '3': 3, '4': 1, '5': 9, '10': 'peerId'},
-  ],
-  '8': [
-    {'1': '_name'},
   ],
 };
 
 /// Descriptor for `FileTransferClient`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List fileTransferClientDescriptor = $convert.base64Decode(
-    'ChJGaWxlVHJhbnNmZXJDbGllbnQSGAoHZW5hYmxlZBgBIAEoCFIHZW5hYmxlZBIXCgRuYW1lGA'
-    'IgASgJSABSBG5hbWWIAQESFwoHcGVlcl9pZBgDIAEoCVIGcGVlcklkQgcKBV9uYW1l');
+    'ChJGaWxlVHJhbnNmZXJDbGllbnQSGAoHZW5hYmxlZBgBIAEoCFIHZW5hYmxlZBISCgRuYW1lGA'
+    'IgASgJUgRuYW1lEhcKB3BlZXJfaWQYAyABKAlSBnBlZXJJZA==');
 
 @$core.Deprecated('Use fileTransferClientsResponseDescriptor instead')
 const FileTransferClientsResponse$json = {
@@ -463,30 +418,24 @@ const PeerInfo$json = {
   '1': 'PeerInfo',
   '2': [
     {'1': 'peer_id', '3': 1, '4': 1, '5': 9, '10': 'peerId'},
-    {'1': 'alias', '3': 2, '4': 1, '5': 9, '9': 0, '10': 'alias', '17': true},
-    {'1': 'hostname', '3': 3, '4': 1, '5': 9, '9': 1, '10': 'hostname', '17': true},
+    {'1': 'alias', '3': 2, '4': 1, '5': 9, '10': 'alias'},
+    {'1': 'hostname', '3': 3, '4': 1, '5': 9, '10': 'hostname'},
     {'1': 'os', '3': 4, '4': 1, '5': 9, '10': 'os'},
-    {'1': 'public_ip', '3': 5, '4': 1, '5': 9, '9': 2, '10': 'publicIp', '17': true},
+    {'1': 'public_ip', '3': 5, '4': 1, '5': 9, '10': 'publicIp'},
     {'1': 'private_ips', '3': 6, '4': 3, '5': 9, '10': 'privateIps'},
     {'1': 'created_at', '3': 7, '4': 1, '5': 3, '10': 'createdAt'},
     {'1': 'last_connected', '3': 8, '4': 1, '5': 3, '10': 'lastConnected'},
     {'1': 'version', '3': 9, '4': 1, '5': 9, '10': 'version'},
   ],
-  '8': [
-    {'1': '_alias'},
-    {'1': '_hostname'},
-    {'1': '_public_ip'},
-  ],
 };
 
 /// Descriptor for `PeerInfo`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List peerInfoDescriptor = $convert.base64Decode(
-    'CghQZWVySW5mbxIXCgdwZWVyX2lkGAEgASgJUgZwZWVySWQSGQoFYWxpYXMYAiABKAlIAFIFYW'
-    'xpYXOIAQESHwoIaG9zdG5hbWUYAyABKAlIAVIIaG9zdG5hbWWIAQESDgoCb3MYBCABKAlSAm9z'
-    'EiAKCXB1YmxpY19pcBgFIAEoCUgCUghwdWJsaWNJcIgBARIfCgtwcml2YXRlX2lwcxgGIAMoCV'
-    'IKcHJpdmF0ZUlwcxIdCgpjcmVhdGVkX2F0GAcgASgDUgljcmVhdGVkQXQSJQoObGFzdF9jb25u'
-    'ZWN0ZWQYCCABKANSDWxhc3RDb25uZWN0ZWQSGAoHdmVyc2lvbhgJIAEoCVIHdmVyc2lvbkIICg'
-    'ZfYWxpYXNCCwoJX2hvc3RuYW1lQgwKCl9wdWJsaWNfaXA=');
+    'CghQZWVySW5mbxIXCgdwZWVyX2lkGAEgASgJUgZwZWVySWQSFAoFYWxpYXMYAiABKAlSBWFsaW'
+    'FzEhoKCGhvc3RuYW1lGAMgASgJUghob3N0bmFtZRIOCgJvcxgEIAEoCVICb3MSGwoJcHVibGlj'
+    'X2lwGAUgASgJUghwdWJsaWNJcBIfCgtwcml2YXRlX2lwcxgGIAMoCVIKcHJpdmF0ZUlwcxIdCg'
+    'pjcmVhdGVkX2F0GAcgASgDUgljcmVhdGVkQXQSJQoObGFzdF9jb25uZWN0ZWQYCCABKANSDWxh'
+    'c3RDb25uZWN0ZWQSGAoHdmVyc2lvbhgJIAEoCVIHdmVyc2lvbg==');
 
 @$core.Deprecated('Use peerInfoListResponseDescriptor instead')
 const PeerInfoListResponse$json = {
@@ -505,17 +454,14 @@ final $typed_data.Uint8List peerInfoListResponseDescriptor = $convert.base64Deco
 const PeerInfoResponse$json = {
   '1': 'PeerInfoResponse',
   '2': [
-    {'1': 'peer_info', '3': 1, '4': 1, '5': 11, '6': '.fungi_daemon.PeerInfo', '9': 0, '10': 'peerInfo', '17': true},
-  ],
-  '8': [
-    {'1': '_peer_info'},
+    {'1': 'peer_info', '3': 1, '4': 1, '5': 11, '6': '.fungi_daemon.PeerInfo', '10': 'peerInfo'},
   ],
 };
 
 /// Descriptor for `PeerInfoResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List peerInfoResponseDescriptor = $convert.base64Decode(
-    'ChBQZWVySW5mb1Jlc3BvbnNlEjgKCXBlZXJfaW5mbxgBIAEoCzIWLmZ1bmdpX2RhZW1vbi5QZW'
-    'VySW5mb0gAUghwZWVySW5mb4gBAUIMCgpfcGVlcl9pbmZv');
+    'ChBQZWVySW5mb1Jlc3BvbnNlEjMKCXBlZXJfaW5mbxgBIAEoCzIWLmZ1bmdpX2RhZW1vbi5QZW'
+    'VySW5mb1IIcGVlckluZm8=');
 
 @$core.Deprecated('Use addressBookAddOrUpdateRequestDescriptor instead')
 const AddressBookAddOrUpdateRequest$json = {

@@ -21,10 +21,6 @@ export 'fungi_daemon.pb.dart';
 
 @$pb.GrpcServiceName('fungi_daemon.FungiDaemon')
 class FungiDaemonClient extends $grpc.Client {
-  static final _$startFungiDaemon = $grpc.ClientMethod<$0.StartFungiDaemonRequest, $0.Empty>(
-      '/fungi_daemon.FungiDaemon/StartFungiDaemon',
-      ($0.StartFungiDaemonRequest value) => value.writeToBuffer(),
-      ($core.List<$core.int> value) => $0.Empty.fromBuffer(value));
   static final _$peerId = $grpc.ClientMethod<$0.Empty, $0.PeerIdResponse>(
       '/fungi_daemon.FungiDaemon/PeerId',
       ($0.Empty value) => value.writeToBuffer(),
@@ -37,8 +33,8 @@ class FungiDaemonClient extends $grpc.Client {
       '/fungi_daemon.FungiDaemon/Hostname',
       ($0.Empty value) => value.writeToBuffer(),
       ($core.List<$core.int> value) => $0.HostnameResponse.fromBuffer(value));
-  static final _$getIncomingAllowedPeersList = $grpc.ClientMethod<$0.Empty, $0.IncomingAllowedPeersListResponse>(
-      '/fungi_daemon.FungiDaemon/GetIncomingAllowedPeersList',
+  static final _$getIncomingAllowedPeers = $grpc.ClientMethod<$0.Empty, $0.IncomingAllowedPeersListResponse>(
+      '/fungi_daemon.FungiDaemon/GetIncomingAllowedPeers',
       ($0.Empty value) => value.writeToBuffer(),
       ($core.List<$core.int> value) => $0.IncomingAllowedPeersListResponse.fromBuffer(value));
   static final _$addIncomingAllowedPeer = $grpc.ClientMethod<$0.AddIncomingAllowedPeerRequest, $0.Empty>(
@@ -49,10 +45,6 @@ class FungiDaemonClient extends $grpc.Client {
       '/fungi_daemon.FungiDaemon/RemoveIncomingAllowedPeer',
       ($0.RemoveIncomingAllowedPeerRequest value) => value.writeToBuffer(),
       ($core.List<$core.int> value) => $0.Empty.fromBuffer(value));
-  static final _$getIncomingAllowedPeersWithInfo = $grpc.ClientMethod<$0.Empty, $0.IncomingAllowedPeersWithInfoResponse>(
-      '/fungi_daemon.FungiDaemon/GetIncomingAllowedPeersWithInfo',
-      ($0.Empty value) => value.writeToBuffer(),
-      ($core.List<$core.int> value) => $0.IncomingAllowedPeersWithInfoResponse.fromBuffer(value));
   static final _$getFileTransferServiceEnabled = $grpc.ClientMethod<$0.Empty, $0.FileTransferServiceEnabledResponse>(
       '/fungi_daemon.FungiDaemon/GetFileTransferServiceEnabled',
       ($0.Empty value) => value.writeToBuffer(),
@@ -148,10 +140,6 @@ class FungiDaemonClient extends $grpc.Client {
       : super(channel, options: options,
         interceptors: interceptors);
 
-  $grpc.ResponseFuture<$0.Empty> startFungiDaemon($0.StartFungiDaemonRequest request, {$grpc.CallOptions? options}) {
-    return $createUnaryCall(_$startFungiDaemon, request, options: options);
-  }
-
   $grpc.ResponseFuture<$0.PeerIdResponse> peerId($0.Empty request, {$grpc.CallOptions? options}) {
     return $createUnaryCall(_$peerId, request, options: options);
   }
@@ -164,8 +152,8 @@ class FungiDaemonClient extends $grpc.Client {
     return $createUnaryCall(_$hostname, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.IncomingAllowedPeersListResponse> getIncomingAllowedPeersList($0.Empty request, {$grpc.CallOptions? options}) {
-    return $createUnaryCall(_$getIncomingAllowedPeersList, request, options: options);
+  $grpc.ResponseFuture<$0.IncomingAllowedPeersListResponse> getIncomingAllowedPeers($0.Empty request, {$grpc.CallOptions? options}) {
+    return $createUnaryCall(_$getIncomingAllowedPeers, request, options: options);
   }
 
   $grpc.ResponseFuture<$0.Empty> addIncomingAllowedPeer($0.AddIncomingAllowedPeerRequest request, {$grpc.CallOptions? options}) {
@@ -174,10 +162,6 @@ class FungiDaemonClient extends $grpc.Client {
 
   $grpc.ResponseFuture<$0.Empty> removeIncomingAllowedPeer($0.RemoveIncomingAllowedPeerRequest request, {$grpc.CallOptions? options}) {
     return $createUnaryCall(_$removeIncomingAllowedPeer, request, options: options);
-  }
-
-  $grpc.ResponseFuture<$0.IncomingAllowedPeersWithInfoResponse> getIncomingAllowedPeersWithInfo($0.Empty request, {$grpc.CallOptions? options}) {
-    return $createUnaryCall(_$getIncomingAllowedPeersWithInfo, request, options: options);
   }
 
   $grpc.ResponseFuture<$0.FileTransferServiceEnabledResponse> getFileTransferServiceEnabled($0.Empty request, {$grpc.CallOptions? options}) {
@@ -274,13 +258,6 @@ abstract class FungiDaemonServiceBase extends $grpc.Service {
   $core.String get $name => 'fungi_daemon.FungiDaemon';
 
   FungiDaemonServiceBase() {
-    $addMethod($grpc.ServiceMethod<$0.StartFungiDaemonRequest, $0.Empty>(
-        'StartFungiDaemon',
-        startFungiDaemon_Pre,
-        false,
-        false,
-        ($core.List<$core.int> value) => $0.StartFungiDaemonRequest.fromBuffer(value),
-        ($0.Empty value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.Empty, $0.PeerIdResponse>(
         'PeerId',
         peerId_Pre,
@@ -303,8 +280,8 @@ abstract class FungiDaemonServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) => $0.Empty.fromBuffer(value),
         ($0.HostnameResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.Empty, $0.IncomingAllowedPeersListResponse>(
-        'GetIncomingAllowedPeersList',
-        getIncomingAllowedPeersList_Pre,
+        'GetIncomingAllowedPeers',
+        getIncomingAllowedPeers_Pre,
         false,
         false,
         ($core.List<$core.int> value) => $0.Empty.fromBuffer(value),
@@ -323,13 +300,6 @@ abstract class FungiDaemonServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.RemoveIncomingAllowedPeerRequest.fromBuffer(value),
         ($0.Empty value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.Empty, $0.IncomingAllowedPeersWithInfoResponse>(
-        'GetIncomingAllowedPeersWithInfo',
-        getIncomingAllowedPeersWithInfo_Pre,
-        false,
-        false,
-        ($core.List<$core.int> value) => $0.Empty.fromBuffer(value),
-        ($0.IncomingAllowedPeersWithInfoResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.Empty, $0.FileTransferServiceEnabledResponse>(
         'GetFileTransferServiceEnabled',
         getFileTransferServiceEnabled_Pre,
@@ -486,10 +456,6 @@ abstract class FungiDaemonServiceBase extends $grpc.Service {
         ($0.Empty value) => value.writeToBuffer()));
   }
 
-  $async.Future<$0.Empty> startFungiDaemon_Pre($grpc.ServiceCall call, $async.Future<$0.StartFungiDaemonRequest> request) async {
-    return startFungiDaemon(call, await request);
-  }
-
   $async.Future<$0.PeerIdResponse> peerId_Pre($grpc.ServiceCall call, $async.Future<$0.Empty> request) async {
     return peerId(call, await request);
   }
@@ -502,8 +468,8 @@ abstract class FungiDaemonServiceBase extends $grpc.Service {
     return hostname(call, await request);
   }
 
-  $async.Future<$0.IncomingAllowedPeersListResponse> getIncomingAllowedPeersList_Pre($grpc.ServiceCall call, $async.Future<$0.Empty> request) async {
-    return getIncomingAllowedPeersList(call, await request);
+  $async.Future<$0.IncomingAllowedPeersListResponse> getIncomingAllowedPeers_Pre($grpc.ServiceCall call, $async.Future<$0.Empty> request) async {
+    return getIncomingAllowedPeers(call, await request);
   }
 
   $async.Future<$0.Empty> addIncomingAllowedPeer_Pre($grpc.ServiceCall call, $async.Future<$0.AddIncomingAllowedPeerRequest> request) async {
@@ -512,10 +478,6 @@ abstract class FungiDaemonServiceBase extends $grpc.Service {
 
   $async.Future<$0.Empty> removeIncomingAllowedPeer_Pre($grpc.ServiceCall call, $async.Future<$0.RemoveIncomingAllowedPeerRequest> request) async {
     return removeIncomingAllowedPeer(call, await request);
-  }
-
-  $async.Future<$0.IncomingAllowedPeersWithInfoResponse> getIncomingAllowedPeersWithInfo_Pre($grpc.ServiceCall call, $async.Future<$0.Empty> request) async {
-    return getIncomingAllowedPeersWithInfo(call, await request);
   }
 
   $async.Future<$0.FileTransferServiceEnabledResponse> getFileTransferServiceEnabled_Pre($grpc.ServiceCall call, $async.Future<$0.Empty> request) async {
@@ -606,14 +568,12 @@ abstract class FungiDaemonServiceBase extends $grpc.Service {
     return addressBookRemove(call, await request);
   }
 
-  $async.Future<$0.Empty> startFungiDaemon($grpc.ServiceCall call, $0.StartFungiDaemonRequest request);
   $async.Future<$0.PeerIdResponse> peerId($grpc.ServiceCall call, $0.Empty request);
   $async.Future<$0.ConfigFilePathResponse> configFilePath($grpc.ServiceCall call, $0.Empty request);
   $async.Future<$0.HostnameResponse> hostname($grpc.ServiceCall call, $0.Empty request);
-  $async.Future<$0.IncomingAllowedPeersListResponse> getIncomingAllowedPeersList($grpc.ServiceCall call, $0.Empty request);
+  $async.Future<$0.IncomingAllowedPeersListResponse> getIncomingAllowedPeers($grpc.ServiceCall call, $0.Empty request);
   $async.Future<$0.Empty> addIncomingAllowedPeer($grpc.ServiceCall call, $0.AddIncomingAllowedPeerRequest request);
   $async.Future<$0.Empty> removeIncomingAllowedPeer($grpc.ServiceCall call, $0.RemoveIncomingAllowedPeerRequest request);
-  $async.Future<$0.IncomingAllowedPeersWithInfoResponse> getIncomingAllowedPeersWithInfo($grpc.ServiceCall call, $0.Empty request);
   $async.Future<$0.FileTransferServiceEnabledResponse> getFileTransferServiceEnabled($grpc.ServiceCall call, $0.Empty request);
   $async.Future<$0.FileTransferServiceRootDirResponse> getFileTransferServiceRootDir($grpc.ServiceCall call, $0.Empty request);
   $async.Future<$0.Empty> startFileTransferService($grpc.ServiceCall call, $0.StartFileTransferServiceRequest request);

@@ -1,23 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
-import 'package:fungi_app/src/rust/api/fungi.dart';
+import 'package:fungi_app/src/grpc/generated/fungi_daemon.pb.dart';
 import 'package:get/get.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import '../widgets/device_selector_dialog.dart';
-
-PeerInfo emptyPeerInfo() {
-  return PeerInfo(
-    peerId: '',
-    alias: null,
-    hostname: null,
-    os: '',
-    publicIp: null,
-    privateIps: [],
-    createdAt: BigInt.zero,
-    lastConnected: BigInt.zero,
-    version: '',
-  );
-}
 
 void showAllowedPeersList() {
   final controller = Get.find<FungiController>();
@@ -28,7 +14,7 @@ void showAllowedPeersList() {
         content: SizedBox(
           width: double.maxFinite,
           child: Obx(() {
-            if (controller.incomingAllowedPeersWithInfo.isEmpty) {
+            if (controller.incomingAllowedPeers.isEmpty) {
               return const Center(
                 child: Padding(
                   padding: EdgeInsets.all(16.0),
@@ -39,19 +25,16 @@ void showAllowedPeersList() {
 
             return ListView.builder(
               shrinkWrap: true,
-              itemCount: controller.incomingAllowedPeersWithInfo.length,
+              itemCount: controller.incomingAllowedPeers.length,
               itemBuilder: (context, index) {
-                final peerWithInfo =
-                    controller.incomingAllowedPeersWithInfo[index];
-                final peerId = peerWithInfo.peerId;
-                final peerInfo = peerWithInfo.peerInfo;
+                final peerInfo = controller.incomingAllowedPeers[index];
 
-                String displayName = peerId;
-                String subtitle = peerId;
+                String displayName = peerInfo.peerId;
+                String subtitle = peerInfo.peerId;
 
-                if (peerInfo != null && peerInfo.hostname != null) {
-                  displayName = peerInfo.hostname!;
-                  subtitle = peerId;
+                if (peerInfo.hostname.isNotEmpty) {
+                  displayName = peerInfo.hostname;
+                  subtitle = peerInfo.peerId;
                 }
 
                 return ListTile(
@@ -78,7 +61,7 @@ void showAllowedPeersList() {
                       size: 20,
                     ),
                     onPressed: () {
-                      controller.removeIncomingAllowedPeer(peerId);
+                      controller.removeIncomingAllowedPeer(peerInfo.peerId);
                     },
                   ),
                   dense: true,
@@ -105,7 +88,7 @@ void showAllowedPeersList() {
 void showAddAllowedPeerDialog() {
   final textPeerIdController = TextEditingController();
   final textAliasController = TextEditingController();
-  final Rx<PeerInfo> selectedPeer = emptyPeerInfo().obs;
+  final Rx<PeerInfo> selectedPeer = PeerInfo().obs;
   final errorMessage = RxString('');
   final controller = Get.find<FungiController>();
 
@@ -125,7 +108,7 @@ void showAddAllowedPeerDialog() {
                 if (newSelectedPeer == null) return;
                 selectedPeer.value = newSelectedPeer;
                 textPeerIdController.text = selectedPeer.value.peerId;
-                textAliasController.text = selectedPeer.value.hostname ?? '';
+                textAliasController.text = selectedPeer.value.hostname;
               },
             ),
             TextButton.icon(
@@ -137,7 +120,7 @@ void showAddAllowedPeerDialog() {
                 if (newSelectedPeer == null) return;
                 selectedPeer.value = newSelectedPeer;
                 textPeerIdController.text = selectedPeer.value.peerId;
-                textAliasController.text = selectedPeer.value.hostname ?? '';
+                textAliasController.text = selectedPeer.value.hostname;
               },
             ),
             SizedBox(height: 8),
@@ -181,7 +164,7 @@ void showAddAllowedPeerDialog() {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               if (textPeerIdController.text.isEmpty) {
                 errorMessage.value = 'Peer ID cannot be empty';
                 return;
@@ -189,15 +172,13 @@ void showAddAllowedPeerDialog() {
 
               if (selectedPeer.value.peerId != textPeerIdController.text) {
                 // reset the selectedPeer
-                selectedPeer.value = emptyPeerInfo();
+                selectedPeer.value = PeerInfo();
               }
 
               selectedPeer.value.peerId = textPeerIdController.text;
-              selectedPeer.value.alias = textAliasController.text.isEmpty
-                  ? null
-                  : textAliasController.text;
+              selectedPeer.value.alias = textAliasController.text;
               try {
-                controller.addIncomingAllowedPeer(selectedPeer.value);
+                await controller.addIncomingAllowedPeer(selectedPeer.value);
                 SmartDialog.dismiss();
               } catch (e) {
                 errorMessage.value = 'Failed to add peer: $e';
@@ -214,7 +195,7 @@ void showAddAllowedPeerDialog() {
 void showAddFileClientDialog() {
   final textPeerIdController = TextEditingController();
   final textAliasController = TextEditingController();
-  final Rx<PeerInfo> selectedPeer = emptyPeerInfo().obs;
+  final Rx<PeerInfo> selectedPeer = PeerInfo().obs;
   final enabled = RxBool(true);
   final errorMessage = RxString('');
   final controller = Get.find<FungiController>();
@@ -235,7 +216,7 @@ void showAddFileClientDialog() {
                 if (newSelectedPeer == null) return;
                 selectedPeer.value = newSelectedPeer;
                 textPeerIdController.text = selectedPeer.value.peerId;
-                textAliasController.text = selectedPeer.value.hostname ?? '';
+                textAliasController.text = selectedPeer.value.hostname;
               },
             ),
             TextButton.icon(
@@ -247,7 +228,7 @@ void showAddFileClientDialog() {
                 if (newSelectedPeer == null) return;
                 selectedPeer.value = newSelectedPeer;
                 textPeerIdController.text = selectedPeer.value.peerId;
-                textAliasController.text = selectedPeer.value.hostname ?? '';
+                textAliasController.text = selectedPeer.value.hostname;
               },
             ),
             SizedBox(height: 8),
@@ -315,12 +296,10 @@ void showAddFileClientDialog() {
               }
               if (selectedPeer.value.peerId != textPeerIdController.text) {
                 // reset the selectedPeer
-                selectedPeer.value = emptyPeerInfo();
+                selectedPeer.value = PeerInfo();
               }
               selectedPeer.value.peerId = textPeerIdController.text;
-              selectedPeer.value.alias = textAliasController.text.isEmpty
-                  ? null
-                  : textAliasController.text;
+              selectedPeer.value.alias = textAliasController.text;
               try {
                 await controller.addFileTransferClient(
                   enabled: enabled.value,
@@ -344,7 +323,7 @@ void showAddForwardingRuleDialog() {
   final localPortController = TextEditingController();
   final peerIdController = TextEditingController();
   final remotePortController = TextEditingController();
-  final Rx<PeerInfo> selectedPeer = emptyPeerInfo().obs;
+  final Rx<PeerInfo> selectedPeer = PeerInfo().obs;
   final errorMessage = RxString('');
 
   final controller = Get.find<FungiController>();
@@ -463,7 +442,7 @@ void showAddForwardingRuleDialog() {
 
               if (selectedPeer.value.peerId != peerIdController.text) {
                 // reset the selectedPeer
-                selectedPeer.value = emptyPeerInfo();
+                selectedPeer.value = PeerInfo();
               }
 
               selectedPeer.value.peerId = peerIdController.text;

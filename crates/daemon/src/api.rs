@@ -31,15 +31,6 @@ impl FungiDaemon {
             .to_string()
     }
 
-    pub fn get_incoming_allowed_peers_list(&self) -> Vec<String> {
-        self.swarm_control()
-            .state()
-            .get_incoming_allowed_peers_list()
-            .into_iter()
-            .map(|p| p.to_string())
-            .collect()
-    }
-
     pub fn add_incoming_allowed_peer(&self, peer_id: PeerId) -> Result<()> {
         // update config and write config file
         let current_config = self.config().lock().clone();
@@ -317,21 +308,22 @@ impl FungiDaemon {
         Ok(())
     }
 
-    pub fn get_incoming_allowed_peers_with_info(&self) -> Vec<(String, Option<PeerInfo>)> {
-        let allowed_peers = self.get_incoming_allowed_peers_list();
+    pub fn get_incoming_allowed_peers(&self) -> Vec<PeerInfo> {
+        let allowed_peers = self
+            .swarm_control()
+            .state()
+            .get_incoming_allowed_peers_list();
         let peers_config_guard = self.address_book();
         let peers_config = peers_config_guard.lock();
 
         allowed_peers
             .into_iter()
-            .map(|peer_id_str| {
-                let peer_info = if let Ok(peer_id) = peer_id_str.parse::<PeerId>() {
-                    peers_config.get_peer_info(&peer_id).cloned()
-                } else {
-                    None
-                };
-                (peer_id_str, peer_info)
-            })
+            .map(
+                |peer_id| match peers_config.get_peer_info(&peer_id).cloned() {
+                    Some(peer_info) => peer_info,
+                    None => PeerInfo::new_unknown(peer_id),
+                },
+            )
             .collect()
     }
 }

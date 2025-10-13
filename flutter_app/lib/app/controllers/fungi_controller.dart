@@ -2,13 +2,10 @@ import 'dart:io';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:fungi_app/app/foreground_task.dart';
-import 'package:path/path.dart' as p;
+import 'package:fungi_app/src/grpc/generated/fungi_daemon.pbgrpc.dart';
 import 'package:flutter/material.dart';
-import 'package:fungi_app/src/rust/api/fungi.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
-import 'package:fungi_app/src/rust/api/fungi.dart' as fungi;
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 enum ThemeOption { light, dark, system }
@@ -46,8 +43,11 @@ class FileTransferServerState {
 }
 
 class FungiController extends GetxController {
+  final FungiDaemonClient fungiClient;
+
   final isServiceRunning = false.obs;
   final peerId = ''.obs;
+  final hostname = ''.obs;
   final configFilePath = ''.obs;
   final isForegroundServiceRunning = false.obs;
 
@@ -57,26 +57,24 @@ class FungiController extends GetxController {
 
   final currentTheme = ThemeOption.system.obs;
   final preventClose = false.obs;
-  final incomingAllowdPeers = <String>[].obs;
-  final incomingAllowedPeersWithInfo = <PeerWithInfo>[].obs;
+  final incomingAllowedPeers = <PeerInfo>[].obs;
   final addressBook = <PeerInfo>[].obs;
   final fileTransferServerState = FileTransferServerState(enabled: false).obs;
   final fileTransferClients = <FileTransferClient>[].obs;
 
   // TCP Tunneling state
-  final tcpTunnelingConfig = TcpTunnelingConfig(
-    forwardingEnabled: false,
-    listeningEnabled: false,
-    forwardingRules: [],
-    listeningRules: [],
-  ).obs;
+  final tcpTunnelingConfig = TcpTunnelingConfigResponse().obs;
 
-  final ftpProxy = FtpProxy(enabled: false, host: "", port: 0).obs;
-  final webdavProxy = WebdavProxy(enabled: false, host: "", port: 0).obs;
+  final ftpProxy = FtpProxyResponse(enabled: false, host: "", port: 0).obs;
+  final webdavProxy = WebdavProxyResponse().obs;
+
+  FungiController({required this.fungiClient});
 
   @override
   void onInit() {
     super.onInit();
+    // TODO check fungiClient is valid
+
     initFungi();
     loadThemeOption();
 
@@ -166,42 +164,52 @@ class FungiController extends GetxController {
     _storage.write(_themeKey, option.index);
   }
 
-  void updateIncomingAllowedPeers() {
-    incomingAllowdPeers.value = fungi.getIncomingAllowedPeersList();
-    incomingAllowedPeersWithInfo.value = fungi
-        .getIncomingAllowedPeersWithInfo();
+  Future<void> updateIncomingAllowedPeers() async {
+    incomingAllowedPeers.value = (await fungiClient.getIncomingAllowedPeers(
+      Empty(),
+    )).peers;
   }
 
-  void updateAddressBook() {
-    addressBook.value = fungi.getAllAddressBook();
+  Future<void> updateAddressBook() async {
+    addressBook.value = (await fungiClient.getAllAddressBook(Empty())).peers;
   }
 
-  void addIncomingAllowedPeer(PeerInfo peerInfo) {
-    fungi.addIncomingAllowedPeer(peerId: peerInfo.peerId);
-    updateIncomingAllowedPeers();
+  Future<void> addIncomingAllowedPeer(PeerInfo peerInfo) async {
+    await fungiClient.addIncomingAllowedPeer(
+      AddIncomingAllowedPeerRequest()..peerId = peerInfo.peerId,
+    );
+    await updateIncomingAllowedPeers();
     // Also add to address books
 
     // Update the address books list to reflect the new peer
-    addressBookAddOrUpdate(peerInfo);
+    await addressBookAddOrUpdate(peerInfo);
   }
 
-  void removeIncomingAllowedPeer(String peerId) {
-    fungi.removeIncomingAllowedPeer(peerId: peerId);
-    updateIncomingAllowedPeers();
+  Future<void> removeIncomingAllowedPeer(String peerId) async {
+    await fungiClient.removeIncomingAllowedPeer(
+      RemoveIncomingAllowedPeerRequest()..peerId = peerId,
+    );
+    await updateIncomingAllowedPeers();
   }
 
-  void addressBookAddOrUpdate(PeerInfo peerInfo) {
-    fungi.addressBookAddOrUpdate(peerInfo: peerInfo);
-    updateAddressBook();
+  Future<void> addressBookAddOrUpdate(PeerInfo peerInfo) async {
+    await fungiClient.addressBookAddOrUpdate(
+      AddressBookAddOrUpdateRequest()..peerInfo = peerInfo,
+    );
+    await updateAddressBook();
   }
 
-  PeerInfo? addressBookGetPeer(String peerId) {
-    return fungi.addressBookGetPeer(peerId: peerId);
+  Future<PeerInfo?> addressBookGetPeer(String peerId) async {
+    return (await fungiClient.addressBookGetPeer(
+      AddressBookGetPeerRequest()..peerId = peerId,
+    )).peerInfo;
   }
 
-  void addressBookRemove(String peerId) {
-    fungi.addressBookRemove(peerId: peerId);
-    updateAddressBook();
+  Future<void> addressBookRemove(String peerId) async {
+    await fungiClient.addressBookRemove(
+      AddressBookRemoveRequest()..peerId = peerId,
+    );
+    await updateAddressBook();
   }
 
   Future<void> startFileTransferServer(String rootDir) async {
@@ -220,7 +228,9 @@ class FungiController extends GetxController {
         }
       }
 
-      await fungi.startFileTransferService(rootDir: rootDir);
+      await fungiClient.startFileTransferService(
+        StartFileTransferServiceRequest()..rootDir = rootDir,
+      );
       fileTransferServerState.value.enabled = true;
       fileTransferServerState.value.error = null;
       debugPrint('File Transfer Server started');
@@ -233,9 +243,9 @@ class FungiController extends GetxController {
     fileTransferServerState.refresh();
   }
 
-  void stopFileTransferServer() {
+  Future<void> stopFileTransferServer() async {
     try {
-      fungi.stopFileTransferService();
+      await fungiClient.stopFileTransferService(Empty());
       fileTransferServerState.value.enabled = false;
       fileTransferServerState.value.error = null;
       debugPrint('File Transfer Server stopped');
@@ -250,10 +260,11 @@ class FungiController extends GetxController {
     required bool enabled,
     required PeerInfo peerInfo,
   }) async {
-    await fungi.addFileTransferClient(
-      enabled: enabled,
-      name: peerInfo.alias,
-      peerId: peerInfo.peerId,
+    await fungiClient.addFileTransferClient(
+      AddFileTransferClientRequest()
+        ..enabled = enabled
+        ..name = peerInfo.alias
+        ..peerId = peerInfo.peerId,
     );
     fileTransferClients.add(
       FileTransferClient(
@@ -263,16 +274,17 @@ class FungiController extends GetxController {
       ),
     );
     // add to address books
-    addressBookAddOrUpdate(peerInfo);
+    await addressBookAddOrUpdate(peerInfo);
   }
 
   Future<void> enableFileTransferClient({
     required FileTransferClient client,
     required bool enabled,
   }) async {
-    await fungi.enableFileTransferClient(
-      peerId: client.peerId,
-      enabled: enabled,
+    await fungiClient.enableFileTransferClient(
+      EnableFileTransferClientRequest()
+        ..peerId = client.peerId
+        ..enabled = enabled,
     );
 
     final newClient = FileTransferClient(
@@ -291,33 +303,41 @@ class FungiController extends GetxController {
     fileTransferClients.refresh();
   }
 
-  void removeFileTransferClient(String peerId) {
-    fungi.removeFileTransferClient(peerId: peerId);
+  Future<void> removeFileTransferClient(String peerId) async {
+    await fungiClient.removeFileTransferClient(
+      RemoveFileTransferClientRequest()..peerId = peerId,
+    );
     fileTransferClients.removeWhere((client) => client.peerId == peerId);
   }
 
   Future<void> initFungi() async {
     try {
-      if (Platform.isAndroid) {
-        final appDocumentsDir = await getApplicationDocumentsDirectory();
-        final fungiDir = p.join(appDocumentsDir.absolute.path, 'fungi');
-        await fungi.startFungiDaemon(fungiDir: fungiDir);
-      }
-      await fungi.startFungiDaemon();
+      // TODO init android
+      // if (Platform.isAndroid) {
+      //   final appDocumentsDir = await getApplicationDocumentsDirectory();
+      //   final fungiDir = p.join(appDocumentsDir.absolute.path, 'fungi');
+      //   await fungi.startFungiDaemon(fungiDir: fungiDir);
+      // }
+      // await fungi.startFungiDaemon();
 
       isServiceRunning.value = true;
       debugPrint('Fungi Daemon started');
 
-      String id = fungi.peerId();
-      peerId.value = id;
-      debugPrint('Peer ID: $id');
+      peerId.value = (await fungiClient.peerId(Empty())).peerId;
+      debugPrint('Peer ID: ${peerId.value}');
 
-      configFilePath.value = fungi.configFilePath();
+      hostname.value = (await fungiClient.hostname(Empty())).hostname;
+
+      configFilePath.value = (await fungiClient.configFilePath(
+        Empty(),
+      )).configFilePath;
 
       try {
-        fileTransferServerState.value.enabled = fungi
-            .getFileTransferServiceEnabled();
-        final dir = fungi.getFileTransferServiceRootDir();
+        fileTransferServerState.value.enabled =
+            (await fungiClient.getFileTransferServiceEnabled(Empty())).enabled;
+        final dir = (await fungiClient.getFileTransferServiceRootDir(
+          Empty(),
+        )).rootDir;
         if (dir.isNotEmpty) {
           fileTransferServerState.value.rootDir = dir;
         } else {
@@ -330,7 +350,9 @@ class FungiController extends GetxController {
       fileTransferServerState.refresh();
 
       try {
-        final clients = fungi.getAllFileTransferClients();
+        final clients = (await fungiClient.getAllFileTransferClients(
+          Empty(),
+        )).clients;
         fileTransferClients.value = clients.toList();
       } catch (e) {
         debugPrint('Failed to get file transfer clients: $e');
@@ -338,15 +360,15 @@ class FungiController extends GetxController {
       }
 
       try {
-        ftpProxy.value = fungi.getFtpProxy();
-        webdavProxy.value = fungi.getWebdavProxy();
+        ftpProxy.value = await fungiClient.getFtpProxy(Empty());
+        webdavProxy.value = await fungiClient.getWebdavProxy(Empty());
       } catch (e) {
         debugPrint('Failed to get proxy infos: $e');
       }
-      updateIncomingAllowedPeers();
-      updateAddressBook();
+      await updateIncomingAllowedPeers();
+      await updateAddressBook();
       // Load TCP tunneling config
-      refreshTcpTunnelingConfig();
+      await refreshTcpTunnelingConfig();
     } catch (e) {
       isServiceRunning.value = false;
       peerId.value = 'error';
@@ -355,9 +377,9 @@ class FungiController extends GetxController {
   }
 
   // TCP Tunneling methods
-  void refreshTcpTunnelingConfig() {
+  Future<void> refreshTcpTunnelingConfig() async {
     try {
-      final config = fungi.getTcpTunnelingConfig();
+      final config = await fungiClient.getTcpTunnelingConfig(Empty());
       tcpTunnelingConfig.value = config;
     } catch (e) {
       debugPrint('Failed to get TCP tunneling config: $e');
@@ -371,16 +393,17 @@ class FungiController extends GetxController {
     required PeerInfo peerInfo,
   }) async {
     try {
-      await fungi.addTcpForwardingRule(
-        localHost: localHost,
-        localPort: localPort,
-        peerId: peerInfo.peerId,
-        remotePort: remotePort,
+      await fungiClient.addTcpForwardingRule(
+        AddTcpForwardingRuleRequest()
+          ..localHost = localHost
+          ..localPort = localPort
+          ..peerId = peerInfo.peerId
+          ..remotePort = remotePort,
       );
-      refreshTcpTunnelingConfig();
+      await refreshTcpTunnelingConfig();
 
       // add to address books
-      addressBookAddOrUpdate(peerInfo);
+      await addressBookAddOrUpdate(peerInfo);
       Get.snackbar(
         'Success',
         'Forwarding rule added successfully',
@@ -401,8 +424,10 @@ class FungiController extends GetxController {
 
   Future<void> removeTcpForwardingRule(String ruleId) async {
     try {
-      fungi.removeTcpForwardingRule(ruleId: ruleId);
-      refreshTcpTunnelingConfig();
+      await fungiClient.removeTcpForwardingRule(
+        RemoveTcpForwardingRuleRequest()..ruleId = ruleId,
+      );
+      await refreshTcpTunnelingConfig();
       Get.snackbar(
         'Success',
         'Forwarding rule removed successfully',
@@ -427,12 +452,13 @@ class FungiController extends GetxController {
     required List<String> allowedPeers,
   }) async {
     try {
-      await fungi.addTcpListeningRule(
-        localHost: localHost,
-        localPort: localPort,
-        allowedPeers: allowedPeers,
+      await fungiClient.addTcpListeningRule(
+        AddTcpListeningRuleRequest()
+          ..localHost = localHost
+          ..localPort = localPort
+          ..allowedPeers.addAll(allowedPeers),
       );
-      refreshTcpTunnelingConfig();
+      await refreshTcpTunnelingConfig();
       Get.snackbar(
         'Success',
         'Listening rule added successfully',
@@ -453,8 +479,10 @@ class FungiController extends GetxController {
 
   Future<void> removeTcpListeningRule(String ruleId) async {
     try {
-      fungi.removeTcpListeningRule(ruleId: ruleId);
-      refreshTcpTunnelingConfig();
+      await fungiClient.removeTcpListeningRule(
+        RemoveTcpListeningRuleRequest()..ruleId = ruleId,
+      );
+      await refreshTcpTunnelingConfig();
       Get.snackbar(
         'Success',
         'Listening rule removed successfully',

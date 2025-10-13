@@ -60,17 +60,22 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         _request: Request<Empty>,
     ) -> Result<Response<HostnameResponse>, Status> {
         let response = HostnameResponse {
-            hostname: self.inner.host_name(),
+            hostname: self.inner.host_name().unwrap_or_default(),
         };
         Ok(Response::new(response))
     }
 
-    async fn get_incoming_allowed_peers_list(
+    async fn get_incoming_allowed_peers(
         &self,
         _request: Request<Empty>,
     ) -> Result<Response<IncomingAllowedPeersListResponse>, Status> {
         let response = IncomingAllowedPeersListResponse {
-            peer_ids: self.inner.get_incoming_allowed_peers_list(),
+            peers: self
+                .inner
+                .get_incoming_allowed_peers()
+                .into_iter()
+                .map(|p| peer_info_to_proto(p))
+                .collect(),
         };
         Ok(Response::new(response))
     }
@@ -101,23 +106,6 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .map_err(|e| Status::internal(format!("Failed to remove peer: {}", e)))?;
 
         Ok(Response::new(Empty {}))
-    }
-
-    async fn get_incoming_allowed_peers_with_info(
-        &self,
-        _request: Request<Empty>,
-    ) -> Result<Response<IncomingAllowedPeersWithInfoResponse>, Status> {
-        let peers_with_info = self.inner.get_incoming_allowed_peers_with_info();
-        let peers = peers_with_info
-            .into_iter()
-            .map(|(peer_id, peer_info)| PeerWithInfo {
-                peer_id,
-                peer_info: peer_info.map(|p| peer_info_to_proto(p)),
-            })
-            .collect();
-
-        let response = IncomingAllowedPeersWithInfoResponse { peers };
-        Ok(Response::new(response))
     }
 
     async fn get_file_transfer_service_enabled(
@@ -178,7 +166,15 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
 
         self.inner
-            .add_file_transfer_client(req.enabled, req.name, peer_id)
+            .add_file_transfer_client(
+                req.enabled,
+                if req.name.is_empty() {
+                    None
+                } else {
+                    Some(req.name)
+                },
+                peer_id,
+            )
             .await
             .map_err(|e| Status::internal(format!("Failed to add client: {}", e)))?;
 
@@ -225,7 +221,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .into_iter()
             .map(|c| FileTransferClient {
                 enabled: c.enabled,
-                name: c.name,
+                name: c.name.unwrap_or_default(),
                 peer_id: c.peer_id.to_string(),
             })
             .collect();
@@ -475,10 +471,10 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 fn peer_info_to_proto(info: fungi_config::address_book::PeerInfo) -> PeerInfo {
     PeerInfo {
         peer_id: info.peer_id.to_string(),
-        alias: info.alias,
-        hostname: info.hostname,
+        alias: info.alias.unwrap_or_default(),
+        hostname: info.hostname.unwrap_or_default(),
         os: os_to_string(info.os),
-        public_ip: info.public_ip,
+        public_ip: info.public_ip.unwrap_or_default(),
         private_ips: info.private_ips,
         created_at: system_time_to_i64(info.created_at),
         last_connected: system_time_to_i64(info.last_connected),
@@ -492,10 +488,22 @@ fn proto_to_peer_info(proto: PeerInfo) -> Result<fungi_config::address_book::Pee
 
     Ok(fungi_config::address_book::PeerInfo {
         peer_id,
-        alias: proto.alias,
-        hostname: proto.hostname,
+        alias: if proto.alias.is_empty() {
+            None
+        } else {
+            Some(proto.alias)
+        },
+        hostname: if proto.hostname.is_empty() {
+            None
+        } else {
+            Some(proto.hostname)
+        },
         os: string_to_os(&proto.os),
-        public_ip: proto.public_ip,
+        public_ip: if proto.public_ip.is_empty() {
+            None
+        } else {
+            Some(proto.public_ip)
+        },
         private_ips: proto.private_ips,
         created_at: i64_to_system_time(proto.created_at),
         last_connected: i64_to_system_time(proto.last_connected),

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:fungi_app/src/rust/api/fungi.dart';
 import 'package:fungi_app/ui/pages/home/drive_page.dart';
 import 'package:fungi_app/ui/pages/home/data_tunnel_page.dart';
 import 'package:fungi_app/ui/pages/settings/settings.dart';
@@ -96,7 +95,9 @@ class HomeHeader extends GetView<FungiController> {
                         color: colorScheme.surfaceTint,
                         fontWeight: FontWeight.bold,
                       ),
-                      value: hostName() ?? "Unknown",
+                      value: controller.hostname.value.isEmpty
+                          ? "Unknown"
+                          : controller.hostname.value,
                       style: const TextStyle(fontSize: 12),
                     ),
                     LabeledText(
@@ -106,7 +107,9 @@ class HomeHeader extends GetView<FungiController> {
                         color: colorScheme.surfaceTint,
                         fontWeight: FontWeight.bold,
                       ),
-                      value: controller.peerId.value.substring(0, 5),
+                      value: controller.peerId.value.length >= 5
+                          ? controller.peerId.value.substring(0, 5)
+                          : controller.peerId.value,
                       valueWidget: TruncatedId(
                         id: controller.peerId.value,
                         style: const TextStyle(fontSize: 12),

@@ -10,7 +10,7 @@ members = [
     "crates/fs",
     "crates/wasi",
     "crates/daemon-grpc",
-    "flutter_app/rust",
+    # "flutter_app/rust",
 ]
 
 [workspace.package]

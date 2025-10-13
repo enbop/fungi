@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
-import 'package:fungi_app/src/rust/api/fungi.dart';
-import 'package:fungi_app/src/rust/api/fungi.dart' as fungi;
 import 'package:get/get.dart';
 
 import 'dart:math';
+
+import '../../src/grpc/generated/fungi_daemon.pb.dart';
 
 Future<PeerInfo?> showAddressBookSelectorDialog() async {
   final dialogId =
@@ -30,14 +30,15 @@ Future<PeerInfo?> showMdnsLocalDevicesSelectorDialog() async {
   final dialogId =
       DateTime.now().millisecondsSinceEpoch.toString() +
       Random().nextInt(100).toString();
+  final controller = Get.find<FungiController>();
 
-  final devices = await fungi.mdnsGetLocalDevices();
+  final devices = await controller.fungiClient.mdnsGetLocalDevices(Empty());
   return await SmartDialog.show<PeerInfo>(
     tag: dialogId,
     builder: (context) => DeviceSelectorDialogWidget(
       title: "Select From Local Devices(mDNS)",
       dialogId: dialogId,
-      devices: devices,
+      devices: devices.peers,
       showOnlineStatus: true,
     ),
     alignment: Alignment.center,

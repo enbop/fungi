@@ -165,7 +165,7 @@ class DataTunnelPage extends GetView<FungiController> {
             ),
             SizedBox(width: 5),
             SelectableText(
-              "${controller.incomingAllowdPeers.length}",
+              "${controller.incomingAllowedPeers.length}",
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             IconButton(

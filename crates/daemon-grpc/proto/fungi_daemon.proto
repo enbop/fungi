@@ -7,13 +7,11 @@ service FungiDaemon {
   rpc ConfigFilePath(Empty) returns (ConfigFilePathResponse) {}
   rpc Hostname(Empty) returns (HostnameResponse) {}
 
-  rpc GetIncomingAllowedPeersList(Empty)
+  rpc GetIncomingAllowedPeers(Empty)
       returns (IncomingAllowedPeersListResponse) {}
   rpc AddIncomingAllowedPeer(AddIncomingAllowedPeerRequest) returns (Empty) {}
   rpc RemoveIncomingAllowedPeer(RemoveIncomingAllowedPeerRequest)
       returns (Empty) {}
-  rpc GetIncomingAllowedPeersWithInfo(Empty)
-      returns (IncomingAllowedPeersWithInfoResponse) {}
 
   rpc GetFileTransferServiceEnabled(Empty)
       returns (FileTransferServiceEnabledResponse) {}
@@ -53,28 +51,19 @@ service FungiDaemon {
 
 message Empty {}
 
-message HostnameResponse { optional string hostname = 1; }
+message HostnameResponse { string hostname = 1; }
 
-message StartFungiDaemonRequest { optional string fungi_dir = 1; }
+message StartFungiDaemonRequest { string fungi_dir = 1; }
 
 message PeerIdResponse { string peer_id = 1; }
 
 message ConfigFilePathResponse { string config_file_path = 1; }
 
-message IncomingAllowedPeersListResponse { repeated string peer_ids = 1; }
+message IncomingAllowedPeersListResponse { repeated PeerInfo peers = 1; }
 
 message AddIncomingAllowedPeerRequest { string peer_id = 1; }
 
 message RemoveIncomingAllowedPeerRequest { string peer_id = 1; }
-
-message PeerWithInfo {
-  string peer_id = 1;
-  optional PeerInfo peer_info = 2;
-}
-
-message IncomingAllowedPeersWithInfoResponse {
-  repeated PeerWithInfo peers = 1;
-}
 
 message FileTransferServiceEnabledResponse { bool enabled = 1; }
 
@@ -84,7 +73,7 @@ message StartFileTransferServiceRequest { string root_dir = 1; }
 
 message AddFileTransferClientRequest {
   bool enabled = 1;
-  optional string name = 2;
+  string name = 2;
   string peer_id = 3;
 }
 
@@ -97,7 +86,7 @@ message EnableFileTransferClientRequest {
 
 message FileTransferClient {
   bool enabled = 1;
-  optional string name = 2;
+  string name = 2;
   string peer_id = 3;
 }
 
@@ -170,10 +159,10 @@ message RemoveTcpListeningRuleRequest { string rule_id = 1; }
 
 message PeerInfo {
   string peer_id = 1;
-  optional string alias = 2;
-  optional string hostname = 3;
+  string alias = 2;
+  string hostname = 3;
   string os = 4;
-  optional string public_ip = 5;
+  string public_ip = 5;
   repeated string private_ips = 6;
   int64 created_at = 7;
   int64 last_connected = 8;
@@ -182,7 +171,7 @@ message PeerInfo {
 
 message PeerInfoListResponse { repeated PeerInfo peers = 1; }
 
-message PeerInfoResponse { optional PeerInfo peer_info = 1; }
+message PeerInfoResponse { PeerInfo peer_info = 1; }
 
 message AddressBookAddOrUpdateRequest { PeerInfo peer_info = 1; }
 

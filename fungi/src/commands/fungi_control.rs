@@ -24,7 +24,7 @@ pub async fn execute(cmd: ControlCommands) {
         ControlCommands::Hostname => {
             let request = Request::new(Empty {});
             let response = rpc_client.hostname(request).await.unwrap();
-            println!("{}", response.into_inner().hostname.unwrap_or_default());
+            println!("{}", response.into_inner().hostname);
         }
     }
 }
