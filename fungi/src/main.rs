@@ -9,10 +9,10 @@ async fn main() -> Result<()> {
 
     match fungi_args.command {
         Commands::Daemon(args) => fungi_daemon::run(args).await?,
-        Commands::Init(args) => fungi_init::run(args).await?,
+        Commands::Init(_args) => fungi_init::run(fungi_args.common).await?,
         Commands::Relay(args) => fungi_relay::run(args).await?,
         Commands::Run(args) => fungi_wasi::run(args).await?,
-        Commands::Control(args) => fungi_control::execute(args).await,
+        Commands::Control(cmd) => fungi_control::execute(fungi_args.common, cmd).await,
     }
     Ok(())
 }

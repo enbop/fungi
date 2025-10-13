@@ -1,10 +1,13 @@
 use clap::Subcommand;
+use fungi_config::{FungiConfig, FungiDir};
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{Empty, fungi_daemon_client::FungiDaemonClient},
 };
 
-#[derive(Subcommand, Debug, Clone)]
+use crate::commands::CommonArgs;
+
+#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
 pub enum ControlCommands {
     /// Show hostname of this device
     Hostname,
@@ -12,9 +15,21 @@ pub enum ControlCommands {
     Id,
     /// Show info of this Fungi daemon
     Info,
+    /// Show RPC address
+    RpcAddress,
 }
 
-pub async fn execute(cmd: ControlCommands) {
+pub async fn execute(args: CommonArgs, cmd: ControlCommands) {
+    let Ok(fungi_config) = FungiConfig::try_read_from_dir(&args.fungi_dir()) else {
+        eprintln!("Failed to read Fungi configuration. Please ensure it is initialized.");
+        return;
+    };
+
+    if cmd == ControlCommands::RpcAddress {
+        println!("{}", fungi_config.rpc.listen_address);
+        return;
+    }
+
     let mut rpc_client = match FungiDaemonClient::connect("http://[::1]:50051").await {
         Ok(client) => client,
         Err(e) => {
@@ -39,6 +54,9 @@ pub async fn execute(cmd: ControlCommands) {
             let request = Request::new(Empty {});
             let response = rpc_client.version(request).await.unwrap();
             println!("Version: {}", response.into_inner().version);
+        }
+        ControlCommands::RpcAddress => {
+            // Already handled above
         }
     }
 }

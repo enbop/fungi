@@ -18,13 +18,6 @@ const DEFAULT_LISTEN_PORT: u16 = 30001;
 
 #[derive(Debug, Clone, Parser)]
 pub struct RelayArgs {
-    #[clap(
-        short,
-        long,
-        help = "Path to the Fungi relay server config directory, defaults to ~/.fungi-relay-server"
-    )]
-    pub fungi_dir: Option<String>,
-
     #[clap(short, long, help = "Public IP address of this device")]
     pub public_ip: IpAddr,
 

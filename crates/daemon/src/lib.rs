@@ -17,8 +17,6 @@ pub struct DaemonArgs {
     pub fungi_dir: Option<String>,
 }
 
-impl DaemonArgs {}
-
 impl FungiDir for DaemonArgs {
     fn fungi_dir(&self) -> PathBuf {
         self.fungi_dir
