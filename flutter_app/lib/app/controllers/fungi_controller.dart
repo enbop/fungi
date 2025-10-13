@@ -321,7 +321,6 @@ class FungiController extends GetxController {
       // await fungi.startFungiDaemon();
 
       isServiceRunning.value = true;
-      debugPrint('Fungi Daemon started');
 
       peerId.value = (await fungiClient.peerId(Empty())).peerId;
       debugPrint('Peer ID: ${peerId.value}');
