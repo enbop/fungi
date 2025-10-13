@@ -38,6 +38,12 @@ impl FungiDaemonRpcImpl {
 
 #[tonic::async_trait]
 impl FungiDaemon for FungiDaemonRpcImpl {
+    async fn version(&self, _request: Request<Empty>) -> Result<Response<VersionResponse>, Status> {
+        Ok(Response::new(VersionResponse {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+        }))
+    }
+
     async fn peer_id(&self, _request: Request<Empty>) -> Result<Response<PeerIdResponse>, Status> {
         let response = PeerIdResponse {
             peer_id: self.inner.peer_id(),

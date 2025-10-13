@@ -3,6 +3,10 @@ syntax = "proto3";
 package fungi_daemon;
 
 service FungiDaemon {
+  // Get the version of the Fungi Daemon.
+  // Also used to check if the daemon is running.
+  rpc Version(Empty) returns (VersionResponse) {}
+
   rpc PeerId(Empty) returns (PeerIdResponse) {}
   rpc ConfigFilePath(Empty) returns (ConfigFilePathResponse) {}
   rpc Hostname(Empty) returns (HostnameResponse) {}
@@ -50,6 +54,8 @@ service FungiDaemon {
 }
 
 message Empty {}
+
+message VersionResponse { string version = 1; }
 
 message HostnameResponse { string hostname = 1; }
 
