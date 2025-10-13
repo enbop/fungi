@@ -154,10 +154,12 @@ class RemoteFileAccess extends GetView<FungiController> {
                       return EnhancedCard(
                         child: ListTile(
                           title: Tooltip(
-                            message: client.name ?? client.peerId,
+                            message: client.name.isEmpty
+                                ? client.peerId
+                                : client.name,
                             waitDuration: const Duration(milliseconds: 1000),
                             child: Text(
-                              client.name ?? client.peerId,
+                              client.name.isEmpty ? client.peerId : client.name,
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                             ),

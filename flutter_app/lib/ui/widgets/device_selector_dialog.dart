@@ -203,13 +203,13 @@ class DeviceSelectorDialogWidget extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Hostname: ${device.hostname ?? 'Unknown'}',
+                'Hostname: ${device.hostname.isEmpty ? 'Unknown' : device.hostname}',
                 style: TextStyle(
                   fontFamily: 'monospace',
                   color: Colors.grey[600],
                 ),
               ),
-              if (device.alias != null && device.alias!.isNotEmpty)
+              if (device.alias.isNotEmpty)
                 Text(
                   'Alias: ${device.alias}',
                   style: TextStyle(
