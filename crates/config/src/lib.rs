@@ -21,6 +21,7 @@ use crate::file_transfer::{FileTransfer, FileTransferClient, FileTransferService
 
 pub const DEFAULT_CONFIG_FILE: &str = "config.toml";
 pub const DEFAULT_FUNGI_DIR: &str = ".fungi";
+pub const DEFAULT_RPC_ADDRESS: &str = "127.0.0.1:5405";
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct FungiConfig {

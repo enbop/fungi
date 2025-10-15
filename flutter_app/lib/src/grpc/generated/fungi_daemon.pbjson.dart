@@ -22,6 +22,18 @@ const Empty$json = {
 final $typed_data.Uint8List emptyDescriptor = $convert.base64Decode(
     'CgVFbXB0eQ==');
 
+@$core.Deprecated('Use versionResponseDescriptor instead')
+const VersionResponse$json = {
+  '1': 'VersionResponse',
+  '2': [
+    {'1': 'version', '3': 1, '4': 1, '5': 9, '10': 'version'},
+  ],
+};
+
+/// Descriptor for `VersionResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List versionResponseDescriptor = $convert.base64Decode(
+    'Cg9WZXJzaW9uUmVzcG9uc2USGAoHdmVyc2lvbhgBIAEoCVIHdmVyc2lvbg==');
+
 @$core.Deprecated('Use hostnameResponseDescriptor instead')
 const HostnameResponse$json = {
   '1': 'HostnameResponse',

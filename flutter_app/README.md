@@ -14,3 +14,20 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+## Protobuf
+
+Install protoc_plugin
+```
+dart pub global activate protoc_plugin 21.1.2
+```
+
+Update path
+```
+export PATH="$PATH:$HOME/.pub-cache/bin"
+```
+
+Regenerate gRPC code
+```
+protoc --dart_out=grpc:lib/src/grpc/generated -I../crates/daemon-grpc/proto ../crates/daemon-grpc/proto/fungi_daemon.proto
+```

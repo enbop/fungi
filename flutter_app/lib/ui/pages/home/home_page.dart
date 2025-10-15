@@ -122,10 +122,13 @@ class HomeHeader extends GetView<FungiController> {
                         color: colorScheme.surfaceTint,
                         fontWeight: FontWeight.bold,
                       ),
-                      value: controller.isServiceRunning.value ? "ON" : "OFF",
+                      value: controller.daemonConnectionState.value.isConnected
+                          ? "ON"
+                          : "OFF",
                       style: TextStyle(
                         fontSize: 12,
-                        color: controller.isServiceRunning.value
+                        color:
+                            controller.daemonConnectionState.value.isConnected
                             ? Colors.green
                             : Colors.red,
                       ),

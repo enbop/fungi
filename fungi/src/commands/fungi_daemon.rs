@@ -19,7 +19,8 @@ pub async fn run(args: DaemonArgs) -> Result<()> {
         .unwrap();
     println!("Network info: {network_info:?}");
 
-    let server_fut = start_grpc_server(daemon, "[::1]:50051".parse()?);
+    let rpc_listen_address = daemon.config().lock().rpc.listen_address.clone();
+    let server_fut = start_grpc_server(daemon, rpc_listen_address.parse().unwrap());
 
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {

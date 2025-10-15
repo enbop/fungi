@@ -21,6 +21,10 @@ export 'fungi_daemon.pb.dart';
 
 @$pb.GrpcServiceName('fungi_daemon.FungiDaemon')
 class FungiDaemonClient extends $grpc.Client {
+  static final _$version = $grpc.ClientMethod<$0.Empty, $0.VersionResponse>(
+      '/fungi_daemon.FungiDaemon/Version',
+      ($0.Empty value) => value.writeToBuffer(),
+      ($core.List<$core.int> value) => $0.VersionResponse.fromBuffer(value));
   static final _$peerId = $grpc.ClientMethod<$0.Empty, $0.PeerIdResponse>(
       '/fungi_daemon.FungiDaemon/PeerId',
       ($0.Empty value) => value.writeToBuffer(),
@@ -140,6 +144,10 @@ class FungiDaemonClient extends $grpc.Client {
       : super(channel, options: options,
         interceptors: interceptors);
 
+  $grpc.ResponseFuture<$0.VersionResponse> version($0.Empty request, {$grpc.CallOptions? options}) {
+    return $createUnaryCall(_$version, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.PeerIdResponse> peerId($0.Empty request, {$grpc.CallOptions? options}) {
     return $createUnaryCall(_$peerId, request, options: options);
   }
@@ -258,6 +266,13 @@ abstract class FungiDaemonServiceBase extends $grpc.Service {
   $core.String get $name => 'fungi_daemon.FungiDaemon';
 
   FungiDaemonServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.Empty, $0.VersionResponse>(
+        'Version',
+        version_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.Empty.fromBuffer(value),
+        ($0.VersionResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.Empty, $0.PeerIdResponse>(
         'PeerId',
         peerId_Pre,
@@ -456,6 +471,10 @@ abstract class FungiDaemonServiceBase extends $grpc.Service {
         ($0.Empty value) => value.writeToBuffer()));
   }
 
+  $async.Future<$0.VersionResponse> version_Pre($grpc.ServiceCall call, $async.Future<$0.Empty> request) async {
+    return version(call, await request);
+  }
+
   $async.Future<$0.PeerIdResponse> peerId_Pre($grpc.ServiceCall call, $async.Future<$0.Empty> request) async {
     return peerId(call, await request);
   }
@@ -568,6 +587,7 @@ abstract class FungiDaemonServiceBase extends $grpc.Service {
     return addressBookRemove(call, await request);
   }
 
+  $async.Future<$0.VersionResponse> version($grpc.ServiceCall call, $0.Empty request);
   $async.Future<$0.PeerIdResponse> peerId($grpc.ServiceCall call, $0.Empty request);
   $async.Future<$0.ConfigFilePathResponse> configFilePath($grpc.ServiceCall call, $0.Empty request);
   $async.Future<$0.HostnameResponse> hostname($grpc.ServiceCall call, $0.Empty request);

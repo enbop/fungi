@@ -15,5 +15,5 @@ impl Default for Rpc {
 }
 
 fn default_rpc_listen_address() -> String {
-    "127.0.0.1:54000".to_string()
+    crate::DEFAULT_RPC_ADDRESS.to_string()
 }

@@ -4,6 +4,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:fungi_app/app/foreground_task.dart';
 import 'package:fungi_app/src/grpc/generated/fungi_daemon.pbgrpc.dart';
 import 'package:flutter/material.dart';
+import 'package:fungi_app/ui/utils/daemon_client.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -34,6 +35,14 @@ extension ThemeOptionExtension on ThemeOption {
   }
 }
 
+enum DaemonConnectionState { connecting, connected, failed }
+
+extension DaemonConnectionStateExtension on DaemonConnectionState {
+  bool get isConnecting => this == DaemonConnectionState.connecting;
+  bool get isConnected => this == DaemonConnectionState.connected;
+  bool get isFailed => this == DaemonConnectionState.failed;
+}
+
 class FileTransferServerState {
   bool enabled;
   String? error;
@@ -43,9 +52,11 @@ class FileTransferServerState {
 }
 
 class FungiController extends GetxController {
-  final FungiDaemonClient fungiClient;
+  FungiDaemonClient fungiClient;
 
-  final isServiceRunning = false.obs;
+  final daemonConnectionState = DaemonConnectionState.connecting.obs;
+  final daemonError = ''.obs;
+
   final peerId = ''.obs;
   final hostname = ''.obs;
   final configFilePath = ''.obs;
@@ -68,23 +79,23 @@ class FungiController extends GetxController {
   final ftpProxy = FtpProxyResponse(enabled: false, host: "", port: 0).obs;
   final webdavProxy = WebdavProxyResponse().obs;
 
-  FungiController({required this.fungiClient});
+  FungiController()
+    : fungiClient = fungiDaemonClientPlaceholder(); // Placeholder client
 
   @override
   void onInit() {
     super.onInit();
-    // TODO check fungiClient is valid
-
-    initFungi();
     loadThemeOption();
-
     if (Platform.isAndroid) {
+      // TODO init fungi daemon process manager for Android
       FlutterForegroundTask.addTaskDataCallback(onReceiveTaskData);
       // Check current foreground service status
       checkForegroundServiceStatus();
       // Load and restore previous foreground service state
       loadForegroundServiceState();
     }
+
+    initFungi();
   }
 
   @override
@@ -311,16 +322,19 @@ class FungiController extends GetxController {
   }
 
   Future<void> initFungi() async {
-    try {
-      // TODO init android
-      // if (Platform.isAndroid) {
-      //   final appDocumentsDir = await getApplicationDocumentsDirectory();
-      //   final fungiDir = p.join(appDocumentsDir.absolute.path, 'fungi');
-      //   await fungi.startFungiDaemon(fungiDir: fungiDir);
-      // }
-      // await fungi.startFungiDaemon();
+    daemonConnectionState.value = DaemonConnectionState.connecting;
+    daemonError.value = '';
 
-      isServiceRunning.value = true;
+    try {
+      try {
+        fungiClient = await getFungiClient();
+      } catch (e) {
+        debugPrint('Failed to get Fungi client: $e');
+        daemonError.value = e.toString();
+        daemonConnectionState.value = DaemonConnectionState.failed;
+        return;
+      }
+      daemonConnectionState.value = DaemonConnectionState.connected;
 
       peerId.value = (await fungiClient.peerId(Empty())).peerId;
       debugPrint('Peer ID: ${peerId.value}');
@@ -369,10 +383,15 @@ class FungiController extends GetxController {
       // Load TCP tunneling config
       await refreshTcpTunnelingConfig();
     } catch (e) {
-      isServiceRunning.value = false;
+      daemonConnectionState.value = DaemonConnectionState.failed;
+      daemonError.value = e.toString();
       peerId.value = 'error';
       debugPrint('Failed to init, error: $e');
     }
+  }
+
+  Future<void> retryConnection() async {
+    await initFungi();
   }
 
   // TCP Tunneling methods
