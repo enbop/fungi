@@ -14,7 +14,7 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'dart:io';
 
 void main() async {
-  Logger.root.level = Level.FINE; // defaults to Level.INFO
+  Logger.root.level = Level.FINE;
   Logger.root.onRecord.listen((record) {
     debugPrint('${record.level.name}: ${record.time}: ${record.message}');
   });
