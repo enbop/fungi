@@ -127,43 +127,59 @@ See the [CLI Service Quick Start Guide](https://fungi.rs/docs/cli_service_quick_
 
 ## Build from Source
 
-All platforms require Rust and Flutter to be installed.
+### Prerequisites
+
+**All platforms require:**
+- Rust toolchain
+- Flutter SDK (for fungi-app only)
+- Protocol Buffers compiler (protoc)
+
+#### Install Dependencies
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get install -y protobuf-compiler clang cmake ninja-build pkg-config libgtk-3-dev libayatana-appindicator3-dev
+```
+
+**macOS:**
+```bash
+brew install protobuf
+```
+
+**Windows:**
+
+- Install build tools for aws-lc-rs [build dependencies](https://aws.github.io/aws-lc-rs/requirements/windows.html) (Ensure you have at least: C/C++ Compiler, CMake, NASM)
+
+- Install protoc:
+```powershell
+choco install protoc
+```
 
 ### Build fungi-cli
 
-Simply run:
 ```bash
 cargo build --release --bin fungi
 ```
-The binary will be located at:
-```
-./target/release/fungi
-```
+
+Binary location: `./target/release/fungi`
 
 ### Build fungi-app
-
-#### Ubuntu
-```
-sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libayatana-appindicator3-dev
-
+```bash
 cd flutter_app
+```
+
+**Linux:**
+```bash
 flutter build linux --release
 ```
 
-#### macOS
+**macOS:**
 ```bash
-cd flutter_app
 flutter build macos --release
 ```
 
-#### Windows
-
-Install aws-lc-rs [build dependencies](https://aws.github.io/aws-lc-rs/requirements/windows.html)
-
-Ensure you have at least: C/C++ Compiler, CMake, NASM
-
+**Windows:**
 ```bash
-cargo build --release -p rust_lib_fungi_app
 flutter build windows --release
 ```
 

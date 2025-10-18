@@ -45,6 +45,7 @@ class FungiDaemonProcessManager {
 
     _process = await Process.start(fungiExecutable, [
       'daemon',
+      '--exit-on-stdin-close',
     ], mode: ProcessStartMode.normal);
 
     _isRunning = true;

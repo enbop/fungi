@@ -15,6 +15,12 @@ pub struct DaemonArgs {
         help = "Path to the Fungi config directory, defaults to ~/.fungi"
     )]
     pub fungi_dir: Option<String>,
+
+    #[clap(
+        long,
+        help = "Exit when stdin is closed (useful when running as a subprocess)"
+    )]
+    pub exit_on_stdin_close: bool,
 }
 
 impl FungiDir for DaemonArgs {
