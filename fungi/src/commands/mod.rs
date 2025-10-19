@@ -2,7 +2,6 @@ pub mod fungi_control;
 pub mod fungi_daemon;
 pub mod fungi_init;
 pub mod fungi_relay;
-pub mod fungi_wasi;
 
 use std::path::PathBuf;
 
@@ -10,7 +9,7 @@ use clap::{Parser, Subcommand};
 use fungi_config::{DEFAULT_FUNGI_DIR, FungiDir};
 
 /// A platform built for seamless multi-device integration
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser)]
 #[command(version, about, long_about = None)]
 pub struct FungiArgs {
     #[command(flatten)]
@@ -38,7 +37,7 @@ impl FungiDir for CommonArgs {
     }
 }
 
-#[derive(Subcommand, Debug, Clone)]
+#[derive(Subcommand)]
 pub enum Commands {
     /// Start a Fungi daemon
     Daemon(fungi_daemon::DaemonArgs),
@@ -46,8 +45,10 @@ pub enum Commands {
     Init(fungi_init::InitArgs),
     /// Start a simple Fungi relay server
     Relay(fungi_relay::RelayArgs),
-    /// Run a WASI module
-    Run(fungi_wasi::WasiArgs),
+    /// Runs a WebAssembly module (re-exported wasmtime command)
+    Run(wasmtime_cli::commands::RunCommand),
+    /// Serves requests from a wasi-http proxy component (re-exported wasmtime command)
+    Serve(wasmtime_cli::commands::ServeCommand),
 
     #[command(flatten)]
     Control(fungi_control::ControlCommands),
