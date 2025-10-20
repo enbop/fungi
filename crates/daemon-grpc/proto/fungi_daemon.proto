@@ -3,53 +3,103 @@ syntax = "proto3";
 package fungi_daemon;
 
 service FungiDaemon {
-  // Get the version of the Fungi Daemon.
-  // Also used to check if the daemon is running.
+  // Returns the running daemon version as a simple health check.
   rpc Version(Empty) returns (VersionResponse) {}
 
+  // Returns the libp2p peer ID of the daemon.
   rpc PeerId(Empty) returns (PeerIdResponse) {}
+
+  // Reports the absolute path of the active configuration file.
   rpc ConfigFilePath(Empty) returns (ConfigFilePathResponse) {}
+
+  // Returns the hostname advertised by the daemon.
   rpc Hostname(Empty) returns (HostnameResponse) {}
 
+  // Lists peers that are allowed to initiate incoming connections.
   rpc GetIncomingAllowedPeers(Empty)
       returns (IncomingAllowedPeersListResponse) {}
+
+  // Adds a peer ID to the allowlist for incoming connections and persists it.
   rpc AddIncomingAllowedPeer(AddIncomingAllowedPeerRequest) returns (Empty) {}
+
+  // Removes a peer ID from the allowlist for incoming connections.
   rpc RemoveIncomingAllowedPeer(RemoveIncomingAllowedPeerRequest)
       returns (Empty) {}
 
+  // Indicates whether the embedded file transfer service is running.
   rpc GetFileTransferServiceEnabled(Empty)
       returns (FileTransferServiceEnabledResponse) {}
+
+  // Returns the root directory shared by the file transfer service.
   rpc GetFileTransferServiceRootDir(Empty)
       returns (FileTransferServiceRootDirResponse) {}
+
+  // Starts the file transfer service with a new root directory, updating
+  // config.
   rpc StartFileTransferService(StartFileTransferServiceRequest)
       returns (Empty) {}
+
+  // Stops the running file transfer service and updates the stored config.
   rpc StopFileTransferService(Empty) returns (Empty) {}
 
+  // Registers a remote file transfer client and optionally enables it
+  // immediately.
   rpc AddFileTransferClient(AddFileTransferClientRequest) returns (Empty) {}
+
+  // Removes a remote file transfer client and forgets its configuration.
   rpc RemoveFileTransferClient(RemoveFileTransferClientRequest)
       returns (Empty) {}
+
+  // Enables or disables a remote file transfer client and syncs its metadata.
   rpc EnableFileTransferClient(EnableFileTransferClientRequest)
       returns (Empty) {}
+
+  // Lists all configured remote file transfer clients with their status.
   rpc GetAllFileTransferClients(Empty) returns (FileTransferClientsResponse) {}
 
+  // Returns the current FTP proxy settings for the file transfer service.
   rpc GetFtpProxy(Empty) returns (FtpProxyResponse) {}
+
+  // Updates the FTP proxy binding and restarts the proxy task if needed.
   rpc UpdateFtpProxy(UpdateFtpProxyRequest) returns (Empty) {}
+
+  // Returns the current WebDAV proxy settings for the file transfer service.
   rpc GetWebdavProxy(Empty) returns (WebdavProxyResponse) {}
+
+  // Updates the WebDAV proxy binding and restarts the proxy task if needed.
   rpc UpdateWebdavProxy(UpdateWebdavProxyRequest) returns (Empty) {}
 
+  // Returns the complete TCP tunneling configuration including current rules.
   rpc GetTcpTunnelingConfig(Empty) returns (TcpTunnelingConfigResponse) {}
+
+  // Creates a new TCP forwarding rule and returns its generated identifier.
   rpc AddTcpForwardingRule(AddTcpForwardingRuleRequest)
       returns (TcpForwardingRuleResponse) {}
+
+  // Deletes an existing TCP forwarding rule by identifier.
   rpc RemoveTcpForwardingRule(RemoveTcpForwardingRuleRequest) returns (Empty) {}
+
+  // Creates a new TCP listening rule and returns its generated identifier.
   rpc AddTcpListeningRule(AddTcpListeningRuleRequest)
       returns (TcpListeningRuleResponse) {}
+
+  // Deletes an existing TCP listening rule by identifier.
   rpc RemoveTcpListeningRule(RemoveTcpListeningRuleRequest) returns (Empty) {}
 
+  // Returns latest metadata for peers discovered via mDNS.
   rpc MdnsGetLocalDevices(Empty) returns (PeerInfoListResponse) {}
+
+  // Lists every peer stored in the address book.
   rpc GetAllAddressBook(Empty) returns (PeerInfoListResponse) {}
+
+  // Inserts or updates a peer entry in the address book.
   rpc AddressBookAddOrUpdate(AddressBookAddOrUpdateRequest) returns (Empty) {}
+
+  // Returns detailed information for a single address book peer.
   rpc AddressBookGetPeer(AddressBookGetPeerRequest) returns (PeerInfoResponse) {
   }
+
+  // Removes a peer from the address book.
   rpc AddressBookRemove(AddressBookRemoveRequest) returns (Empty) {}
 }
 
