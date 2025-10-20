@@ -391,7 +391,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         Ok(Response::new(Empty {}))
     }
 
-    async fn mdns_get_local_devices(
+    async fn list_mdns_devices(
         &self,
         _request: Request<Empty>,
     ) -> Result<Response<PeerInfoListResponse>, Status> {
@@ -408,7 +408,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         Ok(Response::new(response))
     }
 
-    async fn get_all_address_book(
+    async fn list_address_book_peers(
         &self,
         _request: Request<Empty>,
     ) -> Result<Response<PeerInfoListResponse>, Status> {
@@ -423,9 +423,9 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         Ok(Response::new(response))
     }
 
-    async fn address_book_add_or_update(
+    async fn update_address_book_peer(
         &self,
-        request: Request<AddressBookAddOrUpdateRequest>,
+        request: Request<UpdateAddressBookPeerRequest>,
     ) -> Result<Response<Empty>, Status> {
         let peer_info = request
             .into_inner()
@@ -442,9 +442,9 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         Ok(Response::new(Empty {}))
     }
 
-    async fn address_book_get_peer(
+    async fn get_address_book_peer(
         &self,
-        request: Request<AddressBookGetPeerRequest>,
+        request: Request<GetAddressBookPeerRequest>,
     ) -> Result<Response<PeerInfoResponse>, Status> {
         let peer_id = PeerId::from_str(&request.into_inner().peer_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
@@ -458,9 +458,9 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         Ok(Response::new(response))
     }
 
-    async fn address_book_remove(
+    async fn remove_address_book_peer(
         &self,
-        request: Request<AddressBookRemoveRequest>,
+        request: Request<RemoveAddressBookPeerRequest>,
     ) -> Result<Response<Empty>, Status> {
         let peer_id = PeerId::from_str(&request.into_inner().peer_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;

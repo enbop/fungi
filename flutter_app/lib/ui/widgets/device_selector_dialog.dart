@@ -32,7 +32,7 @@ Future<PeerInfo?> showMdnsLocalDevicesSelectorDialog() async {
       Random().nextInt(100).toString();
   final controller = Get.find<FungiController>();
 
-  final devices = await controller.fungiClient.mdnsGetLocalDevices(Empty());
+  final devices = await controller.fungiClient.listMdnsDevices(Empty());
   return await SmartDialog.show<PeerInfo>(
     tag: dialogId,
     builder: (context) => DeviceSelectorDialogWidget(

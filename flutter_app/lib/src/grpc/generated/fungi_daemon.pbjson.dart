@@ -475,40 +475,41 @@ final $typed_data.Uint8List peerInfoResponseDescriptor = $convert.base64Decode(
     'ChBQZWVySW5mb1Jlc3BvbnNlEjMKCXBlZXJfaW5mbxgBIAEoCzIWLmZ1bmdpX2RhZW1vbi5QZW'
     'VySW5mb1IIcGVlckluZm8=');
 
-@$core.Deprecated('Use addressBookAddOrUpdateRequestDescriptor instead')
-const AddressBookAddOrUpdateRequest$json = {
-  '1': 'AddressBookAddOrUpdateRequest',
+@$core.Deprecated('Use updateAddressBookPeerRequestDescriptor instead')
+const UpdateAddressBookPeerRequest$json = {
+  '1': 'UpdateAddressBookPeerRequest',
   '2': [
     {'1': 'peer_info', '3': 1, '4': 1, '5': 11, '6': '.fungi_daemon.PeerInfo', '10': 'peerInfo'},
   ],
 };
 
-/// Descriptor for `AddressBookAddOrUpdateRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List addressBookAddOrUpdateRequestDescriptor = $convert.base64Decode(
-    'Ch1BZGRyZXNzQm9va0FkZE9yVXBkYXRlUmVxdWVzdBIzCglwZWVyX2luZm8YASABKAsyFi5mdW'
-    '5naV9kYWVtb24uUGVlckluZm9SCHBlZXJJbmZv');
+/// Descriptor for `UpdateAddressBookPeerRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List updateAddressBookPeerRequestDescriptor = $convert.base64Decode(
+    'ChxVcGRhdGVBZGRyZXNzQm9va1BlZXJSZXF1ZXN0EjMKCXBlZXJfaW5mbxgBIAEoCzIWLmZ1bm'
+    'dpX2RhZW1vbi5QZWVySW5mb1IIcGVlckluZm8=');
 
-@$core.Deprecated('Use addressBookGetPeerRequestDescriptor instead')
-const AddressBookGetPeerRequest$json = {
-  '1': 'AddressBookGetPeerRequest',
+@$core.Deprecated('Use getAddressBookPeerRequestDescriptor instead')
+const GetAddressBookPeerRequest$json = {
+  '1': 'GetAddressBookPeerRequest',
   '2': [
     {'1': 'peer_id', '3': 1, '4': 1, '5': 9, '10': 'peerId'},
   ],
 };
 
-/// Descriptor for `AddressBookGetPeerRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List addressBookGetPeerRequestDescriptor = $convert.base64Decode(
-    'ChlBZGRyZXNzQm9va0dldFBlZXJSZXF1ZXN0EhcKB3BlZXJfaWQYASABKAlSBnBlZXJJZA==');
+/// Descriptor for `GetAddressBookPeerRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getAddressBookPeerRequestDescriptor = $convert.base64Decode(
+    'ChlHZXRBZGRyZXNzQm9va1BlZXJSZXF1ZXN0EhcKB3BlZXJfaWQYASABKAlSBnBlZXJJZA==');
 
-@$core.Deprecated('Use addressBookRemoveRequestDescriptor instead')
-const AddressBookRemoveRequest$json = {
-  '1': 'AddressBookRemoveRequest',
+@$core.Deprecated('Use removeAddressBookPeerRequestDescriptor instead')
+const RemoveAddressBookPeerRequest$json = {
+  '1': 'RemoveAddressBookPeerRequest',
   '2': [
     {'1': 'peer_id', '3': 1, '4': 1, '5': 9, '10': 'peerId'},
   ],
 };
 
-/// Descriptor for `AddressBookRemoveRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List addressBookRemoveRequestDescriptor = $convert.base64Decode(
-    'ChhBZGRyZXNzQm9va1JlbW92ZVJlcXVlc3QSFwoHcGVlcl9pZBgBIAEoCVIGcGVlcklk');
+/// Descriptor for `RemoveAddressBookPeerRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List removeAddressBookPeerRequestDescriptor = $convert.base64Decode(
+    'ChxSZW1vdmVBZGRyZXNzQm9va1BlZXJSZXF1ZXN0EhcKB3BlZXJfaWQYASABKAlSBnBlZXJJZA'
+    '==');
 

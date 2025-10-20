@@ -87,20 +87,20 @@ service FungiDaemon {
   rpc RemoveTcpListeningRule(RemoveTcpListeningRuleRequest) returns (Empty) {}
 
   // Returns latest metadata for peers discovered via mDNS.
-  rpc MdnsGetLocalDevices(Empty) returns (PeerInfoListResponse) {}
+  rpc ListMdnsDevices(Empty) returns (PeerInfoListResponse) {}
 
   // Lists every peer stored in the address book.
-  rpc GetAllAddressBook(Empty) returns (PeerInfoListResponse) {}
+  rpc ListAddressBookPeers(Empty) returns (PeerInfoListResponse) {}
 
   // Inserts or updates a peer entry in the address book.
-  rpc AddressBookAddOrUpdate(AddressBookAddOrUpdateRequest) returns (Empty) {}
+  rpc UpdateAddressBookPeer(UpdateAddressBookPeerRequest) returns (Empty) {}
 
   // Returns detailed information for a single address book peer.
-  rpc AddressBookGetPeer(AddressBookGetPeerRequest) returns (PeerInfoResponse) {
+  rpc GetAddressBookPeer(GetAddressBookPeerRequest) returns (PeerInfoResponse) {
   }
 
   // Removes a peer from the address book.
-  rpc AddressBookRemove(AddressBookRemoveRequest) returns (Empty) {}
+  rpc RemoveAddressBookPeer(RemoveAddressBookPeerRequest) returns (Empty) {}
 }
 
 message Empty {}
@@ -229,8 +229,8 @@ message PeerInfoListResponse { repeated PeerInfo peers = 1; }
 
 message PeerInfoResponse { PeerInfo peer_info = 1; }
 
-message AddressBookAddOrUpdateRequest { PeerInfo peer_info = 1; }
+message UpdateAddressBookPeerRequest { PeerInfo peer_info = 1; }
 
-message AddressBookGetPeerRequest { string peer_id = 1; }
+message GetAddressBookPeerRequest { string peer_id = 1; }
 
-message AddressBookRemoveRequest { string peer_id = 1; }
+message RemoveAddressBookPeerRequest { string peer_id = 1; }

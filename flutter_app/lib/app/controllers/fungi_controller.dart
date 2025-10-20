@@ -182,7 +182,7 @@ class FungiController extends GetxController {
   }
 
   Future<void> updateAddressBook() async {
-    addressBook.value = (await fungiClient.getAllAddressBook(Empty())).peers;
+    addressBook.value = (await fungiClient.listAddressBookPeers(Empty())).peers;
   }
 
   Future<void> addIncomingAllowedPeer(PeerInfo peerInfo) async {
@@ -193,7 +193,7 @@ class FungiController extends GetxController {
     // Also add to address books
 
     // Update the address books list to reflect the new peer
-    await addressBookAddOrUpdate(peerInfo);
+    await updateAddressBookPeer(peerInfo);
   }
 
   Future<void> removeIncomingAllowedPeer(String peerId) async {
@@ -203,22 +203,22 @@ class FungiController extends GetxController {
     await updateIncomingAllowedPeers();
   }
 
-  Future<void> addressBookAddOrUpdate(PeerInfo peerInfo) async {
-    await fungiClient.addressBookAddOrUpdate(
-      AddressBookAddOrUpdateRequest()..peerInfo = peerInfo,
+  Future<void> updateAddressBookPeer(PeerInfo peerInfo) async {
+    await fungiClient.updateAddressBookPeer(
+      UpdateAddressBookPeerRequest()..peerInfo = peerInfo,
     );
     await updateAddressBook();
   }
 
-  Future<PeerInfo?> addressBookGetPeer(String peerId) async {
-    return (await fungiClient.addressBookGetPeer(
-      AddressBookGetPeerRequest()..peerId = peerId,
+  Future<PeerInfo?> getAddressBookPeer(String peerId) async {
+    return (await fungiClient.getAddressBookPeer(
+      GetAddressBookPeerRequest()..peerId = peerId,
     )).peerInfo;
   }
 
-  Future<void> addressBookRemove(String peerId) async {
-    await fungiClient.addressBookRemove(
-      AddressBookRemoveRequest()..peerId = peerId,
+  Future<void> removeAddressBookPeer(String peerId) async {
+    await fungiClient.removeAddressBookPeer(
+      RemoveAddressBookPeerRequest()..peerId = peerId,
     );
     await updateAddressBook();
   }
@@ -285,7 +285,7 @@ class FungiController extends GetxController {
       ),
     );
     // add to address books
-    await addressBookAddOrUpdate(peerInfo);
+    await updateAddressBookPeer(peerInfo);
   }
 
   Future<void> enableFileTransferClient({
@@ -421,7 +421,7 @@ class FungiController extends GetxController {
       await refreshTcpTunnelingConfig();
 
       // add to address books
-      await addressBookAddOrUpdate(peerInfo);
+      await updateAddressBookPeer(peerInfo);
       Get.snackbar(
         'Success',
         'Forwarding rule added successfully',

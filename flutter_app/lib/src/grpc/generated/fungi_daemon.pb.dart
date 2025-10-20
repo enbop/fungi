@@ -2076,8 +2076,8 @@ class PeerInfoResponse extends $pb.GeneratedMessage {
   PeerInfo ensurePeerInfo() => $_ensure(0);
 }
 
-class AddressBookAddOrUpdateRequest extends $pb.GeneratedMessage {
-  factory AddressBookAddOrUpdateRequest({
+class UpdateAddressBookPeerRequest extends $pb.GeneratedMessage {
+  factory UpdateAddressBookPeerRequest({
     PeerInfo? peerInfo,
   }) {
     final $result = create();
@@ -2086,11 +2086,11 @@ class AddressBookAddOrUpdateRequest extends $pb.GeneratedMessage {
     }
     return $result;
   }
-  AddressBookAddOrUpdateRequest._() : super();
-  factory AddressBookAddOrUpdateRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
-  factory AddressBookAddOrUpdateRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+  UpdateAddressBookPeerRequest._() : super();
+  factory UpdateAddressBookPeerRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory UpdateAddressBookPeerRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'AddressBookAddOrUpdateRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'fungi_daemon'), createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'UpdateAddressBookPeerRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'fungi_daemon'), createEmptyInstance: create)
     ..aOM<PeerInfo>(1, _omitFieldNames ? '' : 'peerInfo', subBuilder: PeerInfo.create)
     ..hasRequiredFields = false
   ;
@@ -2099,22 +2099,22 @@ class AddressBookAddOrUpdateRequest extends $pb.GeneratedMessage {
   'Using this can add significant overhead to your binary. '
   'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
   'Will be removed in next major version')
-  AddressBookAddOrUpdateRequest clone() => AddressBookAddOrUpdateRequest()..mergeFromMessage(this);
+  UpdateAddressBookPeerRequest clone() => UpdateAddressBookPeerRequest()..mergeFromMessage(this);
   @$core.Deprecated(
   'Using this can add significant overhead to your binary. '
   'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
   'Will be removed in next major version')
-  AddressBookAddOrUpdateRequest copyWith(void Function(AddressBookAddOrUpdateRequest) updates) => super.copyWith((message) => updates(message as AddressBookAddOrUpdateRequest)) as AddressBookAddOrUpdateRequest;
+  UpdateAddressBookPeerRequest copyWith(void Function(UpdateAddressBookPeerRequest) updates) => super.copyWith((message) => updates(message as UpdateAddressBookPeerRequest)) as UpdateAddressBookPeerRequest;
 
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
-  static AddressBookAddOrUpdateRequest create() => AddressBookAddOrUpdateRequest._();
-  AddressBookAddOrUpdateRequest createEmptyInstance() => create();
-  static $pb.PbList<AddressBookAddOrUpdateRequest> createRepeated() => $pb.PbList<AddressBookAddOrUpdateRequest>();
+  static UpdateAddressBookPeerRequest create() => UpdateAddressBookPeerRequest._();
+  UpdateAddressBookPeerRequest createEmptyInstance() => create();
+  static $pb.PbList<UpdateAddressBookPeerRequest> createRepeated() => $pb.PbList<UpdateAddressBookPeerRequest>();
   @$core.pragma('dart2js:noInline')
-  static AddressBookAddOrUpdateRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<AddressBookAddOrUpdateRequest>(create);
-  static AddressBookAddOrUpdateRequest? _defaultInstance;
+  static UpdateAddressBookPeerRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<UpdateAddressBookPeerRequest>(create);
+  static UpdateAddressBookPeerRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
   PeerInfo get peerInfo => $_getN(0);
@@ -2128,8 +2128,8 @@ class AddressBookAddOrUpdateRequest extends $pb.GeneratedMessage {
   PeerInfo ensurePeerInfo() => $_ensure(0);
 }
 
-class AddressBookGetPeerRequest extends $pb.GeneratedMessage {
-  factory AddressBookGetPeerRequest({
+class GetAddressBookPeerRequest extends $pb.GeneratedMessage {
+  factory GetAddressBookPeerRequest({
     $core.String? peerId,
   }) {
     final $result = create();
@@ -2138,11 +2138,11 @@ class AddressBookGetPeerRequest extends $pb.GeneratedMessage {
     }
     return $result;
   }
-  AddressBookGetPeerRequest._() : super();
-  factory AddressBookGetPeerRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
-  factory AddressBookGetPeerRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+  GetAddressBookPeerRequest._() : super();
+  factory GetAddressBookPeerRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory GetAddressBookPeerRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'AddressBookGetPeerRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'fungi_daemon'), createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'GetAddressBookPeerRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'fungi_daemon'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'peerId')
     ..hasRequiredFields = false
   ;
@@ -2151,22 +2151,22 @@ class AddressBookGetPeerRequest extends $pb.GeneratedMessage {
   'Using this can add significant overhead to your binary. '
   'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
   'Will be removed in next major version')
-  AddressBookGetPeerRequest clone() => AddressBookGetPeerRequest()..mergeFromMessage(this);
+  GetAddressBookPeerRequest clone() => GetAddressBookPeerRequest()..mergeFromMessage(this);
   @$core.Deprecated(
   'Using this can add significant overhead to your binary. '
   'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
   'Will be removed in next major version')
-  AddressBookGetPeerRequest copyWith(void Function(AddressBookGetPeerRequest) updates) => super.copyWith((message) => updates(message as AddressBookGetPeerRequest)) as AddressBookGetPeerRequest;
+  GetAddressBookPeerRequest copyWith(void Function(GetAddressBookPeerRequest) updates) => super.copyWith((message) => updates(message as GetAddressBookPeerRequest)) as GetAddressBookPeerRequest;
 
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
-  static AddressBookGetPeerRequest create() => AddressBookGetPeerRequest._();
-  AddressBookGetPeerRequest createEmptyInstance() => create();
-  static $pb.PbList<AddressBookGetPeerRequest> createRepeated() => $pb.PbList<AddressBookGetPeerRequest>();
+  static GetAddressBookPeerRequest create() => GetAddressBookPeerRequest._();
+  GetAddressBookPeerRequest createEmptyInstance() => create();
+  static $pb.PbList<GetAddressBookPeerRequest> createRepeated() => $pb.PbList<GetAddressBookPeerRequest>();
   @$core.pragma('dart2js:noInline')
-  static AddressBookGetPeerRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<AddressBookGetPeerRequest>(create);
-  static AddressBookGetPeerRequest? _defaultInstance;
+  static GetAddressBookPeerRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<GetAddressBookPeerRequest>(create);
+  static GetAddressBookPeerRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
   $core.String get peerId => $_getSZ(0);
@@ -2178,8 +2178,8 @@ class AddressBookGetPeerRequest extends $pb.GeneratedMessage {
   void clearPeerId() => clearField(1);
 }
 
-class AddressBookRemoveRequest extends $pb.GeneratedMessage {
-  factory AddressBookRemoveRequest({
+class RemoveAddressBookPeerRequest extends $pb.GeneratedMessage {
+  factory RemoveAddressBookPeerRequest({
     $core.String? peerId,
   }) {
     final $result = create();
@@ -2188,11 +2188,11 @@ class AddressBookRemoveRequest extends $pb.GeneratedMessage {
     }
     return $result;
   }
-  AddressBookRemoveRequest._() : super();
-  factory AddressBookRemoveRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
-  factory AddressBookRemoveRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+  RemoveAddressBookPeerRequest._() : super();
+  factory RemoveAddressBookPeerRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory RemoveAddressBookPeerRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'AddressBookRemoveRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'fungi_daemon'), createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'RemoveAddressBookPeerRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'fungi_daemon'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'peerId')
     ..hasRequiredFields = false
   ;
@@ -2201,22 +2201,22 @@ class AddressBookRemoveRequest extends $pb.GeneratedMessage {
   'Using this can add significant overhead to your binary. '
   'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
   'Will be removed in next major version')
-  AddressBookRemoveRequest clone() => AddressBookRemoveRequest()..mergeFromMessage(this);
+  RemoveAddressBookPeerRequest clone() => RemoveAddressBookPeerRequest()..mergeFromMessage(this);
   @$core.Deprecated(
   'Using this can add significant overhead to your binary. '
   'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
   'Will be removed in next major version')
-  AddressBookRemoveRequest copyWith(void Function(AddressBookRemoveRequest) updates) => super.copyWith((message) => updates(message as AddressBookRemoveRequest)) as AddressBookRemoveRequest;
+  RemoveAddressBookPeerRequest copyWith(void Function(RemoveAddressBookPeerRequest) updates) => super.copyWith((message) => updates(message as RemoveAddressBookPeerRequest)) as RemoveAddressBookPeerRequest;
 
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
-  static AddressBookRemoveRequest create() => AddressBookRemoveRequest._();
-  AddressBookRemoveRequest createEmptyInstance() => create();
-  static $pb.PbList<AddressBookRemoveRequest> createRepeated() => $pb.PbList<AddressBookRemoveRequest>();
+  static RemoveAddressBookPeerRequest create() => RemoveAddressBookPeerRequest._();
+  RemoveAddressBookPeerRequest createEmptyInstance() => create();
+  static $pb.PbList<RemoveAddressBookPeerRequest> createRepeated() => $pb.PbList<RemoveAddressBookPeerRequest>();
   @$core.pragma('dart2js:noInline')
-  static AddressBookRemoveRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<AddressBookRemoveRequest>(create);
-  static AddressBookRemoveRequest? _defaultInstance;
+  static RemoveAddressBookPeerRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<RemoveAddressBookPeerRequest>(create);
+  static RemoveAddressBookPeerRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
   $core.String get peerId => $_getSZ(0);

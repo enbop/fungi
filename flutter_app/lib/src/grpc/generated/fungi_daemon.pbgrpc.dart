@@ -117,25 +117,25 @@ class FungiDaemonClient extends $grpc.Client {
       '/fungi_daemon.FungiDaemon/RemoveTcpListeningRule',
       ($0.RemoveTcpListeningRuleRequest value) => value.writeToBuffer(),
       ($core.List<$core.int> value) => $0.Empty.fromBuffer(value));
-  static final _$mdnsGetLocalDevices = $grpc.ClientMethod<$0.Empty, $0.PeerInfoListResponse>(
-      '/fungi_daemon.FungiDaemon/MdnsGetLocalDevices',
+  static final _$listMdnsDevices = $grpc.ClientMethod<$0.Empty, $0.PeerInfoListResponse>(
+      '/fungi_daemon.FungiDaemon/ListMdnsDevices',
       ($0.Empty value) => value.writeToBuffer(),
       ($core.List<$core.int> value) => $0.PeerInfoListResponse.fromBuffer(value));
-  static final _$getAllAddressBook = $grpc.ClientMethod<$0.Empty, $0.PeerInfoListResponse>(
-      '/fungi_daemon.FungiDaemon/GetAllAddressBook',
+  static final _$listAddressBookPeers = $grpc.ClientMethod<$0.Empty, $0.PeerInfoListResponse>(
+      '/fungi_daemon.FungiDaemon/ListAddressBookPeers',
       ($0.Empty value) => value.writeToBuffer(),
       ($core.List<$core.int> value) => $0.PeerInfoListResponse.fromBuffer(value));
-  static final _$addressBookAddOrUpdate = $grpc.ClientMethod<$0.AddressBookAddOrUpdateRequest, $0.Empty>(
-      '/fungi_daemon.FungiDaemon/AddressBookAddOrUpdate',
-      ($0.AddressBookAddOrUpdateRequest value) => value.writeToBuffer(),
+  static final _$updateAddressBookPeer = $grpc.ClientMethod<$0.UpdateAddressBookPeerRequest, $0.Empty>(
+      '/fungi_daemon.FungiDaemon/UpdateAddressBookPeer',
+      ($0.UpdateAddressBookPeerRequest value) => value.writeToBuffer(),
       ($core.List<$core.int> value) => $0.Empty.fromBuffer(value));
-  static final _$addressBookGetPeer = $grpc.ClientMethod<$0.AddressBookGetPeerRequest, $0.PeerInfoResponse>(
-      '/fungi_daemon.FungiDaemon/AddressBookGetPeer',
-      ($0.AddressBookGetPeerRequest value) => value.writeToBuffer(),
+  static final _$getAddressBookPeer = $grpc.ClientMethod<$0.GetAddressBookPeerRequest, $0.PeerInfoResponse>(
+      '/fungi_daemon.FungiDaemon/GetAddressBookPeer',
+      ($0.GetAddressBookPeerRequest value) => value.writeToBuffer(),
       ($core.List<$core.int> value) => $0.PeerInfoResponse.fromBuffer(value));
-  static final _$addressBookRemove = $grpc.ClientMethod<$0.AddressBookRemoveRequest, $0.Empty>(
-      '/fungi_daemon.FungiDaemon/AddressBookRemove',
-      ($0.AddressBookRemoveRequest value) => value.writeToBuffer(),
+  static final _$removeAddressBookPeer = $grpc.ClientMethod<$0.RemoveAddressBookPeerRequest, $0.Empty>(
+      '/fungi_daemon.FungiDaemon/RemoveAddressBookPeer',
+      ($0.RemoveAddressBookPeerRequest value) => value.writeToBuffer(),
       ($core.List<$core.int> value) => $0.Empty.fromBuffer(value));
 
   FungiDaemonClient($grpc.ClientChannel channel,
@@ -240,24 +240,24 @@ class FungiDaemonClient extends $grpc.Client {
     return $createUnaryCall(_$removeTcpListeningRule, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.PeerInfoListResponse> mdnsGetLocalDevices($0.Empty request, {$grpc.CallOptions? options}) {
-    return $createUnaryCall(_$mdnsGetLocalDevices, request, options: options);
+  $grpc.ResponseFuture<$0.PeerInfoListResponse> listMdnsDevices($0.Empty request, {$grpc.CallOptions? options}) {
+    return $createUnaryCall(_$listMdnsDevices, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.PeerInfoListResponse> getAllAddressBook($0.Empty request, {$grpc.CallOptions? options}) {
-    return $createUnaryCall(_$getAllAddressBook, request, options: options);
+  $grpc.ResponseFuture<$0.PeerInfoListResponse> listAddressBookPeers($0.Empty request, {$grpc.CallOptions? options}) {
+    return $createUnaryCall(_$listAddressBookPeers, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.Empty> addressBookAddOrUpdate($0.AddressBookAddOrUpdateRequest request, {$grpc.CallOptions? options}) {
-    return $createUnaryCall(_$addressBookAddOrUpdate, request, options: options);
+  $grpc.ResponseFuture<$0.Empty> updateAddressBookPeer($0.UpdateAddressBookPeerRequest request, {$grpc.CallOptions? options}) {
+    return $createUnaryCall(_$updateAddressBookPeer, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.PeerInfoResponse> addressBookGetPeer($0.AddressBookGetPeerRequest request, {$grpc.CallOptions? options}) {
-    return $createUnaryCall(_$addressBookGetPeer, request, options: options);
+  $grpc.ResponseFuture<$0.PeerInfoResponse> getAddressBookPeer($0.GetAddressBookPeerRequest request, {$grpc.CallOptions? options}) {
+    return $createUnaryCall(_$getAddressBookPeer, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.Empty> addressBookRemove($0.AddressBookRemoveRequest request, {$grpc.CallOptions? options}) {
-    return $createUnaryCall(_$addressBookRemove, request, options: options);
+  $grpc.ResponseFuture<$0.Empty> removeAddressBookPeer($0.RemoveAddressBookPeerRequest request, {$grpc.CallOptions? options}) {
+    return $createUnaryCall(_$removeAddressBookPeer, request, options: options);
   }
 }
 
@@ -435,39 +435,39 @@ abstract class FungiDaemonServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) => $0.RemoveTcpListeningRuleRequest.fromBuffer(value),
         ($0.Empty value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.Empty, $0.PeerInfoListResponse>(
-        'MdnsGetLocalDevices',
-        mdnsGetLocalDevices_Pre,
+        'ListMdnsDevices',
+        listMdnsDevices_Pre,
         false,
         false,
         ($core.List<$core.int> value) => $0.Empty.fromBuffer(value),
         ($0.PeerInfoListResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.Empty, $0.PeerInfoListResponse>(
-        'GetAllAddressBook',
-        getAllAddressBook_Pre,
+        'ListAddressBookPeers',
+        listAddressBookPeers_Pre,
         false,
         false,
         ($core.List<$core.int> value) => $0.Empty.fromBuffer(value),
         ($0.PeerInfoListResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.AddressBookAddOrUpdateRequest, $0.Empty>(
-        'AddressBookAddOrUpdate',
-        addressBookAddOrUpdate_Pre,
+    $addMethod($grpc.ServiceMethod<$0.UpdateAddressBookPeerRequest, $0.Empty>(
+        'UpdateAddressBookPeer',
+        updateAddressBookPeer_Pre,
         false,
         false,
-        ($core.List<$core.int> value) => $0.AddressBookAddOrUpdateRequest.fromBuffer(value),
+        ($core.List<$core.int> value) => $0.UpdateAddressBookPeerRequest.fromBuffer(value),
         ($0.Empty value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.AddressBookGetPeerRequest, $0.PeerInfoResponse>(
-        'AddressBookGetPeer',
-        addressBookGetPeer_Pre,
+    $addMethod($grpc.ServiceMethod<$0.GetAddressBookPeerRequest, $0.PeerInfoResponse>(
+        'GetAddressBookPeer',
+        getAddressBookPeer_Pre,
         false,
         false,
-        ($core.List<$core.int> value) => $0.AddressBookGetPeerRequest.fromBuffer(value),
+        ($core.List<$core.int> value) => $0.GetAddressBookPeerRequest.fromBuffer(value),
         ($0.PeerInfoResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.AddressBookRemoveRequest, $0.Empty>(
-        'AddressBookRemove',
-        addressBookRemove_Pre,
+    $addMethod($grpc.ServiceMethod<$0.RemoveAddressBookPeerRequest, $0.Empty>(
+        'RemoveAddressBookPeer',
+        removeAddressBookPeer_Pre,
         false,
         false,
-        ($core.List<$core.int> value) => $0.AddressBookRemoveRequest.fromBuffer(value),
+        ($core.List<$core.int> value) => $0.RemoveAddressBookPeerRequest.fromBuffer(value),
         ($0.Empty value) => value.writeToBuffer()));
   }
 
@@ -567,24 +567,24 @@ abstract class FungiDaemonServiceBase extends $grpc.Service {
     return removeTcpListeningRule(call, await request);
   }
 
-  $async.Future<$0.PeerInfoListResponse> mdnsGetLocalDevices_Pre($grpc.ServiceCall call, $async.Future<$0.Empty> request) async {
-    return mdnsGetLocalDevices(call, await request);
+  $async.Future<$0.PeerInfoListResponse> listMdnsDevices_Pre($grpc.ServiceCall call, $async.Future<$0.Empty> request) async {
+    return listMdnsDevices(call, await request);
   }
 
-  $async.Future<$0.PeerInfoListResponse> getAllAddressBook_Pre($grpc.ServiceCall call, $async.Future<$0.Empty> request) async {
-    return getAllAddressBook(call, await request);
+  $async.Future<$0.PeerInfoListResponse> listAddressBookPeers_Pre($grpc.ServiceCall call, $async.Future<$0.Empty> request) async {
+    return listAddressBookPeers(call, await request);
   }
 
-  $async.Future<$0.Empty> addressBookAddOrUpdate_Pre($grpc.ServiceCall call, $async.Future<$0.AddressBookAddOrUpdateRequest> request) async {
-    return addressBookAddOrUpdate(call, await request);
+  $async.Future<$0.Empty> updateAddressBookPeer_Pre($grpc.ServiceCall call, $async.Future<$0.UpdateAddressBookPeerRequest> request) async {
+    return updateAddressBookPeer(call, await request);
   }
 
-  $async.Future<$0.PeerInfoResponse> addressBookGetPeer_Pre($grpc.ServiceCall call, $async.Future<$0.AddressBookGetPeerRequest> request) async {
-    return addressBookGetPeer(call, await request);
+  $async.Future<$0.PeerInfoResponse> getAddressBookPeer_Pre($grpc.ServiceCall call, $async.Future<$0.GetAddressBookPeerRequest> request) async {
+    return getAddressBookPeer(call, await request);
   }
 
-  $async.Future<$0.Empty> addressBookRemove_Pre($grpc.ServiceCall call, $async.Future<$0.AddressBookRemoveRequest> request) async {
-    return addressBookRemove(call, await request);
+  $async.Future<$0.Empty> removeAddressBookPeer_Pre($grpc.ServiceCall call, $async.Future<$0.RemoveAddressBookPeerRequest> request) async {
+    return removeAddressBookPeer(call, await request);
   }
 
   $async.Future<$0.VersionResponse> version($grpc.ServiceCall call, $0.Empty request);
@@ -611,9 +611,9 @@ abstract class FungiDaemonServiceBase extends $grpc.Service {
   $async.Future<$0.Empty> removeTcpForwardingRule($grpc.ServiceCall call, $0.RemoveTcpForwardingRuleRequest request);
   $async.Future<$0.TcpListeningRuleResponse> addTcpListeningRule($grpc.ServiceCall call, $0.AddTcpListeningRuleRequest request);
   $async.Future<$0.Empty> removeTcpListeningRule($grpc.ServiceCall call, $0.RemoveTcpListeningRuleRequest request);
-  $async.Future<$0.PeerInfoListResponse> mdnsGetLocalDevices($grpc.ServiceCall call, $0.Empty request);
-  $async.Future<$0.PeerInfoListResponse> getAllAddressBook($grpc.ServiceCall call, $0.Empty request);
-  $async.Future<$0.Empty> addressBookAddOrUpdate($grpc.ServiceCall call, $0.AddressBookAddOrUpdateRequest request);
-  $async.Future<$0.PeerInfoResponse> addressBookGetPeer($grpc.ServiceCall call, $0.AddressBookGetPeerRequest request);
-  $async.Future<$0.Empty> addressBookRemove($grpc.ServiceCall call, $0.AddressBookRemoveRequest request);
+  $async.Future<$0.PeerInfoListResponse> listMdnsDevices($grpc.ServiceCall call, $0.Empty request);
+  $async.Future<$0.PeerInfoListResponse> listAddressBookPeers($grpc.ServiceCall call, $0.Empty request);
+  $async.Future<$0.Empty> updateAddressBookPeer($grpc.ServiceCall call, $0.UpdateAddressBookPeerRequest request);
+  $async.Future<$0.PeerInfoResponse> getAddressBookPeer($grpc.ServiceCall call, $0.GetAddressBookPeerRequest request);
+  $async.Future<$0.Empty> removeAddressBookPeer($grpc.ServiceCall call, $0.RemoveAddressBookPeerRequest request);
 }
