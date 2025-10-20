@@ -1777,18 +1777,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fungi-wasi"
-version = "0.3.4"
-dependencies = [
- "anyhow",
- "serde",
- "thiserror 2.0.12",
- "tokio",
- "wasmtime",
- "wasmtime-wasi",
-]
-
-[[package]]
 name = "futures"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
