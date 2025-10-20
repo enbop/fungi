@@ -15,7 +15,20 @@ fn main() -> Result<()> {
         Commands::Daemon(args) => fungi_runtime(fungi_daemon::run(args))?,
         Commands::Init(_args) => fungi_runtime(fungi_init::run(fungi_args.common))?,
         Commands::Relay(args) => fungi_runtime(fungi_relay::run(args))?,
-        Commands::Control(cmd) => fungi_runtime(fungi_control::execute(fungi_args.common, cmd)),
+
+        // control commands
+        Commands::Info(cmd) => fungi_runtime(fungi_control::execute_info(fungi_args.common, cmd)),
+        Commands::Peer(cmd) => fungi_runtime(fungi_control::execute_peer(fungi_args.common, cmd)),
+        Commands::Ft(cmd) => {
+            fungi_runtime(fungi_control::execute_file_transfer(fungi_args.common, cmd))
+        }
+        Commands::Proxy(cmd) => fungi_runtime(fungi_control::execute_proxy(fungi_args.common, cmd)),
+        Commands::Tunnel(cmd) => {
+            fungi_runtime(fungi_control::execute_tunnel(fungi_args.common, cmd))
+        }
+        Commands::Device(cmd) => {
+            fungi_runtime(fungi_control::execute_device(fungi_args.common, cmd))
+        }
     }
 
     Ok(())

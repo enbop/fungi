@@ -16,6 +16,7 @@ clap = { version = "4", features = ["derive"] }
 serde = { workspace = true }
 home = "0.5"
 thiserror = { workspace = true }
+tonic = "0.14"
 fungi-config = { path = "../crates/config" }
 fungi-daemon = { path = "../crates/daemon" }
 fungi-daemon-grpc = { path = "../crates/daemon-grpc" }

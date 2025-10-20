@@ -50,6 +50,22 @@ pub enum Commands {
     /// Serves requests from a wasi-http proxy component (re-exported wasmtime command)
     Serve(wasmtime_cli::commands::ServeCommand),
 
-    #[command(flatten)]
-    Control(fungi_control::ControlCommands),
+    /// Daemon information commands
+    #[command(subcommand)]
+    Info(fungi_control::InfoCommands),
+    /// Manage incoming connection allowlist
+    #[command(subcommand)]
+    Peer(fungi_control::PeerCommands),
+    /// File transfer service management
+    #[command(subcommand)]
+    Ft(fungi_control::FileTransferCommands),
+    /// FTP and WebDAV proxy management
+    #[command(subcommand)]
+    Proxy(fungi_control::ProxyCommands),
+    /// TCP tunneling management
+    #[command(subcommand)]
+    Tunnel(fungi_control::TunnelCommands),
+    /// Device discovery and address book
+    #[command(subcommand)]
+    Device(fungi_control::DeviceCommands),
 }
