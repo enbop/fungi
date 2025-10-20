@@ -39,33 +39,35 @@ impl FungiDir for CommonArgs {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Start a Fungi daemon
-    Daemon(fungi_daemon::DaemonArgs),
     /// Initialize a Fungi configuration, and generate a keypair
     Init(fungi_init::InitArgs),
+    /// Start a Fungi daemon
+    ///
+    Daemon(fungi_daemon::DaemonArgs),
     /// Start a simple Fungi relay server
     Relay(fungi_relay::RelayArgs),
-    /// Runs a WebAssembly module (re-exported wasmtime command)
-    Run(wasmtime_cli::commands::RunCommand),
-    /// Serves requests from a wasi-http proxy component (re-exported wasmtime command)
-    Serve(wasmtime_cli::commands::ServeCommand),
 
-    /// Daemon information commands
+    /// Show daemon information
     #[command(subcommand)]
     Info(fungi_control::InfoCommands),
-    /// Manage incoming connection allowlist
-    #[command(subcommand)]
-    Peer(fungi_control::PeerCommands),
-    /// File transfer service management
-    #[command(subcommand)]
-    Ft(fungi_control::FileTransferCommands),
-    /// FTP and WebDAV proxy management
-    #[command(subcommand)]
-    Proxy(fungi_control::ProxyCommands),
-    /// TCP tunneling management
-    #[command(subcommand)]
+    /// Manage incoming allowed peers
+    #[command(subcommand, visible_alias = "ap")]
+    AllowedPeer(fungi_control::AllowedPeerCommands),
+    /// Manage file transfer service
+    #[command(subcommand, visible_alias = "fs")]
+    FtService(fungi_control::FtServiceCommands),
+    /// Manage file transfer client config and FTP and WebDAV proxies
+    #[command(subcommand, visible_alias = "fc")]
+    FtClient(fungi_control::FtClientCommands),
+    /// Manage TCP tunneling
+    #[command(subcommand, visible_alias = "tn")]
     Tunnel(fungi_control::TunnelCommands),
     /// Device discovery and address book
     #[command(subcommand)]
     Device(fungi_control::DeviceCommands),
+
+    /// [WASI runtime] Run a WebAssembly module (re-exported wasmtime command)
+    Run(wasmtime_cli::commands::RunCommand),
+    /// [WASI runtime] Serve wasi-http requests (re-exported wasmtime command)
+    Serve(wasmtime_cli::commands::ServeCommand),
 }

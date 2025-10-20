@@ -30,7 +30,7 @@ pub enum InfoCommands {
 }
 
 #[derive(Subcommand, Debug, Clone)]
-pub enum PeerCommands {
+pub enum AllowedPeerCommands {
     /// List peers allowed to initiate incoming connections
     List,
     /// Add a peer to the incoming connection allowlist
@@ -46,7 +46,7 @@ pub enum PeerCommands {
 }
 
 #[derive(Subcommand, Debug, Clone)]
-pub enum FileTransferCommands {
+pub enum FtServiceCommands {
     /// Show file transfer service status
     Status,
     /// Start the file transfer service
@@ -57,6 +57,22 @@ pub enum FileTransferCommands {
     },
     /// Stop the file transfer service
     Stop,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct AddClientArgs {
+    /// Peer ID of the client
+    peer_id: String,
+    /// Display name for the client
+    #[arg(short, long)]
+    name: Option<String>,
+    /// Enable the client immediately
+    #[arg(short, long, default_value_t = false)]
+    enabled: bool,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum FtClientCommands {
     /// List all file transfer clients
     ListClients,
     /// Add a new file transfer client
@@ -74,22 +90,6 @@ pub enum FileTransferCommands {
         #[arg(short, long)]
         enabled: bool,
     },
-}
-
-#[derive(Args, Debug, Clone)]
-pub struct AddClientArgs {
-    /// Peer ID of the client
-    peer_id: String,
-    /// Display name for the client
-    #[arg(short, long)]
-    name: Option<String>,
-    /// Enable the client immediately
-    #[arg(short, long, default_value_t = false)]
-    enabled: bool,
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub enum ProxyCommands {
     /// Show FTP proxy settings
     FtpStatus,
     /// Update FTP proxy configuration
@@ -166,7 +166,7 @@ pub enum DeviceCommands {
     Mdns,
     /// List all peers in the address book
     List,
-    /// Get information about a specific peer
+    /// Get information about a specific peer in the address book
     Get {
         /// Peer ID to query
         peer_id: String,
@@ -182,11 +182,20 @@ async fn get_rpc_client(args: &CommonArgs) -> Option<FungiDaemonClient<tonic::tr
     let fungi_config = FungiConfig::try_read_from_dir(&args.fungi_dir()).ok()?;
     let rpc_addr = format!("http://{}", fungi_config.rpc.listen_address);
 
-    match FungiDaemonClient::connect(rpc_addr).await {
-        Ok(client) => Some(client),
-        Err(e) => {
+    let connect_timeout = std::time::Duration::from_secs(3);
+    match tokio::time::timeout(connect_timeout, FungiDaemonClient::connect(rpc_addr)).await {
+        Ok(Ok(client)) => Some(client),
+        Ok(Err(e)) => {
             eprintln!("Cannot connect to Fungi daemon. Is it running?");
             log::error!("Error connecting to daemon: {}", e);
+            None
+        }
+        Err(_) => {
+            eprintln!("Cannot connect to Fungi daemon. Is it running?");
+            log::error!(
+                "Connection timeout after {} seconds",
+                connect_timeout.as_secs()
+            );
             None
         }
     }
@@ -240,14 +249,14 @@ pub async fn execute_info(args: CommonArgs, cmd: InfoCommands) {
     }
 }
 
-pub async fn execute_peer(args: CommonArgs, cmd: PeerCommands) {
+pub async fn execute_allowed_peer(args: CommonArgs, cmd: AllowedPeerCommands) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
         None => return,
     };
 
     match cmd {
-        PeerCommands::List => {
+        AllowedPeerCommands::List => {
             match client
                 .get_incoming_allowed_peers(Request::new(Empty {}))
                 .await
@@ -265,14 +274,14 @@ pub async fn execute_peer(args: CommonArgs, cmd: PeerCommands) {
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        PeerCommands::Add { peer_id } => {
+        AllowedPeerCommands::Add { peer_id } => {
             let req = AddIncomingAllowedPeerRequest { peer_id };
             match client.add_incoming_allowed_peer(Request::new(req)).await {
                 Ok(_) => println!("Peer added successfully"),
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        PeerCommands::Remove { peer_id } => {
+        AllowedPeerCommands::Remove { peer_id } => {
             let req = RemoveIncomingAllowedPeerRequest { peer_id };
             match client.remove_incoming_allowed_peer(Request::new(req)).await {
                 Ok(_) => println!("Peer removed successfully"),
@@ -282,14 +291,14 @@ pub async fn execute_peer(args: CommonArgs, cmd: PeerCommands) {
     }
 }
 
-pub async fn execute_file_transfer(args: CommonArgs, cmd: FileTransferCommands) {
+pub async fn execute_ft_service(args: CommonArgs, cmd: FtServiceCommands) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
         None => return,
     };
 
     match cmd {
-        FileTransferCommands::Status => {
+        FtServiceCommands::Status => {
             match client
                 .get_file_transfer_service_enabled(Request::new(Empty {}))
                 .await
@@ -313,14 +322,14 @@ pub async fn execute_file_transfer(args: CommonArgs, cmd: FileTransferCommands) 
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        FileTransferCommands::Start { root_dir } => {
+        FtServiceCommands::Start { root_dir } => {
             let req = StartFileTransferServiceRequest { root_dir };
             match client.start_file_transfer_service(Request::new(req)).await {
                 Ok(_) => println!("File transfer service started"),
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        FileTransferCommands::Stop => {
+        FtServiceCommands::Stop => {
             match client
                 .stop_file_transfer_service(Request::new(Empty {}))
                 .await
@@ -329,7 +338,71 @@ pub async fn execute_file_transfer(args: CommonArgs, cmd: FileTransferCommands) 
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        FileTransferCommands::ListClients => {
+    }
+}
+
+pub async fn execute_ft_client(args: CommonArgs, cmd: FtClientCommands) {
+    let mut client = match get_rpc_client(&args).await {
+        Some(c) => c,
+        None => return,
+    };
+
+    match cmd {
+        FtClientCommands::FtpStatus => match client.get_ftp_proxy(Request::new(Empty {})).await {
+            Ok(resp) => {
+                let proxy = resp.into_inner();
+                println!(
+                    "FTP Proxy: {}",
+                    if proxy.enabled { "enabled" } else { "disabled" }
+                );
+                println!("Binding: {}:{}", proxy.host, proxy.port);
+            }
+            Err(e) => eprintln!("Error: {}", e),
+        },
+        FtClientCommands::FtpUpdate {
+            enabled,
+            host,
+            port,
+        } => {
+            let req = UpdateFtpProxyRequest {
+                enabled,
+                host,
+                port: port as i32,
+            };
+            match client.update_ftp_proxy(Request::new(req)).await {
+                Ok(_) => println!("FTP proxy updated successfully"),
+                Err(e) => eprintln!("Error: {}", e),
+            }
+        }
+        FtClientCommands::WebdavStatus => {
+            match client.get_webdav_proxy(Request::new(Empty {})).await {
+                Ok(resp) => {
+                    let proxy = resp.into_inner();
+                    println!(
+                        "WebDAV Proxy: {}",
+                        if proxy.enabled { "enabled" } else { "disabled" }
+                    );
+                    println!("Binding: {}:{}", proxy.host, proxy.port);
+                }
+                Err(e) => eprintln!("Error: {}", e),
+            }
+        }
+        FtClientCommands::WebdavUpdate {
+            enabled,
+            host,
+            port,
+        } => {
+            let req = UpdateWebdavProxyRequest {
+                enabled,
+                host,
+                port: port as i32,
+            };
+            match client.update_webdav_proxy(Request::new(req)).await {
+                Ok(_) => println!("WebDAV proxy updated successfully"),
+                Err(e) => eprintln!("Error: {}", e),
+            }
+        }
+        FtClientCommands::ListClients => {
             match client
                 .get_all_file_transfer_clients(Request::new(Empty {}))
                 .await
@@ -356,7 +429,7 @@ pub async fn execute_file_transfer(args: CommonArgs, cmd: FileTransferCommands) 
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        FileTransferCommands::AddClient(add_args) => {
+        FtClientCommands::AddClient(add_args) => {
             let req = AddFileTransferClientRequest {
                 enabled: add_args.enabled,
                 name: add_args.name.unwrap_or_default(),
@@ -367,84 +440,20 @@ pub async fn execute_file_transfer(args: CommonArgs, cmd: FileTransferCommands) 
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        FileTransferCommands::RemoveClient { peer_id } => {
+        FtClientCommands::RemoveClient { peer_id } => {
             let req = RemoveFileTransferClientRequest { peer_id };
             match client.remove_file_transfer_client(Request::new(req)).await {
                 Ok(_) => println!("Client removed successfully"),
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        FileTransferCommands::EnableClient { peer_id, enabled } => {
+        FtClientCommands::EnableClient { peer_id, enabled } => {
             let req = EnableFileTransferClientRequest { peer_id, enabled };
             match client.enable_file_transfer_client(Request::new(req)).await {
                 Ok(_) => println!(
                     "Client {} successfully",
                     if enabled { "enabled" } else { "disabled" }
                 ),
-                Err(e) => eprintln!("Error: {}", e),
-            }
-        }
-    }
-}
-
-pub async fn execute_proxy(args: CommonArgs, cmd: ProxyCommands) {
-    let mut client = match get_rpc_client(&args).await {
-        Some(c) => c,
-        None => return,
-    };
-
-    match cmd {
-        ProxyCommands::FtpStatus => match client.get_ftp_proxy(Request::new(Empty {})).await {
-            Ok(resp) => {
-                let proxy = resp.into_inner();
-                println!(
-                    "FTP Proxy: {}",
-                    if proxy.enabled { "enabled" } else { "disabled" }
-                );
-                println!("Binding: {}:{}", proxy.host, proxy.port);
-            }
-            Err(e) => eprintln!("Error: {}", e),
-        },
-        ProxyCommands::FtpUpdate {
-            enabled,
-            host,
-            port,
-        } => {
-            let req = UpdateFtpProxyRequest {
-                enabled,
-                host,
-                port: port as i32,
-            };
-            match client.update_ftp_proxy(Request::new(req)).await {
-                Ok(_) => println!("FTP proxy updated successfully"),
-                Err(e) => eprintln!("Error: {}", e),
-            }
-        }
-        ProxyCommands::WebdavStatus => {
-            match client.get_webdav_proxy(Request::new(Empty {})).await {
-                Ok(resp) => {
-                    let proxy = resp.into_inner();
-                    println!(
-                        "WebDAV Proxy: {}",
-                        if proxy.enabled { "enabled" } else { "disabled" }
-                    );
-                    println!("Binding: {}:{}", proxy.host, proxy.port);
-                }
-                Err(e) => eprintln!("Error: {}", e),
-            }
-        }
-        ProxyCommands::WebdavUpdate {
-            enabled,
-            host,
-            port,
-        } => {
-            let req = UpdateWebdavProxyRequest {
-                enabled,
-                host,
-                port: port as i32,
-            };
-            match client.update_webdav_proxy(Request::new(req)).await {
-                Ok(_) => println!("WebDAV proxy updated successfully"),
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
