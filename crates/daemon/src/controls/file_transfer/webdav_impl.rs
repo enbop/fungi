@@ -102,7 +102,7 @@ struct DavFileImpl {
 
 impl DavFileImpl {
     /// Flush the write buffer to remote storage
-    fn flush_buffer(&mut self) -> FsFuture<()> {
+    fn flush_buffer(&mut self) -> FsFuture<'_, ()> {
         if self.write_buffer.is_empty() {
             return async { Ok(()) }.boxed();
         }
@@ -136,7 +136,7 @@ impl DavFileImpl {
     }
 
     /// Add data to write buffer, flushing if necessary
-    fn write_chunk(&mut self, chunk: Vec<u8>) -> FsFuture<()> {
+    fn write_chunk(&mut self, chunk: Vec<u8>) -> FsFuture<'_, ()> {
         let len = chunk.len();
         log::debug!(
             "DavFile: Writing {} bytes to file: {} at position: {} (buffer: {}/{}, buffer_start: {})",
@@ -196,7 +196,7 @@ impl DavFileImpl {
 }
 
 impl DavFile for DavFileImpl {
-    fn metadata(&mut self) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata(&mut self) -> FsFuture<'_, Box<dyn DavMetaData>> {
         log::debug!(
             "DavFile: Getting metadata for file: {}",
             self.path_os_string
@@ -213,17 +213,17 @@ impl DavFile for DavFileImpl {
         .boxed()
     }
 
-    fn write_buf(&mut self, buf: Box<dyn libp2p::bytes::Buf + Send>) -> FsFuture<()> {
+    fn write_buf(&mut self, buf: Box<dyn libp2p::bytes::Buf + Send>) -> FsFuture<'_, ()> {
         let bytes = buf.chunk().to_vec();
         self.write_chunk(bytes)
     }
 
-    fn write_bytes(&mut self, buf: libp2p::bytes::Bytes) -> FsFuture<()> {
+    fn write_bytes(&mut self, buf: libp2p::bytes::Bytes) -> FsFuture<'_, ()> {
         let bytes = buf.to_vec();
         self.write_chunk(bytes)
     }
 
-    fn read_bytes(&mut self, count: usize) -> FsFuture<libp2p::bytes::Bytes> {
+    fn read_bytes(&mut self, count: usize) -> FsFuture<'_, libp2p::bytes::Bytes> {
         log::debug!(
             "DavFile: Reading {} bytes from file: {} at position: {}",
             count,
@@ -249,7 +249,7 @@ impl DavFile for DavFileImpl {
         .boxed()
     }
 
-    fn seek(&mut self, pos: SeekFrom) -> FsFuture<u64> {
+    fn seek(&mut self, pos: SeekFrom) -> FsFuture<'_, u64> {
         log::debug!(
             "DavFile: Seeking to position: {:?} in file: {} (current buffer: {} bytes)",
             pos,
@@ -371,7 +371,7 @@ impl DavFile for DavFileImpl {
         }
     }
 
-    fn flush(&mut self) -> FsFuture<()> {
+    fn flush(&mut self) -> FsFuture<'_, ()> {
         log::debug!("DavFile: Flushing file: {}", self.path_os_string);
         self.flush_buffer()
     }
@@ -387,7 +387,7 @@ impl DavDirEntry for DavDirEntryImpl {
         self.name.as_bytes().to_vec()
     }
 
-    fn metadata(&self) -> FsFuture<Box<dyn DavMetaData>> {
+    fn metadata(&self) -> FsFuture<'_, Box<dyn DavMetaData>> {
         log::debug!("DavDirEntry: Getting metadata for entry: {}", self.name);
         async move {
             let meta = DavMetaDataImpl(self.metadata.clone());
@@ -396,15 +396,15 @@ impl DavDirEntry for DavDirEntryImpl {
         .boxed()
     }
 
-    fn is_dir(&self) -> FsFuture<bool> {
+    fn is_dir(&self) -> FsFuture<'_, bool> {
         async move { Ok(self.metadata.is_dir) }.boxed()
     }
 
-    fn is_file(&self) -> FsFuture<bool> {
+    fn is_file(&self) -> FsFuture<'_, bool> {
         async move { Ok(self.metadata.is_file) }.boxed()
     }
 
-    fn is_symlink(&self) -> FsFuture<bool> {
+    fn is_symlink(&self) -> FsFuture<'_, bool> {
         async move { Ok(self.metadata.is_symlink) }.boxed()
     }
 }
@@ -711,7 +711,7 @@ impl DavFileSystem for FileTransferClientsControl {
     /// The first value returned is the amount of space used,
     /// the second optional value is the total amount of space
     /// (used + available).
-    fn get_quota(&self) -> FsFuture<(u64, Option<u64>)> {
+    fn get_quota(&self) -> FsFuture<'_, (u64, Option<u64>)> {
         log::debug!("DavFileSystem: (get_quota) Getting filesystem quota");
         async { Ok((0, None)) }.boxed()
     }
