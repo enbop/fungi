@@ -440,10 +440,19 @@ class FungiController extends GetxController {
     }
   }
 
-  Future<void> removeTcpForwardingRule(String ruleId) async {
+  Future<void> removeTcpForwardingRule({
+    required String localHost,
+    required int localPort,
+    required String peerId,
+    required int remotePort,
+  }) async {
     try {
       await fungiClient.removeTcpForwardingRule(
-        RemoveTcpForwardingRuleRequest()..ruleId = ruleId,
+        RemoveTcpForwardingRuleRequest()
+          ..localHost = localHost
+          ..localPort = localPort
+          ..peerId = peerId
+          ..remotePort = remotePort,
       );
       await refreshTcpTunnelingConfig();
       Get.snackbar(
@@ -495,10 +504,15 @@ class FungiController extends GetxController {
     }
   }
 
-  Future<void> removeTcpListeningRule(String ruleId) async {
+  Future<void> removeTcpListeningRule({
+    required String localHost,
+    required int localPort,
+  }) async {
     try {
       await fungiClient.removeTcpListeningRule(
-        RemoveTcpListeningRuleRequest()..ruleId = ruleId,
+        RemoveTcpListeningRuleRequest()
+          ..localHost = localHost
+          ..localPort = localPort,
       );
       await refreshTcpTunnelingConfig();
       Get.snackbar(

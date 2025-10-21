@@ -1604,11 +1604,23 @@ class TcpForwardingRuleResponse extends $pb.GeneratedMessage {
 
 class RemoveTcpForwardingRuleRequest extends $pb.GeneratedMessage {
   factory RemoveTcpForwardingRuleRequest({
-    $core.String? ruleId,
+    $core.String? localHost,
+    $core.int? localPort,
+    $core.String? peerId,
+    $core.int? remotePort,
   }) {
     final $result = create();
-    if (ruleId != null) {
-      $result.ruleId = ruleId;
+    if (localHost != null) {
+      $result.localHost = localHost;
+    }
+    if (localPort != null) {
+      $result.localPort = localPort;
+    }
+    if (peerId != null) {
+      $result.peerId = peerId;
+    }
+    if (remotePort != null) {
+      $result.remotePort = remotePort;
     }
     return $result;
   }
@@ -1617,7 +1629,10 @@ class RemoveTcpForwardingRuleRequest extends $pb.GeneratedMessage {
   factory RemoveTcpForwardingRuleRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'RemoveTcpForwardingRuleRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'fungi_daemon'), createEmptyInstance: create)
-    ..aOS(1, _omitFieldNames ? '' : 'ruleId')
+    ..aOS(1, _omitFieldNames ? '' : 'localHost')
+    ..a<$core.int>(2, _omitFieldNames ? '' : 'localPort', $pb.PbFieldType.O3)
+    ..aOS(3, _omitFieldNames ? '' : 'peerId')
+    ..a<$core.int>(4, _omitFieldNames ? '' : 'remotePort', $pb.PbFieldType.O3)
     ..hasRequiredFields = false
   ;
 
@@ -1643,13 +1658,40 @@ class RemoveTcpForwardingRuleRequest extends $pb.GeneratedMessage {
   static RemoveTcpForwardingRuleRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $core.String get ruleId => $_getSZ(0);
+  $core.String get localHost => $_getSZ(0);
   @$pb.TagNumber(1)
-  set ruleId($core.String v) { $_setString(0, v); }
+  set localHost($core.String v) { $_setString(0, v); }
   @$pb.TagNumber(1)
-  $core.bool hasRuleId() => $_has(0);
+  $core.bool hasLocalHost() => $_has(0);
   @$pb.TagNumber(1)
-  void clearRuleId() => clearField(1);
+  void clearLocalHost() => clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get localPort => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set localPort($core.int v) { $_setSignedInt32(1, v); }
+  @$pb.TagNumber(2)
+  $core.bool hasLocalPort() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearLocalPort() => clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get peerId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set peerId($core.String v) { $_setString(2, v); }
+  @$pb.TagNumber(3)
+  $core.bool hasPeerId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearPeerId() => clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.int get remotePort => $_getIZ(3);
+  @$pb.TagNumber(4)
+  set remotePort($core.int v) { $_setSignedInt32(3, v); }
+  @$pb.TagNumber(4)
+  $core.bool hasRemotePort() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRemotePort() => clearField(4);
 }
 
 class AddTcpListeningRuleRequest extends $pb.GeneratedMessage {
@@ -1776,11 +1818,15 @@ class TcpListeningRuleResponse extends $pb.GeneratedMessage {
 
 class RemoveTcpListeningRuleRequest extends $pb.GeneratedMessage {
   factory RemoveTcpListeningRuleRequest({
-    $core.String? ruleId,
+    $core.String? localHost,
+    $core.int? localPort,
   }) {
     final $result = create();
-    if (ruleId != null) {
-      $result.ruleId = ruleId;
+    if (localHost != null) {
+      $result.localHost = localHost;
+    }
+    if (localPort != null) {
+      $result.localPort = localPort;
     }
     return $result;
   }
@@ -1789,7 +1835,8 @@ class RemoveTcpListeningRuleRequest extends $pb.GeneratedMessage {
   factory RemoveTcpListeningRuleRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'RemoveTcpListeningRuleRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'fungi_daemon'), createEmptyInstance: create)
-    ..aOS(1, _omitFieldNames ? '' : 'ruleId')
+    ..aOS(1, _omitFieldNames ? '' : 'localHost')
+    ..a<$core.int>(2, _omitFieldNames ? '' : 'localPort', $pb.PbFieldType.O3)
     ..hasRequiredFields = false
   ;
 
@@ -1815,13 +1862,22 @@ class RemoveTcpListeningRuleRequest extends $pb.GeneratedMessage {
   static RemoveTcpListeningRuleRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $core.String get ruleId => $_getSZ(0);
+  $core.String get localHost => $_getSZ(0);
   @$pb.TagNumber(1)
-  set ruleId($core.String v) { $_setString(0, v); }
+  set localHost($core.String v) { $_setString(0, v); }
   @$pb.TagNumber(1)
-  $core.bool hasRuleId() => $_has(0);
+  $core.bool hasLocalHost() => $_has(0);
   @$pb.TagNumber(1)
-  void clearRuleId() => clearField(1);
+  void clearLocalHost() => clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get localPort => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set localPort($core.int v) { $_setSignedInt32(1, v); }
+  @$pb.TagNumber(2)
+  $core.bool hasLocalPort() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearLocalPort() => clearField(2);
 }
 
 class PeerInfo extends $pb.GeneratedMessage {

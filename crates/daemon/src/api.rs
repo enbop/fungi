@@ -250,7 +250,33 @@ impl FungiDaemon {
         self.add_tcp_forwarding_rule_internal(rule).await
     }
 
-    pub fn remove_tcp_forwarding_rule(&self, rule_id: String) -> Result<()> {
+    pub fn remove_tcp_forwarding_rule(
+        &self,
+        local_host: String,
+        local_port: u16,
+        remote_peer_id: String,
+        remote_port: u16,
+    ) -> Result<()> {
+        let rules = self.tcp_tunneling_control().get_forwarding_rules();
+        let rule_id = rules
+            .iter()
+            .find(|(_, rule)| {
+                rule.local_host == local_host
+                    && rule.local_port == local_port
+                    && rule.remote_peer_id == remote_peer_id
+                    && rule.remote_port == remote_port
+            })
+            .map(|(id, _)| id.clone())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Forwarding rule not found: {}:{} -> {}:{}",
+                    local_host,
+                    local_port,
+                    remote_peer_id,
+                    remote_port
+                )
+            })?;
+
         self.remove_tcp_forwarding_rule_internal(&rule_id)
     }
 
@@ -267,7 +293,16 @@ impl FungiDaemon {
         self.add_tcp_listening_rule_internal(rule).await
     }
 
-    pub fn remove_tcp_listening_rule(&self, rule_id: String) -> Result<()> {
+    pub fn remove_tcp_listening_rule(&self, local_host: String, local_port: u16) -> Result<()> {
+        let rules = self.tcp_tunneling_control().get_listening_rules();
+        let rule_id = rules
+            .iter()
+            .find(|(_, rule)| rule.host == local_host && rule.port == local_port)
+            .map(|(id, _)| id.clone())
+            .ok_or_else(|| {
+                anyhow::anyhow!("Listening rule not found: {}:{}", local_host, local_port)
+            })?;
+
         self.remove_tcp_listening_rule_internal(&rule_id)
     }
 

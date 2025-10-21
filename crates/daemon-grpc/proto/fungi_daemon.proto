@@ -201,7 +201,12 @@ message AddTcpForwardingRuleRequest {
 
 message TcpForwardingRuleResponse { string rule_id = 1; }
 
-message RemoveTcpForwardingRuleRequest { string rule_id = 1; }
+message RemoveTcpForwardingRuleRequest {
+  string local_host = 1;
+  int32 local_port = 2;
+  string peer_id = 3;
+  int32 remote_port = 4;
+}
 
 message AddTcpListeningRuleRequest {
   string local_host = 1;
@@ -211,7 +216,10 @@ message AddTcpListeningRuleRequest {
 
 message TcpListeningRuleResponse { string rule_id = 1; }
 
-message RemoveTcpListeningRuleRequest { string rule_id = 1; }
+message RemoveTcpListeningRuleRequest {
+  string local_host = 1;
+  int32 local_port = 2;
+}
 
 message PeerInfo {
   string peer_id = 1;

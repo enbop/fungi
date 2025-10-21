@@ -15,6 +15,23 @@ use fungi_daemon_grpc::{
 
 use crate::commands::CommonArgs;
 
+fn parse_address(address: &str) -> Result<(String, u16), String> {
+    let parts: Vec<&str> = address.rsplitn(2, ':').collect();
+    if parts.len() != 2 {
+        return Err(format!(
+            "Invalid address format: {}. Expected format: host:port",
+            address
+        ));
+    }
+
+    let port = parts[0]
+        .parse::<u16>()
+        .map_err(|_| format!("Invalid port number: {}", parts[0]))?;
+    let host = parts[1].to_string();
+
+    Ok((host, port))
+}
+
 #[derive(Subcommand, Debug, Clone)]
 pub enum InfoCommands {
     /// Show daemon version
@@ -126,37 +143,31 @@ pub enum TunnelCommands {
     Config,
     /// Add a TCP forwarding rule
     AddForward {
-        /// Local host to bind
-        #[arg(short = 'L', long)]
-        local_host: String,
-        /// Local port to bind
-        #[arg(short = 'l', long)]
-        local_port: u16,
+        /// Local address to bind (format: host:port, e.g., 127.0.0.1:8080)
+        local_address: String,
         /// Remote peer ID
-        #[arg(short = 'R', long)]
         remote_peer_id: String,
         /// Remote port to connect
-        #[arg(short = 'r', long)]
         remote_port: u16,
     },
     /// Remove a TCP forwarding rule
     RemoveForward {
-        /// Rule ID to remove
-        rule_id: String,
+        /// Local address (format: host:port, e.g., 127.0.0.1:8080)
+        local_address: String,
+        /// Remote peer ID
+        remote_peer_id: String,
+        /// Remote port
+        remote_port: u16,
     },
     /// Add a TCP listening rule
     AddListen {
-        /// Local host to bind
-        #[arg(short = 'H', long)]
-        local_host: String,
-        /// Local port to bind
-        #[arg(short, long)]
-        local_port: u16,
+        /// Local address to bind (format: host:port, e.g., 127.0.0.1:8080)
+        local_address: String,
     },
     /// Remove a TCP listening rule
     RemoveListen {
-        /// Rule ID to remove
-        rule_id: String,
+        /// Local address (format: host:port, e.g., 127.0.0.1:8080)
+        local_address: String,
     },
 }
 
@@ -515,11 +526,18 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
             }
         }
         TunnelCommands::AddForward {
-            local_host,
-            local_port,
+            local_address,
             remote_peer_id,
             remote_port,
         } => {
+            let (local_host, local_port) = match parse_address(&local_address) {
+                Ok(addr) => addr,
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    return;
+                }
+            };
+
             let req = AddTcpForwardingRuleRequest {
                 local_host,
                 local_port: local_port as i32,
@@ -531,17 +549,39 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        TunnelCommands::RemoveForward { rule_id } => {
-            let req = RemoveTcpForwardingRuleRequest { rule_id };
+        TunnelCommands::RemoveForward {
+            local_address,
+            remote_peer_id,
+            remote_port,
+        } => {
+            let (local_host, local_port) = match parse_address(&local_address) {
+                Ok(addr) => addr,
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    return;
+                }
+            };
+
+            let req = RemoveTcpForwardingRuleRequest {
+                local_host,
+                local_port: local_port as i32,
+                peer_id: remote_peer_id,
+                remote_port: remote_port as i32,
+            };
             match client.remove_tcp_forwarding_rule(Request::new(req)).await {
                 Ok(_) => println!("Forwarding rule removed successfully"),
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        TunnelCommands::AddListen {
-            local_host,
-            local_port,
-        } => {
+        TunnelCommands::AddListen { local_address } => {
+            let (local_host, local_port) = match parse_address(&local_address) {
+                Ok(addr) => addr,
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    return;
+                }
+            };
+
             let req = AddTcpListeningRuleRequest {
                 local_host,
                 local_port: local_port as i32,
@@ -552,8 +592,19 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        TunnelCommands::RemoveListen { rule_id } => {
-            let req = RemoveTcpListeningRuleRequest { rule_id };
+        TunnelCommands::RemoveListen { local_address } => {
+            let (local_host, local_port) = match parse_address(&local_address) {
+                Ok(addr) => addr,
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    return;
+                }
+            };
+
+            let req = RemoveTcpListeningRuleRequest {
+                local_host,
+                local_port: local_port as i32,
+            };
             match client.remove_tcp_listening_rule(Request::new(req)).await {
                 Ok(_) => println!("Listening rule removed successfully"),
                 Err(e) => eprintln!("Error: {}", e),

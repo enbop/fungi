@@ -375,14 +375,18 @@ final $typed_data.Uint8List tcpForwardingRuleResponseDescriptor = $convert.base6
 const RemoveTcpForwardingRuleRequest$json = {
   '1': 'RemoveTcpForwardingRuleRequest',
   '2': [
-    {'1': 'rule_id', '3': 1, '4': 1, '5': 9, '10': 'ruleId'},
+    {'1': 'local_host', '3': 1, '4': 1, '5': 9, '10': 'localHost'},
+    {'1': 'local_port', '3': 2, '4': 1, '5': 5, '10': 'localPort'},
+    {'1': 'peer_id', '3': 3, '4': 1, '5': 9, '10': 'peerId'},
+    {'1': 'remote_port', '3': 4, '4': 1, '5': 5, '10': 'remotePort'},
   ],
 };
 
 /// Descriptor for `RemoveTcpForwardingRuleRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List removeTcpForwardingRuleRequestDescriptor = $convert.base64Decode(
-    'Ch5SZW1vdmVUY3BGb3J3YXJkaW5nUnVsZVJlcXVlc3QSFwoHcnVsZV9pZBgBIAEoCVIGcnVsZU'
-    'lk');
+    'Ch5SZW1vdmVUY3BGb3J3YXJkaW5nUnVsZVJlcXVlc3QSHQoKbG9jYWxfaG9zdBgBIAEoCVIJbG'
+    '9jYWxIb3N0Eh0KCmxvY2FsX3BvcnQYAiABKAVSCWxvY2FsUG9ydBIXCgdwZWVyX2lkGAMgASgJ'
+    'UgZwZWVySWQSHwoLcmVtb3RlX3BvcnQYBCABKAVSCnJlbW90ZVBvcnQ=');
 
 @$core.Deprecated('Use addTcpListeningRuleRequestDescriptor instead')
 const AddTcpListeningRuleRequest$json = {
@@ -416,14 +420,15 @@ final $typed_data.Uint8List tcpListeningRuleResponseDescriptor = $convert.base64
 const RemoveTcpListeningRuleRequest$json = {
   '1': 'RemoveTcpListeningRuleRequest',
   '2': [
-    {'1': 'rule_id', '3': 1, '4': 1, '5': 9, '10': 'ruleId'},
+    {'1': 'local_host', '3': 1, '4': 1, '5': 9, '10': 'localHost'},
+    {'1': 'local_port', '3': 2, '4': 1, '5': 5, '10': 'localPort'},
   ],
 };
 
 /// Descriptor for `RemoveTcpListeningRuleRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List removeTcpListeningRuleRequestDescriptor = $convert.base64Decode(
-    'Ch1SZW1vdmVUY3BMaXN0ZW5pbmdSdWxlUmVxdWVzdBIXCgdydWxlX2lkGAEgASgJUgZydWxlSW'
-    'Q=');
+    'Ch1SZW1vdmVUY3BMaXN0ZW5pbmdSdWxlUmVxdWVzdBIdCgpsb2NhbF9ob3N0GAEgASgJUglsb2'
+    'NhbEhvc3QSHQoKbG9jYWxfcG9ydBgCIAEoBVIJbG9jYWxQb3J0');
 
 @$core.Deprecated('Use peerInfoDescriptor instead')
 const PeerInfo$json = {

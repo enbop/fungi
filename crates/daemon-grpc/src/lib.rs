@@ -357,8 +357,14 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         &self,
         request: Request<RemoveTcpForwardingRuleRequest>,
     ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
         self.inner
-            .remove_tcp_forwarding_rule(request.into_inner().rule_id)
+            .remove_tcp_forwarding_rule(
+                req.local_host,
+                req.local_port as u16,
+                req.peer_id,
+                req.remote_port as u16,
+            )
             .map_err(|e| Status::internal(format!("Failed to remove forwarding rule: {}", e)))?;
 
         Ok(Response::new(Empty {}))
@@ -384,8 +390,9 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         &self,
         request: Request<RemoveTcpListeningRuleRequest>,
     ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
         self.inner
-            .remove_tcp_listening_rule(request.into_inner().rule_id)
+            .remove_tcp_listening_rule(req.local_host, req.local_port as u16)
             .map_err(|e| Status::internal(format!("Failed to remove listening rule: {}", e)))?;
 
         Ok(Response::new(Empty {}))

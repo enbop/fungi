@@ -1761,6 +1761,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fungi-tests"
+version = "0.3.4"
+dependencies = [
+ "anyhow",
+ "env_logger 0.11.8",
+ "log",
+ "tempfile",
+]
+
+[[package]]
 name = "fungi-util"
 version = "0.3.4"
 dependencies = [
