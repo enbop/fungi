@@ -7,6 +7,8 @@ default-run = "fungi"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
+default = ["wasi"]
+wasi = ["dep:wasmtime-cli"]
 
 [dependencies]
 log = { workspace = true }
@@ -23,7 +25,7 @@ fungi-daemon-grpc = { path = "../crates/daemon-grpc" }
 fungi-swarm = { path = "../crates/swarm" }
 fungi-util = { path = "../crates/util" }
 # fungi-wasi = { path = "../crates/wasi" }
-wasmtime-cli = "37"
+wasmtime-cli = { version = "37", optional = true }
 libp2p = { workspace = true }
 futures = { workspace = true }
 bincode = { workspace = true }

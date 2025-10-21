@@ -10,9 +10,11 @@ fn main() -> Result<()> {
     init_device_info(&fungi_args.common);
 
     match fungi_args.command {
+        #[cfg(feature = "wasi")]
         // wasmtime commands
         // env_logger and tokio runtime have been initialized in wasmtime commands
         Commands::Run(c) => c.execute()?,
+        #[cfg(feature = "wasi")]
         Commands::Serve(c) => c.execute()?,
 
         // fungi commands
