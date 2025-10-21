@@ -3,6 +3,7 @@ import 'package:fungi_app/ui/pages/home/drive_page.dart';
 import 'package:fungi_app/ui/pages/home/data_tunnel_page.dart';
 import 'package:fungi_app/ui/pages/settings/settings.dart';
 import 'package:fungi_app/ui/widgets/text.dart';
+import 'package:fungi_app/ui/widgets/service_overlay.dart';
 import 'package:get/get.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
 
@@ -199,32 +200,34 @@ class HomePage extends StatelessWidget {
         children: [
           const HomeHeader(),
           Expanded(
-            child: DefaultTabController(
-              initialIndex: 0,
-              length: 3,
-              child: Column(
-                children: [
-                  Container(
-                    color: colorScheme.primaryContainer,
-                    child: TabBar(
-                      tabs: const <Widget>[
-                        Tab(text: "File Transfer", height: 30),
-                        Tab(text: "Data Tunnel", height: 30),
-                        Tab(text: "Settings", height: 30),
-                      ],
-                      indicatorColor: colorScheme.primary,
+            child: ServiceOverlay(
+              child: DefaultTabController(
+                initialIndex: 0,
+                length: 3,
+                child: Column(
+                  children: [
+                    Container(
+                      color: colorScheme.primaryContainer,
+                      child: TabBar(
+                        tabs: const <Widget>[
+                          Tab(text: "File Transfer", height: 30),
+                          Tab(text: "Data Tunnel", height: 30),
+                          Tab(text: "Settings", height: 30),
+                        ],
+                        indicatorColor: colorScheme.primary,
+                      ),
                     ),
-                  ),
-                  Expanded(
-                    child: const TabBarView(
-                      children: <Widget>[
-                        SingleChildScrollView(child: FileTransferPage()),
-                        SingleChildScrollView(child: DataTunnelPage()),
-                        Settings(),
-                      ],
+                    Expanded(
+                      child: const TabBarView(
+                        children: <Widget>[
+                          SingleChildScrollView(child: FileTransferPage()),
+                          SingleChildScrollView(child: DataTunnelPage()),
+                          Settings(),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
