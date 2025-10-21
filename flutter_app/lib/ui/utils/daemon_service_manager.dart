@@ -136,6 +136,14 @@ class MobileDaemonServiceManager implements DaemonServiceManager {
   @override
   bool get isRunning => _isRunning;
 
+  Future<bool> get isRunningAsync async {
+    if (Platform.isAndroid) {
+      _isRunning = await FlutterForegroundTask.isRunningService;
+      return _isRunning;
+    }
+    return false;
+  }
+
   @override
   Future<bool> start() async {
     if (Platform.isAndroid) {

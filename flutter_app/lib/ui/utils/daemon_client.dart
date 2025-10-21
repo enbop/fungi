@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:fungi_app/src/grpc/generated/fungi_daemon.pbgrpc.dart';
 import 'package:fungi_app/ui/utils/android_binary_path.dart';
 import 'package:grpc/grpc.dart';
@@ -29,10 +28,6 @@ Future<String> readRpcAddress() async {
   List<String> args = ['info', 'rpc-address'];
 
   if (Platform.isAndroid) {
-    final deviceInfo = DeviceInfoPlugin();
-    final androidInfo = await deviceInfo.androidInfo;
-    final deviceName = androidInfo.model;
-
     final appDocumentsDir = await getApplicationDocumentsDirectory();
     final fungiDir = p.join(appDocumentsDir.absolute.path, 'fungi');
 
@@ -41,13 +36,8 @@ Future<String> readRpcAddress() async {
       throw FileSystemException('Fungi executable not found on Android');
     }
 
-    args = [
-      '--default-device-name',
-      deviceName,
-      ...args,
-      '--fungi-dir',
-      fungiDir,
-    ];
+    // --default-device-name no need here
+    args = ['--default-device-name', 'null', '--fungi-dir', fungiDir, ...args];
   } else {
     fungiExecutable = _getFungiExecutablePath();
     final file = File(fungiExecutable);

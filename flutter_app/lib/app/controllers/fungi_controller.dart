@@ -99,7 +99,7 @@ class FungiController extends GetxController {
   }
 
   Future<void> _initializeAndStartDaemon() async {
-    loadDaemonEnabledState();
+    await loadDaemonEnabledState();
 
     if (isDaemonEnabled.value && !daemonManager.isRunning) {
       await startDaemon();
@@ -167,13 +167,26 @@ class FungiController extends GetxController {
     _storage.write(_daemonDisabledKey, !enabled);
   }
 
-  void loadDaemonEnabledState() {
+  Future<void> loadDaemonEnabledState() async {
     final savedState = _storage.read(_daemonDisabledKey);
     final isDisabled = savedState is bool ? savedState : false;
-    isDaemonEnabled.value = !isDisabled;
+    final userWantsEnabled = !isDisabled;
 
     if (daemonManager is MobileDaemonServiceManager) {
-      isDaemonEnabled.value = daemonManager.isRunning;
+      final manager = daemonManager as MobileDaemonServiceManager;
+      final isRunning = await manager.isRunningAsync;
+
+      // If service is running, enable it regardless of saved state
+      // Otherwise, use the user's saved preference
+      isDaemonEnabled.value = isRunning || userWantsEnabled;
+
+      // Update daemon connection state based on service running state
+      daemonConnectionState.value = isRunning
+          ? DaemonConnectionState.connecting
+          : DaemonConnectionState.disabled;
+    } else {
+      // Desktop platform
+      isDaemonEnabled.value = userWantsEnabled;
     }
   }
 
