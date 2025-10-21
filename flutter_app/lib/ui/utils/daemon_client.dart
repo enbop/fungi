@@ -1,13 +1,14 @@
-import 'dart:async';
 import 'dart:io';
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:fungi_app/src/grpc/generated/fungi_daemon.pbgrpc.dart';
+import 'package:fungi_app/ui/utils/android_binary_path.dart';
 import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
-final _logger = Logger('FungiDaemonProcess');
-
-final fungiDaemonProcessManager = FungiDaemonProcessManager();
+final _logger = Logger('DaemonClient');
 
 String _getFungiExecutablePath() {
   final executablePath = Platform.resolvedExecutable;
@@ -23,96 +24,45 @@ String _getFungiExecutablePath() {
   }
 }
 
-class FungiDaemonProcessManager {
-  Process? _process;
-  bool _isRunning = false;
+Future<String> readRpcAddress() async {
+  String fungiExecutable;
+  List<String> args = ['info', 'rpc-address'];
 
-  bool get isRunning => _isRunning;
+  if (Platform.isAndroid) {
+    final deviceInfo = DeviceInfoPlugin();
+    final androidInfo = await deviceInfo.androidInfo;
+    final deviceName = androidInfo.model;
 
-  bool get hasProcess => _process != null;
+    final appDocumentsDir = await getApplicationDocumentsDirectory();
+    final fungiDir = p.join(appDocumentsDir.absolute.path, 'fungi');
 
-  Future<bool> start() async {
-    if (_isRunning) {
-      return true;
+    fungiExecutable = await getAndroidFungiBinaryPath() ?? '';
+    if (fungiExecutable.isEmpty) {
+      throw FileSystemException('Fungi executable not found on Android');
     }
 
-    final fungiExecutable = _getFungiExecutablePath();
+    args = [
+      '--default-device-name',
+      deviceName,
+      ...args,
+      '--fungi-dir',
+      fungiDir,
+    ];
+  } else {
+    fungiExecutable = _getFungiExecutablePath();
     final file = File(fungiExecutable);
 
     if (!await file.exists()) {
       throw FileSystemException('Fungi executable not found', fungiExecutable);
     }
-
-    _process = await Process.start(fungiExecutable, [
-      'daemon',
-      '--exit-on-stdin-close',
-    ], mode: ProcessStartMode.normal);
-
-    _isRunning = true;
-
-    _process!.stdout
-        .transform(SystemEncoding().decoder)
-        .listen(
-          (data) => _logger.fine('[Daemon] $data'),
-          onDone: () => _logger.warning('[Daemon] stdout closed'),
-        );
-
-    _process!.stderr
-        .transform(SystemEncoding().decoder)
-        .listen(
-          (data) => _logger.fine('[Daemon Error] $data'),
-          onDone: () => _logger.warning('[Daemon] stderr closed'),
-        );
-
-    _process!.exitCode.then((exitCode) {
-      _logger.info('Daemon exited with code: $exitCode');
-      _isRunning = false;
-      _process = null;
-    });
-
-    await Future.delayed(const Duration(seconds: 1));
-    return _isRunning;
   }
 
-  Future<void> stop() async {
-    if (_process == null) {
-      _logger.warning('No daemon process to stop');
-      return;
-    }
-
-    _logger.info('Stopping daemon...');
-
-    final killed = _process!.kill(ProcessSignal.sigterm);
-
-    if (killed) {
-      try {
-        await _process!.exitCode.timeout(const Duration(seconds: 5));
-        _logger.info('Daemon stopped gracefully');
-      } on TimeoutException {
-        _logger.warning('Timeout, force killing daemon...');
-        _process!.kill(ProcessSignal.sigkill);
-      }
-    }
-
-    _isRunning = false;
-    _process = null;
-  }
-}
-
-Future<String> readRpcAddress() async {
-  final fungiExecutable = _getFungiExecutablePath();
-  final file = File(fungiExecutable);
-
-  if (!await file.exists()) {
-    throw FileSystemException('Fungi executable not found', fungiExecutable);
-  }
-
-  final result = await Process.run(fungiExecutable, ['info', 'rpc-address']);
+  final result = await Process.run(fungiExecutable, args);
 
   if (result.exitCode != 0) {
     throw ProcessException(
       fungiExecutable,
-      ['info', 'rpc-address'],
+      args,
       'Process exited with code ${result.exitCode}\nstderr: ${result.stderr}',
     );
   }
@@ -162,24 +112,10 @@ Future<FungiDaemonClient> getFungiClient() async {
 
   try {
     await client.version(Empty());
+    _logger.info('Connected to Fungi daemon at $address');
+    return client;
   } catch (e) {
     _logger.severe('Failed to connect to daemon: $e');
-    _logger.warning('Try to start daemon...');
-    if (!await fungiDaemonProcessManager.start()) {
-      throw Exception('Failed to start Fungi daemon');
-    }
+    throw Exception('Daemon not available. Please ensure daemon is running.');
   }
-
-  for (int i = 0; i < 5; i++) {
-    try {
-      await client.version(Empty());
-      _logger.info('Connected to Fungi daemon at $address');
-      return client;
-    } catch (e) {
-      _logger.warning('Attempt ${i + 1} to connect to daemon failed: $e');
-      await Future.delayed(const Duration(seconds: 2));
-    }
-  }
-
-  throw Exception('Failed to connect to Fungi daemon after multiple attempts');
 }

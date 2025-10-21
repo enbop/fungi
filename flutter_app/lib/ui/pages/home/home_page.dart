@@ -5,7 +5,6 @@ import 'package:fungi_app/ui/pages/settings/settings.dart';
 import 'package:fungi_app/ui/widgets/text.dart';
 import 'package:get/get.dart';
 import 'package:fungi_app/app/controllers/fungi_controller.dart';
-import 'dart:io';
 
 class LabeledText extends StatelessWidget {
   final String label;
@@ -88,97 +87,94 @@ class HomeHeader extends GetView<FungiController> {
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    LabeledText(
-                      label: 'Hostname',
-                      labelStyle: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.surfaceTint,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      value: controller.hostname.value.isEmpty
-                          ? "Unknown"
-                          : controller.hostname.value,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    LabeledText(
-                      label: 'Peer ID',
-                      labelStyle: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.surfaceTint,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      value: controller.peerId.value.length >= 5
-                          ? controller.peerId.value.substring(0, 5)
-                          : controller.peerId.value,
-                      valueWidget: TruncatedId(
-                        id: controller.peerId.value,
+                    if (!controller.daemonConnectionState.value.isDisabled) ...[
+                      LabeledText(
+                        label: 'Hostname',
+                        labelStyle: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.surfaceTint,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        value: controller.hostname.value.isEmpty
+                            ? "Unknown"
+                            : controller.hostname.value,
                         style: const TextStyle(fontSize: 12),
                       ),
-                    ),
-                    LabeledText(
-                      label: 'Service state',
-                      labelStyle: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.surfaceTint,
-                        fontWeight: FontWeight.bold,
+                      LabeledText(
+                        label: 'Peer ID',
+                        labelStyle: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.surfaceTint,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        value: controller.peerId.value.length >= 5
+                            ? controller.peerId.value.substring(0, 5)
+                            : controller.peerId.value,
+                        valueWidget: TruncatedId(
+                          id: controller.peerId.value,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ),
-                      value: controller.daemonConnectionState.value.isConnected
-                          ? "ON"
-                          : "OFF",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color:
-                            controller.daemonConnectionState.value.isConnected
-                            ? Colors.green
-                            : Colors.red,
-                      ),
-                    ),
-                    // Android background service toggle
-                    if (Platform.isAndroid) ...[
-                      const SizedBox(height: 2),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Container(
-                            width: 120,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Run in Background',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colorScheme.surfaceTint,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            ':  ',
+                    ],
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 120,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Service state',
                             style: TextStyle(
                               fontSize: 12,
                               color: colorScheme.surfaceTint,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          SizedBox(
-                            height: 18,
-                            child: FittedBox(
-                              fit: BoxFit.fill,
-                              child: Switch(
-                                value:
-                                    controller.isForegroundServiceRunning.value,
-                                onChanged: (value) async {
-                                  await controller.toggleForegroundService();
-                                },
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                padding: EdgeInsets.zero,
-                              ),
+                        ),
+                        Text(
+                          ':  ',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colorScheme.surfaceTint,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (!controller.daemonConnectionState.value.isDisabled)
+                          Text(
+                            controller.daemonConnectionState.value.isConnected
+                                ? "ON"
+                                : "OFF",
+                            style: TextStyle(
+                              fontSize: 12,
+                              color:
+                                  controller
+                                      .daemonConnectionState
+                                      .value
+                                      .isConnected
+                                  ? Colors.green
+                                  : Colors.red,
                             ),
                           ),
-                        ],
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          height: 18,
+                          child: FittedBox(
+                            fit: BoxFit.fill,
+                            child: Switch(
+                              value: controller.isDaemonEnabled.value,
+                              onChanged: (value) async {
+                                await controller.toggleDaemon();
+                              },
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              padding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 4),
                   ],
                 ),

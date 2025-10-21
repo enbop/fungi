@@ -1,7 +1,12 @@
+import 'dart:io';
+
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:fungi_app/ui/utils/android_binary_path.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
-// The callback function should always be a top-level or static function.
 @pragma('vm:entry-point')
 void startCallback() {
   FlutterForegroundTask.setTaskHandler(MyTaskHandler());
@@ -21,13 +26,63 @@ void onReceiveTaskData(Object data) {
 }
 
 class MyTaskHandler extends TaskHandler {
-  // Called when the task is started.
+  Process? _daemonProcess;
+
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     debugPrint('onStart(starter: ${starter.name})');
+
+    if (Platform.isAndroid) {
+      await _startDaemonProcess();
+    }
   }
 
-  // Called based on the eventAction set in ForegroundTaskOptions.
+  Future<void> _startDaemonProcess() async {
+    try {
+      final fungiBinaryPath = await getAndroidFungiBinaryPath();
+      if (fungiBinaryPath == null) {
+        debugPrint('Failed to find fungi binary');
+        return;
+      }
+
+      final deviceInfo = DeviceInfoPlugin();
+      final androidInfo = await deviceInfo.androidInfo;
+      final deviceName = androidInfo.model;
+
+      final appDocumentsDir = await getApplicationDocumentsDirectory();
+      final fungiDir = p.join(appDocumentsDir.absolute.path, 'fungi');
+
+      await Directory(fungiDir).create(recursive: true);
+
+      _daemonProcess = await Process.start(fungiBinaryPath, [
+        '--default-device-name',
+        deviceName,
+        'daemon',
+        '--fungi-dir',
+        fungiDir,
+        '--exit-on-stdin-close',
+      ], mode: ProcessStartMode.normal);
+
+      _daemonProcess!.stdout
+          .transform(SystemEncoding().decoder)
+          .listen((data) => debugPrint('[Daemon] $data'));
+
+      _daemonProcess!.stderr
+          .transform(SystemEncoding().decoder)
+          .listen((data) => debugPrint('[Daemon Error] $data'));
+
+      _daemonProcess!.exitCode.then((exitCode) {
+        debugPrint('Daemon exited with code: $exitCode');
+        _daemonProcess = null;
+      });
+
+      debugPrint('Daemon started successfully');
+    } catch (e) {
+      debugPrint('Failed to start daemon: $e');
+    }
+  }
+
+  @override
   @override
   void onRepeatEvent(DateTime timestamp) {
     // Send data to main isolate.
@@ -37,10 +92,14 @@ class MyTaskHandler extends TaskHandler {
     FlutterForegroundTask.sendDataToMain(data);
   }
 
-  // Called when the task is destroyed.
   @override
   Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {
     debugPrint('onDestroy(isTimeout: $isTimeout)');
+
+    if (_daemonProcess != null) {
+      _daemonProcess!.kill(ProcessSignal.sigterm);
+      _daemonProcess = null;
+    }
   }
 
   // Called when data is sent using `FlutterForegroundTask.sendDataToTask`.

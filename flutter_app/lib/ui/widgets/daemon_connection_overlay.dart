@@ -12,7 +12,7 @@ class DaemonConnectionOverlay extends GetView<FungiController> {
     return Obx(() {
       final state = controller.daemonConnectionState.value;
 
-      if (state.isConnected) {
+      if (state.isConnected || state.isDisabled) {
         return child;
       }
 

@@ -5,6 +5,7 @@ import 'package:fungi_app/app/foreground_task.dart';
 import 'package:fungi_app/src/grpc/generated/fungi_daemon.pbgrpc.dart';
 import 'package:flutter/material.dart';
 import 'package:fungi_app/ui/utils/daemon_client.dart';
+import 'package:fungi_app/ui/utils/daemon_service_manager.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -35,9 +36,10 @@ extension ThemeOptionExtension on ThemeOption {
   }
 }
 
-enum DaemonConnectionState { connecting, connected, failed }
+enum DaemonConnectionState { disabled, connecting, connected, failed }
 
 extension DaemonConnectionStateExtension on DaemonConnectionState {
+  bool get isDisabled => this == DaemonConnectionState.disabled;
   bool get isConnecting => this == DaemonConnectionState.connecting;
   bool get isConnected => this == DaemonConnectionState.connected;
   bool get isFailed => this == DaemonConnectionState.failed;
@@ -53,18 +55,19 @@ class FileTransferServerState {
 
 class FungiController extends GetxController {
   FungiDaemonClient fungiClient;
+  late final DaemonServiceManager daemonManager;
 
-  final daemonConnectionState = DaemonConnectionState.connecting.obs;
+  final daemonConnectionState = DaemonConnectionState.disabled.obs;
   final daemonError = ''.obs;
 
   final peerId = ''.obs;
   final hostname = ''.obs;
   final configFilePath = ''.obs;
-  final isForegroundServiceRunning = false.obs;
+  final isDaemonEnabled = false.obs;
 
   final _storage = GetStorage();
   final _themeKey = 'theme_option';
-  final _foregroundServiceKey = 'foreground_service_enabled';
+  final _daemonDisabledKey = 'daemon_disabled';
 
   final currentTheme = ThemeOption.system.obs;
   final preventClose = false.obs;
@@ -79,86 +82,98 @@ class FungiController extends GetxController {
   final ftpProxy = FtpProxyResponse(enabled: false, host: "", port: 0).obs;
   final webdavProxy = WebdavProxyResponse().obs;
 
-  FungiController()
-    : fungiClient = fungiDaemonClientPlaceholder(); // Placeholder client
+  FungiController() : fungiClient = fungiDaemonClientPlaceholder() {
+    daemonManager = DaemonServiceManager.create();
+  }
 
   @override
   void onInit() {
     super.onInit();
     loadThemeOption();
+
     if (Platform.isAndroid) {
-      // TODO init fungi daemon process manager for Android
       FlutterForegroundTask.addTaskDataCallback(onReceiveTaskData);
-      // Check current foreground service status
-      checkForegroundServiceStatus();
-      // Load and restore previous foreground service state
-      loadForegroundServiceState();
     }
 
-    initFungi();
+    _initializeAndStartDaemon();
+  }
+
+  Future<void> _initializeAndStartDaemon() async {
+    loadDaemonEnabledState();
+
+    if (isDaemonEnabled.value && !daemonManager.isRunning) {
+      await startDaemon();
+    } else if (isDaemonEnabled.value) {
+      await initFungi();
+    }
   }
 
   @override
   void dispose() {
-    // Remove a callback to receive data sent from the TaskHandler.
     FlutterForegroundTask.removeTaskDataCallback(onReceiveTaskData);
     super.dispose();
   }
 
-  // Foreground service control methods
-  Future<void> toggleForegroundService() async {
-    if (isForegroundServiceRunning.value) {
-      await stopForegroundServiceController();
+  Future<void> toggleDaemon() async {
+    if (isDaemonEnabled.value) {
+      await stopDaemon();
     } else {
-      await startForegroundServiceController();
+      await startDaemon();
     }
   }
 
-  Future<void> startForegroundServiceController() async {
+  Future<void> startDaemon() async {
     try {
-      await requestForegroundPermissions();
-      initForegroundService();
-      await startForegroundService();
-      isForegroundServiceRunning.value = true;
-      saveForegroundServiceState(true);
-      debugPrint('Foreground service started successfully');
-    } catch (e) {
-      debugPrint('Failed to start foreground service: $e');
-    }
-  }
+      final success = await daemonManager.start();
+      isDaemonEnabled.value = success;
+      saveDaemonEnabledState(success);
 
-  Future<void> stopForegroundServiceController() async {
-    try {
-      await stopForegroundService();
-      isForegroundServiceRunning.value = false;
-      saveForegroundServiceState(false);
-      debugPrint('Foreground service stopped successfully');
-    } catch (e) {
-      debugPrint('Failed to stop foreground service: $e');
-    }
-  }
-
-  Future<void> checkForegroundServiceStatus() async {
-    if (Platform.isAndroid) {
-      final isRunning = await FlutterForegroundTask.isRunningService;
-      isForegroundServiceRunning.value = isRunning;
-    }
-  }
-
-  void saveForegroundServiceState(bool enabled) {
-    _storage.write(_foregroundServiceKey, enabled);
-  }
-
-  void loadForegroundServiceState() {
-    final savedState = _storage.read(_foregroundServiceKey);
-    if (savedState != null && savedState is bool) {
-      // Only restore if the service was enabled before
-      if (savedState) {
-        (() async {
-          await Future.delayed(const Duration(seconds: 1));
-          await startForegroundServiceController();
-        })();
+      if (success) {
+        await initFungi();
+      } else {
+        _setDaemonError('Failed to start daemon service');
       }
+    } catch (e) {
+      debugPrint('Failed to start daemon: $e');
+      _setDaemonError(e.toString());
+    }
+  }
+
+  void _setDaemonError(String error) {
+    daemonConnectionState.value = DaemonConnectionState.failed;
+    daemonError.value = error;
+  }
+
+  Future<void> stopDaemon() async {
+    try {
+      await daemonManager.stop();
+      isDaemonEnabled.value = false;
+      saveDaemonEnabledState(false);
+      _clearDaemonState();
+    } catch (e) {
+      debugPrint('Failed to stop daemon: $e');
+    }
+  }
+
+  void _clearDaemonState() {
+    daemonConnectionState.value = DaemonConnectionState.disabled;
+    daemonError.value = '';
+    peerId.value = '';
+    hostname.value = '';
+    configFilePath.value = '';
+  }
+
+  void saveDaemonEnabledState(bool enabled) {
+    _storage.write(_daemonDisabledKey, !enabled);
+  }
+
+  void loadDaemonEnabledState() {
+    final savedState = _storage.read(_daemonDisabledKey);
+    final isDisabled = savedState is bool ? savedState : false;
+    isDaemonEnabled.value = !isDisabled;
+
+    if (daemonManager is MobileDaemonServiceManager) {
+      isDaemonEnabled.value = daemonManager.isRunning;
     }
   }
 
@@ -322,20 +337,38 @@ class FungiController extends GetxController {
   }
 
   Future<void> initFungi() async {
+    if (!isDaemonEnabled.value) {
+      daemonConnectionState.value = DaemonConnectionState.disabled;
+      daemonError.value = '';
+      return;
+    }
+
     daemonConnectionState.value = DaemonConnectionState.connecting;
     daemonError.value = '';
 
-    try {
+    for (int i = 0; i < 5; i++) {
       try {
         fungiClient = await getFungiClient();
+        daemonConnectionState.value = DaemonConnectionState.connected;
+        break;
       } catch (e) {
-        debugPrint('Failed to get Fungi client: $e');
-        daemonError.value = e.toString();
+        if (i < 4) {
+          debugPrint('Connection attempt ${i + 1} failed, retrying...');
+          await Future.delayed(Duration(seconds: i + 1));
+          continue;
+        }
+        debugPrint('Failed to connect to daemon after 5 attempts: $e');
         daemonConnectionState.value = DaemonConnectionState.failed;
+        daemonError.value = e.toString();
         return;
       }
-      daemonConnectionState.value = DaemonConnectionState.connected;
+    }
 
+    if (daemonConnectionState.value != DaemonConnectionState.connected) {
+      return;
+    }
+
+    try {
       peerId.value = (await fungiClient.peerId(Empty())).peerId;
       debugPrint('Peer ID: ${peerId.value}');
 
