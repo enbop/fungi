@@ -126,3 +126,14 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
+
+# Copy Rust binary to bundle
+install(CODE "
+  execute_process(
+    COMMAND \"${CMAKE_CURRENT_SOURCE_DIR}/scripts/copy_rust_binary.sh\" \"${CMAKE_INSTALL_PREFIX}\" \"${CMAKE_BUILD_TYPE}\"
+    RESULT_VARIABLE RESULT
+  )
+  if(NOT RESULT EQUAL 0)
+    message(FATAL_ERROR \"Failed to copy Rust binary\")
+  endif()
+  " COMPONENT Runtime)

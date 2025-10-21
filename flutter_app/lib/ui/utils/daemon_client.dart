@@ -107,12 +107,12 @@ Future<String> readRpcAddress() async {
     throw FileSystemException('Fungi executable not found', fungiExecutable);
   }
 
-  final result = await Process.run(fungiExecutable, ['rpc-address']);
+  final result = await Process.run(fungiExecutable, ['info', 'rpc-address']);
 
   if (result.exitCode != 0) {
     throw ProcessException(
       fungiExecutable,
-      ['rpc-address'],
+      ['info', 'rpc-address'],
       'Process exited with code ${result.exitCode}\nstderr: ${result.stderr}',
     );
   }
