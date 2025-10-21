@@ -2,6 +2,7 @@ pub mod address_book;
 pub mod file_transfer;
 mod init;
 mod libp2p;
+mod rpc;
 pub mod tcp_tunneling;
 
 pub use init::init;
@@ -20,11 +21,12 @@ use crate::file_transfer::{FileTransfer, FileTransferClient, FileTransferService
 
 pub const DEFAULT_CONFIG_FILE: &str = "config.toml";
 pub const DEFAULT_FUNGI_DIR: &str = ".fungi";
-pub const DEFAULT_IPC_DIR_NAME: &str = ".ipc";
-pub const DEFAULT_DAEMON_RPC_NAME: &str = ".fungi_daemon.sock";
+pub const DEFAULT_RPC_ADDRESS: &str = "127.0.0.1:5405";
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct FungiConfig {
+    #[serde(default)]
+    pub rpc: rpc::Rpc,
     #[serde(default)]
     pub network: Network,
     #[serde(default)]
@@ -52,6 +54,20 @@ impl FungiConfig {
         let toml_string = toml::to_string(&config)?;
         std::fs::write(&config_file, toml_string)?;
         Ok(())
+    }
+
+    pub fn try_read_from_dir(fungi_dir: &Path) -> Result<Self> {
+        let config_file = fungi_dir.join(DEFAULT_CONFIG_FILE);
+        if !config_file.exists() {
+            return Err(anyhow::anyhow!(
+                "Config file not found at {}",
+                config_file.display()
+            ));
+        }
+        let s = std::fs::read_to_string(&config_file)?;
+        let mut cfg = Self::parse_toml(&s)?;
+        cfg.config_file = config_file;
+        Ok(cfg)
     }
 
     pub fn apply_from_dir(fungi_dir: &Path) -> Result<Self> {
@@ -299,18 +315,6 @@ impl FungiConfig {
 
 pub trait FungiDir {
     fn fungi_dir(&self) -> PathBuf;
-
-    fn ipc_dir(&self) -> PathBuf {
-        let dir = self.fungi_dir().join(DEFAULT_IPC_DIR_NAME);
-        if !dir.exists() {
-            std::fs::create_dir(&dir).unwrap();
-        }
-        dir
-    }
-
-    fn daemon_rpc_path(&self) -> PathBuf {
-        self.ipc_dir().join(DEFAULT_DAEMON_RPC_NAME)
-    }
 }
 
 #[cfg(test)]

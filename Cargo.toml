@@ -8,8 +8,9 @@ members = [
     "crates/swarm",
     "crates/util",
     "crates/fs",
-    "crates/wasi",
-    "flutter_app/rust",
+    # "crates/wasi",
+    "crates/daemon-grpc",
+    "crates/tests",
 ]
 
 [workspace.package]

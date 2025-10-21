@@ -1,4 +1,8 @@
-use std::{net::{IpAddr, Ipv4Addr, Ipv6Addr}, sync::Arc, time::Duration};
+use std::{
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    sync::Arc,
+    time::Duration,
+};
 
 use crate::{
     DaemonArgs,
@@ -6,7 +10,6 @@ use crate::{
         FileTransferClientsControl, FileTransferServiceControl, TcpTunnelingControl,
         mdns::MdnsControl,
     },
-    listeners::FungiDaemonRpcServer,
 };
 use anyhow::Result;
 use fungi_config::{
@@ -16,14 +19,13 @@ use fungi_config::{
 };
 use fungi_swarm::{FungiSwarm, State, SwarmControl, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
-use libp2p::{identity::Keypair, multiaddr::Protocol, Multiaddr};
+use libp2p::{Multiaddr, identity::Keypair, multiaddr::Protocol};
 use parking_lot::Mutex;
 use tokio::task::JoinHandle;
 
 #[allow(dead_code)]
 struct TaskHandles {
     swarm_task: JoinHandle<()>,
-    daemon_rpc_task: Arc<Mutex<Option<JoinHandle<()>>>>,
     proxy_ftp_task: Arc<Mutex<Option<JoinHandle<()>>>>,
     proxy_webdav_task: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
@@ -160,11 +162,8 @@ impl FungiDaemon {
             None
         };
 
-        let daemon_rpc_task = FungiDaemonRpcServer::start(args.clone(), swarm_control.clone())?;
-
         let task_handles = TaskHandles {
             swarm_task,
-            daemon_rpc_task: Arc::new(Mutex::new(Some(daemon_rpc_task))),
             proxy_ftp_task: Arc::new(Mutex::new(proxy_ftp_task)),
             proxy_webdav_task: Arc::new(Mutex::new(proxy_webdav_task)),
         };
@@ -369,26 +368,34 @@ impl FungiDaemon {
 }
 
 fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) {
-    swarm.listen_on(
-        Multiaddr::empty()
-            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-            .with(Protocol::Tcp(config.network.listen_tcp_port)),
-    ).unwrap();
-    swarm.listen_on(
-        Multiaddr::empty()
-            .with(Protocol::from(Ipv6Addr::UNSPECIFIED))
-            .with(Protocol::Tcp(config.network.listen_tcp_port)),
-    ).unwrap();
-    swarm.listen_on(
-        Multiaddr::empty()
-            .with(Protocol::from(Ipv6Addr::UNSPECIFIED))
-            .with(Protocol::Udp(config.network.listen_udp_port))
-            .with(Protocol::QuicV1),
-    ).unwrap();
-    swarm.listen_on(
-        Multiaddr::empty()
-            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-            .with(Protocol::Udp(config.network.listen_udp_port))
-            .with(Protocol::QuicV1),
-    ).unwrap();
+    swarm
+        .listen_on(
+            Multiaddr::empty()
+                .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+                .with(Protocol::Tcp(config.network.listen_tcp_port)),
+        )
+        .unwrap();
+    swarm
+        .listen_on(
+            Multiaddr::empty()
+                .with(Protocol::from(Ipv6Addr::UNSPECIFIED))
+                .with(Protocol::Tcp(config.network.listen_tcp_port)),
+        )
+        .unwrap();
+    swarm
+        .listen_on(
+            Multiaddr::empty()
+                .with(Protocol::from(Ipv6Addr::UNSPECIFIED))
+                .with(Protocol::Udp(config.network.listen_udp_port))
+                .with(Protocol::QuicV1),
+        )
+        .unwrap();
+    swarm
+        .listen_on(
+            Multiaddr::empty()
+                .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+                .with(Protocol::Udp(config.network.listen_udp_port))
+                .with(Protocol::QuicV1),
+        )
+        .unwrap();
 }

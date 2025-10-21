@@ -1,14 +1,14 @@
 import 'dart:io';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:fungi_app/app/foreground_task.dart';
-import 'package:path/path.dart' as p;
+import 'package:fungi_app/src/grpc/generated/fungi_daemon.pbgrpc.dart';
 import 'package:flutter/material.dart';
-import 'package:fungi_app/src/rust/api/fungi.dart';
+import 'package:fungi_app/ui/utils/daemon_client.dart';
+import 'package:fungi_app/ui/utils/daemon_service_manager.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
-import 'package:fungi_app/src/rust/api/fungi.dart' as fungi;
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 enum ThemeOption { light, dark, system }
@@ -37,6 +37,15 @@ extension ThemeOptionExtension on ThemeOption {
   }
 }
 
+enum DaemonConnectionState { disabled, connecting, connected, failed }
+
+extension DaemonConnectionStateExtension on DaemonConnectionState {
+  bool get isDisabled => this == DaemonConnectionState.disabled;
+  bool get isConnecting => this == DaemonConnectionState.connecting;
+  bool get isConnected => this == DaemonConnectionState.connected;
+  bool get isFailed => this == DaemonConnectionState.failed;
+}
+
 class FileTransferServerState {
   bool enabled;
   String? error;
@@ -46,110 +55,197 @@ class FileTransferServerState {
 }
 
 class FungiController extends GetxController {
-  final isServiceRunning = false.obs;
+  FungiDaemonClient fungiClient;
+  late final DaemonServiceManager daemonManager;
+
+  final daemonConnectionState = DaemonConnectionState.disabled.obs;
+  final daemonError = ''.obs;
+
   final peerId = ''.obs;
+  final hostname = ''.obs;
   final configFilePath = ''.obs;
-  final isForegroundServiceRunning = false.obs;
+  final isDaemonEnabled = false.obs;
 
   final _storage = GetStorage();
   final _themeKey = 'theme_option';
-  final _foregroundServiceKey = 'foreground_service_enabled';
+  final _daemonDisabledKey = 'daemon_disabled';
 
   final currentTheme = ThemeOption.system.obs;
   final preventClose = false.obs;
-  final incomingAllowdPeers = <String>[].obs;
-  final incomingAllowedPeersWithInfo = <PeerWithInfo>[].obs;
+  final incomingAllowedPeers = <PeerInfo>[].obs;
   final addressBook = <PeerInfo>[].obs;
   final fileTransferServerState = FileTransferServerState(enabled: false).obs;
   final fileTransferClients = <FileTransferClient>[].obs;
 
   // TCP Tunneling state
-  final tcpTunnelingConfig = TcpTunnelingConfig(
-    forwardingEnabled: false,
-    listeningEnabled: false,
-    forwardingRules: [],
-    listeningRules: [],
-  ).obs;
+  final tcpTunnelingConfig = TcpTunnelingConfigResponse().obs;
 
-  final ftpProxy = FtpProxy(enabled: false, host: "", port: 0).obs;
-  final webdavProxy = WebdavProxy(enabled: false, host: "", port: 0).obs;
+  final ftpProxy = FtpProxyResponse(enabled: false, host: "", port: 0).obs;
+  final webdavProxy = WebdavProxyResponse().obs;
+
+  FungiController() : fungiClient = fungiDaemonClientPlaceholder() {
+    daemonManager = DaemonServiceManager.create();
+  }
 
   @override
   void onInit() {
     super.onInit();
-    initFungi();
     loadThemeOption();
 
     if (Platform.isAndroid) {
       FlutterForegroundTask.addTaskDataCallback(onReceiveTaskData);
-      // Check current foreground service status
-      checkForegroundServiceStatus();
-      // Load and restore previous foreground service state
-      loadForegroundServiceState();
+    }
+
+    _initializeAndStartDaemon();
+  }
+
+  Future<void> _initializeAndStartDaemon() async {
+    await loadDaemonEnabledState();
+
+    if (isDaemonEnabled.value && !daemonManager.isRunning) {
+      await startDaemon();
+    } else if (isDaemonEnabled.value) {
+      await initFungi();
     }
   }
 
   @override
   void dispose() {
-    // Remove a callback to receive data sent from the TaskHandler.
     FlutterForegroundTask.removeTaskDataCallback(onReceiveTaskData);
     super.dispose();
   }
 
-  // Foreground service control methods
-  Future<void> toggleForegroundService() async {
-    if (isForegroundServiceRunning.value) {
-      await stopForegroundServiceController();
+  Future<void> toggleDaemon() async {
+    if (isDaemonEnabled.value) {
+      await stopDaemon();
     } else {
-      await startForegroundServiceController();
+      await startDaemon();
     }
   }
 
-  Future<void> startForegroundServiceController() async {
+  Future<void> startDaemon() async {
     try {
-      await requestForegroundPermissions();
-      initForegroundService();
-      await startForegroundService();
-      isForegroundServiceRunning.value = true;
-      saveForegroundServiceState(true);
-      debugPrint('Foreground service started successfully');
-    } catch (e) {
-      debugPrint('Failed to start foreground service: $e');
-    }
-  }
-
-  Future<void> stopForegroundServiceController() async {
-    try {
-      await stopForegroundService();
-      isForegroundServiceRunning.value = false;
-      saveForegroundServiceState(false);
-      debugPrint('Foreground service stopped successfully');
-    } catch (e) {
-      debugPrint('Failed to stop foreground service: $e');
-    }
-  }
-
-  Future<void> checkForegroundServiceStatus() async {
-    if (Platform.isAndroid) {
-      final isRunning = await FlutterForegroundTask.isRunningService;
-      isForegroundServiceRunning.value = isRunning;
-    }
-  }
-
-  void saveForegroundServiceState(bool enabled) {
-    _storage.write(_foregroundServiceKey, enabled);
-  }
-
-  void loadForegroundServiceState() {
-    final savedState = _storage.read(_foregroundServiceKey);
-    if (savedState != null && savedState is bool) {
-      // Only restore if the service was enabled before
-      if (savedState) {
-        (() async {
-          await Future.delayed(const Duration(seconds: 1));
-          await startForegroundServiceController();
-        })();
+      // For Android, check notification permission before starting
+      if (Platform.isAndroid) {
+        final hasPermission = await _checkAndRequestNotificationPermission();
+        if (!hasPermission) {
+          // User cancelled or denied permission
+          return;
+        }
       }
+
+      final success = await daemonManager.start();
+      isDaemonEnabled.value = success;
+      saveDaemonEnabledState(success);
+
+      if (success) {
+        await initFungi();
+      } else {
+        _setDaemonError('Failed to start daemon service');
+      }
+    } catch (e) {
+      debugPrint('Failed to start daemon: $e');
+      _setDaemonError(e.toString());
+    }
+  }
+
+  /// Check and request notification permission for Android
+  /// Returns true if permission is granted or user confirmed to proceed
+  /// Returns false if user cancelled
+  Future<bool> _checkAndRequestNotificationPermission() async {
+    final notificationPermission =
+        await FlutterForegroundTask.checkNotificationPermission();
+
+    // If already granted, proceed directly
+    if (notificationPermission == NotificationPermission.granted) {
+      return true;
+    }
+
+    // Show dialog to inform user about notification permission
+    bool? userConfirmed = await SmartDialog.show<bool>(
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Notification Permission Required'),
+          content: const Text(
+            'Background service requires notification permission to run properly. '
+            'Without this permission, the service may not work correctly.\n\n'
+            'Please grant notification permission when prompted.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => SmartDialog.dismiss(result: false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => SmartDialog.dismiss(result: true),
+              child: const Text('Continue'),
+            ),
+          ],
+        );
+      },
+    );
+
+    // User cancelled
+    if (userConfirmed != true) {
+      return false;
+    }
+
+    // Request permission
+    await FlutterForegroundTask.requestNotificationPermission();
+
+    // Return true to proceed even if permission is denied
+    // The service might still work without notification
+    return true;
+  }
+
+  void _setDaemonError(String error) {
+    daemonConnectionState.value = DaemonConnectionState.failed;
+    daemonError.value = error;
+  }
+
+  Future<void> stopDaemon() async {
+    try {
+      await daemonManager.stop();
+      isDaemonEnabled.value = false;
+      saveDaemonEnabledState(false);
+      _clearDaemonState();
+    } catch (e) {
+      debugPrint('Failed to stop daemon: $e');
+    }
+  }
+
+  void _clearDaemonState() {
+    daemonConnectionState.value = DaemonConnectionState.disabled;
+    daemonError.value = '';
+    peerId.value = '';
+    hostname.value = '';
+    configFilePath.value = '';
+  }
+
+  void saveDaemonEnabledState(bool enabled) {
+    _storage.write(_daemonDisabledKey, !enabled);
+  }
+
+  Future<void> loadDaemonEnabledState() async {
+    final savedState = _storage.read(_daemonDisabledKey);
+    final isDisabled = savedState is bool ? savedState : false;
+    final userWantsEnabled = !isDisabled;
+
+    if (daemonManager is MobileDaemonServiceManager) {
+      final manager = daemonManager as MobileDaemonServiceManager;
+      final isRunning = await manager.isRunningAsync;
+
+      // If service is running, enable it regardless of saved state
+      // Otherwise, use the user's saved preference
+      isDaemonEnabled.value = isRunning || userWantsEnabled;
+
+      // Update daemon connection state based on service running state
+      daemonConnectionState.value = isRunning
+          ? DaemonConnectionState.connecting
+          : DaemonConnectionState.disabled;
+    } else {
+      // Desktop platform
+      isDaemonEnabled.value = userWantsEnabled;
     }
   }
 
@@ -166,42 +262,52 @@ class FungiController extends GetxController {
     _storage.write(_themeKey, option.index);
   }
 
-  void updateIncomingAllowedPeers() {
-    incomingAllowdPeers.value = fungi.getIncomingAllowedPeersList();
-    incomingAllowedPeersWithInfo.value = fungi
-        .getIncomingAllowedPeersWithInfo();
+  Future<void> updateIncomingAllowedPeers() async {
+    incomingAllowedPeers.value = (await fungiClient.getIncomingAllowedPeers(
+      Empty(),
+    )).peers;
   }
 
-  void updateAddressBook() {
-    addressBook.value = fungi.getAllAddressBook();
+  Future<void> updateAddressBook() async {
+    addressBook.value = (await fungiClient.listAddressBookPeers(Empty())).peers;
   }
 
-  void addIncomingAllowedPeer(PeerInfo peerInfo) {
-    fungi.addIncomingAllowedPeer(peerId: peerInfo.peerId);
-    updateIncomingAllowedPeers();
+  Future<void> addIncomingAllowedPeer(PeerInfo peerInfo) async {
+    await fungiClient.addIncomingAllowedPeer(
+      AddIncomingAllowedPeerRequest()..peerId = peerInfo.peerId,
+    );
+    await updateIncomingAllowedPeers();
     // Also add to address books
 
     // Update the address books list to reflect the new peer
-    addressBookAddOrUpdate(peerInfo);
+    await updateAddressBookPeer(peerInfo);
   }
 
-  void removeIncomingAllowedPeer(String peerId) {
-    fungi.removeIncomingAllowedPeer(peerId: peerId);
-    updateIncomingAllowedPeers();
+  Future<void> removeIncomingAllowedPeer(String peerId) async {
+    await fungiClient.removeIncomingAllowedPeer(
+      RemoveIncomingAllowedPeerRequest()..peerId = peerId,
+    );
+    await updateIncomingAllowedPeers();
   }
 
-  void addressBookAddOrUpdate(PeerInfo peerInfo) {
-    fungi.addressBookAddOrUpdate(peerInfo: peerInfo);
-    updateAddressBook();
+  Future<void> updateAddressBookPeer(PeerInfo peerInfo) async {
+    await fungiClient.updateAddressBookPeer(
+      UpdateAddressBookPeerRequest()..peerInfo = peerInfo,
+    );
+    await updateAddressBook();
   }
 
-  PeerInfo? addressBookGetPeer(String peerId) {
-    return fungi.addressBookGetPeer(peerId: peerId);
+  Future<PeerInfo?> getAddressBookPeer(String peerId) async {
+    return (await fungiClient.getAddressBookPeer(
+      GetAddressBookPeerRequest()..peerId = peerId,
+    )).peerInfo;
   }
 
-  void addressBookRemove(String peerId) {
-    fungi.addressBookRemove(peerId: peerId);
-    updateAddressBook();
+  Future<void> removeAddressBookPeer(String peerId) async {
+    await fungiClient.removeAddressBookPeer(
+      RemoveAddressBookPeerRequest()..peerId = peerId,
+    );
+    await updateAddressBook();
   }
 
   Future<void> startFileTransferServer(String rootDir) async {
@@ -220,7 +326,9 @@ class FungiController extends GetxController {
         }
       }
 
-      await fungi.startFileTransferService(rootDir: rootDir);
+      await fungiClient.startFileTransferService(
+        StartFileTransferServiceRequest()..rootDir = rootDir,
+      );
       fileTransferServerState.value.enabled = true;
       fileTransferServerState.value.error = null;
       debugPrint('File Transfer Server started');
@@ -233,9 +341,9 @@ class FungiController extends GetxController {
     fileTransferServerState.refresh();
   }
 
-  void stopFileTransferServer() {
+  Future<void> stopFileTransferServer() async {
     try {
-      fungi.stopFileTransferService();
+      await fungiClient.stopFileTransferService(Empty());
       fileTransferServerState.value.enabled = false;
       fileTransferServerState.value.error = null;
       debugPrint('File Transfer Server stopped');
@@ -250,10 +358,11 @@ class FungiController extends GetxController {
     required bool enabled,
     required PeerInfo peerInfo,
   }) async {
-    await fungi.addFileTransferClient(
-      enabled: enabled,
-      name: peerInfo.alias,
-      peerId: peerInfo.peerId,
+    await fungiClient.addFileTransferClient(
+      AddFileTransferClientRequest()
+        ..enabled = enabled
+        ..name = peerInfo.alias
+        ..peerId = peerInfo.peerId,
     );
     fileTransferClients.add(
       FileTransferClient(
@@ -263,16 +372,17 @@ class FungiController extends GetxController {
       ),
     );
     // add to address books
-    addressBookAddOrUpdate(peerInfo);
+    await updateAddressBookPeer(peerInfo);
   }
 
   Future<void> enableFileTransferClient({
     required FileTransferClient client,
     required bool enabled,
   }) async {
-    await fungi.enableFileTransferClient(
-      peerId: client.peerId,
-      enabled: enabled,
+    await fungiClient.enableFileTransferClient(
+      EnableFileTransferClientRequest()
+        ..peerId = client.peerId
+        ..enabled = enabled,
     );
 
     final newClient = FileTransferClient(
@@ -291,33 +401,61 @@ class FungiController extends GetxController {
     fileTransferClients.refresh();
   }
 
-  void removeFileTransferClient(String peerId) {
-    fungi.removeFileTransferClient(peerId: peerId);
+  Future<void> removeFileTransferClient(String peerId) async {
+    await fungiClient.removeFileTransferClient(
+      RemoveFileTransferClientRequest()..peerId = peerId,
+    );
     fileTransferClients.removeWhere((client) => client.peerId == peerId);
   }
 
   Future<void> initFungi() async {
-    try {
-      if (Platform.isAndroid) {
-        final appDocumentsDir = await getApplicationDocumentsDirectory();
-        final fungiDir = p.join(appDocumentsDir.absolute.path, 'fungi');
-        await fungi.startFungiDaemon(fungiDir: fungiDir);
+    if (!isDaemonEnabled.value) {
+      daemonConnectionState.value = DaemonConnectionState.disabled;
+      daemonError.value = '';
+      return;
+    }
+
+    daemonConnectionState.value = DaemonConnectionState.connecting;
+    daemonError.value = '';
+
+    for (int i = 0; i < 5; i++) {
+      try {
+        fungiClient = await getFungiClient();
+        daemonConnectionState.value = DaemonConnectionState.connected;
+        break;
+      } catch (e) {
+        if (i < 4) {
+          debugPrint('Connection attempt ${i + 1} failed, retrying...');
+          await Future.delayed(Duration(seconds: i + 1));
+          continue;
+        }
+        debugPrint('Failed to connect to daemon after 5 attempts: $e');
+        daemonConnectionState.value = DaemonConnectionState.failed;
+        daemonError.value = e.toString();
+        return;
       }
-      await fungi.startFungiDaemon();
+    }
 
-      isServiceRunning.value = true;
-      debugPrint('Fungi Daemon started');
+    if (daemonConnectionState.value != DaemonConnectionState.connected) {
+      return;
+    }
 
-      String id = fungi.peerId();
-      peerId.value = id;
-      debugPrint('Peer ID: $id');
+    try {
+      peerId.value = (await fungiClient.peerId(Empty())).peerId;
+      debugPrint('Peer ID: ${peerId.value}');
 
-      configFilePath.value = fungi.configFilePath();
+      hostname.value = (await fungiClient.hostname(Empty())).hostname;
+
+      configFilePath.value = (await fungiClient.configFilePath(
+        Empty(),
+      )).configFilePath;
 
       try {
-        fileTransferServerState.value.enabled = fungi
-            .getFileTransferServiceEnabled();
-        final dir = fungi.getFileTransferServiceRootDir();
+        fileTransferServerState.value.enabled =
+            (await fungiClient.getFileTransferServiceEnabled(Empty())).enabled;
+        final dir = (await fungiClient.getFileTransferServiceRootDir(
+          Empty(),
+        )).rootDir;
         if (dir.isNotEmpty) {
           fileTransferServerState.value.rootDir = dir;
         } else {
@@ -330,7 +468,9 @@ class FungiController extends GetxController {
       fileTransferServerState.refresh();
 
       try {
-        final clients = fungi.getAllFileTransferClients();
+        final clients = (await fungiClient.getAllFileTransferClients(
+          Empty(),
+        )).clients;
         fileTransferClients.value = clients.toList();
       } catch (e) {
         debugPrint('Failed to get file transfer clients: $e');
@@ -338,26 +478,31 @@ class FungiController extends GetxController {
       }
 
       try {
-        ftpProxy.value = fungi.getFtpProxy();
-        webdavProxy.value = fungi.getWebdavProxy();
+        ftpProxy.value = await fungiClient.getFtpProxy(Empty());
+        webdavProxy.value = await fungiClient.getWebdavProxy(Empty());
       } catch (e) {
         debugPrint('Failed to get proxy infos: $e');
       }
-      updateIncomingAllowedPeers();
-      updateAddressBook();
+      await updateIncomingAllowedPeers();
+      await updateAddressBook();
       // Load TCP tunneling config
-      refreshTcpTunnelingConfig();
+      await refreshTcpTunnelingConfig();
     } catch (e) {
-      isServiceRunning.value = false;
+      daemonConnectionState.value = DaemonConnectionState.failed;
+      daemonError.value = e.toString();
       peerId.value = 'error';
       debugPrint('Failed to init, error: $e');
     }
   }
 
+  Future<void> retryConnection() async {
+    await initFungi();
+  }
+
   // TCP Tunneling methods
-  void refreshTcpTunnelingConfig() {
+  Future<void> refreshTcpTunnelingConfig() async {
     try {
-      final config = fungi.getTcpTunnelingConfig();
+      final config = await fungiClient.getTcpTunnelingConfig(Empty());
       tcpTunnelingConfig.value = config;
     } catch (e) {
       debugPrint('Failed to get TCP tunneling config: $e');
@@ -371,16 +516,17 @@ class FungiController extends GetxController {
     required PeerInfo peerInfo,
   }) async {
     try {
-      await fungi.addTcpForwardingRule(
-        localHost: localHost,
-        localPort: localPort,
-        peerId: peerInfo.peerId,
-        remotePort: remotePort,
+      await fungiClient.addTcpForwardingRule(
+        AddTcpForwardingRuleRequest()
+          ..localHost = localHost
+          ..localPort = localPort
+          ..peerId = peerInfo.peerId
+          ..remotePort = remotePort,
       );
-      refreshTcpTunnelingConfig();
+      await refreshTcpTunnelingConfig();
 
       // add to address books
-      addressBookAddOrUpdate(peerInfo);
+      await updateAddressBookPeer(peerInfo);
       Get.snackbar(
         'Success',
         'Forwarding rule added successfully',
@@ -399,10 +545,21 @@ class FungiController extends GetxController {
     }
   }
 
-  Future<void> removeTcpForwardingRule(String ruleId) async {
+  Future<void> removeTcpForwardingRule({
+    required String localHost,
+    required int localPort,
+    required String peerId,
+    required int remotePort,
+  }) async {
     try {
-      fungi.removeTcpForwardingRule(ruleId: ruleId);
-      refreshTcpTunnelingConfig();
+      await fungiClient.removeTcpForwardingRule(
+        RemoveTcpForwardingRuleRequest()
+          ..localHost = localHost
+          ..localPort = localPort
+          ..peerId = peerId
+          ..remotePort = remotePort,
+      );
+      await refreshTcpTunnelingConfig();
       Get.snackbar(
         'Success',
         'Forwarding rule removed successfully',
@@ -427,12 +584,13 @@ class FungiController extends GetxController {
     required List<String> allowedPeers,
   }) async {
     try {
-      await fungi.addTcpListeningRule(
-        localHost: localHost,
-        localPort: localPort,
-        allowedPeers: allowedPeers,
+      await fungiClient.addTcpListeningRule(
+        AddTcpListeningRuleRequest()
+          ..localHost = localHost
+          ..localPort = localPort
+          ..allowedPeers.addAll(allowedPeers),
       );
-      refreshTcpTunnelingConfig();
+      await refreshTcpTunnelingConfig();
       Get.snackbar(
         'Success',
         'Listening rule added successfully',
@@ -451,10 +609,17 @@ class FungiController extends GetxController {
     }
   }
 
-  Future<void> removeTcpListeningRule(String ruleId) async {
+  Future<void> removeTcpListeningRule({
+    required String localHost,
+    required int localPort,
+  }) async {
     try {
-      fungi.removeTcpListeningRule(ruleId: ruleId);
-      refreshTcpTunnelingConfig();
+      await fungiClient.removeTcpListeningRule(
+        RemoveTcpListeningRuleRequest()
+          ..localHost = localHost
+          ..localPort = localPort,
+      );
+      await refreshTcpTunnelingConfig();
       Get.snackbar(
         'Success',
         'Listening rule removed successfully',

@@ -50,7 +50,7 @@ class Settings extends GetView<FungiController> {
               SettingsTile.navigation(
                 leading: Icon(Icons.security),
                 title: Text('Incoming Allowed Peers'),
-                value: Text('${controller.incomingAllowdPeers.length} peers'),
+                value: Text('${controller.incomingAllowedPeers.length} peers'),
                 onPressed: (context) {
                   showAllowedPeersList();
                 },

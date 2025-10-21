@@ -1,0 +1,16 @@
+[package]
+name = "fungi-daemon-grpc"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+fungi-daemon = { path = "../daemon" }
+fungi-config = { path = "../config" }
+tonic = "0.14.2"
+tonic-prost = "0.14.2"
+prost = "0.14"
+libp2p-identity = { workspace = true }
+
+[build-dependencies]
+tonic-prost-build = "0.14.2"

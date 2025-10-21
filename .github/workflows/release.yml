@@ -51,12 +51,17 @@ jobs:
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libayatana-appindicator3-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libayatana-appindicator3-dev protobuf-compiler
+
+      - name: Install macOS dependencies
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install protobuf
 
       - name: Install Windows dependencies (NASM)
         if: matrix.os == 'windows-latest'
         run: |
-          choco install nasm
+          choco install nasm protoc
           echo "C:\Program Files\NASM" >> $GITHUB_PATH
         shell: powershell
 

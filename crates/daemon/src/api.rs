@@ -31,15 +31,6 @@ impl FungiDaemon {
             .to_string()
     }
 
-    pub fn get_incoming_allowed_peers_list(&self) -> Vec<String> {
-        self.swarm_control()
-            .state()
-            .get_incoming_allowed_peers_list()
-            .into_iter()
-            .map(|p| p.to_string())
-            .collect()
-    }
-
     pub fn add_incoming_allowed_peer(&self, peer_id: PeerId) -> Result<()> {
         // update config and write config file
         let current_config = self.config().lock().clone();
@@ -259,7 +250,33 @@ impl FungiDaemon {
         self.add_tcp_forwarding_rule_internal(rule).await
     }
 
-    pub fn remove_tcp_forwarding_rule(&self, rule_id: String) -> Result<()> {
+    pub fn remove_tcp_forwarding_rule(
+        &self,
+        local_host: String,
+        local_port: u16,
+        remote_peer_id: String,
+        remote_port: u16,
+    ) -> Result<()> {
+        let rules = self.tcp_tunneling_control().get_forwarding_rules();
+        let rule_id = rules
+            .iter()
+            .find(|(_, rule)| {
+                rule.local_host == local_host
+                    && rule.local_port == local_port
+                    && rule.remote_peer_id == remote_peer_id
+                    && rule.remote_port == remote_port
+            })
+            .map(|(id, _)| id.clone())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Forwarding rule not found: {}:{} -> {}:{}",
+                    local_host,
+                    local_port,
+                    remote_peer_id,
+                    remote_port
+                )
+            })?;
+
         self.remove_tcp_forwarding_rule_internal(&rule_id)
     }
 
@@ -276,7 +293,16 @@ impl FungiDaemon {
         self.add_tcp_listening_rule_internal(rule).await
     }
 
-    pub fn remove_tcp_listening_rule(&self, rule_id: String) -> Result<()> {
+    pub fn remove_tcp_listening_rule(&self, local_host: String, local_port: u16) -> Result<()> {
+        let rules = self.tcp_tunneling_control().get_listening_rules();
+        let rule_id = rules
+            .iter()
+            .find(|(_, rule)| rule.host == local_host && rule.port == local_port)
+            .map(|(id, _)| id.clone())
+            .ok_or_else(|| {
+                anyhow::anyhow!("Listening rule not found: {}:{}", local_host, local_port)
+            })?;
+
         self.remove_tcp_listening_rule_internal(&rule_id)
     }
 
@@ -317,21 +343,22 @@ impl FungiDaemon {
         Ok(())
     }
 
-    pub fn get_incoming_allowed_peers_with_info(&self) -> Vec<(String, Option<PeerInfo>)> {
-        let allowed_peers = self.get_incoming_allowed_peers_list();
+    pub fn get_incoming_allowed_peers(&self) -> Vec<PeerInfo> {
+        let allowed_peers = self
+            .swarm_control()
+            .state()
+            .get_incoming_allowed_peers_list();
         let peers_config_guard = self.address_book();
         let peers_config = peers_config_guard.lock();
 
         allowed_peers
             .into_iter()
-            .map(|peer_id_str| {
-                let peer_info = if let Ok(peer_id) = peer_id_str.parse::<PeerId>() {
-                    peers_config.get_peer_info(&peer_id).cloned()
-                } else {
-                    None
-                };
-                (peer_id_str, peer_info)
-            })
+            .map(
+                |peer_id| match peers_config.get_peer_info(&peer_id).cloned() {
+                    Some(peer_info) => peer_info,
+                    None => PeerInfo::new_unknown(peer_id),
+                },
+            )
             .collect()
     }
 }

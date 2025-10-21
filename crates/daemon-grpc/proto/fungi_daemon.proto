@@ -1,0 +1,244 @@
+syntax = "proto3";
+
+package fungi_daemon;
+
+service FungiDaemon {
+  // Returns the running daemon version as a simple health check.
+  rpc Version(Empty) returns (VersionResponse) {}
+
+  // Returns the libp2p peer ID of the daemon.
+  rpc PeerId(Empty) returns (PeerIdResponse) {}
+
+  // Reports the absolute path of the active configuration file.
+  rpc ConfigFilePath(Empty) returns (ConfigFilePathResponse) {}
+
+  // Returns the hostname advertised by the daemon.
+  rpc Hostname(Empty) returns (HostnameResponse) {}
+
+  // Lists peers that are allowed to initiate incoming connections.
+  rpc GetIncomingAllowedPeers(Empty)
+      returns (IncomingAllowedPeersListResponse) {}
+
+  // Adds a peer ID to the allowlist for incoming connections and persists it.
+  rpc AddIncomingAllowedPeer(AddIncomingAllowedPeerRequest) returns (Empty) {}
+
+  // Removes a peer ID from the allowlist for incoming connections.
+  rpc RemoveIncomingAllowedPeer(RemoveIncomingAllowedPeerRequest)
+      returns (Empty) {}
+
+  // Indicates whether the embedded file transfer service is running.
+  rpc GetFileTransferServiceEnabled(Empty)
+      returns (FileTransferServiceEnabledResponse) {}
+
+  // Returns the root directory shared by the file transfer service.
+  rpc GetFileTransferServiceRootDir(Empty)
+      returns (FileTransferServiceRootDirResponse) {}
+
+  // Starts the file transfer service with a new root directory, updating
+  // config.
+  rpc StartFileTransferService(StartFileTransferServiceRequest)
+      returns (Empty) {}
+
+  // Stops the running file transfer service and updates the stored config.
+  rpc StopFileTransferService(Empty) returns (Empty) {}
+
+  // Registers a remote file transfer client and optionally enables it
+  // immediately.
+  rpc AddFileTransferClient(AddFileTransferClientRequest) returns (Empty) {}
+
+  // Removes a remote file transfer client and forgets its configuration.
+  rpc RemoveFileTransferClient(RemoveFileTransferClientRequest)
+      returns (Empty) {}
+
+  // Enables or disables a remote file transfer client and syncs its metadata.
+  rpc EnableFileTransferClient(EnableFileTransferClientRequest)
+      returns (Empty) {}
+
+  // Lists all configured remote file transfer clients with their status.
+  rpc GetAllFileTransferClients(Empty) returns (FileTransferClientsResponse) {}
+
+  // Returns the current FTP proxy settings for the file transfer service.
+  rpc GetFtpProxy(Empty) returns (FtpProxyResponse) {}
+
+  // Updates the FTP proxy binding and restarts the proxy task if needed.
+  rpc UpdateFtpProxy(UpdateFtpProxyRequest) returns (Empty) {}
+
+  // Returns the current WebDAV proxy settings for the file transfer service.
+  rpc GetWebdavProxy(Empty) returns (WebdavProxyResponse) {}
+
+  // Updates the WebDAV proxy binding and restarts the proxy task if needed.
+  rpc UpdateWebdavProxy(UpdateWebdavProxyRequest) returns (Empty) {}
+
+  // Returns the complete TCP tunneling configuration including current rules.
+  rpc GetTcpTunnelingConfig(Empty) returns (TcpTunnelingConfigResponse) {}
+
+  // Creates a new TCP forwarding rule and returns its generated identifier.
+  rpc AddTcpForwardingRule(AddTcpForwardingRuleRequest)
+      returns (TcpForwardingRuleResponse) {}
+
+  // Deletes an existing TCP forwarding rule by identifier.
+  rpc RemoveTcpForwardingRule(RemoveTcpForwardingRuleRequest) returns (Empty) {}
+
+  // Creates a new TCP listening rule and returns its generated identifier.
+  rpc AddTcpListeningRule(AddTcpListeningRuleRequest)
+      returns (TcpListeningRuleResponse) {}
+
+  // Deletes an existing TCP listening rule by identifier.
+  rpc RemoveTcpListeningRule(RemoveTcpListeningRuleRequest) returns (Empty) {}
+
+  // Returns latest metadata for peers discovered via mDNS.
+  rpc ListMdnsDevices(Empty) returns (PeerInfoListResponse) {}
+
+  // Lists every peer stored in the address book.
+  rpc ListAddressBookPeers(Empty) returns (PeerInfoListResponse) {}
+
+  // Inserts or updates a peer entry in the address book.
+  rpc UpdateAddressBookPeer(UpdateAddressBookPeerRequest) returns (Empty) {}
+
+  // Returns detailed information for a single address book peer.
+  rpc GetAddressBookPeer(GetAddressBookPeerRequest) returns (PeerInfoResponse) {
+  }
+
+  // Removes a peer from the address book.
+  rpc RemoveAddressBookPeer(RemoveAddressBookPeerRequest) returns (Empty) {}
+}
+
+message Empty {}
+
+message VersionResponse { string version = 1; }
+
+message HostnameResponse { string hostname = 1; }
+
+message StartFungiDaemonRequest { string fungi_dir = 1; }
+
+message PeerIdResponse { string peer_id = 1; }
+
+message ConfigFilePathResponse { string config_file_path = 1; }
+
+message IncomingAllowedPeersListResponse { repeated PeerInfo peers = 1; }
+
+message AddIncomingAllowedPeerRequest { string peer_id = 1; }
+
+message RemoveIncomingAllowedPeerRequest { string peer_id = 1; }
+
+message FileTransferServiceEnabledResponse { bool enabled = 1; }
+
+message FileTransferServiceRootDirResponse { string root_dir = 1; }
+
+message StartFileTransferServiceRequest { string root_dir = 1; }
+
+message AddFileTransferClientRequest {
+  bool enabled = 1;
+  string name = 2;
+  string peer_id = 3;
+}
+
+message RemoveFileTransferClientRequest { string peer_id = 1; }
+
+message EnableFileTransferClientRequest {
+  string peer_id = 1;
+  bool enabled = 2;
+}
+
+message FileTransferClient {
+  bool enabled = 1;
+  string name = 2;
+  string peer_id = 3;
+}
+
+message FileTransferClientsResponse { repeated FileTransferClient clients = 1; }
+
+message FtpProxyResponse {
+  bool enabled = 1;
+  string host = 2;
+  int32 port = 3;
+}
+
+message UpdateFtpProxyRequest {
+  bool enabled = 1;
+  string host = 2;
+  int32 port = 3;
+}
+
+message WebdavProxyResponse {
+  bool enabled = 1;
+  string host = 2;
+  int32 port = 3;
+}
+
+message UpdateWebdavProxyRequest {
+  bool enabled = 1;
+  string host = 2;
+  int32 port = 3;
+}
+
+message ForwardingRule {
+  string local_host = 1;
+  int32 local_port = 2;
+  string remote_peer_id = 3;
+  int32 remote_port = 4;
+}
+
+message ListeningRule {
+  string host = 1;
+  int32 port = 2;
+  repeated string allowed_peers = 3;
+}
+
+message TcpTunnelingConfigResponse {
+  bool forwarding_enabled = 1;
+  bool listening_enabled = 2;
+  repeated ForwardingRule forwarding_rules = 3;
+  repeated ListeningRule listening_rules = 4;
+}
+
+message AddTcpForwardingRuleRequest {
+  string local_host = 1;
+  int32 local_port = 2;
+  string peer_id = 3;
+  int32 remote_port = 4;
+}
+
+message TcpForwardingRuleResponse { string rule_id = 1; }
+
+message RemoveTcpForwardingRuleRequest {
+  string local_host = 1;
+  int32 local_port = 2;
+  string peer_id = 3;
+  int32 remote_port = 4;
+}
+
+message AddTcpListeningRuleRequest {
+  string local_host = 1;
+  int32 local_port = 2;
+  repeated string allowed_peers = 3;
+}
+
+message TcpListeningRuleResponse { string rule_id = 1; }
+
+message RemoveTcpListeningRuleRequest {
+  string local_host = 1;
+  int32 local_port = 2;
+}
+
+message PeerInfo {
+  string peer_id = 1;
+  string alias = 2;
+  string hostname = 3;
+  string os = 4;
+  string public_ip = 5;
+  repeated string private_ips = 6;
+  int64 created_at = 7;
+  int64 last_connected = 8;
+  string version = 9;
+}
+
+message PeerInfoListResponse { repeated PeerInfo peers = 1; }
+
+message PeerInfoResponse { PeerInfo peer_info = 1; }
+
+message UpdateAddressBookPeerRequest { PeerInfo peer_info = 1; }
+
+message GetAddressBookPeerRequest { string peer_id = 1; }
+
+message RemoveAddressBookPeerRequest { string peer_id = 1; }

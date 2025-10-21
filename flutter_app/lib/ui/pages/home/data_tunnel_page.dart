@@ -85,9 +85,6 @@ class DataTunnelPage extends GetView<FungiController> {
                   children: controller.tcpTunnelingConfig.value.forwardingRules.map((
                     rule,
                   ) {
-                    final ruleId =
-                        "forward_${rule.localHost}:${rule.localPort}_to_${rule.remotePeerId}";
-
                     return EnhancedCard(
                       child: ListTile(
                         title: Text(
@@ -119,8 +116,12 @@ class DataTunnelPage extends GetView<FungiController> {
                         ),
                         trailing: IconButton(
                           icon: Icon(Icons.delete, size: 20, color: Colors.red),
-                          onPressed: () =>
-                              controller.removeTcpForwardingRule(ruleId),
+                          onPressed: () => controller.removeTcpForwardingRule(
+                            localHost: rule.localHost,
+                            localPort: rule.localPort,
+                            peerId: rule.remotePeerId,
+                            remotePort: rule.remotePort,
+                          ),
                         ),
                       ),
                     );
@@ -165,7 +166,7 @@ class DataTunnelPage extends GetView<FungiController> {
             ),
             SizedBox(width: 5),
             SelectableText(
-              "${controller.incomingAllowdPeers.length}",
+              "${controller.incomingAllowedPeers.length}",
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             IconButton(
@@ -194,56 +195,56 @@ class DataTunnelPage extends GetView<FungiController> {
                   ),
                 )
               : Column(
-                  children: controller.tcpTunnelingConfig.value.listeningRules.map((
-                    rule,
-                  ) {
-                    final ruleId = "listen_${rule.host}:${rule.port}";
-
-                    return EnhancedCard(
-                      accentColor: Theme.of(context).colorScheme.secondary,
-                      child: ListTile(
-                        title: Text(
-                          "Local:${rule.host}:${rule.port}",
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Protocol: /fungi/tunnel/0.1.0/${rule.port}",
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.apply(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurface.withAlpha(120),
+                  children: controller.tcpTunnelingConfig.value.listeningRules
+                      .map((rule) {
+                        return EnhancedCard(
+                          accentColor: Theme.of(context).colorScheme.secondary,
+                          child: ListTile(
+                            title: Text(
+                              "Local:${rule.host}:${rule.port}",
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Protocol: /fungi/tunnel/0.1.0/${rule.port}",
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.apply(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface.withAlpha(120),
+                                      ),
+                                ),
+                                if (rule.allowedPeers.isNotEmpty)
+                                  Text(
+                                    "Allowed peers: ${rule.allowedPeers.length}",
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.apply(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurface
+                                              .withAlpha(150),
+                                        ),
+                                  ),
+                              ],
+                            ),
+                            trailing: IconButton(
+                              icon: Icon(
+                                Icons.delete,
+                                size: 20,
+                                color: Colors.red,
+                              ),
+                              onPressed: () =>
+                                  controller.removeTcpListeningRule(
+                                    localHost: rule.host,
+                                    localPort: rule.port,
                                   ),
                             ),
-                            if (rule.allowedPeers.isNotEmpty)
-                              Text(
-                                "Allowed peers: ${rule.allowedPeers.length}",
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.apply(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurface.withAlpha(150),
-                                    ),
-                              ),
-                            // else
-                            //   Text(
-                            //     "Open to all peers",
-                            //     style: Theme.of(context).textTheme.bodySmall
-                            //         ?.apply(color: Colors.orange),
-                            //   ),
-                          ],
-                        ),
-                        trailing: IconButton(
-                          icon: Icon(Icons.delete, size: 20, color: Colors.red),
-                          onPressed: () =>
-                              controller.removeTcpListeningRule(ruleId),
-                        ),
-                      ),
-                    );
-                  }).toList(),
+                          ),
+                        );
+                      })
+                      .toList(),
                 ),
         ),
       ],

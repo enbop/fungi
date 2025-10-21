@@ -187,7 +187,7 @@ mod tests {
         let test_peer_id2 = test_keypair2.public().to_peer_id();
 
         // Add a forwarding rule
-        let forward_rule_id = daemon
+        let _forward_rule_id = daemon
             .add_tcp_forwarding_rule(
                 "127.0.0.1".to_string(),
                 8080,
@@ -198,7 +198,7 @@ mod tests {
             .unwrap();
 
         // Add a listening rule
-        let listen_rule_id = daemon
+        let _listen_rule_id = daemon
             .add_tcp_listening_rule(
                 "127.0.0.1".to_string(),
                 9090,
@@ -211,13 +211,18 @@ mod tests {
         assert_eq!(daemon.get_tcp_forwarding_rules().len(), 1);
         assert_eq!(daemon.get_tcp_listening_rules().len(), 1);
 
-        // Remove forwarding rule
-        let result = daemon.remove_tcp_forwarding_rule(forward_rule_id);
+        // Remove forwarding rule by its parameters
+        let result = daemon.remove_tcp_forwarding_rule(
+            "127.0.0.1".to_string(),
+            8080,
+            test_peer_id1.to_string(),
+            8080,
+        );
         assert!(result.is_ok());
         assert_eq!(daemon.get_tcp_forwarding_rules().len(), 0);
 
-        // Remove listening rule
-        let result = daemon.remove_tcp_listening_rule(listen_rule_id);
+        // Remove listening rule by its parameters
+        let result = daemon.remove_tcp_listening_rule("127.0.0.1".to_string(), 9090);
         assert!(result.is_ok());
         assert_eq!(daemon.get_tcp_listening_rules().len(), 0);
     }

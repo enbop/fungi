@@ -126,6 +126,20 @@ impl PeerInfo {
             true // If we can't determine elapsed time, consider it expired
         }
     }
+
+    pub fn new_unknown(peer_id: PeerId) -> Self {
+        Self {
+            peer_id,
+            alias: None,
+            hostname: None,
+            os: Os::Unknown,
+            public_ip: None,
+            private_ips: vec![],
+            version: String::new(),
+            created_at: SystemTime::now(),
+            last_connected: SystemTime::now(),
+        }
+    }
 }
 
 impl TryFrom<&mdns_sd::TxtProperties> for PeerInfo {

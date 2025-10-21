@@ -26,6 +26,18 @@ jobs:
         toolchain: stable
         override: true
 
+    - name: Install protobuf compiler
+      shell: bash
+      run: |
+        if [ "${{ runner.os }}" = "Linux" ]; then
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+        elif [ "${{ runner.os }}" = "macOS" ]; then
+          brew install protobuf
+        elif [ "${{ runner.os }}" = "Windows" ]; then
+          choco install protoc
+        fi
+
     - name: Cache cargo registry
       uses: actions/cache@v3
       with:

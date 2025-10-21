@@ -38,3 +38,10 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
+
+# Copy Rust binary
+add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+  COMMAND powershell -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/copy_rust_binary.ps1" -Configuration "$<CONFIG>" -DestDir "$<TARGET_FILE_DIR:${BINARY_NAME}>"
+  COMMENT "Copying Rust binary to bundle"
+  VERBATIM
+)
