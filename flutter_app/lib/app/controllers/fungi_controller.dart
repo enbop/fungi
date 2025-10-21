@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:fungi_app/app/foreground_task.dart';
 import 'package:fungi_app/src/grpc/generated/fungi_daemon.pbgrpc.dart';
 import 'package:flutter/material.dart';
@@ -124,6 +125,15 @@ class FungiController extends GetxController {
 
   Future<void> startDaemon() async {
     try {
+      // For Android, check notification permission before starting
+      if (Platform.isAndroid) {
+        final hasPermission = await _checkAndRequestNotificationPermission();
+        if (!hasPermission) {
+          // User cancelled or denied permission
+          return;
+        }
+      }
+
       final success = await daemonManager.start();
       isDaemonEnabled.value = success;
       saveDaemonEnabledState(success);
@@ -137,6 +147,55 @@ class FungiController extends GetxController {
       debugPrint('Failed to start daemon: $e');
       _setDaemonError(e.toString());
     }
+  }
+
+  /// Check and request notification permission for Android
+  /// Returns true if permission is granted or user confirmed to proceed
+  /// Returns false if user cancelled
+  Future<bool> _checkAndRequestNotificationPermission() async {
+    final notificationPermission =
+        await FlutterForegroundTask.checkNotificationPermission();
+
+    // If already granted, proceed directly
+    if (notificationPermission == NotificationPermission.granted) {
+      return true;
+    }
+
+    // Show dialog to inform user about notification permission
+    bool? userConfirmed = await SmartDialog.show<bool>(
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Notification Permission Required'),
+          content: const Text(
+            'Background service requires notification permission to run properly. '
+            'Without this permission, the service may not work correctly.\n\n'
+            'Please grant notification permission when prompted.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => SmartDialog.dismiss(result: false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => SmartDialog.dismiss(result: true),
+              child: const Text('Continue'),
+            ),
+          ],
+        );
+      },
+    );
+
+    // User cancelled
+    if (userConfirmed != true) {
+      return false;
+    }
+
+    // Request permission
+    await FlutterForegroundTask.requestNotificationPermission();
+
+    // Return true to proceed even if permission is denied
+    // The service might still work without notification
+    return true;
   }
 
   void _setDaemonError(String error) {
