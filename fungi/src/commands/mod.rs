@@ -26,6 +26,13 @@ pub struct CommonArgs {
         help = "Path to the Fungi config directory, defaults to ~/.fungi"
     )]
     pub fungi_dir: Option<String>,
+
+    #[cfg(target_os = "android")]
+    #[clap(
+        long,
+        help = "Set default device info string for this device, only used in Android"
+    )]
+    pub default_device_name: String,
 }
 
 impl FungiDir for CommonArgs {

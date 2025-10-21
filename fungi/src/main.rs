@@ -6,6 +6,9 @@ fn main() -> Result<()> {
     let fungi_args = FungiArgs::parse();
     use fungi_control::*;
 
+    #[cfg(target_os = "android")]
+    init_device_info(&fungi_args.common);
+
     match fungi_args.command {
         // wasmtime commands
         // env_logger and tokio runtime have been initialized in wasmtime commands
@@ -37,4 +40,13 @@ fn block_on<F: Future>(f: F) -> F::Output {
         .build()
         .unwrap()
         .block_on(f)
+}
+
+#[cfg(target_os = "android")]
+fn init_device_info(common_args: &CommonArgs) {
+    {
+        if !common_args.default_device_name.is_empty() {
+            fungi_util::init_mobile_device_name(common_args.default_device_name.clone());
+        }
+    }
 }
