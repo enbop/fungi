@@ -93,8 +93,10 @@ jobs:
         if: ${{ matrix.cross }}
       
       - name: Build Rust CLI (ARM64 cross compile)
-        run: cross build --release --bin fungi --target ${{ matrix.rust-target }}
         if: ${{ matrix.cross }}
+        env:
+          PROTOC: /usr/bin/protoc
+        run: cross build --release --bin fungi --target ${{ matrix.rust-target }}
 
       - name: Archive Rust CLI (.exe)
         if: matrix.os == 'windows-latest'
