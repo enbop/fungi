@@ -146,56 +146,6 @@ class HostnameResponse extends $pb.GeneratedMessage {
   void clearHostname() => clearField(1);
 }
 
-class StartFungiDaemonRequest extends $pb.GeneratedMessage {
-  factory StartFungiDaemonRequest({
-    $core.String? fungiDir,
-  }) {
-    final $result = create();
-    if (fungiDir != null) {
-      $result.fungiDir = fungiDir;
-    }
-    return $result;
-  }
-  StartFungiDaemonRequest._() : super();
-  factory StartFungiDaemonRequest.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
-  factory StartFungiDaemonRequest.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
-
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'StartFungiDaemonRequest', package: const $pb.PackageName(_omitMessageNames ? '' : 'fungi_daemon'), createEmptyInstance: create)
-    ..aOS(1, _omitFieldNames ? '' : 'fungiDir')
-    ..hasRequiredFields = false
-  ;
-
-  @$core.Deprecated(
-  'Using this can add significant overhead to your binary. '
-  'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
-  'Will be removed in next major version')
-  StartFungiDaemonRequest clone() => StartFungiDaemonRequest()..mergeFromMessage(this);
-  @$core.Deprecated(
-  'Using this can add significant overhead to your binary. '
-  'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
-  'Will be removed in next major version')
-  StartFungiDaemonRequest copyWith(void Function(StartFungiDaemonRequest) updates) => super.copyWith((message) => updates(message as StartFungiDaemonRequest)) as StartFungiDaemonRequest;
-
-  $pb.BuilderInfo get info_ => _i;
-
-  @$core.pragma('dart2js:noInline')
-  static StartFungiDaemonRequest create() => StartFungiDaemonRequest._();
-  StartFungiDaemonRequest createEmptyInstance() => create();
-  static $pb.PbList<StartFungiDaemonRequest> createRepeated() => $pb.PbList<StartFungiDaemonRequest>();
-  @$core.pragma('dart2js:noInline')
-  static StartFungiDaemonRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<StartFungiDaemonRequest>(create);
-  static StartFungiDaemonRequest? _defaultInstance;
-
-  @$pb.TagNumber(1)
-  $core.String get fungiDir => $_getSZ(0);
-  @$pb.TagNumber(1)
-  set fungiDir($core.String v) { $_setString(0, v); }
-  @$pb.TagNumber(1)
-  $core.bool hasFungiDir() => $_has(0);
-  @$pb.TagNumber(1)
-  void clearFungiDir() => clearField(1);
-}
-
 class PeerIdResponse extends $pb.GeneratedMessage {
   factory PeerIdResponse({
     $core.String? peerId,

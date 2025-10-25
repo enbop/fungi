@@ -94,8 +94,6 @@ jobs:
       
       - name: Build Rust CLI (ARM64 cross compile)
         if: ${{ matrix.cross }}
-        env:
-          PROTOC: /usr/bin/protoc
         run: cross build --release --bin fungi --target ${{ matrix.rust-target }}
 
       - name: Archive Rust CLI (.exe)

@@ -1,5 +1,7 @@
+mod generated;
+
 pub mod fungi_daemon_grpc {
-    tonic::include_proto!("fungi_daemon");
+    pub use crate::generated::*;
 }
 
 use std::net::SocketAddr;

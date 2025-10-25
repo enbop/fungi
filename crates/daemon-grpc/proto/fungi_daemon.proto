@@ -109,8 +109,6 @@ message VersionResponse { string version = 1; }
 
 message HostnameResponse { string hostname = 1; }
 
-message StartFungiDaemonRequest { string fungi_dir = 1; }
-
 message PeerIdResponse { string peer_id = 1; }
 
 message ConfigFilePathResponse { string config_file_path = 1; }

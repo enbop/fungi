@@ -46,18 +46,6 @@ const HostnameResponse$json = {
 final $typed_data.Uint8List hostnameResponseDescriptor = $convert.base64Decode(
     'ChBIb3N0bmFtZVJlc3BvbnNlEhoKCGhvc3RuYW1lGAEgASgJUghob3N0bmFtZQ==');
 
-@$core.Deprecated('Use startFungiDaemonRequestDescriptor instead')
-const StartFungiDaemonRequest$json = {
-  '1': 'StartFungiDaemonRequest',
-  '2': [
-    {'1': 'fungi_dir', '3': 1, '4': 1, '5': 9, '10': 'fungiDir'},
-  ],
-};
-
-/// Descriptor for `StartFungiDaemonRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List startFungiDaemonRequestDescriptor = $convert.base64Decode(
-    'ChdTdGFydEZ1bmdpRGFlbW9uUmVxdWVzdBIbCglmdW5naV9kaXIYASABKAlSCGZ1bmdpRGly');
-
 @$core.Deprecated('Use peerIdResponseDescriptor instead')
 const PeerIdResponse$json = {
   '1': 'PeerIdResponse',
