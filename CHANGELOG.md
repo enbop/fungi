@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2025-10-25
+
+### Added
+
+- **gRPC Support**: Daemon and control layers are now decoupled, communicating via gRPC protocol. Interact with fungi daemon using Fungi App, Fungi CLI, or any gRPC client
+- **Enhanced CLI Commands**: Comprehensive CLI commands for daemon management
+- **Experimental WASI Support**: Re-export `wasmtime-cli`'s `run` and `proxy` commands. You can now directly run WASM modules using fungi
+
 ## [0.3.4] - 2025-09-09
 
 ### Fixed
