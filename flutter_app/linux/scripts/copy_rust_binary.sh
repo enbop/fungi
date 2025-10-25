@@ -21,17 +21,37 @@ echo "Build Type: ${BUILD_TYPE}"
 # Paths
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 PROJECT_ROOT="$(realpath "${SCRIPT_DIR}/../../..")"
-RUST_BINARY_PATH="${PROJECT_ROOT}/target/${BUILD_TYPE}/fungi"
 DEST_DIR="${INSTALL_PREFIX}"
 DEST_BINARY="${DEST_DIR}/fungi"
+
+# Try to find Rust binary in multiple locations
+# 1. Standard location (dev environment): target/{debug,release}/fungi
+# 2. CI environment with target triple: target/{triple}/{debug,release}/fungi
+RUST_BINARY_PATH=""
+POSSIBLE_PATHS=(
+    "${PROJECT_ROOT}/target/${BUILD_TYPE}/fungi"
+    "${PROJECT_ROOT}/target/x86_64-unknown-linux-gnu/${BUILD_TYPE}/fungi"
+    "${PROJECT_ROOT}/target/aarch64-unknown-linux-gnu/${BUILD_TYPE}/fungi"
+)
+
+for path in "${POSSIBLE_PATHS[@]}"; do
+    if [ -f "${path}" ]; then
+        RUST_BINARY_PATH="${path}"
+        break
+    fi
+done
 
 echo "Source: ${RUST_BINARY_PATH}"
 echo "Destination: ${DEST_BINARY}"
 
 # Check if Rust binary exists
-if [ ! -f "${RUST_BINARY_PATH}" ]; then
+if [ -z "${RUST_BINARY_PATH}" ] || [ ! -f "${RUST_BINARY_PATH}" ]; then
     echo "Error: Rust binary not found!"
-    echo "Please run: cargo build $([ "${BUILD_TYPE}" == "release" ] && echo "--release")"
+    echo "Searched in:"
+    for path in "${POSSIBLE_PATHS[@]}"; do
+        echo "  - ${path}"
+    done
+    echo "Please run: cargo build --bin fungi $([ "${BUILD_TYPE}" == "release" ] && echo "--release")"
     exit 1
 fi
 

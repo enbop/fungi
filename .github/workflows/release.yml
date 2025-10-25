@@ -78,28 +78,22 @@ jobs:
       - name: Build Rust CLI (macOS Universal)
         if: matrix.rust-target == 'universal-apple-darwin'
         run: |
-          cargo build --release --target x86_64-apple-darwin
-          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --bin fungi --target x86_64-apple-darwin
+          cargo build --release --bin fungi --target aarch64-apple-darwin
           lipo -create -output target/fungi target/x86_64-apple-darwin/release/fungi target/aarch64-apple-darwin/release/fungi
           mkdir -p target/universal-apple-darwin/release
           mv target/fungi target/universal-apple-darwin/release/
 
       - name: Build Rust CLI (Other platforms)
-        run: cargo build --release --target ${{ matrix.rust-target }}
+        run: cargo build --release --bin fungi --target ${{ matrix.rust-target }}
         if: ${{ ! matrix.cross && matrix.rust-target != 'universal-apple-darwin' }}
-      - name: Copy DLL to release directory for flutter_app\rust_builder\windows\CMakeLists.txt
-        if: matrix.os == 'windows-latest'
-        shell: bash
-        run: |
-          mkdir -p target/release
-          cp -f target/x86_64-pc-windows-msvc/release/rust_lib_fungi_app.dll target/release/ || true
 
       - name: Install cross for ARM64
         run: cargo install cross
         if: ${{ matrix.cross }}
       
       - name: Build Rust CLI (ARM64 cross compile)
-        run: cross build --release --target ${{ matrix.rust-target }}
+        run: cross build --release --bin fungi --target ${{ matrix.rust-target }}
         if: ${{ matrix.cross }}
 
       - name: Archive Rust CLI (.exe)
@@ -115,6 +109,12 @@ jobs:
         run: |
           ls -la target/${{ matrix.rust-target }}/release/
           tar -czf fungi-cli-${{ matrix.platform-name }}.tar.gz -C target/${{ matrix.rust-target }}/release fungi
+
+      - name: Copy proto file
+        if: matrix.platform-name == 'linux-x86_64'
+        shell: bash
+        run: |
+          cp crates/daemon-grpc/proto/fungi_daemon.proto fungi_daemon.proto
 
       - name: Flutter dependencies
         if: matrix.flutter-platform
@@ -173,4 +173,8 @@ jobs:
           
           if [ -f fungi-app-${{ matrix.platform-name }}.tar.gz ]; then
             gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-app-${{ matrix.platform-name }}.tar.gz
+          fi
+          
+          if [ -f fungi_daemon.proto ]; then
+            gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi_daemon.proto
           fi
