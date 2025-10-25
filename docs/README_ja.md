@@ -35,6 +35,8 @@ Rust（P2P通信に[rust-libp2p](https://github.com/libp2p/rust-libp2p)を採用
 
 🛡️ **セキュリティ第一** - エンドツーエンド暗号化、PeerIDベースの認証とホワイトリストアクセス制御
 
+🏗️ **モジュラーアーキテクチャ** - Daemon と制御層が分離され、gRPC プロトコルで通信。Fungi App、Fungi CLI、または任意の gRPC クライアントで daemon と対話可能
+
 🌐 **ゲートウェイアーキテクチャ** - 任意のデバイスをネットワーク内のサービスとファイルのゲートウェイに変換
 
 ⚡ **どこでも動作** - mDNSによるローカルネットワークの自動検出、インターネット接続時はリレーサーバーへのシームレスなフォールバック
@@ -127,43 +129,59 @@ FTP/WebDAVアドレスはホームページに表示されます。
 
 ## ソースからビルド
 
-すべてのプラットフォームでRustとFlutterのインストールが必要です。
+### 前提条件
 
-### fungi-cliのビルド
+**すべてのプラットフォームで必要：**
+- Rust ツールチェーン
+- Flutter SDK（fungi-app のみ必要）
+- Protocol Buffers コンパイラ（protoc）
 
-以下を実行するだけです：
+#### 依存関係のインストール
+
+**Ubuntu/Debian：**
+```bash
+sudo apt-get install -y protobuf-compiler clang cmake ninja-build pkg-config libgtk-3-dev libayatana-appindicator3-dev
+```
+
+**macOS：**
+```bash
+brew install protobuf
+```
+
+**Windows：**
+
+- aws-lc-rs [ビルド依存関係](https://aws.github.io/aws-lc-rs/requirements/windows.html)をインストール（最低限必要：C/C++ コンパイラ、CMake、NASM）
+
+- protoc をインストール：
+```powershell
+choco install protoc
+```
+
+### fungi-cli のビルド
+
 ```bash
 cargo build --release --bin fungi
 ```
-バイナリファイルは以下の場所にあります：
-```
-./target/release/fungi
-```
 
-### fungi-appのビルド
+バイナリファイルの場所：`./target/release/fungi`
 
-#### Ubuntu
+### fungi-app のビルド
 ```bash
-sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libayatana-appindicator3-dev
-
 cd flutter_app
+```
+
+**Linux：**
+```bash
 flutter build linux --release
 ```
 
-#### macOS
+**macOS：**
 ```bash
-cd flutter_app
 flutter build macos --release
 ```
 
-#### Windows
-
-aws-lc-rs [ビルド依存関係](https://aws.github.io/aws-lc-rs/requirements/windows.html)をインストール
-
-最低限以下が必要です：C/C++コンパイラ、CMake、NASM
-
+**Windows：**
 ```bash
-cargo build --release -p rust_lib_fungi_app
 flutter build windows --release
 ```
 

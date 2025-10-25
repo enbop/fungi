@@ -35,6 +35,8 @@ Fungi 让您通过 P2P 连接安全地连接和管理多个设备。没有服务
 
 🛡️ **安全优先** - 端到端加密，基于 PeerID 的身份验证和白名单访问控制
 
+🏗️ **模块化架构** - Daemon 与控制层解耦，通过 gRPC 协议通信。可使用 Fungi App、Fungi CLI 或任何 gRPC 客户端与 daemon 交互
+
 🌐 **网关架构** - 将任何设备转变为网络中服务和文件的网关
 
 ⚡ **随处可用** - 通过 mDNS 自动发现本地网络设备，互联网连接时无缝回退到中继服务器
@@ -127,43 +129,59 @@ FTP/WebDAV 地址会显示在主页上。
 
 ## 从源码构建
 
-所有平台都需要安装 Rust 和 Flutter。
+### 前置要求
+
+**所有平台都需要：**
+- Rust 工具链
+- Flutter SDK（仅 fungi-app 需要）
+- Protocol Buffers 编译器（protoc）
+
+#### 安装依赖
+
+**Ubuntu/Debian：**
+```bash
+sudo apt-get install -y protobuf-compiler clang cmake ninja-build pkg-config libgtk-3-dev libayatana-appindicator3-dev
+```
+
+**macOS：**
+```bash
+brew install protobuf
+```
+
+**Windows：**
+
+- 安装 aws-lc-rs [构建依赖](https://aws.github.io/aws-lc-rs/requirements/windows.html)（确保您至少安装了：C/C++ 编译器、CMake、NASM）
+
+- 安装 protoc：
+```powershell
+choco install protoc
+```
 
 ### 构建 fungi-cli
 
-只需运行：
 ```bash
 cargo build --release --bin fungi
 ```
-二进制文件将位于：
-```
-./target/release/fungi
-```
+
+二进制文件位置：`./target/release/fungi`
 
 ### 构建 fungi-app
-
-#### Ubuntu
 ```bash
-sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libayatana-appindicator3-dev
-
 cd flutter_app
+```
+
+**Linux：**
+```bash
 flutter build linux --release
 ```
 
-#### macOS
+**macOS：**
 ```bash
-cd flutter_app
 flutter build macos --release
 ```
 
-#### Windows
-
-安装 aws-lc-rs [构建依赖](https://aws.github.io/aws-lc-rs/requirements/windows.html)
-
-确保您至少安装了：C/C++ 编译器、CMake、NASM
-
+**Windows：**
 ```bash
-cargo build --release -p rust_lib_fungi_app
 flutter build windows --release
 ```
 

@@ -35,6 +35,8 @@ Built with Rust (using [rust-libp2p](https://github.com/libp2p/rust-libp2p) for 
 
 🛡️ **Security First** - End-to-end encryption with PeerID-based authentication and whitelist access control
 
+🏗️ **Modular Architecture** - Daemon and control layers are decoupled, communicating via gRPC protocol. Interact with fungi daemon using Fungi App (with built-in daemon), Fungi CLI, or any gRPC client
+
 🌐 **Gateway Architecture** - Turn any device into a gateway for services and files across your network
 
 ⚡ **Works Everywhere** - Local network auto-discovery via mDNS, seamless internet connectivity with relay fallback
