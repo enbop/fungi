@@ -1,9 +1,18 @@
 fn main() {
-    #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
-    // Skip for Linux on ARM64 (cross-compilation issues)
-    {
-        generate_proto();
+    let target = std::env::var("TARGET").unwrap_or_default();
+
+    // Skip proto generation for ARM64 Linux cross-compilation
+    // Use pre-generated code instead to avoid protoc issues in cross environment
+    if target == "aarch64-unknown-linux-gnu" {
+        println!(
+            "cargo:warning=Skipping proto generation for {}, using pre-generated code",
+            target
+        );
+        return;
     }
+
+    // For all other platforms, generate code
+    generate_proto();
 }
 
 fn generate_proto() {
