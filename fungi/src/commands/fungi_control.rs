@@ -37,7 +37,7 @@ pub enum InfoCommands {
     /// Show daemon version
     Version,
     /// Show peer ID of this daemon
-    PeerId,
+    Id,
     /// Show hostname of this device
     Hostname,
     /// Show configuration file path
@@ -91,16 +91,16 @@ pub struct AddClientArgs {
 #[derive(Subcommand, Debug, Clone)]
 pub enum FtClientCommands {
     /// List all file transfer clients
-    ListClients,
+    List,
     /// Add a new file transfer client
-    AddClient(AddClientArgs),
+    Add(AddClientArgs),
     /// Remove a file transfer client
-    RemoveClient {
+    Remove {
         /// Peer ID of the client
         peer_id: String,
     },
     /// Enable or disable a file transfer client
-    EnableClient {
+    Enable {
         /// Peer ID of the client
         peer_id: String,
         /// Whether to enable the client
@@ -140,7 +140,7 @@ pub enum FtClientCommands {
 #[derive(Subcommand, Debug, Clone)]
 pub enum TunnelCommands {
     /// Show TCP tunneling configuration
-    Config,
+    Show,
     /// Add a TCP forwarding rule
     AddForward {
         /// Local address to bind (format: host:port, e.g., 127.0.0.1:8080)
@@ -248,7 +248,7 @@ pub async fn execute_info(args: CommonArgs, cmd: InfoCommands) {
             Ok(resp) => println!("{}", resp.into_inner().version),
             Err(e) => eprintln!("Error: {}", e),
         },
-        InfoCommands::PeerId => match client.peer_id(Request::new(Empty {})).await {
+        InfoCommands::Id => match client.peer_id(Request::new(Empty {})).await {
             Ok(resp) => println!("{}", resp.into_inner().peer_id),
             Err(e) => eprintln!("Error: {}", e),
         },
@@ -413,7 +413,7 @@ pub async fn execute_ft_client(args: CommonArgs, cmd: FtClientCommands) {
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        FtClientCommands::ListClients => {
+        FtClientCommands::List => {
             match client
                 .get_all_file_transfer_clients(Request::new(Empty {}))
                 .await
@@ -440,7 +440,7 @@ pub async fn execute_ft_client(args: CommonArgs, cmd: FtClientCommands) {
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        FtClientCommands::AddClient(add_args) => {
+        FtClientCommands::Add(add_args) => {
             let req = AddFileTransferClientRequest {
                 enabled: add_args.enabled,
                 name: add_args.name.unwrap_or_default(),
@@ -451,14 +451,14 @@ pub async fn execute_ft_client(args: CommonArgs, cmd: FtClientCommands) {
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        FtClientCommands::RemoveClient { peer_id } => {
+        FtClientCommands::Remove { peer_id } => {
             let req = RemoveFileTransferClientRequest { peer_id };
             match client.remove_file_transfer_client(Request::new(req)).await {
                 Ok(_) => println!("Client removed successfully"),
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-        FtClientCommands::EnableClient { peer_id, enabled } => {
+        FtClientCommands::Enable { peer_id, enabled } => {
             let req = EnableFileTransferClientRequest { peer_id, enabled };
             match client.enable_file_transfer_client(Request::new(req)).await {
                 Ok(_) => println!(
@@ -478,7 +478,7 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
     };
 
     match cmd {
-        TunnelCommands::Config => {
+        TunnelCommands::Show => {
             match client
                 .get_tcp_tunneling_config(Request::new(Empty {}))
                 .await

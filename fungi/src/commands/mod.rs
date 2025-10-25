@@ -59,7 +59,7 @@ pub enum Commands {
     Info(fungi_control::InfoCommands),
     /// Manage incoming allowed peers
     #[command(subcommand, visible_alias = "ap")]
-    AllowedPeer(fungi_control::AllowedPeerCommands),
+    AllowedPeers(fungi_control::AllowedPeerCommands),
     /// Manage file transfer service
     #[command(subcommand, visible_alias = "fs")]
     FtService(fungi_control::FtServiceCommands),
