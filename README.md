@@ -29,13 +29,15 @@ Fungi lets you securely connect and manage multiple devices through P2P connecti
 
 Built with Rust (using [rust-libp2p](https://github.com/libp2p/rust-libp2p) for p2p) and Flutter for cross-platform UI.
 
+📚 **[Read the full documentation](https://fungi.rs/docs/intro)**
+
 ## Why Fungi?
 
 🚀 **Zero Configuration P2P** - Direct device-to-device connections with automatic NAT traversal, no public IP required
 
 🛡️ **Security First** - End-to-end encryption with PeerID-based authentication and whitelist access control
 
-🏗️ **Modular Architecture** - Daemon and control layers are decoupled, communicating via gRPC protocol. Interact with fungi daemon using Fungi App (with built-in daemon), Fungi CLI, or any gRPC client
+🏗️ **Modular Architecture** - Daemon and control layers are decoupled, communicating via gRPC protocol. Interact with fungi daemon using Fungi App (with built-in daemon), Fungi CLI, or [any gRPC client](https://fungi.rs/docs/grpc-guide)
 
 🌐 **Gateway Architecture** - Turn any device into a gateway for services and files across your network
 
@@ -60,12 +62,13 @@ Built with Rust (using [rust-libp2p](https://github.com/libp2p/rust-libp2p) for 
 🔮 **Cross-Device Integration** *(Coming Soon)*
 - Remote computing and command execution
 - WASI sandbox for cross-platform app deployment
+  - *Experimental WASI runtime now available - [Learn more](https://fungi.rs/docs/wasi)*
 
 ## How It Works
 
 **Local Network**: Devices automatically discover each other via mDNS - no setup needed.
 
-**Internet**: Attempts NAT hole punching for direct P2P connections. If successful, data flows directly between devices; otherwise uses relay server. All traffic is end-to-end encrypted - relay server only sees encrypted data packets. By default, we provide a relay server. You can also set up your [own relay server](https://fungi.rs/docs/self_hosted_relay).
+**Internet**: Attempts NAT hole punching for direct P2P connections. If successful, data flows directly between devices; otherwise uses relay server. All traffic is end-to-end encrypted - relay server only sees encrypted data packets. By default, we provide a relay server. You can also set up your [own relay server](https://fungi.rs/docs/self-hosted-relay).
 
 ## Download
 [Get the latest release](https://github.com/enbop/fungi/releases):
@@ -125,7 +128,7 @@ Connect `localhost:9090` on Device A to reach the service running on Device B's 
 
 ### Quick Start (fungi-cli)
 
-See the [CLI Service Quick Start Guide](https://fungi.rs/docs/cli_service_quick_start).
+See the [Fungi CLI Guide](https://fungi.rs/docs/cli-service-quick-start).
 
 ## Build from Source
 

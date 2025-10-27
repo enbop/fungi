@@ -29,13 +29,15 @@ Fungi 让您通过 P2P 连接安全地连接和管理多个设备。没有服务
 
 基于 Rust 构建（采用 [rust-libp2p](https://github.com/libp2p/rust-libp2p) 实现 P2P 通信）并配以 Flutter 跨平台用户界面。
 
+📚 **[阅读完整文档](https://fungi.rs/docs/intro)**
+
 ## 为什么选择 Fungi？
 
 🚀 **零配置 P2P** - 设备间直接连接，自动 NAT 穿透，无需公网 IP
 
 🛡️ **安全优先** - 端到端加密，基于 PeerID 的身份验证和白名单访问控制
 
-🏗️ **模块化架构** - Daemon 与控制层解耦，通过 gRPC 协议通信。可使用 Fungi App、Fungi CLI 或任何 gRPC 客户端与 daemon 交互
+🏗️ **模块化架构** - Daemon 与控制层解耦,通过 gRPC 协议通信。可使用 Fungi App、Fungi CLI 或[任何 gRPC 客户端](https://fungi.rs/docs/grpc-guide)与 daemon 交互
 
 🌐 **网关架构** - 将任何设备转变为网络中服务和文件的网关
 
@@ -60,12 +62,13 @@ Fungi 让您通过 P2P 连接安全地连接和管理多个设备。没有服务
 🔮 **跨设备集成** *（即将推出）*
 - 远程计算和命令执行
 - WASI 沙箱，支持跨平台应用部署
+  - *试验性 WASI 运行时现已支持 - [了解更多](https://fungi.rs/docs/wasi)*
 
 ## 工作原理
 
 **本地网络**：设备通过 mDNS 自动发现彼此 - 无需设置。
 
-**互联网连接**：尝试 NAT 打洞进行直接 P2P 连接。如果成功，数据直接在设备间流动；否则使用中继服务器。所有流量都是端到端加密的 - 中继服务器只能看到加密的数据包。默认情况下，我们提供了一个中继服务器。
+**互联网连接**：尝试 NAT 打洞进行直接 P2P 连接。如果成功，数据直接在设备间流动；否则使用中继服务器。所有流量都是端到端加密的 - 中继服务器只能看到加密的数据包。默认情况下，我们提供了一个中继服务器。您也可以设置[自己的中继服务器](https://fungi.rs/docs/self-hosted-relay)。
 
 ## 下载
 [获取最新版本](https://github.com/enbop/fungi/releases)：
@@ -125,7 +128,7 @@ FTP/WebDAV 地址会显示在主页上。
 
 ### 快速开始（fungi-cli）
 
-参见 [CLI 服务快速开始指南](cli_service_quick_start.md)。
+参见 [Fungi CLI 指南](https://fungi.rs/docs/cli-service-quick-start)。
 
 ## 从源码构建
 
