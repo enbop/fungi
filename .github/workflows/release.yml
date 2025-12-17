@@ -16,36 +16,29 @@ jobs:
     name: Release build and publish
     runs-on: ${{ matrix.os }}
     strategy:
-      # fail-fast: false
+      fail-fast: false
       matrix:
         include:
           - rust-target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
-            flutter-platform: linux
             platform-name: linux-x86_64
           - rust-target: aarch64-unknown-linux-gnu
             os: ubuntu-22.04
             cross: true
             platform-name: linux-aarch64
-          - rust-target: universal-apple-darwin
+          - rust-target: x86_64-apple-darwin
             os: macos-latest
-            flutter-platform: macos
-            platform-name: macos-universal
+            platform-name: macos-x86_64
+          - rust-target: aarch64-apple-darwin
+            os: macos-latest
+            platform-name: macos-aarch64
           - rust-target: x86_64-pc-windows-msvc
             os: windows-latest
-            flutter-platform: windows
             platform-name: windows-x86_64
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.32.6'
-          channel: 'stable'
-          cache: true
 
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-22.04'
@@ -69,94 +62,40 @@ jobs:
         shell: bash
         run: |
           rustup update stable --no-self-update && rustup default stable
-          if [ "${{ matrix.rust-target }}" = "universal-apple-darwin" ]; then
-            rustup target add x86_64-apple-darwin aarch64-apple-darwin
-          elif [ "${{ matrix.rust-target }}" != "universal-apple-darwin" ]; then
-            rustup target add ${{ matrix.rust-target }}
-          fi
+          rustup target add ${{ matrix.rust-target }}
 
-      - name: Build Rust CLI (macOS Universal)
-        if: matrix.rust-target == 'universal-apple-darwin'
-        run: |
-          cargo build --release --bin fungi --target x86_64-apple-darwin
-          cargo build --release --bin fungi --target aarch64-apple-darwin
-          lipo -create -output target/fungi target/x86_64-apple-darwin/release/fungi target/aarch64-apple-darwin/release/fungi
-          mkdir -p target/universal-apple-darwin/release
-          mv target/fungi target/universal-apple-darwin/release/
-
-      - name: Build Rust CLI (Other platforms)
-        run: cargo build --release --bin fungi --target ${{ matrix.rust-target }}
-        if: ${{ ! matrix.cross && matrix.rust-target != 'universal-apple-darwin' }}
-
-      - name: Install cross for ARM64
+      - name: Install cross
+        if: ${{ matrix.cross }}
         run: cargo install cross
-        if: ${{ matrix.cross }}
-      
-      - name: Build Rust CLI (ARM64 cross compile)
-        if: ${{ matrix.cross }}
-        run: cross build --release --bin fungi --target ${{ matrix.rust-target }}
 
-      - name: Archive Rust CLI (.exe)
-        if: matrix.os == 'windows-latest'
+      - name: Build Rust CLI
         shell: bash
         run: |
-          ls -la target/${{ matrix.rust-target }}/release/
-          tar -czf fungi-cli-${{ matrix.platform-name }}.tar.gz -C target/${{ matrix.rust-target }}/release fungi.exe
-      
-      - name: Archive Rust CLI
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --release --bin fungi --target ${{ matrix.rust-target }}
+          else
+            cargo build --release --bin fungi --target ${{ matrix.rust-target }}
+          fi
+
+      - name: Prepare Artifacts (Linux/macOS)
         if: matrix.os != 'windows-latest'
         shell: bash
         run: |
-          ls -la target/${{ matrix.rust-target }}/release/
-          tar -czf fungi-cli-${{ matrix.platform-name }}.tar.gz -C target/${{ matrix.rust-target }}/release fungi
+          cp target/${{ matrix.rust-target }}/release/fungi fungi
+          tar -czf fungi-${{ matrix.platform-name }}.tar.gz fungi
+
+      - name: Prepare Artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          cp target/${{ matrix.rust-target }}/release/fungi.exe fungi.exe
+          tar -czf fungi-${{ matrix.platform-name }}.tar.gz fungi.exe
 
       - name: Copy proto file
         if: matrix.platform-name == 'linux-x86_64'
         shell: bash
         run: |
           cp crates/daemon-grpc/proto/fungi_daemon.proto fungi_daemon.proto
-
-      - name: Flutter dependencies
-        if: matrix.flutter-platform
-        run: flutter pub get
-        working-directory: ./flutter_app
-
-      - name: Build Flutter Linux
-        if: matrix.flutter-platform == 'linux' && !matrix.cross
-        working-directory: ./flutter_app
-        run: |
-          flutter config --enable-linux-desktop
-          flutter build linux --release
-          ls -la build/linux/x64/release/bundle/
-          tar -czf ../fungi-app-${{ matrix.platform-name }}.tar.gz -C build/linux/x64/release/bundle .
-
-      - name: Build Flutter macOS
-        if: matrix.flutter-platform == 'macos'
-        working-directory: ./flutter_app
-        run: |
-          flutter config --enable-macos-desktop
-          flutter build macos --release
-          ls -la build/macos/Build/Products/Release/
-          tar -czf ../fungi-app-${{ matrix.platform-name }}.tar.gz -C build/macos/Build/Products/Release "Fungi App.app"
-
-      - name: Build Flutter Windows
-        if: matrix.flutter-platform == 'windows'
-        working-directory: ./flutter_app
-        shell: bash
-        run: |
-          flutter config --enable-windows-desktop
-          flutter build windows --release
-          ls -la build/windows/x64/runner/Release/
-          cd build/windows/x64/runner/Release
-          tar -czf ../../../../../../fungi-app-${{ matrix.platform-name }}.tar.gz .
-
-      - name: Update nightly release notes
-        if: (github.event_name == 'workflow_dispatch' || github.ref_name == 'nightly') && matrix.platform-name == 'linux-x86_64'
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release edit nightly --title "Nightly Build" --notes "Latest development build from commit ${{ github.sha }} ($(date))" || true
 
       - name: GH publish
         shell: bash
@@ -169,11 +108,7 @@ jobs:
             RELEASE_TAG="${{ github.ref_name }}"
           fi
           
-          gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-cli-${{ matrix.platform-name }}.tar.gz
-          
-          if [ -f fungi-app-${{ matrix.platform-name }}.tar.gz ]; then
-            gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-app-${{ matrix.platform-name }}.tar.gz
-          fi
+          gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-${{ matrix.platform-name }}.tar.gz
           
           if [ -f fungi_daemon.proto ]; then
             gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi_daemon.proto
