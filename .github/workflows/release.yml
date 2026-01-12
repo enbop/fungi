@@ -26,9 +26,6 @@ jobs:
             os: ubuntu-22.04
             cross: true
             platform-name: linux-aarch64
-          - rust-target: x86_64-apple-darwin
-            os: macos-latest
-            platform-name: macos-x86_64
           - rust-target: aarch64-apple-darwin
             os: macos-latest
             platform-name: macos-aarch64
@@ -81,8 +78,10 @@ jobs:
         if: matrix.os != 'windows-latest'
         shell: bash
         run: |
-          cp target/${{ matrix.rust-target }}/release/fungi fungi
-          tar -czf fungi-${{ matrix.platform-name }}.tar.gz fungi
+          # Use a dist directory to avoid conflict with the 'fungi' directory in the root
+          mkdir -p dist
+          cp target/${{ matrix.rust-target }}/release/fungi dist/fungi
+          tar -czf fungi-${{ matrix.platform-name }}.tar.gz -C dist fungi
 
       - name: Prepare Artifacts (Windows)
         if: matrix.os == 'windows-latest'
