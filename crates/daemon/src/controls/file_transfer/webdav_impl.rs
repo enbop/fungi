@@ -453,7 +453,7 @@ impl DavFileSystem for FileTransferClientsControl {
             }
 
             // For write operations, we might need to handle file creation
-            if options.write && options.create && meta_res.is_err() && options.create {
+            if options.write && options.create && meta_res.is_err() {
                 log::debug!("File {} doesn't exist, will create it", path_os_string);
                 let empty_data = Vec::new();
                 client

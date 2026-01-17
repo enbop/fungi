@@ -303,30 +303,28 @@ fn test_error_cases(ctx: &TestContext) -> Result<()> {
         "8888",
     ]);
 
-    if result.is_err() {
-        println!("   ✓ Correctly failed to remove non-existent forwarding rule");
-    } else {
-        let output = result.unwrap();
+    if let Ok(output) = result {
         if output.contains("not found") || output.contains("error") {
             println!("   ✓ Returned error message for non-existent rule");
         } else {
             println!("   ⚠ Warning: Removing non-existent rule did not fail");
         }
+    } else {
+        println!("   ✓ Correctly failed to remove non-existent forwarding rule");
     }
 
     // Test 2: Remove non-existent listening rule
     println!("2. Testing removal of non-existent listening rule...");
     let result = ctx.run_cli(&["tunnel", "remove-listen", "127.0.0.1:9999"]);
 
-    if result.is_err() {
-        println!("   ✓ Correctly failed to remove non-existent listening rule");
-    } else {
-        let output = result.unwrap();
+    if let Ok(output) = result {
         if output.contains("not found") || output.contains("error") {
             println!("   ✓ Returned error message for non-existent rule");
         } else {
             println!("   ⚠ Warning: Removing non-existent rule did not fail");
         }
+    } else {
+        println!("   ✓ Correctly failed to remove non-existent listening rule");
     }
 
     // Test 3: Invalid address format (missing port)
@@ -407,15 +405,14 @@ fn test_error_cases(ctx: &TestContext) -> Result<()> {
     // Test 10: Port zero (invalid)
     println!("10. Testing port zero...");
     let result = ctx.run_cli(&["tunnel", "add-listen", "127.0.0.1:0"]);
-    if result.is_err() {
-        println!("   ✓ Correctly rejected port zero");
-    } else {
-        let output = result.unwrap();
+    if let Ok(output) = result {
         if output.contains("error") || output.contains("invalid") {
             println!("   ✓ Returned error for port zero");
         } else {
             println!("   ⚠ Warning: Port zero was accepted (may be intentional)");
         }
+    } else {
+        println!("   ✓ Correctly rejected port zero");
     }
 
     println!("✓ Error cases test completed");
