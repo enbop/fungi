@@ -192,11 +192,10 @@ impl FungiDaemon {
     }
 
     async fn init_fts(config: FTSConfig, fts_control: &FileTransferServiceControl) {
-        if config.enabled {
-            if let Err(e) = fts_control.add_service(config).await {
+        if config.enabled
+            && let Err(e) = fts_control.add_service(config).await {
                 log::warn!("Failed to add file transfer service: {e}");
             }
-        }
     }
 
     fn init_ftc(clients: Vec<FTCConfig>, ftc_control: FileTransferClientsControl) {
@@ -206,13 +205,12 @@ impl FungiDaemon {
                 if !client.enabled {
                     continue;
                 }
-                if client.name.is_none() {
-                    if let Ok(remote_host_name) =
+                if client.name.is_none()
+                    && let Ok(remote_host_name) =
                         ftc_control.connect_and_get_host_name(client.peer_id).await
                     {
                         client.name = remote_host_name
                     }
-                }
                 ftc_control.add_client(client);
             }
         });
@@ -227,11 +225,10 @@ impl FungiDaemon {
         if port == 0 {
             return Err(anyhow::anyhow!("Port must be greater than 0"));
         }
-        if let Some(old_task) = self.task_handles.proxy_ftp_task.lock().take() {
-            if !old_task.is_finished() {
+        if let Some(old_task) = self.task_handles.proxy_ftp_task.lock().take()
+            && !old_task.is_finished() {
                 old_task.abort();
             }
-        }
         if enabled {
             let task = tokio::spawn(crate::controls::start_ftp_proxy_service(
                 host,
@@ -252,11 +249,10 @@ impl FungiDaemon {
         if port == 0 {
             return Err(anyhow::anyhow!("Port must be greater than 0"));
         }
-        if let Some(old_task) = self.task_handles.proxy_webdav_task.lock().take() {
-            if !old_task.is_finished() {
+        if let Some(old_task) = self.task_handles.proxy_webdav_task.lock().take()
+            && !old_task.is_finished() {
                 old_task.abort();
             }
-        }
         if enabled {
             let task = tokio::spawn(crate::controls::start_webdav_proxy_service(
                 host,

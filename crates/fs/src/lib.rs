@@ -446,11 +446,10 @@ impl FileSystem {
         let mut metadata = Metadata::from(meta);
 
         // Handle symlinks
-        if metadata.is_symlink {
-            if let Ok(target) = tokio::fs::read_link(&full_path).await {
+        if metadata.is_symlink
+            && let Ok(target) = tokio::fs::read_link(&full_path).await {
                 metadata.readlink = Some(target);
             }
-        }
 
         Ok(metadata)
     }
@@ -496,11 +495,10 @@ impl FileSystem {
             let metadata = match entry.metadata().await {
                 Ok(meta) => {
                     let mut metadata = Metadata::from(meta);
-                    if metadata.is_symlink {
-                        if let Ok(target) = tokio::fs::read_link(&entry_path).await {
+                    if metadata.is_symlink
+                        && let Ok(target) = tokio::fs::read_link(&entry_path).await {
                             metadata.readlink = Some(target);
                         }
-                    }
                     metadata
                 }
                 Err(_) => {
@@ -527,8 +525,8 @@ impl FileSystem {
         let full_path = self.resolve_path(&path)?;
 
         // Create parent directories if needed and we're creating the file
-        if options.create || options.create_new {
-            if let Some(parent) = full_path.parent() {
+        if (options.create || options.create_new)
+            && let Some(parent) = full_path.parent() {
                 tokio::fs::create_dir_all(parent)
                     .await
                     .map_err(|e| FileSystemError::Io {
@@ -539,7 +537,6 @@ impl FileSystem {
                         ),
                     })?;
             }
-        }
 
         FileStream::new(full_path, options).await
     }

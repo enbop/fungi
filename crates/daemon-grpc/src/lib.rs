@@ -82,7 +82,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 .inner
                 .get_incoming_allowed_peers()
                 .into_iter()
-                .map(|p| peer_info_to_proto(p))
+                .map(peer_info_to_proto)
                 .collect(),
         };
         Ok(Response::new(response))

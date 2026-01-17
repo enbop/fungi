@@ -78,7 +78,7 @@ impl std::fmt::Debug for FileTransferClientsControl {
 }
 
 impl FileTransferClientsControl {
-    const DEFAULT_WRITE_BUFFER_SIZE: usize = 1 * 1024 * 1024; // 1 MB
+    const DEFAULT_WRITE_BUFFER_SIZE: usize = 1024 * 1024; // 1 MB
 
     pub fn new(swarm_control: SwarmControl) -> Self {
         Self::new_with_buffer_size(swarm_control, Self::DEFAULT_WRITE_BUFFER_SIZE)
@@ -368,7 +368,7 @@ impl FileTransferClientsControl {
         start_pos: u64,
         length: u64,
     ) -> fungi_fs::Result<Vec<u8>> {
-        let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
+        let unix_path = convert_string_to_utf8_unix_path_buf(path_os_string).normalize();
         let components: Utf8UnixComponents<'_> = unix_path.components();
 
         if Self::is_root_path(components.clone()) {
@@ -460,13 +460,12 @@ impl FileTransferClientsControl {
             });
         };
 
-        if remaining_components.next().is_none() {
-            if first.is_root() || first.is_current() || first.is_empty() {
+        if remaining_components.next().is_none()
+            && (first.is_root() || first.is_current() || first.is_empty()) {
                 return Err(fungi_fs::FileSystemError::Other {
                     message: "Cannot delete root or current directory".to_string(),
                 });
             }
-        }
 
         client
             .del(context::current(), path_str)
@@ -502,13 +501,12 @@ impl FileTransferClientsControl {
             });
         };
 
-        if remaining_components.next().is_none() {
-            if first.is_root() || first.is_current() || first.is_empty() {
+        if remaining_components.next().is_none()
+            && (first.is_root() || first.is_current() || first.is_empty()) {
                 return Err(fungi_fs::FileSystemError::Other {
                     message: "Cannot delete root or current directory".to_string(),
                 });
             }
-        }
 
         client
             .rmd(context::current(), path_str)
@@ -702,7 +700,7 @@ pub fn convert_string_to_utf8_unix_path_buf(path: &str) -> Utf8PathBuf<Utf8UnixE
     }
     #[cfg(not(windows))]
     {
-        return Utf8Path::<Utf8UnixEncoding>::new(path).with_encoding();
+        Utf8Path::<Utf8UnixEncoding>::new(path).with_encoding()
     }
 }
 

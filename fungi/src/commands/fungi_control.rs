@@ -321,14 +321,13 @@ pub async fn execute_ft_service(args: CommonArgs, cmd: FtServiceCommands) {
                         if enabled { "running" } else { "stopped" }
                     );
 
-                    if enabled {
-                        if let Ok(dir_resp) = client
+                    if enabled
+                        && let Ok(dir_resp) = client
                             .get_file_transfer_service_root_dir(Request::new(Empty {}))
                             .await
                         {
                             println!("Root directory: {}", dir_resp.into_inner().root_dir);
                         }
-                    }
                 }
                 Err(e) => eprintln!("Error: {}", e),
             }

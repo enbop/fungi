@@ -39,9 +39,9 @@ impl Os {
     }
 }
 
-impl Into<String> for &Os {
-    fn into(self) -> String {
-        match self {
+impl From<&Os> for String {
+    fn from(val: &Os) -> Self {
+        match val {
             Os::Windows => "Windows".to_string(),
             Os::MacOS => "MacOS".to_string(),
             Os::Linux => "Linux".to_string(),

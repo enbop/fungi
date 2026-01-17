@@ -70,8 +70,8 @@ impl DavMetaData for DavMetaDataImpl {
     fn etag(&self) -> Option<String> {
         use std::time::UNIX_EPOCH;
 
-        if let Some(modified) = self.0.modified {
-            if let Ok(duration) = modified.duration_since(UNIX_EPOCH) {
+        if let Some(modified) = self.0.modified
+            && let Ok(duration) = modified.duration_since(UNIX_EPOCH) {
                 let timestamp_us =
                     duration.as_secs() * 1_000_000 + duration.subsec_nanos() as u64 / 1000;
 
@@ -81,7 +81,6 @@ impl DavMetaData for DavMetaDataImpl {
                     return Some(format!("{:x}", timestamp_us));
                 }
             }
-        }
         None
     }
 }
@@ -426,15 +425,15 @@ impl DavFileSystem for FileTransferClientsControl {
         async move {
             let unix_path = convert_string_to_utf8_unix_path_buf(&path_os_string).normalize();
             let mut components: Utf8UnixComponents<'_> = unix_path.components();
-            let mut client_name = components.next().ok_or_else(|| FsError::GeneralFailure)?;
+            let mut client_name = components.next().ok_or(FsError::GeneralFailure)?;
             // remove the first component if it is root or current
             // "/Test" to "Test"
             if client_name.is_root() || client_name.is_current() {
-                client_name = components.next().ok_or_else(|| FsError::GeneralFailure)?;
+                client_name = components.next().ok_or(FsError::GeneralFailure)?;
             }
 
             let client = clients_ctrl
-                .get_client(&client_name.to_string())
+                .get_client(client_name.as_ref())
                 .await
                 .map_err(|e| {
                     log::error!("Failed to get file transfer client: {}", e);
@@ -448,15 +447,14 @@ impl DavFileSystem for FileTransferClientsControl {
                 .map_err(|_rpc_error| FsError::GeneralFailure)?;
 
             // For create_new, file must not exist
-            if options.create_new {
-                if meta_res.is_ok() {
+            if options.create_new
+                && meta_res.is_ok() {
                     return Err(FsError::Exists);
                 }
-            }
 
             // For write operations, we might need to handle file creation
-            if options.write && options.create {
-                if meta_res.is_err() && options.create {
+            if options.write && options.create
+                && meta_res.is_err() && options.create {
                     log::debug!("File {} doesn't exist, will create it", path_os_string);
                     let empty_data = Vec::new();
                     client
@@ -471,7 +469,6 @@ impl DavFileSystem for FileTransferClientsControl {
                         .map_err(|e| map_error(e, "create_file", &real_path_os_string))?;
                     log::info!("Successfully created empty file: {}", real_path_os_string);
                 }
-            }
             let file = DavFileImpl {
                 path_os_string: real_path_os_string,
                 client,

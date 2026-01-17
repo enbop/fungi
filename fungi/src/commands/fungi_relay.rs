@@ -13,7 +13,7 @@ use libp2p::{
 };
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-const DEFAULT_CONFIG_DIR: &'static str = ".fungi-relay-server";
+const DEFAULT_CONFIG_DIR: &str = ".fungi-relay-server";
 const DEFAULT_LISTEN_PORT: u16 = 30001;
 
 #[derive(Debug, Clone, Parser)]
@@ -72,8 +72,8 @@ pub async fn run(args: RelayArgs) -> Result<()> {
         })?
         .build();
 
-    let peer_id = swarm.local_peer_id().clone();
-    println!("Local peer id: {}", swarm.local_peer_id().to_string());
+    let peer_id = *swarm.local_peer_id();
+    println!("Local peer id: {}", swarm.local_peer_id());
 
     listen_all_interfaces(&mut swarm, tcp_listen_port, udp_listen_port)?;
 

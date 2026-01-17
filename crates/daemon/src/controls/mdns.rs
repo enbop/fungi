@@ -105,7 +105,7 @@ impl MdnsControl {
             service_type,
             &instance_name,
             &format!("{}.local.", instance_name),
-            &device_info.private_ips.get(0).cloned().unwrap_or_default(),
+            device_info.private_ips.first().cloned().unwrap_or_default(),
             port,
             &properties[..],
         )?;
@@ -133,14 +133,13 @@ impl MdnsControl {
             match receiver.recv_timeout(Duration::from_millis(100)) {
                 Ok(event) => match event {
                     ServiceEvent::ServiceResolved(info) => {
-                        if let Some(remote_device) = Self::parse_service_info(&info) {
-                            if remote_device.peer_id != current_peer_id {
+                        if let Some(remote_device) = Self::parse_service_info(&info)
+                            && remote_device.peer_id != current_peer_id {
                                 log::info!("Discovered device: {:?}", remote_device.peer_id);
                                 local_devices
                                     .lock()
                                     .insert(remote_device.peer_id.to_owned(), remote_device);
                             }
-                        }
                     }
                     ServiceEvent::ServiceRemoved(typ, fullname) => {
                         log::info!("Service removed: {} of type {}", fullname, typ);
@@ -183,11 +182,10 @@ impl MdnsControl {
         local_devices: &Arc<Mutex<HashMap<PeerId, PeerInfo>>>,
         fullname: &str,
     ) {
-        if let Some(instance_name) = fullname.split('.').next() {
-            if let Ok(peer_id) = instance_name.parse::<PeerId>() {
+        if let Some(instance_name) = fullname.split('.').next()
+            && let Ok(peer_id) = instance_name.parse::<PeerId>() {
                 local_devices.lock().remove(&peer_id);
             }
-        }
     }
 }
 
