@@ -36,7 +36,6 @@ use tempfile::TempDir;
 
 struct DaemonProcess {
     child: Child,
-    temp_dir: TempDir,
     fungi_dir: PathBuf,
 }
 
@@ -77,7 +76,6 @@ impl DaemonProcess {
 
         Ok(Self {
             child,
-            temp_dir,
             fungi_dir,
         })
     }
