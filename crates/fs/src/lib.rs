@@ -447,9 +447,10 @@ impl FileSystem {
 
         // Handle symlinks
         if metadata.is_symlink
-            && let Ok(target) = tokio::fs::read_link(&full_path).await {
-                metadata.readlink = Some(target);
-            }
+            && let Ok(target) = tokio::fs::read_link(&full_path).await
+        {
+            metadata.readlink = Some(target);
+        }
 
         Ok(metadata)
     }
@@ -496,9 +497,10 @@ impl FileSystem {
                 Ok(meta) => {
                     let mut metadata = Metadata::from(meta);
                     if metadata.is_symlink
-                        && let Ok(target) = tokio::fs::read_link(&entry_path).await {
-                            metadata.readlink = Some(target);
-                        }
+                        && let Ok(target) = tokio::fs::read_link(&entry_path).await
+                    {
+                        metadata.readlink = Some(target);
+                    }
                     metadata
                 }
                 Err(_) => {
@@ -526,17 +528,18 @@ impl FileSystem {
 
         // Create parent directories if needed and we're creating the file
         if (options.create || options.create_new)
-            && let Some(parent) = full_path.parent() {
-                tokio::fs::create_dir_all(parent)
-                    .await
-                    .map_err(|e| FileSystemError::Io {
-                        message: format!(
-                            "Failed to create parent directories for {}: {}",
-                            path.as_ref().display(),
-                            e
-                        ),
-                    })?;
-            }
+            && let Some(parent) = full_path.parent()
+        {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| FileSystemError::Io {
+                    message: format!(
+                        "Failed to create parent directories for {}: {}",
+                        path.as_ref().display(),
+                        e
+                    ),
+                })?;
+        }
 
         FileStream::new(full_path, options).await
     }
@@ -611,7 +614,8 @@ impl FileSystem {
             })?;
 
         let mut buffer = vec![0u8; length as usize];
-        let bytes_read = file.read(&mut buffer)
+        let bytes_read = file
+            .read(&mut buffer)
             .await
             .map_err(|e| FileSystemError::Io {
                 message: format!("Failed to read: {e}"),

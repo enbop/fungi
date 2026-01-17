@@ -325,9 +325,9 @@ pub async fn execute_ft_service(args: CommonArgs, cmd: FtServiceCommands) {
                         && let Ok(dir_resp) = client
                             .get_file_transfer_service_root_dir(Request::new(Empty {}))
                             .await
-                        {
-                            println!("Root directory: {}", dir_resp.into_inner().root_dir);
-                        }
+                    {
+                        println!("Root directory: {}", dir_resp.into_inner().root_dir);
+                    }
                 }
                 Err(e) => eprintln!("Error: {}", e),
             }

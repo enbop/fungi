@@ -130,9 +130,10 @@ impl FungiDaemon {
 
         // TODO add transaction
         if name.is_none()
-            && let Ok(remote_host_name) = ftc_control.connect_and_get_host_name(peer_id).await {
-                name = remote_host_name
-            }
+            && let Ok(remote_host_name) = ftc_control.connect_and_get_host_name(peer_id).await
+        {
+            name = remote_host_name
+        }
 
         let current_config = self.config().lock().clone();
         let updated_config =
@@ -176,9 +177,9 @@ impl FungiDaemon {
             if config.name.is_none()
                 && let Ok(remote_host_name) =
                     self.ftc_control().connect_and_get_host_name(peer_id).await
-                {
-                    config.name = remote_host_name
-                }
+            {
+                config.name = remote_host_name
+            }
             self.ftc_control().add_client(config);
         } else {
             self.ftc_control().remove_client(&peer_id);

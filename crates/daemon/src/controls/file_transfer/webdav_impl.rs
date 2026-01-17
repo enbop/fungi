@@ -71,16 +71,17 @@ impl DavMetaData for DavMetaDataImpl {
         use std::time::UNIX_EPOCH;
 
         if let Some(modified) = self.0.modified
-            && let Ok(duration) = modified.duration_since(UNIX_EPOCH) {
-                let timestamp_us =
-                    duration.as_secs() * 1_000_000 + duration.subsec_nanos() as u64 / 1000;
+            && let Ok(duration) = modified.duration_since(UNIX_EPOCH)
+        {
+            let timestamp_us =
+                duration.as_secs() * 1_000_000 + duration.subsec_nanos() as u64 / 1000;
 
-                if self.0.is_file && self.0.len > 0 {
-                    return Some(format!("{:x}-{:x}", self.0.len, timestamp_us));
-                } else {
-                    return Some(format!("{:x}", timestamp_us));
-                }
+            if self.0.is_file && self.0.len > 0 {
+                return Some(format!("{:x}-{:x}", self.0.len, timestamp_us));
+            } else {
+                return Some(format!("{:x}", timestamp_us));
             }
+        }
         None
     }
 }
@@ -447,28 +448,26 @@ impl DavFileSystem for FileTransferClientsControl {
                 .map_err(|_rpc_error| FsError::GeneralFailure)?;
 
             // For create_new, file must not exist
-            if options.create_new
-                && meta_res.is_ok() {
-                    return Err(FsError::Exists);
-                }
+            if options.create_new && meta_res.is_ok() {
+                return Err(FsError::Exists);
+            }
 
             // For write operations, we might need to handle file creation
-            if options.write && options.create
-                && meta_res.is_err() && options.create {
-                    log::debug!("File {} doesn't exist, will create it", path_os_string);
-                    let empty_data = Vec::new();
-                    client
-                        .put(
-                            Context::current(),
-                            empty_data,
-                            real_path_os_string.clone(),
-                            0,
-                        )
-                        .await
-                        .map_err(|_rpc_error| FsError::GeneralFailure)?
-                        .map_err(|e| map_error(e, "create_file", &real_path_os_string))?;
-                    log::info!("Successfully created empty file: {}", real_path_os_string);
-                }
+            if options.write && options.create && meta_res.is_err() && options.create {
+                log::debug!("File {} doesn't exist, will create it", path_os_string);
+                let empty_data = Vec::new();
+                client
+                    .put(
+                        Context::current(),
+                        empty_data,
+                        real_path_os_string.clone(),
+                        0,
+                    )
+                    .await
+                    .map_err(|_rpc_error| FsError::GeneralFailure)?
+                    .map_err(|e| map_error(e, "create_file", &real_path_os_string))?;
+                log::info!("Successfully created empty file: {}", real_path_os_string);
+            }
             let file = DavFileImpl {
                 path_os_string: real_path_os_string,
                 client,

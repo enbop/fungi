@@ -134,12 +134,13 @@ impl MdnsControl {
                 Ok(event) => match event {
                     ServiceEvent::ServiceResolved(info) => {
                         if let Some(remote_device) = Self::parse_service_info(&info)
-                            && remote_device.peer_id != current_peer_id {
-                                log::info!("Discovered device: {:?}", remote_device.peer_id);
-                                local_devices
-                                    .lock()
-                                    .insert(remote_device.peer_id.to_owned(), remote_device);
-                            }
+                            && remote_device.peer_id != current_peer_id
+                        {
+                            log::info!("Discovered device: {:?}", remote_device.peer_id);
+                            local_devices
+                                .lock()
+                                .insert(remote_device.peer_id.to_owned(), remote_device);
+                        }
                     }
                     ServiceEvent::ServiceRemoved(typ, fullname) => {
                         log::info!("Service removed: {} of type {}", fullname, typ);
@@ -183,9 +184,10 @@ impl MdnsControl {
         fullname: &str,
     ) {
         if let Some(instance_name) = fullname.split('.').next()
-            && let Ok(peer_id) = instance_name.parse::<PeerId>() {
-                local_devices.lock().remove(&peer_id);
-            }
+            && let Ok(peer_id) = instance_name.parse::<PeerId>()
+        {
+            local_devices.lock().remove(&peer_id);
+        }
     }
 }
 

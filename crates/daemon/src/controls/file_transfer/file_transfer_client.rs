@@ -461,11 +461,12 @@ impl FileTransferClientsControl {
         };
 
         if remaining_components.next().is_none()
-            && (first.is_root() || first.is_current() || first.is_empty()) {
-                return Err(fungi_fs::FileSystemError::Other {
-                    message: "Cannot delete root or current directory".to_string(),
-                });
-            }
+            && (first.is_root() || first.is_current() || first.is_empty())
+        {
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot delete root or current directory".to_string(),
+            });
+        }
 
         client
             .del(context::current(), path_str)
@@ -502,11 +503,12 @@ impl FileTransferClientsControl {
         };
 
         if remaining_components.next().is_none()
-            && (first.is_root() || first.is_current() || first.is_empty()) {
-                return Err(fungi_fs::FileSystemError::Other {
-                    message: "Cannot delete root or current directory".to_string(),
-                });
-            }
+            && (first.is_root() || first.is_current() || first.is_empty())
+        {
+            return Err(fungi_fs::FileSystemError::Other {
+                message: "Cannot delete root or current directory".to_string(),
+            });
+        }
 
         client
             .rmd(context::current(), path_str)

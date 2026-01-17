@@ -74,10 +74,7 @@ impl DaemonProcess {
             }
         }
 
-        Ok(Self {
-            child,
-            fungi_dir,
-        })
+        Ok(Self { child, fungi_dir })
     }
 
     fn fungi_dir(&self) -> &PathBuf {

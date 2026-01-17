@@ -591,9 +591,10 @@ async fn listen_relay_by_addr(swarm_control: SwarmControl, relay_addr: Multiaddr
     swarm_control
         .invoke_swarm(move |swarm| {
             if !swarm.is_connected(&relay_peer)
-                && let Err(e) = swarm.dial(relay_addr_cl) {
-                    log::error!("Failed to dial relay address {relay_peer}: {e}");
-                }
+                && let Err(e) = swarm.dial(relay_addr_cl)
+            {
+                log::error!("Failed to dial relay address {relay_peer}: {e}");
+            }
         })
         .await?;
 
