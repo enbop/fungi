@@ -368,6 +368,17 @@ impl FungiSwarm {
     ) {
         while let Some(event) = event_rx.recv().await {
             match event {
+                SwarmEvent::Behaviour(FungiBehavioursEvent::Ping(libp2p::ping::Event {
+                    peer: _,
+                    connection,
+                    result,
+                })) => {
+                    if let Ok(rtt) = result {
+                        swarm_control
+                            .state()
+                            .update_connection_ping(&connection, rtt);
+                    }
+                }
                 SwarmEvent::NewListenAddr { address, .. } => {
                     println!("[Swarm event] NewListenAddr {address:?}");
                     handle_new_listen_addr(&swarm_control, address);

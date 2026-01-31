@@ -9,6 +9,7 @@ use parking_lot::{Mutex, RwLock};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
+    time::{Duration, SystemTime},
 };
 
 pub type DialCallback = Arc<Mutex<HashMap<PeerId, Completer<std::result::Result<(), DialError>>>>>;
@@ -91,7 +92,7 @@ impl PeerConnections {
 pub struct State {
     dial_callback: DialCallback,
     peer_connections: Arc<Mutex<HashMap<PeerId, PeerConnections>>>,
-    connection_id_map: Arc<Mutex<HashMap<ConnectionId, PeerId>>>,
+    connection_id_map: Arc<Mutex<HashMap<ConnectionId, ConnectionEntry>>>,
     incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
 }
 
@@ -113,7 +114,7 @@ impl State {
         self.peer_connections.clone()
     }
 
-    pub fn connection_id_map(&self) -> Arc<Mutex<HashMap<ConnectionId, PeerId>>> {
+    pub fn connection_id_map(&self) -> Arc<Mutex<HashMap<ConnectionId, ConnectionEntry>>> {
         self.connection_id_map.clone()
     }
 
@@ -126,7 +127,24 @@ impl State {
     }
 
     pub fn peer_id_by_connection_id(&self, connection_id: &ConnectionId) -> Option<PeerId> {
-        self.connection_id_map.lock().get(connection_id).cloned()
+        self.connection_id_map
+            .lock()
+            .get(connection_id)
+            .map(|entry| entry.peer_id)
+    }
+
+    pub fn connection_ping_info(&self, connection_id: &ConnectionId) -> Option<ConnectionPingInfo> {
+        self.connection_id_map
+            .lock()
+            .get(connection_id)
+            .map(|entry| entry.ping_info.clone())
+    }
+
+    pub fn update_connection_ping(&self, connection_id: &ConnectionId, rtt: Duration) {
+        if let Some(entry) = self.connection_id_map.lock().get_mut(connection_id) {
+            entry.ping_info.last_rtt = rtt;
+            entry.ping_info.last_rtt_at = SystemTime::now();
+        }
     }
 
     pub fn get_peer_connections(&self, peer_id: &PeerId) -> Option<PeerConnections> {
@@ -139,6 +157,26 @@ impl State {
             .get(peer_id)
             .map_or(false, |peers| peers.total_connections() > 0)
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct ConnectionPingInfo {
+    pub last_rtt: Duration,
+    pub last_rtt_at: SystemTime,
+}
+
+impl Default for ConnectionPingInfo {
+    fn default() -> Self {
+        Self {
+            last_rtt: Duration::from_secs(0),
+            last_rtt_at: SystemTime::UNIX_EPOCH,
+        }
+    }
+}
+#[derive(Debug, Clone)]
+pub struct ConnectionEntry {
+    pub peer_id: PeerId,
+    pub ping_info: ConnectionPingInfo,
 }
 
 pub(crate) fn handle_connection_established(
@@ -163,10 +201,13 @@ pub(crate) fn handle_connection_established(
     let connection_info = ConnectionInfo::new(connection_id, endpoint.get_remote_address().clone());
 
     let state = swarm_control.state();
-    state
-        .connection_id_map()
-        .lock()
-        .insert(connection_id, peer_id);
+    state.connection_id_map().lock().insert(
+        connection_id,
+        ConnectionEntry {
+            peer_id,
+            ping_info: ConnectionPingInfo::default(),
+        },
+    );
     state
         .peer_connections()
         .lock()
