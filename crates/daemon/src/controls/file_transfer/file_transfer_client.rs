@@ -104,7 +104,7 @@ impl FileTransferClientsControl {
         let host_name = self
             .swarm_control
             .state()
-            .connected_peers()
+            .peer_connections()
             .lock()
             .get(&peer_id)
             .expect("Peer should be connected.")
