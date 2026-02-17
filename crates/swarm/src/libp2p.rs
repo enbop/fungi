@@ -3,6 +3,7 @@ use crate::{
     behaviours::{FungiBehaviours, FungiBehavioursEvent},
     connection_state,
     peer_handshake::PeerHandshakePayload,
+    ping::{PingRttEvent, PingState},
 };
 use anyhow::{Result, bail};
 use async_result::{AsyncResult, Completer};
@@ -14,7 +15,7 @@ use libp2p::{
     mdns,
     multiaddr::Protocol,
     noise,
-    swarm::{DialError, SwarmEvent, dial_opts::DialOpts},
+    swarm::{ConnectionId, DialError, SwarmEvent, dial_opts::DialOpts},
     tcp, yamux,
 };
 use std::{
@@ -35,6 +36,7 @@ use tokio::{
 // Relay connection retry constants
 const RELAY_RETRY_MAX_ATTEMPTS: u32 = 4;
 const RELAY_RETRY_BASE_DELAY_MS: u64 = 500;
+const OUTBOUND_PING_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Simple RAII guard to ensure atomic bool is reset when task completes
 struct TaskGuard {
@@ -115,6 +117,8 @@ pub struct SwarmControl {
     /// Prevents duplicate connection attempts to the same relay server
     relay_addresses_state: Arc<Vec<(Multiaddr, Arc<AtomicBool>)>>,
 
+    pub(crate) ping_state: Arc<PingState>,
+
     state: State,
 }
 
@@ -124,6 +128,7 @@ impl SwarmControl {
         swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
         stream_control: libp2p_stream::Control,
         relay_addresses: Vec<Multiaddr>,
+        ping_state: Arc<PingState>,
         state: State,
     ) -> Self {
         let relay_addresses_state = Arc::new(
@@ -137,6 +142,7 @@ impl SwarmControl {
             swarm_caller_tx,
             stream_control,
             relay_addresses_state,
+            ping_state,
             state,
         }
     }
@@ -155,6 +161,23 @@ impl SwarmControl {
 
     pub fn state(&self) -> &State {
         &self.state
+    }
+
+    pub async fn ping_connection(
+        &self,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+    ) -> Result<Duration> {
+        let mapped_peer_id = self
+            .state
+            .peer_id_by_connection_id(&connection_id)
+            .ok_or_else(|| anyhow::anyhow!("Connection {connection_id:?} not found"))?;
+
+        if mapped_peer_id != peer_id {
+            bail!("Connection {connection_id:?} belongs to {mapped_peer_id}, not {peer_id}");
+        }
+
+        self.ping_state.ping_now(connection_id).await
     }
 
     // TODO impl handshake
@@ -310,121 +333,154 @@ impl FungiSwarm {
         let local_peer_id = *swarm.local_peer_id();
         let stream_control = swarm.behaviour().stream.new_control();
 
+        let (ping_event_tx, ping_event_rx) = mpsc::unbounded_channel::<PingRttEvent>();
+        let mut ping_state = PingState::new(OUTBOUND_PING_INTERVAL, ping_event_tx);
+        ping_state.init(stream_control.clone());
+        let ping_state = Arc::new(ping_state);
+
         apply(&mut swarm);
 
         let (swarm_caller_tx, swarm_caller_rx) = mpsc::unbounded_channel::<SwarmAsyncCall>();
         let (swarm_event_tx, swarm_event_rx) =
             mpsc::unbounded_channel::<SwarmEvent<FungiBehavioursEvent>>();
 
-        let swarm_fut = Self::swarm_loop(swarm, swarm_caller_rx, swarm_event_tx);
+        let swarm_fut = swarm_loop(swarm, swarm_caller_rx, swarm_event_tx);
         let swarm_control = SwarmControl::new(
             Arc::new(local_peer_id),
             swarm_caller_tx,
             stream_control,
             relay_addresses,
+            ping_state,
             state,
         );
-        let event_handle_fut = Self::handle_swarm_event(swarm_control.clone(), swarm_event_rx);
+        let event_handle_fut = handle_swarm_event(swarm_control.clone(), swarm_event_rx);
+        let ping_handle_fut = handle_ping_event(swarm_control.clone(), ping_event_rx);
+
         let join_handle = tokio::spawn(async move {
             tokio::select! {
                 _ = swarm_fut => {},
                 _ = event_handle_fut => {},
+                _ = ping_handle_fut => {},
             }
         });
 
         Ok((swarm_control, join_handle))
     }
+}
 
-    async fn swarm_loop(
-        mut swarm: TSwarm,
-        mut swarm_caller_rx: UnboundedReceiver<SwarmAsyncCall>,
-        event_tx: mpsc::UnboundedSender<SwarmEvent<FungiBehavioursEvent>>,
-    ) {
-        loop {
-            tokio::select! {
-                // We use a separate task to handle swarm events, make sure to not block the swarm loop
-                swarm_events = swarm.select_next_some() => {
-                    if let Err(e) = event_tx.send(swarm_events) {
-                        log::error!("Failed to send swarm event: {e:?}");
-                        break;
-                    }
-                },
-                invoke = swarm_caller_rx.recv() => {
-                    let Some(SwarmAsyncCall{ request, response }) = invoke else {
-                        log::debug!("Swarm caller channel closed");
-                        break;
-                    };
-                    let res = request(&mut swarm);
-                    response.complete(res);
+async fn swarm_loop(
+    mut swarm: TSwarm,
+    mut swarm_caller_rx: UnboundedReceiver<SwarmAsyncCall>,
+    event_tx: mpsc::UnboundedSender<SwarmEvent<FungiBehavioursEvent>>,
+) {
+    loop {
+        tokio::select! {
+            // We use a separate task to handle swarm events, make sure to not block the swarm loop
+            swarm_events = swarm.select_next_some() => {
+                if let Err(e) = event_tx.send(swarm_events) {
+                    log::error!("Failed to send swarm event: {e:?}");
+                    break;
                 }
+            },
+            invoke = swarm_caller_rx.recv() => {
+                let Some(SwarmAsyncCall{ request, response }) = invoke else {
+                    log::debug!("Swarm caller channel closed");
+                    break;
+                };
+                let res = request(&mut swarm);
+                response.complete(res);
             }
         }
-        log::info!("Swarm loop exited");
     }
+    log::info!("Swarm loop exited");
+}
 
-    async fn handle_swarm_event(
-        swarm_control: SwarmControl,
-        mut event_rx: UnboundedReceiver<SwarmEvent<FungiBehavioursEvent>>,
-    ) {
-        while let Some(event) = event_rx.recv().await {
-            match event {
-                SwarmEvent::Behaviour(FungiBehavioursEvent::Ping(libp2p::ping::Event {
-                    peer: _,
-                    connection,
-                    result,
-                })) => {
-                    if let Ok(rtt) = result {
-                        swarm_control
-                            .state()
-                            .update_connection_ping(&connection, rtt);
-                    }
-                }
-                SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("[Swarm event] NewListenAddr {address:?}");
-                    handle_new_listen_addr(&swarm_control, address);
-                }
-                SwarmEvent::NewExternalAddrCandidate { address, .. } => {
-                    log::info!("[Swarm event] NewExternalAddrCandidate {address:?}");
-                }
-                // TODO: fix bug: dialer and listener should be handled separately
-                SwarmEvent::ConnectionEstablished {
-                    peer_id,
-                    connection_id,
-                    endpoint,
-                    ..
-                } => {
-                    log::info!("[Swarm event] ConnectionEstablished {peer_id:?} at {endpoint:?}");
-                    connection_state::handle_connection_established(
-                        &swarm_control,
-                        peer_id,
-                        connection_id,
-                        &endpoint,
-                    );
-                }
-                SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
-                    log::info!("[Swarm event] OutgoingConnectionError {peer_id:?}: {error:?}");
-                    // check dial callback
-                    let Some(peer_id) = peer_id else {
-                        continue;
-                    };
-                    handle_outgoing_connection_error(&swarm_control, peer_id, error);
-                }
-                SwarmEvent::ConnectionClosed {
-                    peer_id,
-                    connection_id,
-                    cause,
-                    ..
-                } => {
-                    log::info!("[Swarm event] ConnectionClosed {peer_id:?}: {cause:?}");
-                    connection_state::handle_connection_closed(
-                        &swarm_control,
-                        peer_id,
-                        connection_id,
-                    );
-                }
-                _ => {}
+async fn handle_swarm_event(
+    swarm_control: SwarmControl,
+    mut event_rx: UnboundedReceiver<SwarmEvent<FungiBehavioursEvent>>,
+) {
+    loop {
+        let Some(event) = event_rx.recv().await else {
+            log::debug!("Swarm event channel closed");
+            break;
+        };
+        match event {
+            SwarmEvent::NewListenAddr { address, .. } => {
+                println!("[Swarm event] NewListenAddr {address:?}");
+                handle_new_listen_addr(&swarm_control, address);
             }
+            SwarmEvent::NewExternalAddrCandidate { address, .. } => {
+                log::info!("[Swarm event] NewExternalAddrCandidate {address:?}");
+            }
+            SwarmEvent::ConnectionEstablished {
+                peer_id,
+                connection_id,
+                endpoint,
+                ..
+            } => {
+                log::debug!(
+                    "Established connection {:?} - peer_id {:?} - multiaddr {:?} - is_dialer {:?}",
+                    connection_id,
+                    peer_id,
+                    endpoint.get_remote_address(),
+                    endpoint.is_dialer()
+                );
+
+                connection_state::handle_connection_established(
+                    &swarm_control,
+                    peer_id,
+                    connection_id,
+                    &endpoint,
+                );
+            }
+            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                log::info!("[Swarm event] OutgoingConnectionError {peer_id:?}: {error:?}");
+                // check dial callback
+                let Some(peer_id) = peer_id else {
+                    continue;
+                };
+                handle_outgoing_connection_error(&swarm_control, peer_id, error);
+            }
+            SwarmEvent::ConnectionClosed {
+                peer_id,
+                connection_id,
+                endpoint,
+                cause,
+                ..
+            } => {
+                log::debug!(
+                    "Closed connection {} - peer_id {} - multiaddr {:?} - is_dialer {:?} - cause {:?}",
+                    connection_id,
+                    peer_id,
+                    endpoint.get_remote_address(),
+                    endpoint.is_dialer(),
+                    cause
+                );
+
+                connection_state::handle_connection_closed(&swarm_control, peer_id, connection_id);
+            }
+            _ => {}
         }
+    }
+}
+
+async fn handle_ping_event(
+    swarm_control: SwarmControl,
+    mut ping_event_rx: UnboundedReceiver<PingRttEvent>,
+) {
+    loop {
+        let Some(event) = ping_event_rx.recv().await else {
+            log::debug!("Ping event channel closed");
+            break;
+        };
+        log::debug!(
+            "Received ping event for connection {:?} with RTT {:?}",
+            event.connection_id,
+            event.rtt
+        );
+        swarm_control
+            .state()
+            .update_connection_ping(&event.connection_id, event.rtt);
     }
 }
 

@@ -214,6 +214,12 @@ pub(crate) fn handle_connection_established(
         .entry(peer_id)
         .or_default()
         .add_connection(direction, connection_info);
+
+    if matches!(endpoint, libp2p::core::ConnectedPoint::Dialer { .. }) {
+        swarm_control
+            .ping_state
+            .start_outbound_ping(peer_id, connection_id);
+    }
 }
 
 pub(crate) fn handle_connection_closed(
@@ -233,4 +239,6 @@ pub(crate) fn handle_connection_closed(
             peers.remove(&peer_id);
         }
     }
+
+    swarm_control.ping_state.stop_outbound_ping(connection_id);
 }

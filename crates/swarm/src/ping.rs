@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use anyhow::Context as _;
+use anyhow::{Context as _, bail};
 
 use libp2p::{
     PeerId, Stream, StreamProtocol,
@@ -17,14 +17,23 @@ pub struct PingState {
     stream_control: Option<libp2p_stream::Control>,
     outbound_interval: Duration,
     outbound: Arc<Mutex<HashMap<ConnectionId, OutboundPingState>>>,
+    event_tx: mpsc::UnboundedSender<PingRttEvent>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PingRttEvent {
+    pub peer_id: PeerId,
+    pub connection_id: ConnectionId,
+    pub rtt: Duration,
 }
 
 impl PingState {
-    pub fn new(outbound_interval: Duration) -> Self {
+    pub fn new(outbound_interval: Duration, event_tx: mpsc::UnboundedSender<PingRttEvent>) -> Self {
         Self {
             outbound_interval,
             stream_control: None,
             outbound: Arc::new(Mutex::new(HashMap::new())),
+            event_tx,
         }
     }
 
@@ -60,13 +69,37 @@ impl PingState {
                 connection_id,
                 self.stream_control.as_ref().unwrap().clone(),
                 self.outbound_interval,
+                self.event_tx.clone(),
             ),
         );
+    }
+
+    pub fn stop_outbound_ping(&self, connection_id: ConnectionId) {
+        self.outbound.lock().remove(&connection_id);
+    }
+
+    pub async fn ping_now(&self, connection_id: ConnectionId) -> anyhow::Result<Duration> {
+        let ping_trigger = {
+            let lock = self.outbound.lock();
+            lock.get(&connection_id)
+                .map(|state| state.ping_trigger.clone())
+                .ok_or_else(|| {
+                    anyhow::anyhow!("No outbound ping task found for connection {connection_id:?}")
+                })?
+        };
+
+        let (tx, rx) = oneshot::channel::<Duration>();
+        ping_trigger
+            .send(tx)
+            .await
+            .with_context(|| format!("Failed to trigger ping for connection {connection_id:?}"))?;
+        rx.await.with_context(|| {
+            format!("Failed to receive ping result for connection {connection_id:?}")
+        })
     }
 }
 
 struct OutboundPingState {
-    peer_id: PeerId,
     // Sender to trigger an immediate ping
     // Returns RTT result through the oneshot channel
     ping_trigger: mpsc::Sender<oneshot::Sender<Duration>>,
@@ -79,6 +112,7 @@ impl OutboundPingState {
         connection_id: ConnectionId,
         mut stream_control: libp2p_stream::Control,
         interval: Duration,
+        event_tx: mpsc::UnboundedSender<PingRttEvent>,
     ) -> Self {
         let task_alive = Arc::new(());
         let task_alive_guard = task_alive.clone();
@@ -86,6 +120,12 @@ impl OutboundPingState {
         let (ping_trigger, mut ping_trigger_receiver) =
             mpsc::channel::<oneshot::Sender<Duration>>(8);
         tokio::spawn(async move {
+            log::debug!(
+                "Starting outbound ping to {}, connection {:?}",
+                peer_id,
+                connection_id
+            );
+
             let _task_alive_guard = task_alive_guard;
 
             if let Err(e) = run_outbound_ping_task(
@@ -94,15 +134,21 @@ impl OutboundPingState {
                 &mut stream_control,
                 interval,
                 &mut ping_trigger_receiver,
+                event_tx,
             )
             .await
             {
                 log::warn!("{:#}", e);
             }
+
+            log::debug!(
+                "Outbound ping task ended for {}, connection {:?}",
+                peer_id,
+                connection_id
+            );
         });
 
         Self {
-            peer_id,
             ping_trigger,
             task_alive,
         }
@@ -119,25 +165,31 @@ async fn run_outbound_ping_task(
     stream_control: &mut libp2p_stream::Control,
     interval: Duration,
     ping_trigger_receiver: &mut mpsc::Receiver<oneshot::Sender<Duration>>,
+    event_tx: mpsc::UnboundedSender<PingRttEvent>,
 ) -> anyhow::Result<()> {
-    log::debug!("Starting outbound ping to {}", peer_id);
     let mut stream = stream_control
         .open_stream_on_connection(peer_id, connection_id, PING_PROTOCOL)
         .await
         .with_context(|| format!("Failed to open ping stream to {}", peer_id))?;
     stream.ignore_for_keep_alive();
 
-    let mut interval_timer = tokio::time::interval(interval);
     loop {
-        let callback = tokio::select! {
-            _ = interval_timer.tick() => None,
-            Some(callback) = ping_trigger_receiver.recv() => Some(callback),
+        let callback = match tokio::time::timeout(interval, ping_trigger_receiver.recv()).await {
+            Ok(Some(cb)) => Some(cb),
+            Ok(None) => {
+                bail!("Ping trigger channel closed for connection {connection_id:?}");
+            }
+            Err(_) => None, // interval ticked
         };
 
         let rtt = send_ping(&mut stream)
             .await
             .with_context(|| format!("Ping to {} failed", peer_id))?;
-        log::info!("Ping to {}: RTT = {:?}", peer_id, rtt);
+        let _ = event_tx.send(PingRttEvent {
+            peer_id,
+            connection_id,
+            rtt,
+        });
         if let Some(callback) = callback {
             let _ = callback.send(rtt);
         }
