@@ -247,6 +247,68 @@ pub struct RemoveAddressBookPeerRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PingPeerRequest {
+    #[prost(string, tag = "1")]
+    pub peer_id: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "2")]
+    pub interval_ms: u32,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PingPeerEvent {
+    #[prost(string, tag = "1")]
+    pub peer_id: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub tick_seq: u64,
+    #[prost(int64, tag = "3")]
+    pub ts_unix_ms: i64,
+    #[prost(oneof = "ping_peer_event::Event", tags = "10, 11, 12, 13, 14")]
+    pub event: ::core::option::Option<ping_peer_event::Event>,
+}
+/// Nested message and enum types in `PingPeerEvent`.
+pub mod ping_peer_event {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Event {
+        #[prost(message, tag = "10")]
+        Connecting(super::PingPeerConnecting),
+        #[prost(message, tag = "11")]
+        Connected(super::PingPeerConnected),
+        #[prost(message, tag = "12")]
+        Idle(super::PingPeerIdle),
+        #[prost(message, tag = "13")]
+        Result(super::PingPeerResult),
+        #[prost(message, tag = "14")]
+        Error(super::PingPeerError),
+    }
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PingPeerConnecting {}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PingPeerConnected {}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PingPeerIdle {}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PingPeerResult {
+    #[prost(string, tag = "1")]
+    pub connection_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub direction: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub remote_addr: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "4")]
+    pub rtt_ms: u64,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PingPeerError {
+    #[prost(string, tag = "1")]
+    pub connection_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub direction: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub remote_addr: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub message: ::prost::alloc::string::String,
+}
 /// Generated client implementations.
 pub mod fungi_daemon_client {
     #![allow(
@@ -1095,6 +1157,31 @@ pub mod fungi_daemon_client {
                 );
             self.inner.unary(req, path, codec).await
         }
+        /// Continuously pings all active connections to a peer and streams results.
+        pub async fn ping_peer(
+            &mut self,
+            request: impl tonic::IntoRequest<super::PingPeerRequest>,
+        ) -> std::result::Result<
+            tonic::Response<tonic::codec::Streaming<super::PingPeerEvent>>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/PingPeer",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "PingPeer"));
+            self.inner.server_streaming(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -1299,6 +1386,17 @@ pub mod fungi_daemon_server {
             &self,
             request: tonic::Request<super::RemoveAddressBookPeerRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
+        /// Server streaming response type for the PingPeer method.
+        type PingPeerStream: tonic::codegen::tokio_stream::Stream<
+                Item = std::result::Result<super::PingPeerEvent, tonic::Status>,
+            >
+            + std::marker::Send
+            + 'static;
+        /// Continuously pings all active connections to a peer and streams results.
+        async fn ping_peer(
+            &self,
+            request: tonic::Request<super::PingPeerRequest>,
+        ) -> std::result::Result<tonic::Response<Self::PingPeerStream>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct FungiDaemonServer<T> {
@@ -2729,6 +2827,52 @@ pub mod fungi_daemon_server {
                                 max_encoding_message_size,
                             );
                         let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/PingPeer" => {
+                    #[allow(non_camel_case_types)]
+                    struct PingPeerSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::ServerStreamingService<super::PingPeerRequest>
+                    for PingPeerSvc<T> {
+                        type Response = super::PingPeerEvent;
+                        type ResponseStream = T::PingPeerStream;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::ResponseStream>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::PingPeerRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::ping_peer(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = PingPeerSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)

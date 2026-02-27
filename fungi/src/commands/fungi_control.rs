@@ -6,6 +6,7 @@ use fungi_daemon_grpc::{
         AddFileTransferClientRequest, AddIncomingAllowedPeerRequest, AddTcpForwardingRuleRequest,
         AddTcpListeningRuleRequest, Empty, EnableFileTransferClientRequest,
         GetAddressBookPeerRequest, PeerInfo, RemoveAddressBookPeerRequest,
+        PingPeerRequest, ping_peer_event,
         RemoveFileTransferClientRequest, RemoveIncomingAllowedPeerRequest,
         RemoveTcpForwardingRuleRequest, RemoveTcpListeningRuleRequest,
         StartFileTransferServiceRequest, UpdateFtpProxyRequest, UpdateWebdavProxyRequest,
@@ -208,6 +209,74 @@ async fn get_rpc_client(args: &CommonArgs) -> Option<FungiDaemonClient<tonic::tr
                 connect_timeout.as_secs()
             );
             None
+        }
+    }
+}
+
+pub async fn execute_ping(
+    args: CommonArgs,
+    peer_id: String,
+    interval_ms: u32,
+) {
+    let mut client = match get_rpc_client(&args).await {
+        Some(c) => c,
+        None => return,
+    };
+
+    let req = PingPeerRequest {
+        peer_id: peer_id.clone(),
+        interval_ms,
+    };
+
+    let response = match client.ping_peer(Request::new(req)).await {
+        Ok(resp) => resp,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            return;
+        }
+    };
+
+    let mut stream = response.into_inner();
+    println!("Start ping stream for peer {peer_id}. Press Ctrl+C to stop.");
+
+    while let Ok(Some(event)) = stream.message().await {
+        match event.event {
+            Some(ping_peer_event::Event::Connecting(_)) => {
+                println!("[tick={}] connecting...", event.tick_seq);
+            }
+            Some(ping_peer_event::Event::Connected(_)) => {
+                println!("[tick={}] connected", event.tick_seq);
+            }
+            Some(ping_peer_event::Event::Idle(_)) => {
+                println!("[tick={}] no active connections", event.tick_seq);
+            }
+            Some(ping_peer_event::Event::Result(result)) => {
+                println!(
+                    "[tick={}] conn={} dir={} addr={} rtt={}ms",
+                    event.tick_seq,
+                    result.connection_id,
+                    result.direction,
+                    result.remote_addr,
+                    result.rtt_ms
+                );
+            }
+            Some(ping_peer_event::Event::Error(error)) => {
+                if error.connection_id.is_empty() {
+                    println!("[tick={}] error={}", event.tick_seq, error.message);
+                } else {
+                    println!(
+                        "[tick={}] conn={} dir={} addr={} error={}",
+                        event.tick_seq,
+                        error.connection_id,
+                        error.direction,
+                        error.remote_addr,
+                        error.message
+                    );
+                }
+            }
+            _ => {
+                println!("[tick={}] unknown event", event.tick_seq);
+            }
         }
     }
 }

@@ -29,6 +29,10 @@ fn main() -> Result<()> {
         Commands::FtClient(cmd) => block_on(execute_ft_client(fungi_args.common, cmd)),
         Commands::Tunnel(cmd) => block_on(execute_tunnel(fungi_args.common, cmd)),
         Commands::Device(cmd) => block_on(execute_device(fungi_args.common, cmd)),
+        Commands::Ping {
+            peer_id,
+            interval_ms,
+        } => block_on(execute_ping(fungi_args.common, peer_id, interval_ms)),
     }
 
     Ok(())

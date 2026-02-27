@@ -5,13 +5,71 @@ pub mod fungi_daemon_grpc {
 }
 
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::str::FromStr;
+use std::sync::Arc;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use fungi_daemon_grpc::fungi_daemon_server::FungiDaemon;
 use fungi_daemon_grpc::*;
 use libp2p_identity::PeerId;
+use tokio::sync::mpsc;
+use tokio::task::JoinSet;
+use tokio_stream::wrappers::ReceiverStream;
 pub use tonic::{Request, Response, Status};
+
+type PingEventSendError = mpsc::error::SendError<Result<PingPeerEvent, Status>>;
+
+fn now_unix_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64
+}
+
+fn ping_event(
+    peer_id: &str,
+    tick_seq: u64,
+    ts_unix_ms: i64,
+    event: ping_peer_event::Event,
+) -> PingPeerEvent {
+    PingPeerEvent {
+        peer_id: peer_id.to_string(),
+        tick_seq,
+        ts_unix_ms,
+        event: Some(event),
+    }
+}
+
+impl PingPeerError {
+    fn new(
+        connection_id: impl Into<String>,
+        direction: impl Into<String>,
+        remote_addr: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            connection_id: connection_id.into(),
+            direction: direction.into(),
+            remote_addr: remote_addr.into(),
+            message: message.into(),
+        }
+    }
+
+    fn reason(message: impl Into<String>) -> Self {
+        Self::new("", "", "", message)
+    }
+
+    fn event(self, peer_id: &str, tick_seq: u64, ts_unix_ms: i64) -> PingPeerEvent {
+        ping_event(
+            peer_id,
+            tick_seq,
+            ts_unix_ms,
+            ping_peer_event::Event::Error(self),
+        )
+    }
+}
 
 pub async fn start_grpc_server(
     daemon: fungi_daemon::FungiDaemon,
@@ -29,17 +87,22 @@ pub async fn start_grpc_server(
 }
 
 pub struct FungiDaemonRpcImpl {
-    inner: fungi_daemon::FungiDaemon,
+    inner: Arc<fungi_daemon::FungiDaemon>,
 }
 
 impl FungiDaemonRpcImpl {
     pub fn new(inner: fungi_daemon::FungiDaemon) -> Self {
-        Self { inner }
+        Self {
+            inner: Arc::new(inner),
+        }
     }
 }
 
 #[tonic::async_trait]
 impl FungiDaemon for FungiDaemonRpcImpl {
+    type PingPeerStream =
+        Pin<Box<dyn tokio_stream::Stream<Item = Result<PingPeerEvent, Status>> + Send>>;
+
     async fn version(&self, _request: Request<Empty>) -> Result<Response<VersionResponse>, Status> {
         Ok(Response::new(VersionResponse {
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -479,6 +542,148 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .map_err(|e| Status::internal(format!("Failed to remove peer: {}", e)))?;
 
         Ok(Response::new(Empty {}))
+    }
+
+    async fn ping_peer(
+        &self,
+        request: Request<PingPeerRequest>,
+    ) -> Result<Response<Self::PingPeerStream>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+        let interval_ms = if req.interval_ms == 0 {
+            1000
+        } else {
+            req.interval_ms
+        };
+
+        let daemon = self.inner.clone();
+        let (tx, rx) = mpsc::channel::<Result<PingPeerEvent, Status>>(128);
+        let run = async move {
+            let mut ticker = tokio::time::interval(Duration::from_millis(interval_ms as u64));
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            let per_ping_timeout_ms = (interval_ms.saturating_sub(100)).max(200);
+            let per_ping_timeout = Duration::from_millis(per_ping_timeout_ms as u64);
+
+            let peer_id_str = peer_id.to_string();
+            let mut tick_seq = 0_u64;
+
+            tx.send(Ok(ping_event(
+                &peer_id_str,
+                tick_seq,
+                now_unix_ms(),
+                ping_peer_event::Event::Connecting(PingPeerConnecting {}),
+            )))
+            .await?;
+
+            if let Err(e) = daemon.dial_peer_once(peer_id).await {
+                tx.send(Ok(PingPeerError::reason(e.to_string()).event(
+                    &peer_id_str,
+                    tick_seq,
+                    now_unix_ms(),
+                )))
+                .await?;
+            }
+
+            loop {
+                ticker.tick().await;
+                tick_seq += 1;
+                let ts_unix_ms = now_unix_ms();
+
+                let Some(peer_connections) = daemon.get_peer_connections(peer_id) else {
+                    tx.send(Ok(ping_event(
+                        &peer_id_str,
+                        tick_seq,
+                        ts_unix_ms,
+                        ping_peer_event::Event::Idle(PingPeerIdle {}),
+                    )))
+                    .await?;
+                    continue;
+                };
+
+                if peer_connections.outbound().is_empty() {
+                    tx.send(Ok(ping_event(
+                        &peer_id_str,
+                        tick_seq,
+                        ts_unix_ms,
+                        ping_peer_event::Event::Idle(PingPeerIdle {}),
+                    )))
+                    .await?;
+                    continue;
+                }
+
+                let mut ping_set = JoinSet::new();
+                for conn in peer_connections.outbound().iter() {
+                    let connection_id = conn.connection_id();
+                    let remote_addr = conn.multiaddr().to_string();
+                    let daemon = daemon.clone();
+                    let peer_id = peer_id.clone();
+                    ping_set.spawn(async move {
+                        let res = tokio::time::timeout(
+                            per_ping_timeout,
+                            daemon.ping_peer_connection(peer_id, connection_id),
+                        )
+                        .await;
+                        (connection_id, "outbound".to_string(), remote_addr, res)
+                    });
+                }
+
+                while let Some(join_res) = ping_set.join_next().await {
+                    match join_res {
+                        Ok((connection_id, direction, remote_addr, Ok(Ok(rtt)))) => {
+                            tx.send(Ok(ping_event(
+                                &peer_id_str,
+                                tick_seq,
+                                ts_unix_ms,
+                                ping_peer_event::Event::Result(PingPeerResult {
+                                    connection_id: connection_id.to_string(),
+                                    direction,
+                                    remote_addr,
+                                    rtt_ms: rtt.as_millis() as u64,
+                                }),
+                            )))
+                            .await?;
+                        }
+                        Ok((connection_id, direction, remote_addr, Ok(Err(e)))) => {
+                            tx.send(Ok(PingPeerError::new(
+                                connection_id.to_string(),
+                                direction,
+                                remote_addr,
+                                e.to_string(),
+                            )
+                            .event(&peer_id_str, tick_seq, ts_unix_ms)))
+                                .await?;
+                        }
+                        Ok((connection_id, direction, remote_addr, Err(_))) => {
+                            tx.send(Ok(PingPeerError::new(
+                                connection_id.to_string(),
+                                direction,
+                                remote_addr,
+                                format!("Ping timed out after {}ms", per_ping_timeout.as_millis()),
+                            )
+                            .event(&peer_id_str, tick_seq, ts_unix_ms)))
+                                .await?;
+                        }
+                        Err(e) => {
+                            tx.send(Ok(PingPeerError::reason(format!(
+                                "Ping task join error: {e}"
+                            ))
+                            .event(&peer_id_str, tick_seq, ts_unix_ms)))
+                                .await?;
+                        }
+                    }
+                }
+            }
+
+            #[allow(unreachable_code)]
+            Ok::<(), PingEventSendError>(())
+        };
+
+        tokio::spawn(run);
+
+        Ok(Response::new(
+            Box::pin(ReceiverStream::new(rx)) as Self::PingPeerStream
+        ))
     }
 }
 

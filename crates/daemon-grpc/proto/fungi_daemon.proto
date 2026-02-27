@@ -101,6 +101,9 @@ service FungiDaemon {
 
   // Removes a peer from the address book.
   rpc RemoveAddressBookPeer(RemoveAddressBookPeerRequest) returns (Empty) {}
+
+  // Continuously pings all active connections to a peer and streams results.
+  rpc PingPeer(PingPeerRequest) returns (stream PingPeerEvent) {}
 }
 
 message Empty {}
@@ -240,3 +243,42 @@ message UpdateAddressBookPeerRequest { PeerInfo peer_info = 1; }
 message GetAddressBookPeerRequest { string peer_id = 1; }
 
 message RemoveAddressBookPeerRequest { string peer_id = 1; }
+
+message PingPeerRequest {
+  string peer_id = 1;
+  uint32 interval_ms = 2;
+}
+
+message PingPeerEvent {
+  string peer_id = 1;
+  uint64 tick_seq = 2;
+  int64 ts_unix_ms = 3;
+
+  oneof event {
+    PingPeerConnecting connecting = 10;
+    PingPeerConnected connected = 11;
+    PingPeerIdle idle = 12;
+    PingPeerResult result = 13;
+    PingPeerError error = 14;
+  }
+}
+
+message PingPeerConnecting {}
+
+message PingPeerConnected {}
+
+message PingPeerIdle {}
+
+message PingPeerResult {
+  string connection_id = 1;
+  string direction = 2;
+  string remote_addr = 3;
+  uint64 rtt_ms = 4;
+}
+
+message PingPeerError {
+  string connection_id = 1;
+  string direction = 2;
+  string remote_addr = 3;
+  string message = 4;
+}

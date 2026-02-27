@@ -3,7 +3,9 @@ use std::{net::IpAddr, path::PathBuf};
 use anyhow::{Result, bail};
 use fungi_config::address_book::PeerInfo;
 use fungi_config::file_transfer::{FileTransferClient, FtpProxy, WebdavProxy};
+use fungi_swarm::PeerConnections;
 use libp2p::PeerId;
+use libp2p::swarm::ConnectionId;
 
 use crate::FungiDaemon;
 
@@ -72,6 +74,28 @@ impl FungiDaemon {
             .server
             .shared_root_dir
             .clone()
+    }
+
+    pub fn get_peer_connections(&self, peer_id: PeerId) -> Option<PeerConnections> {
+        self.swarm_control().state().get_peer_connections(&peer_id)
+    }
+
+    pub async fn dial_peer_once(&self, peer_id: PeerId) -> Result<()> {
+        self.swarm_control()
+            .invoke_swarm(move |swarm| swarm.dial(peer_id))
+            .await?
+            .map_err(|e| anyhow::anyhow!("Dial failed: {e}"))?;
+        Ok(())
+    }
+
+    pub async fn ping_peer_connection(
+        &self,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+    ) -> Result<std::time::Duration> {
+        self.swarm_control()
+            .ping_connection(peer_id, connection_id)
+            .await
     }
 
     pub async fn start_file_transfer_service(&self, root_dir: String) -> Result<()> {

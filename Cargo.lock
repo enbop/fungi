@@ -1724,6 +1724,8 @@ dependencies = [
  "fungi-daemon",
  "libp2p-identity",
  "prost",
+ "tokio",
+ "tokio-stream",
  "tonic",
  "tonic-prost",
  "tonic-prost-build",
