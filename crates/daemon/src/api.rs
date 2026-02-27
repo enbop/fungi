@@ -1,3 +1,4 @@
+use std::time::Duration;
 use std::{net::IpAddr, path::PathBuf};
 
 use anyhow::{Result, bail};
@@ -82,8 +83,8 @@ impl FungiDaemon {
 
     pub async fn dial_peer_once(&self, peer_id: PeerId) -> Result<()> {
         self.swarm_control()
-            .invoke_swarm(move |swarm| swarm.dial(peer_id))
-            .await?
+            .connect(peer_id)
+            .await
             .map_err(|e| anyhow::anyhow!("Dial failed: {e}"))?;
         Ok(())
     }
@@ -92,9 +93,10 @@ impl FungiDaemon {
         &self,
         peer_id: PeerId,
         connection_id: ConnectionId,
+        timeout: Duration,
     ) -> Result<std::time::Duration> {
         self.swarm_control()
-            .ping_connection(peer_id, connection_id)
+            .ping_connection(peer_id, connection_id, timeout)
             .await
     }
 

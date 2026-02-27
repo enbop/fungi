@@ -167,6 +167,7 @@ impl SwarmControl {
         &self,
         peer_id: PeerId,
         connection_id: ConnectionId,
+        timeout: Duration,
     ) -> Result<Duration> {
         let mapped_peer_id = self
             .state
@@ -177,7 +178,9 @@ impl SwarmControl {
             bail!("Connection {connection_id:?} belongs to {mapped_peer_id}, not {peer_id}");
         }
 
-        self.ping_state.ping_now(connection_id).await
+        self.ping_state
+            .ping_now(peer_id, connection_id, timeout)
+            .await
     }
 
     // TODO impl handshake

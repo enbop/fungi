@@ -4,6 +4,7 @@ pub mod fungi_daemon_grpc {
     pub use crate::generated::*;
 }
 
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -613,24 +614,26 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 }
 
                 let mut ping_set = JoinSet::new();
+                let mut seen_addrs = HashSet::new();
                 for conn in peer_connections.outbound().iter() {
                     let connection_id = conn.connection_id();
                     let remote_addr = conn.multiaddr().to_string();
+                    if !seen_addrs.insert(remote_addr.clone()) {
+                        continue;
+                    }
                     let daemon = daemon.clone();
                     let peer_id = peer_id.clone();
                     ping_set.spawn(async move {
-                        let res = tokio::time::timeout(
-                            per_ping_timeout,
-                            daemon.ping_peer_connection(peer_id, connection_id),
-                        )
-                        .await;
+                        let res = daemon
+                            .ping_peer_connection(peer_id, connection_id, per_ping_timeout)
+                            .await;
                         (connection_id, "outbound".to_string(), remote_addr, res)
                     });
                 }
 
                 while let Some(join_res) = ping_set.join_next().await {
                     match join_res {
-                        Ok((connection_id, direction, remote_addr, Ok(Ok(rtt)))) => {
+                        Ok((connection_id, direction, remote_addr, Ok(rtt))) => {
                             tx.send(Ok(ping_event(
                                 &peer_id_str,
                                 tick_seq,
@@ -644,22 +647,12 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                             )))
                             .await?;
                         }
-                        Ok((connection_id, direction, remote_addr, Ok(Err(e)))) => {
+                        Ok((connection_id, direction, remote_addr, Err(e))) => {
                             tx.send(Ok(PingPeerError::new(
                                 connection_id.to_string(),
                                 direction,
                                 remote_addr,
                                 e.to_string(),
-                            )
-                            .event(&peer_id_str, tick_seq, ts_unix_ms)))
-                                .await?;
-                        }
-                        Ok((connection_id, direction, remote_addr, Err(_))) => {
-                            tx.send(Ok(PingPeerError::new(
-                                connection_id.to_string(),
-                                direction,
-                                remote_addr,
-                                format!("Ping timed out after {}ms", per_ping_timeout.as_millis()),
                             )
                             .event(&peer_id_str, tick_seq, ts_unix_ms)))
                                 .await?;
