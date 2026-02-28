@@ -11,7 +11,7 @@ use std::{
 use anyhow::bail;
 use dav_server::{DavHandler, fakels::FakeLs};
 use fungi_config::file_transfer::FileTransferClient as FileTransferClientConfig;
-use fungi_swarm::{ConnectionSelectionStrategy, SwarmControl};
+use fungi_swarm::{ConnectionSelectionStrategy, StreamObservationHandle, SwarmControl};
 use fungi_util::protocols::FUNGI_FILE_TRANSFER_PROTOCOL;
 use hyper::{server::conn::http1, service::service_fn};
 use hyper_util::rt::TokioIo;
@@ -28,11 +28,21 @@ use crate::controls::file_transfer::FileTransferRpcClient;
 use crate::controls::open_stream_with_strategy;
 
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ConnectedClient {
     peer_id: Arc<PeerId>,
     is_windows: bool,
     rpc_client: FileTransferRpcClient,
+    stream_observation_handle: StreamObservationHandle,
+}
+
+impl std::fmt::Debug for ConnectedClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConnectedClient")
+            .field("peer_id", &self.peer_id)
+            .field("is_windows", &self.is_windows)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Deref for ConnectedClient {
@@ -143,9 +153,12 @@ impl FileTransferClientsControl {
         self.clients.lock().retain(|_, (id, _)| id != peer_id);
     }
 
-    async fn connect_client(&self, peer_id: PeerId) -> anyhow::Result<FileTransferRpcClient> {
+    async fn connect_client(
+        &self,
+        peer_id: PeerId,
+    ) -> anyhow::Result<(FileTransferRpcClient, StreamObservationHandle)> {
         let mut stream_control = self.swarm_control.stream_control().clone();
-        let stream = open_stream_with_strategy(
+        let (stream, stream_observation_handle) = open_stream_with_strategy(
             &self.swarm_control,
             &mut stream_control,
             peer_id,
@@ -160,7 +173,7 @@ impl FileTransferClientsControl {
 
         let client = connect_file_transfer_rpc(stream);
 
-        Ok(client)
+        Ok((client, stream_observation_handle))
     }
 
     pub async fn get_client(&self, name: &str) -> anyhow::Result<ConnectedClient> {
@@ -177,7 +190,7 @@ impl FileTransferClientsControl {
                     (peer_id, FileClientState::Connecting(start_time)),
                 );
                 // try to connect
-                let client = match self.connect_client(peer_id).await {
+                let (client, stream_observation_handle) = match self.connect_client(peer_id).await {
                     Ok(client) => client,
                     Err(e) => {
                         self.clients
@@ -200,6 +213,7 @@ impl FileTransferClientsControl {
                     peer_id: Arc::new(peer_id),
                     is_windows,
                     rpc_client: client,
+                    stream_observation_handle,
                 };
                 // update the client state to connected
                 self.clients.lock().insert(

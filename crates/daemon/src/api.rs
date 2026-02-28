@@ -19,6 +19,23 @@ pub struct ConnectionSnapshot {
     pub is_relay: bool,
     pub last_rtt_ms: u64,
     pub last_ping_at: Option<std::time::SystemTime>,
+    pub active_streams_total: usize,
+    pub active_streams_by_protocol: Vec<ProtocolStreamCountSnapshot>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProtocolStreamCountSnapshot {
+    pub protocol_name: String,
+    pub stream_count: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct ActiveStreamSnapshot {
+    pub stream_id: u64,
+    pub peer_id: String,
+    pub connection_id: String,
+    pub protocol_name: String,
+    pub opened_at: std::time::SystemTime,
 }
 
 impl FungiDaemon {
@@ -108,11 +125,29 @@ impl FungiDaemon {
             for conn in peer_conn.inbound() {
                 let ping_info = state.connection_ping_info(&conn.connection_id());
                 let (last_rtt_ms, last_ping_at) = match ping_info {
-                    Some(info) if info.last_rtt_at != std::time::SystemTime::UNIX_EPOCH => {
-                        (info.last_rtt.as_millis() as u64, Some(info.last_rtt_at))
-                    }
-                    _ => (0, None),
+                    Some(info) => match (info.last_rtt, info.last_rtt_at) {
+                        (Some(last_rtt), Some(last_rtt_at)) => {
+                            (last_rtt.as_millis() as u64, Some(last_rtt_at))
+                        }
+                        _ => (0, None),
+                    },
+                    None => (0, None),
                 };
+
+                let active_streams_by_protocol = state
+                    .connection_active_stream_protocol_counts(&conn.connection_id())
+                    .into_iter()
+                    .map(
+                        |(protocol_name, stream_count)| ProtocolStreamCountSnapshot {
+                            protocol_name,
+                            stream_count,
+                        },
+                    )
+                    .collect::<Vec<_>>();
+                let active_streams_total = active_streams_by_protocol
+                    .iter()
+                    .map(|entry| entry.stream_count)
+                    .sum();
 
                 let remote_addr = conn.multiaddr().to_string();
                 snapshots.push(ConnectionSnapshot {
@@ -123,17 +158,37 @@ impl FungiDaemon {
                     remote_addr,
                     last_rtt_ms,
                     last_ping_at,
+                    active_streams_total,
+                    active_streams_by_protocol,
                 });
             }
 
             for conn in peer_conn.outbound() {
                 let ping_info = state.connection_ping_info(&conn.connection_id());
                 let (last_rtt_ms, last_ping_at) = match ping_info {
-                    Some(info) if info.last_rtt_at != std::time::SystemTime::UNIX_EPOCH => {
-                        (info.last_rtt.as_millis() as u64, Some(info.last_rtt_at))
-                    }
+                    Some(info) => match (info.last_rtt, info.last_rtt_at) {
+                        (Some(last_rtt), Some(last_rtt_at)) => {
+                            (last_rtt.as_millis() as u64, Some(last_rtt_at))
+                        }
+                        _ => (0, None),
+                    },
                     _ => (0, None),
                 };
+
+                let active_streams_by_protocol = state
+                    .connection_active_stream_protocol_counts(&conn.connection_id())
+                    .into_iter()
+                    .map(
+                        |(protocol_name, stream_count)| ProtocolStreamCountSnapshot {
+                            protocol_name,
+                            stream_count,
+                        },
+                    )
+                    .collect::<Vec<_>>();
+                let active_streams_total = active_streams_by_protocol
+                    .iter()
+                    .map(|entry| entry.stream_count)
+                    .sum();
 
                 let remote_addr = conn.multiaddr().to_string();
                 snapshots.push(ConnectionSnapshot {
@@ -144,6 +199,8 @@ impl FungiDaemon {
                     remote_addr,
                     last_rtt_ms,
                     last_ping_at,
+                    active_streams_total,
+                    active_streams_by_protocol,
                 });
             }
         }
@@ -156,6 +213,47 @@ impl FungiDaemon {
         });
 
         snapshots
+    }
+
+    pub fn list_active_streams(&self) -> Vec<ActiveStreamSnapshot> {
+        let mut streams = self
+            .swarm_control()
+            .state()
+            .list_active_streams()
+            .into_iter()
+            .map(|stream| ActiveStreamSnapshot {
+                stream_id: stream.stream_id,
+                peer_id: stream.peer_id.to_string(),
+                connection_id: stream.connection_id.to_string(),
+                protocol_name: stream.protocol_name,
+                opened_at: stream.opened_at,
+            })
+            .collect::<Vec<_>>();
+
+        streams.sort_by(|a, b| a.stream_id.cmp(&b.stream_id));
+        streams
+    }
+
+    pub fn list_active_streams_by_protocol(
+        &self,
+        protocol_name: String,
+    ) -> Vec<ActiveStreamSnapshot> {
+        let mut streams = self
+            .swarm_control()
+            .state()
+            .active_streams_by_protocol(&protocol_name)
+            .into_iter()
+            .map(|stream| ActiveStreamSnapshot {
+                stream_id: stream.stream_id,
+                peer_id: stream.peer_id.to_string(),
+                connection_id: stream.connection_id.to_string(),
+                protocol_name: stream.protocol_name,
+                opened_at: stream.opened_at,
+            })
+            .collect::<Vec<_>>();
+
+        streams.sort_by(|a, b| a.stream_id.cmp(&b.stream_id));
+        streams
     }
 
     pub async fn dial_peer_once(&self, peer_id: PeerId) -> Result<()> {

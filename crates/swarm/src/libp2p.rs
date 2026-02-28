@@ -247,9 +247,7 @@ impl SwarmControl {
         let mut selected = Vec::new();
         for conn in peer_connections.outbound() {
             let ping_info = self.state.connection_ping_info(&conn.connection_id());
-            let last_rtt = ping_info.and_then(|info| {
-                (info.last_rtt_at != std::time::SystemTime::UNIX_EPOCH).then_some(info.last_rtt)
-            });
+            let last_rtt = ping_info.and_then(|info| info.last_rtt);
             let remote_addr = conn.multiaddr().clone();
             let is_relay = remote_addr.to_string().contains("/p2p-circuit");
             selected.push(SelectedConnection {
@@ -263,9 +261,7 @@ impl SwarmControl {
 
         for conn in peer_connections.inbound() {
             let ping_info = self.state.connection_ping_info(&conn.connection_id());
-            let last_rtt = ping_info.and_then(|info| {
-                (info.last_rtt_at != std::time::SystemTime::UNIX_EPOCH).then_some(info.last_rtt)
-            });
+            let last_rtt = ping_info.and_then(|info| info.last_rtt);
             let remote_addr = conn.multiaddr().clone();
             let is_relay = remote_addr.to_string().contains("/p2p-circuit");
             selected.push(SelectedConnection {

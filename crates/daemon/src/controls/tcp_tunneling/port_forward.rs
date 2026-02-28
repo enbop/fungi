@@ -121,7 +121,7 @@ async fn handle_tcp_connection(
     target_peer: PeerId,
     target_protocol: StreamProtocol,
 ) -> Result<()> {
-    let libp2p_stream = open_stream_with_strategy(
+    let (libp2p_stream, _stream_observation_handle) = open_stream_with_strategy(
         &swarm_control,
         &mut stream_control,
         target_peer,

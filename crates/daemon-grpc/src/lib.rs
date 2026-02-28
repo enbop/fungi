@@ -35,6 +35,10 @@ fn system_time_to_unix_ms(time: SystemTime) -> i64 {
         .as_millis() as i64
 }
 
+fn system_time_to_unix_ms_optional(time: Option<SystemTime>) -> i64 {
+    time.map(system_time_to_unix_ms).unwrap_or(0)
+}
+
 fn ping_event(
     peer_id: &str,
     tick_seq: u64,
@@ -710,11 +714,65 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 remote_addr: c.remote_addr,
                 is_relay: c.is_relay,
                 last_rtt_ms: c.last_rtt_ms,
-                last_ping_unix_ms: c.last_ping_at.map(system_time_to_unix_ms).unwrap_or(0),
+                last_ping_unix_ms: system_time_to_unix_ms_optional(c.last_ping_at),
+                active_streams_total: c.active_streams_total as u64,
+                active_streams_by_protocol: c
+                    .active_streams_by_protocol
+                    .into_iter()
+                    .map(|s| ProtocolStreamCountSnapshot {
+                        protocol_name: s.protocol_name,
+                        stream_count: s.stream_count as u64,
+                    })
+                    .collect(),
             })
             .collect();
 
         Ok(Response::new(ListConnectionsResponse { connections }))
+    }
+
+    async fn list_active_streams(
+        &self,
+        request: Request<ListActiveStreamsRequest>,
+    ) -> Result<Response<ListActiveStreamsResponse>, Status> {
+        let req = request.into_inner();
+
+        let peer_filter = if req.peer_id.trim().is_empty() {
+            None
+        } else {
+            Some(
+                PeerId::from_str(&req.peer_id)
+                    .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?,
+            )
+        };
+        let protocol_filter = if req.protocol_name.trim().is_empty() {
+            None
+        } else {
+            Some(req.protocol_name)
+        };
+
+        let mut streams = if let Some(protocol_name) = protocol_filter {
+            self.inner.list_active_streams_by_protocol(protocol_name)
+        } else {
+            self.inner.list_active_streams()
+        };
+
+        if let Some(peer_id) = peer_filter {
+            let peer_id_string = peer_id.to_string();
+            streams.retain(|s| s.peer_id == peer_id_string);
+        }
+
+        let streams = streams
+            .into_iter()
+            .map(|s| ActiveStreamSnapshot {
+                stream_id: s.stream_id,
+                peer_id: s.peer_id,
+                connection_id: s.connection_id,
+                protocol_name: s.protocol_name,
+                opened_at_unix_ms: system_time_to_unix_ms(s.opened_at),
+            })
+            .collect();
+
+        Ok(Response::new(ListActiveStreamsResponse { streams }))
     }
 }
 

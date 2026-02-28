@@ -113,6 +113,10 @@ service FungiDaemon {
   // Lists currently established connections with latest ping metadata.
   // If peer_id is provided, only that peer's connections are returned.
   rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse) {}
+
+  // Lists currently active streams with optional peer/protocol filters.
+  rpc ListActiveStreams(ListActiveStreamsRequest)
+      returns (ListActiveStreamsResponse) {}
 }
 
 message Empty {}
@@ -306,6 +310,33 @@ message ConnectionSnapshot {
   uint64 last_rtt_ms = 6;
   // 0 means no ping has been recorded yet.
   int64 last_ping_unix_ms = 7;
+  uint64 active_streams_total = 8;
+  repeated ProtocolStreamCountSnapshot active_streams_by_protocol = 9;
+}
+
+message ProtocolStreamCountSnapshot {
+  string protocol_name = 1;
+  uint64 stream_count = 2;
 }
 
 message ListConnectionsResponse { repeated ConnectionSnapshot connections = 1; }
+
+message ListActiveStreamsRequest {
+  // Optional peer_id filter. Empty means all peers.
+  string peer_id = 1;
+  // Optional protocol filter. Empty means all protocols.
+  string protocol_name = 2;
+}
+
+message ActiveStreamSnapshot {
+  uint64 stream_id = 1;
+  string peer_id = 2;
+  string connection_id = 3;
+  string protocol_name = 4;
+  // 0 means unknown.
+  int64 opened_at_unix_ms = 5;
+}
+
+message ListActiveStreamsResponse {
+  repeated ActiveStreamSnapshot streams = 1;
+}

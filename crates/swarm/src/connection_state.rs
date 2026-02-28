@@ -8,7 +8,10 @@ use libp2p::{
 use parking_lot::{Mutex, RwLock};
 use std::{
     collections::{HashMap, HashSet},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, SystemTime},
 };
 
@@ -94,6 +97,8 @@ pub struct State {
     peer_connections: Arc<Mutex<HashMap<PeerId, PeerConnections>>>,
     connection_id_map: Arc<Mutex<HashMap<ConnectionId, ConnectionEntry>>>,
     incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
+    next_stream_id: Arc<AtomicU64>,
+    stream_state: Arc<Mutex<StreamObservationState>>,
 }
 
 impl State {
@@ -103,6 +108,8 @@ impl State {
             peer_connections: Arc::new(Mutex::new(HashMap::new())),
             connection_id_map: Arc::new(Mutex::new(HashMap::new())),
             incoming_allowed_peers: Arc::new(RwLock::new(incoming_allowed_peers)),
+            next_stream_id: Arc::new(AtomicU64::new(0)),
+            stream_state: Arc::new(Mutex::new(StreamObservationState::default())),
         }
     }
 
@@ -142,8 +149,149 @@ impl State {
 
     pub fn update_connection_ping(&self, connection_id: &ConnectionId, rtt: Duration) {
         if let Some(entry) = self.connection_id_map.lock().get_mut(connection_id) {
-            entry.ping_info.last_rtt = rtt;
-            entry.ping_info.last_rtt_at = SystemTime::now();
+            entry.ping_info.last_rtt = Some(rtt);
+            entry.ping_info.last_rtt_at = Some(SystemTime::now());
+        }
+    }
+
+    pub fn track_outbound_stream_opened(
+        &self,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        protocol_name: String,
+    ) -> StreamObservationHandle {
+        let stream_id = self.next_stream_id.fetch_add(1, Ordering::Relaxed) + 1;
+
+        let mut stream_state = self.stream_state.lock();
+
+        stream_state.streams_by_id.insert(
+            stream_id,
+            ObservedStreamEntry {
+                stream_id,
+                peer_id,
+                connection_id,
+                protocol_name: protocol_name.clone(),
+                opened_at: SystemTime::now(),
+            },
+        );
+
+        stream_state
+            .stream_ids_by_connection
+            .entry(connection_id)
+            .or_default()
+            .insert(stream_id);
+        stream_state
+            .stream_ids_by_protocol
+            .entry(protocol_name)
+            .or_default()
+            .insert(stream_id);
+        stream_state
+            .stream_ids_by_peer
+            .entry(peer_id)
+            .or_default()
+            .insert(stream_id);
+
+        StreamObservationHandle::new(self.clone(), stream_id)
+    }
+
+    pub fn active_streams_by_connection(
+        &self,
+        connection_id: &ConnectionId,
+    ) -> Vec<ObservedStreamEntry> {
+        let stream_state = self.stream_state.lock();
+        stream_state
+            .stream_ids_by_connection
+            .get(connection_id)
+            .into_iter()
+            .flat_map(|ids| ids.iter())
+            .filter_map(|stream_id| stream_state.streams_by_id.get(stream_id).cloned())
+            .collect()
+    }
+
+    pub fn active_streams_by_protocol(&self, protocol_name: &str) -> Vec<ObservedStreamEntry> {
+        let stream_state = self.stream_state.lock();
+        stream_state
+            .stream_ids_by_protocol
+            .get(protocol_name)
+            .into_iter()
+            .flat_map(|ids| ids.iter())
+            .filter_map(|stream_id| stream_state.streams_by_id.get(stream_id).cloned())
+            .collect()
+    }
+
+    pub fn connection_active_stream_protocol_counts(
+        &self,
+        connection_id: &ConnectionId,
+    ) -> Vec<(String, usize)> {
+        let streams = self.active_streams_by_connection(connection_id);
+        let mut counts: HashMap<String, usize> = HashMap::new();
+        for stream in streams {
+            *counts.entry(stream.protocol_name).or_insert(0) += 1;
+        }
+        let mut out: Vec<(String, usize)> = counts.into_iter().collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
+
+    pub fn list_active_streams(&self) -> Vec<ObservedStreamEntry> {
+        let stream_state = self.stream_state.lock();
+        let mut streams: Vec<ObservedStreamEntry> =
+            stream_state.streams_by_id.values().cloned().collect();
+        streams.sort_by(|a, b| a.stream_id.cmp(&b.stream_id));
+        streams
+    }
+
+    fn mark_stream_closed(&self, stream_id: StreamId) {
+        let mut stream_state = self.stream_state.lock();
+        let Some(entry) = stream_state.streams_by_id.remove(&stream_id) else {
+            return;
+        };
+
+        if let Some(ids) = stream_state
+            .stream_ids_by_connection
+            .get_mut(&entry.connection_id)
+        {
+            ids.remove(&stream_id);
+            if ids.is_empty() {
+                stream_state
+                    .stream_ids_by_connection
+                    .remove(&entry.connection_id);
+            }
+        }
+
+        if let Some(ids) = stream_state
+            .stream_ids_by_protocol
+            .get_mut(&entry.protocol_name)
+        {
+            ids.remove(&stream_id);
+            if ids.is_empty() {
+                stream_state
+                    .stream_ids_by_protocol
+                    .remove(&entry.protocol_name);
+            }
+        }
+
+        if let Some(ids) = stream_state.stream_ids_by_peer.get_mut(&entry.peer_id) {
+            ids.remove(&stream_id);
+            if ids.is_empty() {
+                stream_state.stream_ids_by_peer.remove(&entry.peer_id);
+            }
+        }
+    }
+
+    fn close_all_streams_for_connection(&self, connection_id: ConnectionId) {
+        let stream_ids: Vec<StreamId> = {
+            let stream_state = self.stream_state.lock();
+            stream_state
+                .stream_ids_by_connection
+                .get(&connection_id)
+                .into_iter()
+                .flat_map(|ids| ids.iter().copied())
+                .collect()
+        };
+
+        for stream_id in stream_ids {
+            self.mark_stream_closed(stream_id);
         }
     }
 
@@ -161,18 +309,70 @@ impl State {
 
 #[derive(Debug, Clone)]
 pub struct ConnectionPingInfo {
-    pub last_rtt: Duration,
-    pub last_rtt_at: SystemTime,
+    pub last_rtt: Option<Duration>,
+    pub last_rtt_at: Option<SystemTime>,
 }
 
 impl Default for ConnectionPingInfo {
     fn default() -> Self {
         Self {
-            last_rtt: Duration::from_secs(0),
-            last_rtt_at: SystemTime::UNIX_EPOCH,
+            last_rtt: None,
+            last_rtt_at: None,
         }
     }
 }
+
+pub type StreamId = u64;
+
+#[derive(Debug, Clone)]
+pub struct ObservedStreamEntry {
+    pub stream_id: StreamId,
+    pub peer_id: PeerId,
+    pub connection_id: ConnectionId,
+    pub protocol_name: String,
+    pub opened_at: SystemTime,
+}
+
+#[derive(Debug, Default)]
+struct StreamObservationState {
+    // Primary storage: stream id -> stream metadata.
+    streams_by_id: HashMap<StreamId, ObservedStreamEntry>,
+    // Secondary index: connection id -> active stream ids.
+    stream_ids_by_connection: HashMap<ConnectionId, HashSet<StreamId>>,
+    // Secondary index: protocol name -> active stream ids.
+    stream_ids_by_protocol: HashMap<String, HashSet<StreamId>>,
+    // Secondary index: peer id -> active stream ids.
+    stream_ids_by_peer: HashMap<PeerId, HashSet<StreamId>>,
+}
+
+#[derive(Clone)]
+pub struct StreamObservationHandle {
+    inner: Arc<StreamObservationHandleInner>,
+}
+
+impl StreamObservationHandle {
+    fn new(state: State, stream_id: StreamId) -> Self {
+        Self {
+            inner: Arc::new(StreamObservationHandleInner { state, stream_id }),
+        }
+    }
+
+    pub fn stream_id(&self) -> StreamId {
+        self.inner.stream_id
+    }
+}
+
+struct StreamObservationHandleInner {
+    state: State,
+    stream_id: StreamId,
+}
+
+impl Drop for StreamObservationHandleInner {
+    fn drop(&mut self) {
+        self.state.mark_stream_closed(self.stream_id);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ConnectionEntry {
     pub peer_id: PeerId,
@@ -228,6 +428,8 @@ pub(crate) fn handle_connection_closed(
     connection_id: ConnectionId,
 ) {
     let state = swarm_control.state();
+
+    state.close_all_streams_for_connection(connection_id);
 
     state.connection_id_map().lock().remove(&connection_id);
 

@@ -72,6 +72,9 @@ pub enum Commands {
     /// Device discovery and address book
     #[command(subcommand)]
     Device(fungi_control::DeviceCommands),
+    /// Connection observability and diagnostics
+    #[command(subcommand, visible_alias = "conn")]
+    Connection(fungi_control::ConnectionCommands),
     /// Continuously ping all active connections to a peer
     Ping {
         /// Peer ID to ping
@@ -83,16 +86,6 @@ pub enum Commands {
         #[arg(short, long, default_value_t = false)]
         verbose: bool,
     },
-    /// List active connections and latest ping results
-    Connections {
-        /// Optional peer ID filter
-        #[arg(long)]
-        peer_id: Option<String>,
-        /// Show detailed output
-        #[arg(short, long, default_value_t = false)]
-        verbose: bool,
-    },
-
     #[cfg(feature = "wasi")]
     /// [WASI runtime] Run a WebAssembly module (re-exported wasmtime command)
     Run(wasmtime_cli::commands::RunCommand),
