@@ -79,12 +79,18 @@ pub enum Commands {
         /// Ping interval in milliseconds
         #[arg(long, default_value_t = 1000)]
         interval_ms: u32,
+        /// Show detailed output
+        #[arg(short, long, default_value_t = false)]
+        verbose: bool,
     },
     /// List active connections and latest ping results
     Connections {
         /// Optional peer ID filter
         #[arg(long)]
         peer_id: Option<String>,
+        /// Show detailed output
+        #[arg(short, long, default_value_t = false)]
+        verbose: bool,
     },
 
     #[cfg(feature = "wasi")]

@@ -212,7 +212,34 @@ async fn get_rpc_client(args: &CommonArgs) -> Option<FungiDaemonClient<tonic::tr
     }
 }
 
-pub async fn execute_ping(args: CommonArgs, peer_id: String, interval_ms: u32) {
+fn shorten_peer_id(peer_id: &str) -> String {
+    if peer_id.len() <= 18 {
+        return peer_id.to_string();
+    }
+    format!("{}****{}", &peer_id[..8], &peer_id[peer_id.len() - 6..])
+}
+
+fn simplify_multiaddr_peer_ids(addr: &str) -> String {
+    let mut parts: Vec<String> = addr
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+        .collect();
+
+    let mut i = 0;
+    while i + 1 < parts.len() {
+        if parts[i] == "p2p" {
+            parts[i + 1] = shorten_peer_id(&parts[i + 1]);
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+
+    format!("/{}", parts.join("/"))
+}
+
+pub async fn execute_ping(args: CommonArgs, peer_id: String, interval_ms: u32, verbose: bool) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
         None => return,
@@ -232,51 +259,140 @@ pub async fn execute_ping(args: CommonArgs, peer_id: String, interval_ms: u32) {
     };
 
     let mut stream = response.into_inner();
-    println!("Start ping stream for peer {peer_id}. Press Ctrl+C to stop.");
+    println!(
+        "Ping stream peer={} interval={}ms (Ctrl+C to stop)",
+        if verbose {
+            peer_id.clone()
+        } else {
+            shorten_peer_id(&peer_id)
+        },
+        interval_ms
+    );
+
+    if !verbose {
+        println!(
+            "{:<6} {:<6} {:<8} {:<5} {:<10} {}",
+            "TICK", "CONN", "DIR", "RLY", "RTT", "ADDR/MSG"
+        );
+    }
 
     while let Ok(Some(event)) = stream.message().await {
         match event.event {
             Some(ping_peer_event::Event::Connecting(_)) => {
-                println!("[tick={}] connecting...", event.tick_seq);
-            }
-            Some(ping_peer_event::Event::Connected(_)) => {
-                println!("[tick={}] connected", event.tick_seq);
-            }
-            Some(ping_peer_event::Event::Idle(_)) => {
-                println!("[tick={}] no active connections", event.tick_seq);
-            }
-            Some(ping_peer_event::Event::Result(result)) => {
-                println!(
-                    "[tick={}] conn={} dir={} addr={} rtt={}ms",
-                    event.tick_seq,
-                    result.connection_id,
-                    result.direction,
-                    result.remote_addr,
-                    result.rtt_ms
-                );
-            }
-            Some(ping_peer_event::Event::Error(error)) => {
-                if error.connection_id.is_empty() {
-                    println!("[tick={}] error={}", event.tick_seq, error.message);
+                if verbose {
+                    println!("[tick={}] connecting...", event.tick_seq);
                 } else {
                     println!(
-                        "[tick={}] conn={} dir={} addr={} error={}",
+                        "{:<6} {:<6} {:<8} {:<5} {:<10} connecting",
+                        event.tick_seq, "-", "-", "-", "-"
+                    );
+                }
+            }
+            Some(ping_peer_event::Event::Connected(_)) => {
+                if verbose {
+                    println!("[tick={}] connected", event.tick_seq);
+                } else {
+                    println!(
+                        "{:<6} {:<6} {:<8} {:<5} {:<10} connected",
+                        event.tick_seq, "-", "-", "-", "-"
+                    );
+                }
+            }
+            Some(ping_peer_event::Event::Idle(_)) => {
+                if verbose {
+                    println!("[tick={}] no active connections", event.tick_seq);
+                } else {
+                    println!(
+                        "{:<6} {:<6} {:<8} {:<5} {:<10} no active connections",
+                        event.tick_seq, "-", "-", "-", "-"
+                    );
+                }
+            }
+            Some(ping_peer_event::Event::Result(result)) => {
+                if verbose {
+                    println!(
+                        "[tick={}] conn={} dir={} addr={} rtt={}ms",
                         event.tick_seq,
-                        error.connection_id,
+                        result.connection_id,
+                        result.direction,
+                        result.remote_addr,
+                        result.rtt_ms
+                    );
+                } else {
+                    let relay = if result.remote_addr.contains("/p2p-circuit") {
+                        "yes"
+                    } else {
+                        "no"
+                    };
+                    println!(
+                        "{:<6} {:<6} {:<8} {:<5} {:<10} {}",
+                        event.tick_seq,
+                        result.connection_id,
+                        result.direction,
+                        relay,
+                        format!("{}ms", result.rtt_ms),
+                        simplify_multiaddr_peer_ids(&result.remote_addr)
+                    );
+                }
+            }
+            Some(ping_peer_event::Event::Error(error)) => {
+                if verbose {
+                    if error.connection_id.is_empty() {
+                        println!("[tick={}] error={}", event.tick_seq, error.message);
+                    } else {
+                        println!(
+                            "[tick={}] conn={} dir={} addr={} error={}",
+                            event.tick_seq,
+                            error.connection_id,
+                            error.direction,
+                            error.remote_addr,
+                            error.message
+                        );
+                    }
+                } else {
+                    let relay = if error.remote_addr.contains("/p2p-circuit") {
+                        "yes"
+                    } else {
+                        "no"
+                    };
+                    println!(
+                        "{:<6} {:<6} {:<8} {:<5} {:<10} {}",
+                        event.tick_seq,
+                        if error.connection_id.is_empty() {
+                            "-"
+                        } else {
+                            &error.connection_id
+                        },
                         error.direction,
-                        error.remote_addr,
-                        error.message
+                        relay,
+                        "error",
+                        if error.remote_addr.is_empty() {
+                            error.message
+                        } else {
+                            format!(
+                                "{} | {}",
+                                simplify_multiaddr_peer_ids(&error.remote_addr),
+                                error.message
+                            )
+                        }
                     );
                 }
             }
             _ => {
-                println!("[tick={}] unknown event", event.tick_seq);
+                if verbose {
+                    println!("[tick={}] unknown event", event.tick_seq);
+                } else {
+                    println!(
+                        "{:<6} {:<6} {:<8} {:<5} {:<10} unknown event",
+                        event.tick_seq, "-", "-", "-", "-"
+                    );
+                }
             }
         }
     }
 }
 
-pub async fn execute_connections(args: CommonArgs, peer_id: Option<String>) {
+pub async fn execute_connections(args: CommonArgs, peer_id: Option<String>, verbose: bool) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
         None => return,
@@ -298,20 +414,52 @@ pub async fn execute_connections(args: CommonArgs, peer_id: Option<String>) {
                 return;
             }
 
+            println!(
+                "Connections {}",
+                peer_id
+                    .as_ref()
+                    .map(|p| {
+                        if verbose {
+                            format!("(peer={})", p)
+                        } else {
+                            format!("(peer={})", shorten_peer_id(p))
+                        }
+                    })
+                    .unwrap_or_else(|| "(all peers)".to_string())
+            );
+            println!(
+                "{:<22} {:<6} {:<8} {:<5} {:<12} {}",
+                "PEER", "CONN", "DIR", "RLY", "LAST_PING", "ADDR"
+            );
+
             for conn in connections {
                 let ping = if conn.last_ping_unix_ms == 0 {
                     "n/a".to_string()
                 } else {
-                    format!("{}ms @ {}", conn.last_rtt_ms, conn.last_ping_unix_ms)
+                    if verbose {
+                        format!("{}ms @ {}", conn.last_rtt_ms, conn.last_ping_unix_ms)
+                    } else {
+                        format!("{}ms", conn.last_rtt_ms)
+                    }
+                };
+                let peer_display = if verbose {
+                    conn.peer_id
+                } else {
+                    shorten_peer_id(&conn.peer_id)
+                };
+                let addr_display = if verbose {
+                    conn.remote_addr
+                } else {
+                    simplify_multiaddr_peer_ids(&conn.remote_addr)
                 };
                 println!(
-                    "peer={} conn={} dir={} relay={} addr={} last_ping={}",
-                    conn.peer_id,
+                    "{:<22} {:<6} {:<8} {:<5} {:<12} {}",
+                    peer_display,
                     conn.connection_id,
                     conn.direction,
                     if conn.is_relay { "yes" } else { "no" },
-                    conn.remote_addr,
                     ping,
+                    addr_display,
                 );
             }
         }

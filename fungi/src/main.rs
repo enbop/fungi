@@ -32,9 +32,15 @@ fn main() -> Result<()> {
         Commands::Ping {
             peer_id,
             interval_ms,
-        } => block_on(execute_ping(fungi_args.common, peer_id, interval_ms)),
-        Commands::Connections { peer_id } => {
-            block_on(execute_connections(fungi_args.common, peer_id))
+            verbose,
+        } => block_on(execute_ping(
+            fungi_args.common,
+            peer_id,
+            interval_ms,
+            verbose,
+        )),
+        Commands::Connections { peer_id, verbose } => {
+            block_on(execute_connections(fungi_args.common, peer_id, verbose))
         }
     }
 

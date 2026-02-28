@@ -349,6 +349,11 @@ pub mod fungi_daemon_client {
     )]
     use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    /// Fungi daemon control API.
+    ///
+    /// This service exposes runtime inspection and management operations for the
+    /// local daemon, including network state, transfer/tunneling config, and
+    /// peer/connection observability.
     #[derive(Debug, Clone)]
     pub struct FungiDaemonClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -1462,6 +1467,11 @@ pub mod fungi_daemon_server {
             tonic::Status,
         >;
     }
+    /// Fungi daemon control API.
+    ///
+    /// This service exposes runtime inspection and management operations for the
+    /// local daemon, including network state, transfer/tunneling config, and
+    /// peer/connection observability.
     #[derive(Debug)]
     pub struct FungiDaemonServer<T> {
         inner: Arc<T>,
