@@ -5,7 +5,7 @@ mod libp2p;
 mod rpc;
 pub mod tcp_tunneling;
 
-pub use init::init;
+pub use init::{init, init_for_daemon};
 
 use anyhow::Result;
 use libp2p::*;

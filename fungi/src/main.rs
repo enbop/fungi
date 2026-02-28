@@ -1,9 +1,11 @@
 use anyhow::{Ok, Result};
 use clap::Parser;
 use fungi::commands::*;
+mod logging;
 
 fn main() -> Result<()> {
     let fungi_args = FungiArgs::parse();
+    logging::init_logging(&fungi_args)?;
     use fungi_control::*;
 
     #[cfg(target_os = "android")]
@@ -46,8 +48,6 @@ fn main() -> Result<()> {
 }
 
 fn block_on<F: Future>(f: F) -> F::Output {
-    env_logger::init();
-
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()

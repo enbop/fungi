@@ -757,11 +757,6 @@ async fn handle_ping_event(
             log::debug!("Ping event channel closed");
             break;
         };
-        log::debug!(
-            "Received ping event for connection {:?} with RTT {:?}",
-            event.connection_id,
-            event.rtt
-        );
         swarm_control
             .state()
             .update_connection_ping(&event.connection_id, event.rtt);
