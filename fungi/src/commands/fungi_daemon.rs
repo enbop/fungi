@@ -4,20 +4,20 @@ use fungi_daemon::FungiDaemon;
 use fungi_daemon_grpc::start_grpc_server;
 
 pub async fn run(args: DaemonArgs) -> Result<()> {
-    fungi_config::init(&args).unwrap();
+    fungi_config::init_for_daemon(&args)?;
 
-    println!("Starting Fungi daemon...");
+    log::info!("Starting Fungi daemon...");
 
     let daemon = FungiDaemon::start(args.clone()).await?;
 
     let swarm_control = daemon.swarm_control().clone();
-    println!("Local Peer ID: {}", swarm_control.local_peer_id());
+    log::info!("Local Peer ID: {}", swarm_control.local_peer_id());
 
     let network_info = swarm_control
         .invoke_swarm(|swarm| swarm.network_info())
         .await
         .unwrap();
-    println!("Network info: {network_info:?}");
+    log::info!("Network info: {network_info:?}");
 
     let rpc_listen_address = daemon.config().lock().rpc.listen_address.clone();
     let server_fut = start_grpc_server(daemon, rpc_listen_address.parse().unwrap());
@@ -30,11 +30,11 @@ pub async fn run(args: DaemonArgs) -> Result<()> {
 
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {
-            println!("Received Ctrl+C, shutting down Fungi daemon...");
+            log::info!("Received Ctrl+C, shutting down Fungi daemon...");
         },
         res = server_fut => {
             if let Err(e) = res {
-                eprintln!("Error occurred while serving: {}", e);
+                log::error!("Error occurred while serving: {}", e);
             }
         },
         _ = async {
@@ -44,7 +44,7 @@ pub async fn run(args: DaemonArgs) -> Result<()> {
                 std::future::pending::<()>().await
             }
         } => {
-            println!("Shutting down Fungi daemon...");
+            log::info!("Shutting down Fungi daemon...");
         },
     }
 
@@ -60,7 +60,7 @@ async fn stdin_monitor() {
     loop {
         match stdin.read(&mut buf).await {
             Ok(0) => {
-                println!("Stdin closed, parent process likely terminated. Shutting down...");
+                log::info!("Stdin closed, parent process likely terminated. Shutting down...");
                 break;
             }
             Ok(_) => {
@@ -68,7 +68,7 @@ async fn stdin_monitor() {
                 continue;
             }
             Err(e) => {
-                eprintln!("Error reading stdin: {}, shutting down...", e);
+                log::error!("Error reading stdin: {}, shutting down...", e);
                 break;
             }
         }
