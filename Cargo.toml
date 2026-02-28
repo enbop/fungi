@@ -45,8 +45,7 @@ libp2p = { version = "0.56", features = [
     "secp256k1",
     "ed25519",
 ] }
-# libp2p-stream = "0.4.0-alpha"
-libp2p-stream = { path = "../../rust-libp2p/protocols/stream/dist" }
+libp2p-stream = { path = "crates/libp2p-stream" }
 libp2p-identity = { version = "0.2", features = ["secp256k1", "serde", "rand"] }
 libp2p-swarm = "0.47"
 parking_lot = "0.12"
