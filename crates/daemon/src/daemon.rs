@@ -134,10 +134,8 @@ impl FungiDaemon {
         let peer_info = PeerInfo::this_device(swarm_control.local_peer_id(), config.get_hostname());
         mdns_control.start(peer_info)?;
 
-        let stream_control = swarm_control.stream_control().clone();
-
         let fts_control = FileTransferServiceControl::new(
-            stream_control.clone(),
+            swarm_control.clone(),
             state.incoming_allowed_peers().clone(),
         );
         Self::init_fts(config.file_transfer.server.clone(), &fts_control).await;

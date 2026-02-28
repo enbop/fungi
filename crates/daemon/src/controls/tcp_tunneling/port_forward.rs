@@ -1,6 +1,5 @@
 use fungi_swarm::{ConnectionSelectionStrategy, SwarmControl};
 use libp2p::{PeerId, StreamProtocol};
-use libp2p_stream::Control;
 use parking_lot::Mutex;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -9,8 +8,6 @@ use thiserror::Error;
 use tokio::task::JoinHandle;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::sync::CancellationToken;
-
-use crate::controls::open_stream_with_strategy;
 
 const CONNECT_SNIFF_WAIT: Duration = Duration::from_secs(3);
 
@@ -36,7 +33,6 @@ type Result<T> = std::result::Result<T, PortForwardError>;
 
 pub async fn forward_port_to_peer(
     swarm_control: SwarmControl,
-    stream_control: Control,
     local_addr: SocketAddr,
     target_peer: PeerId,
     target_protocol: StreamProtocol,
@@ -70,13 +66,11 @@ pub async fn forward_port_to_peer(
                         log::debug!("Accepted connection from {client_addr}");
 
                         let swarm_control = swarm_control.clone();
-                        let stream_control = stream_control.clone();
                         let target_protocol = target_protocol.clone();
 
                         let task = tokio::spawn(async move {
                             if let Err(e) = handle_tcp_connection(
                                 swarm_control,
-                                stream_control,
                                 tcp_stream,
                                 target_peer,
                                 target_protocol,
@@ -116,24 +110,22 @@ pub async fn forward_port_to_peer(
 
 async fn handle_tcp_connection(
     swarm_control: SwarmControl,
-    mut stream_control: Control,
     mut tcp_stream: tokio::net::TcpStream,
     target_peer: PeerId,
     target_protocol: StreamProtocol,
 ) -> Result<()> {
-    let (libp2p_stream, _stream_observation_handle) = open_stream_with_strategy(
-        &swarm_control,
-        &mut stream_control,
-        target_peer,
-        target_protocol,
-        ConnectionSelectionStrategy::PreferDirect,
-        CONNECT_SNIFF_WAIT,
-    )
-    .await
-    .map_err(|source| PortForwardError::ConnectPeer {
-        peer: target_peer,
-        source,
-    })?;
+    let (libp2p_stream, _stream_observation_handle, _connection_id) = swarm_control
+        .open_stream_with_strategy(
+            target_peer,
+            target_protocol,
+            ConnectionSelectionStrategy::PreferDirect,
+            CONNECT_SNIFF_WAIT,
+        )
+        .await
+        .map_err(|source| PortForwardError::ConnectPeer {
+            peer: target_peer,
+            source,
+        })?;
 
     let tcp_peer_addr = tcp_stream
         .peer_addr()

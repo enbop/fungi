@@ -25,7 +25,6 @@ use typed_path::{
 };
 
 use crate::controls::file_transfer::FileTransferRpcClient;
-use crate::controls::open_stream_with_strategy;
 
 #[allow(dead_code)]
 #[derive(Clone)]
@@ -112,7 +111,17 @@ impl FileTransferClientsControl {
         &self,
         peer_id: PeerId,
     ) -> anyhow::Result<Option<String>> {
-        self.swarm_control.connect(peer_id).await?;
+        let (_stream, _stream_observation_handle, _connection_id) = self
+            .swarm_control
+            .open_stream_with_strategy(
+                peer_id,
+                FUNGI_FILE_TRANSFER_PROTOCOL,
+                ConnectionSelectionStrategy::PreferDirect,
+                Self::CONNECT_SNIFF_WAIT,
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to connect to peer {peer_id}: {e}"))?;
+
         let host_name = self
             .swarm_control
             .state()
@@ -157,19 +166,18 @@ impl FileTransferClientsControl {
         &self,
         peer_id: PeerId,
     ) -> anyhow::Result<(FileTransferRpcClient, StreamObservationHandle)> {
-        let mut stream_control = self.swarm_control.stream_control().clone();
-        let (stream, stream_observation_handle) = open_stream_with_strategy(
-            &self.swarm_control,
-            &mut stream_control,
-            peer_id,
-            FUNGI_FILE_TRANSFER_PROTOCOL,
-            ConnectionSelectionStrategy::PreferDirect,
-            Self::CONNECT_SNIFF_WAIT,
-        )
-        .await
-        .map_err(|e| {
-            anyhow::anyhow!("Failed to open file-transfer stream to peer {peer_id}: {e}")
-        })?;
+        let (stream, stream_observation_handle, _connection_id) = self
+            .swarm_control
+            .open_stream_with_strategy(
+                peer_id,
+                FUNGI_FILE_TRANSFER_PROTOCOL,
+                ConnectionSelectionStrategy::PreferDirect,
+                Self::CONNECT_SNIFF_WAIT,
+            )
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to open file-transfer stream to peer {peer_id}: {e}")
+            })?;
 
         let client = connect_file_transfer_rpc(stream);
 

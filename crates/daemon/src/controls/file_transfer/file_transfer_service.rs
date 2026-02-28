@@ -7,10 +7,11 @@ use std::{
 
 use fungi_config::file_transfer::FileTransferService as FileTransferServiceConfig;
 use fungi_fs::{FileSystem, Result};
+use fungi_swarm::SwarmControl;
 use fungi_util::protocols::FUNGI_FILE_TRANSFER_PROTOCOL;
 use futures::StreamExt;
 use libp2p::PeerId;
-use libp2p_stream::{Control, IncomingStreams};
+use libp2p_stream::IncomingStreams;
 use parking_lot::{Mutex, RwLock};
 use tarpc::{
     context::Context,
@@ -186,18 +187,18 @@ impl FileTransferRpcService {
 
 #[derive(Clone)]
 pub struct FileTransferServiceControl {
-    stream_control: Control,
+    swarm_control: SwarmControl,
     services: Arc<Mutex<HashMap<PathBuf, CancellationToken>>>,
     incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
 }
 
 impl FileTransferServiceControl {
     pub fn new(
-        stream_control: Control,
+        swarm_control: SwarmControl,
         incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
     ) -> Self {
         Self {
-            stream_control,
+            swarm_control,
             services: Arc::new(Mutex::new(HashMap::new())),
             incoming_allowed_peers,
         }
@@ -215,12 +216,12 @@ impl FileTransferServiceControl {
 
         let service_path = config.shared_root_dir.clone();
         let service = FileTransferRpcService::new(config, self.incoming_allowed_peers.clone())?;
-        let mut stream_control = self.stream_control.clone();
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
 
-        let incoming_streams = stream_control
-            .accept(FUNGI_FILE_TRANSFER_PROTOCOL)
+        let incoming_streams = self
+            .swarm_control
+            .accept_incoming_streams(FUNGI_FILE_TRANSFER_PROTOCOL)
             .map_err(io::Error::other)?;
         log::info!("File Transfer Service listening on protocol: {FUNGI_FILE_TRANSFER_PROTOCOL}");
 

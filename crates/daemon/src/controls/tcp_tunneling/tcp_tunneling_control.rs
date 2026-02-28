@@ -88,7 +88,6 @@ impl TcpTunnelingControl {
         .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
 
         let swarm_control = self.swarm_control.clone();
-        let stream_control = swarm_control.stream_control().clone();
 
         log::info!("Adding forwarding rule: {local_addr} -> {target_peer}/{target_protocol}");
 
@@ -98,7 +97,6 @@ impl TcpTunnelingControl {
         let task_handle = tokio::spawn(async move {
             super::forward_port_to_peer(
                 swarm_control,
-                stream_control,
                 local_addr,
                 target_peer,
                 target_protocol,
@@ -148,17 +146,15 @@ impl TcpTunnelingControl {
             StreamProtocol::try_from_owned(format!("{}/{}", FUNGI_TUNNEL_PROTOCOL, rule.port))
                 .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
 
-        let stream_control = self.swarm_control.stream_control().clone();
-
         log::info!("Adding listening rule: {local_addr} for {listening_protocol}");
 
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
 
         // Accept incoming streams before spawning
-        let mut stream_control_clone = stream_control.clone();
-        let incomings = stream_control_clone
-            .accept(listening_protocol)
+        let incomings = self
+            .swarm_control
+            .accept_incoming_streams(listening_protocol)
             .map_err(|e| anyhow::anyhow!("Failed to accept incoming streams: {}", e))?;
 
         let task_handle = tokio::spawn(async move {

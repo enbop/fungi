@@ -11,7 +11,7 @@ use parking_lot::Mutex;
 use tokio::sync::mpsc;
 
 // https://github.com/libp2p/specs/blob/master/ping/ping.md#protocol
-const PING_PROTOCOL: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0");
+pub(crate) const PING_PROTOCOL: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0");
 
 pub struct PingState {
     stream_control: Option<libp2p_stream::Control>,
@@ -176,7 +176,7 @@ async fn run_outbound_ping_task(
     }
 }
 
-async fn send_ping_with_timeout(
+pub(crate) async fn send_ping_with_timeout(
     stream: &mut Stream,
     peer_id: PeerId,
     timeout: Duration,
