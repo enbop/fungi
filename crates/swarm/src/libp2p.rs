@@ -1,5 +1,5 @@
 use crate::{
-    State,
+    ConnectionDirection, State,
     behaviours::{FungiBehaviours, FungiBehavioursEvent},
     connection_state,
     peer_handshake::PeerHandshakePayload,
@@ -122,6 +122,22 @@ pub struct SwarmControl {
     state: State,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ConnectionSelectionStrategy {
+    PreferDirect,
+    PreferRelay,
+    PreferLowLatency,
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectedConnection {
+    pub connection_id: ConnectionId,
+    pub direction: ConnectionDirection,
+    pub remote_addr: Multiaddr,
+    pub is_relay: bool,
+    pub last_rtt: Option<Duration>,
+}
+
 impl SwarmControl {
     pub fn new(
         local_peer_id: Arc<PeerId>,
@@ -163,6 +179,43 @@ impl SwarmControl {
         &self.state
     }
 
+    pub async fn connect_with_strategy(
+        &self,
+        peer_id: PeerId,
+        strategy: ConnectionSelectionStrategy,
+        sniff_wait: Duration,
+    ) -> Result<Vec<SelectedConnection>> {
+        if !self.state.has_active_connection(&peer_id) {
+            self.connect(peer_id)
+                .await
+                .map_err(|e| anyhow::anyhow!("Connect failed: {e}"))?;
+        }
+
+        if matches!(
+            strategy,
+            ConnectionSelectionStrategy::PreferDirect
+                | ConnectionSelectionStrategy::PreferLowLatency
+        ) && !sniff_wait.is_zero()
+        {
+            let deadline = tokio::time::Instant::now() + sniff_wait;
+            loop {
+                let current = self.collect_selected_connections(peer_id);
+                if current.iter().any(|c| !c.is_relay) || tokio::time::Instant::now() >= deadline {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
+        }
+
+        let mut selected = self.collect_selected_connections(peer_id);
+        if selected.is_empty() {
+            bail!("No active connections for peer {peer_id}");
+        }
+
+        Self::sort_selected_connections(strategy, &mut selected);
+        Ok(selected)
+    }
+
     pub async fn ping_connection(
         &self,
         peer_id: PeerId,
@@ -184,6 +237,82 @@ impl SwarmControl {
             .await?;
         self.state.update_connection_ping(&connection_id, rtt);
         Ok(rtt)
+    }
+
+    fn collect_selected_connections(&self, peer_id: PeerId) -> Vec<SelectedConnection> {
+        let Some(peer_connections) = self.state.get_peer_connections(&peer_id) else {
+            return Vec::new();
+        };
+
+        let mut selected = Vec::new();
+        for conn in peer_connections.outbound() {
+            let ping_info = self.state.connection_ping_info(&conn.connection_id());
+            let last_rtt = ping_info.and_then(|info| {
+                (info.last_rtt_at != std::time::SystemTime::UNIX_EPOCH).then_some(info.last_rtt)
+            });
+            let remote_addr = conn.multiaddr().clone();
+            let is_relay = remote_addr.to_string().contains("/p2p-circuit");
+            selected.push(SelectedConnection {
+                connection_id: conn.connection_id(),
+                direction: ConnectionDirection::Outbound,
+                remote_addr,
+                is_relay,
+                last_rtt,
+            });
+        }
+
+        for conn in peer_connections.inbound() {
+            let ping_info = self.state.connection_ping_info(&conn.connection_id());
+            let last_rtt = ping_info.and_then(|info| {
+                (info.last_rtt_at != std::time::SystemTime::UNIX_EPOCH).then_some(info.last_rtt)
+            });
+            let remote_addr = conn.multiaddr().clone();
+            let is_relay = remote_addr.to_string().contains("/p2p-circuit");
+            selected.push(SelectedConnection {
+                connection_id: conn.connection_id(),
+                direction: ConnectionDirection::Inbound,
+                remote_addr,
+                is_relay,
+                last_rtt,
+            });
+        }
+
+        selected
+    }
+
+    fn sort_selected_connections(
+        strategy: ConnectionSelectionStrategy,
+        selected: &mut [SelectedConnection],
+    ) {
+        fn conn_id_key(id: ConnectionId) -> u64 {
+            let s = id.to_string();
+            if let Ok(v) = s.parse::<u64>() {
+                return v;
+            }
+            let digits: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
+            digits.parse::<u64>().unwrap_or(u64::MAX)
+        }
+
+        fn rtt_key(rtt: Option<Duration>) -> u128 {
+            rtt.map(|v| v.as_millis()).unwrap_or(u128::MAX)
+        }
+
+        selected.sort_by(|a, b| match strategy {
+            ConnectionSelectionStrategy::PreferDirect => a
+                .is_relay
+                .cmp(&b.is_relay)
+                .then(rtt_key(a.last_rtt).cmp(&rtt_key(b.last_rtt)))
+                .then(conn_id_key(a.connection_id).cmp(&conn_id_key(b.connection_id))),
+            ConnectionSelectionStrategy::PreferRelay => b
+                .is_relay
+                .cmp(&a.is_relay)
+                .then(rtt_key(a.last_rtt).cmp(&rtt_key(b.last_rtt)))
+                .then(conn_id_key(a.connection_id).cmp(&conn_id_key(b.connection_id))),
+            ConnectionSelectionStrategy::PreferLowLatency => rtt_key(a.last_rtt)
+                .cmp(&rtt_key(b.last_rtt))
+                .then(a.is_relay.cmp(&b.is_relay))
+                .then(conn_id_key(a.connection_id).cmp(&conn_id_key(b.connection_id))),
+        });
     }
 
     // TODO impl handshake
@@ -316,6 +445,7 @@ impl FungiSwarm {
         keypair: Keypair,
         state: State,
         relay_addresses: Vec<Multiaddr>,
+        idle_connection_timeout: Duration,
         apply: impl FnOnce(&mut TSwarm),
     ) -> Result<(SwarmControl, JoinHandle<()>)> {
         let mdns =
@@ -333,7 +463,7 @@ impl FungiSwarm {
             .with_behaviour(|keypair, relay| {
                 FungiBehaviours::new(keypair, relay, mdns, state.clone())
             })?
-            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
+            .with_swarm_config(|c| c.with_idle_connection_timeout(idle_connection_timeout))
             .build();
 
         let local_peer_id = *swarm.local_peer_id();

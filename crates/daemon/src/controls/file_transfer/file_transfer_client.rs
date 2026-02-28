@@ -11,7 +11,7 @@ use std::{
 use anyhow::bail;
 use dav_server::{DavHandler, fakels::FakeLs};
 use fungi_config::file_transfer::FileTransferClient as FileTransferClientConfig;
-use fungi_swarm::SwarmControl;
+use fungi_swarm::{ConnectionSelectionStrategy, SwarmControl};
 use fungi_util::protocols::FUNGI_FILE_TRANSFER_PROTOCOL;
 use hyper::{server::conn::http1, service::service_fn};
 use hyper_util::rt::TokioIo;
@@ -25,6 +25,7 @@ use typed_path::{
 };
 
 use crate::controls::file_transfer::FileTransferRpcClient;
+use crate::controls::open_stream_with_strategy;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -79,6 +80,7 @@ impl std::fmt::Debug for FileTransferClientsControl {
 
 impl FileTransferClientsControl {
     const DEFAULT_WRITE_BUFFER_SIZE: usize = 1024 * 1024; // 1 MB
+    const CONNECT_SNIFF_WAIT: Duration = Duration::from_secs(3);
 
     pub fn new(swarm_control: SwarmControl) -> Self {
         Self::new_with_buffer_size(swarm_control, Self::DEFAULT_WRITE_BUFFER_SIZE)
@@ -142,15 +144,20 @@ impl FileTransferClientsControl {
     }
 
     async fn connect_client(&self, peer_id: PeerId) -> anyhow::Result<FileTransferRpcClient> {
-        self.swarm_control.connect(peer_id).await?;
         let mut stream_control = self.swarm_control.stream_control().clone();
-        let stream = match stream_control
-            .open_stream(peer_id, FUNGI_FILE_TRANSFER_PROTOCOL)
-            .await
-        {
-            Ok(stream) => stream,
-            Err(e) => bail!("Failed to open stream to peer {}: {}", peer_id, e),
-        };
+        let stream = open_stream_with_strategy(
+            &self.swarm_control,
+            &mut stream_control,
+            peer_id,
+            FUNGI_FILE_TRANSFER_PROTOCOL,
+            ConnectionSelectionStrategy::PreferDirect,
+            Self::CONNECT_SNIFF_WAIT,
+        )
+        .await
+        .map_err(|e| {
+            anyhow::anyhow!("Failed to open file-transfer stream to peer {peer_id}: {e}")
+        })?;
+
         let client = connect_file_transfer_rpc(stream);
 
         Ok(client)

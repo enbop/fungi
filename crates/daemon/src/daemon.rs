@@ -117,11 +117,19 @@ impl FungiDaemon {
             }
         }
 
-        let (swarm_control, swarm_task) =
-            FungiSwarm::start_swarm(keypair, state.clone(), relay_addrs, |swarm| {
+        let idle_connection_timeout =
+            Duration::from_secs(config.network.idle_connection_timeout_secs.max(30));
+
+        let (swarm_control, swarm_task) = FungiSwarm::start_swarm(
+            keypair,
+            state.clone(),
+            relay_addrs,
+            idle_connection_timeout,
+            |swarm| {
                 apply_listen(swarm, &config);
-            })
-            .await?;
+            },
+        )
+        .await?;
         let mdns_control = MdnsControl::new();
         let peer_info = PeerInfo::this_device(swarm_control.local_peer_id(), config.get_hostname());
         mdns_control.start(peer_info)?;

@@ -345,10 +345,10 @@ pub mod fungi_daemon_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     /// Fungi daemon control API.
     ///
     /// This service exposes runtime inspection and management operations for the
@@ -392,14 +392,13 @@ pub mod fungi_daemon_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             FungiDaemonClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -438,22 +437,12 @@ pub mod fungi_daemon_client {
         pub async fn version(
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::VersionResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::VersionResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/Version",
-            );
+            let path = http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/Version");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "Version"));
@@ -464,18 +453,11 @@ pub mod fungi_daemon_client {
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
         ) -> std::result::Result<tonic::Response<super::PeerIdResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/PeerId",
-            );
+            let path = http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/PeerId");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "PeerId"));
@@ -485,47 +467,31 @@ pub mod fungi_daemon_client {
         pub async fn config_file_path(
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::ConfigFilePathResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::ConfigFilePathResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/ConfigFilePath",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/ConfigFilePath");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "ConfigFilePath"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "ConfigFilePath",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Returns the hostname advertised by the daemon.
         pub async fn hostname(
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::HostnameResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::HostnameResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/Hostname",
-            );
+            let path = http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/Hostname");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "Hostname"));
@@ -539,26 +505,18 @@ pub mod fungi_daemon_client {
             tonic::Response<super::IncomingAllowedPeersListResponse>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/GetIncomingAllowedPeers",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "fungi_daemon.FungiDaemon",
-                        "GetIncomingAllowedPeers",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "GetIncomingAllowedPeers",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Adds a peer ID to the allowlist for incoming connections and persists it.
@@ -566,23 +524,18 @@ pub mod fungi_daemon_client {
             &mut self,
             request: impl tonic::IntoRequest<super::AddIncomingAllowedPeerRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/AddIncomingAllowedPeer",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "AddIncomingAllowedPeer"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "AddIncomingAllowedPeer",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Removes a peer ID from the allowlist for incoming connections.
@@ -590,26 +543,18 @@ pub mod fungi_daemon_client {
             &mut self,
             request: impl tonic::IntoRequest<super::RemoveIncomingAllowedPeerRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/RemoveIncomingAllowedPeer",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "fungi_daemon.FungiDaemon",
-                        "RemoveIncomingAllowedPeer",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "RemoveIncomingAllowedPeer",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Indicates whether the embedded file transfer service is running.
@@ -620,26 +565,18 @@ pub mod fungi_daemon_client {
             tonic::Response<super::FileTransferServiceEnabledResponse>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/GetFileTransferServiceEnabled",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "fungi_daemon.FungiDaemon",
-                        "GetFileTransferServiceEnabled",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "GetFileTransferServiceEnabled",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Returns the root directory shared by the file transfer service.
@@ -650,26 +587,18 @@ pub mod fungi_daemon_client {
             tonic::Response<super::FileTransferServiceRootDirResponse>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/GetFileTransferServiceRootDir",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "fungi_daemon.FungiDaemon",
-                        "GetFileTransferServiceRootDir",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "GetFileTransferServiceRootDir",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Starts the file transfer service with a new root directory, updating
@@ -678,26 +607,18 @@ pub mod fungi_daemon_client {
             &mut self,
             request: impl tonic::IntoRequest<super::StartFileTransferServiceRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/StartFileTransferService",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "fungi_daemon.FungiDaemon",
-                        "StartFileTransferService",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "StartFileTransferService",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Stops the running file transfer service and updates the stored config.
@@ -705,26 +626,18 @@ pub mod fungi_daemon_client {
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/StopFileTransferService",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "fungi_daemon.FungiDaemon",
-                        "StopFileTransferService",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "StopFileTransferService",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Registers a remote file transfer client and optionally enables it
@@ -733,23 +646,18 @@ pub mod fungi_daemon_client {
             &mut self,
             request: impl tonic::IntoRequest<super::AddFileTransferClientRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/AddFileTransferClient",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "AddFileTransferClient"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "AddFileTransferClient",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Removes a remote file transfer client and forgets its configuration.
@@ -757,26 +665,18 @@ pub mod fungi_daemon_client {
             &mut self,
             request: impl tonic::IntoRequest<super::RemoveFileTransferClientRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/RemoveFileTransferClient",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "fungi_daemon.FungiDaemon",
-                        "RemoveFileTransferClient",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "RemoveFileTransferClient",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Enables or disables a remote file transfer client and syncs its metadata.
@@ -784,78 +684,51 @@ pub mod fungi_daemon_client {
             &mut self,
             request: impl tonic::IntoRequest<super::EnableFileTransferClientRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/EnableFileTransferClient",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "fungi_daemon.FungiDaemon",
-                        "EnableFileTransferClient",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "EnableFileTransferClient",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Lists all configured remote file transfer clients with their status.
         pub async fn get_all_file_transfer_clients(
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::FileTransferClientsResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::FileTransferClientsResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/GetAllFileTransferClients",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "fungi_daemon.FungiDaemon",
-                        "GetAllFileTransferClients",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "GetAllFileTransferClients",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Returns the current FTP proxy settings for the file transfer service.
         pub async fn get_ftp_proxy(
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::FtpProxyResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::FtpProxyResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/GetFtpProxy",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/GetFtpProxy");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "GetFtpProxy"));
@@ -866,46 +739,36 @@ pub mod fungi_daemon_client {
             &mut self,
             request: impl tonic::IntoRequest<super::UpdateFtpProxyRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/UpdateFtpProxy",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/UpdateFtpProxy");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "UpdateFtpProxy"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "UpdateFtpProxy",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Returns the current WebDAV proxy settings for the file transfer service.
         pub async fn get_webdav_proxy(
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::WebdavProxyResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::WebdavProxyResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/GetWebdavProxy",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/GetWebdavProxy");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "GetWebdavProxy"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "GetWebdavProxy",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Updates the WebDAV proxy binding and restarts the proxy task if needed.
@@ -913,77 +776,57 @@ pub mod fungi_daemon_client {
             &mut self,
             request: impl tonic::IntoRequest<super::UpdateWebdavProxyRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/UpdateWebdavProxy",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/UpdateWebdavProxy");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "UpdateWebdavProxy"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "UpdateWebdavProxy",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Returns the complete TCP tunneling configuration including current rules.
         pub async fn get_tcp_tunneling_config(
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::TcpTunnelingConfigResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::TcpTunnelingConfigResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/GetTcpTunnelingConfig",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "GetTcpTunnelingConfig"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "GetTcpTunnelingConfig",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Creates a new TCP forwarding rule and returns its generated identifier.
         pub async fn add_tcp_forwarding_rule(
             &mut self,
             request: impl tonic::IntoRequest<super::AddTcpForwardingRuleRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::TcpForwardingRuleResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::TcpForwardingRuleResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/AddTcpForwardingRule",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "AddTcpForwardingRule"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "AddTcpForwardingRule",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Deletes an existing TCP forwarding rule by identifier.
@@ -991,53 +834,38 @@ pub mod fungi_daemon_client {
             &mut self,
             request: impl tonic::IntoRequest<super::RemoveTcpForwardingRuleRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/RemoveTcpForwardingRule",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "fungi_daemon.FungiDaemon",
-                        "RemoveTcpForwardingRule",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "RemoveTcpForwardingRule",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Creates a new TCP listening rule and returns its generated identifier.
         pub async fn add_tcp_listening_rule(
             &mut self,
             request: impl tonic::IntoRequest<super::AddTcpListeningRuleRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::TcpListeningRuleResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::TcpListeningRuleResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/AddTcpListeningRule",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "AddTcpListeningRule"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "AddTcpListeningRule",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Deletes an existing TCP listening rule by identifier.
@@ -1045,75 +873,57 @@ pub mod fungi_daemon_client {
             &mut self,
             request: impl tonic::IntoRequest<super::RemoveTcpListeningRuleRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/RemoveTcpListeningRule",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "RemoveTcpListeningRule"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "RemoveTcpListeningRule",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Returns latest metadata for peers discovered via mDNS.
         pub async fn list_mdns_devices(
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::PeerInfoListResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::PeerInfoListResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/ListMdnsDevices",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/ListMdnsDevices");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "ListMdnsDevices"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "ListMdnsDevices",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Lists every peer stored in the address book.
         pub async fn list_address_book_peers(
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::PeerInfoListResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::PeerInfoListResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/ListAddressBookPeers",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "ListAddressBookPeers"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "ListAddressBookPeers",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Inserts or updates a peer entry in the address book.
@@ -1121,50 +931,37 @@ pub mod fungi_daemon_client {
             &mut self,
             request: impl tonic::IntoRequest<super::UpdateAddressBookPeerRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/UpdateAddressBookPeer",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "UpdateAddressBookPeer"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "UpdateAddressBookPeer",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Returns detailed information for a single address book peer.
         pub async fn get_address_book_peer(
             &mut self,
             request: impl tonic::IntoRequest<super::GetAddressBookPeerRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::PeerInfoResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::PeerInfoResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/GetAddressBookPeer",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "GetAddressBookPeer"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "GetAddressBookPeer",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Removes a peer from the address book.
@@ -1172,23 +969,18 @@ pub mod fungi_daemon_client {
             &mut self,
             request: impl tonic::IntoRequest<super::RemoveAddressBookPeerRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/fungi_daemon.FungiDaemon/RemoveAddressBookPeer",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "RemoveAddressBookPeer"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "RemoveAddressBookPeer",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /// Continuously pings all active connections to a peer and streams results.
@@ -1199,18 +991,11 @@ pub mod fungi_daemon_client {
             tonic::Response<tonic::codec::Streaming<super::PingPeerEvent>>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/PingPeer",
-            );
+            let path = http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/PingPeer");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "PingPeer"));
@@ -1221,25 +1006,19 @@ pub mod fungi_daemon_client {
         pub async fn list_connections(
             &mut self,
             request: impl tonic::IntoRequest<super::ListConnectionsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ListConnectionsResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::ListConnectionsResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/ListConnections",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/ListConnections");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "ListConnections"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "ListConnections",
+            ));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -1251,7 +1030,7 @@ pub mod fungi_daemon_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with FungiDaemonServer.
@@ -1271,18 +1050,12 @@ pub mod fungi_daemon_server {
         async fn config_file_path(
             &self,
             request: tonic::Request<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::ConfigFilePathResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::ConfigFilePathResponse>, tonic::Status>;
         /// Returns the hostname advertised by the daemon.
         async fn hostname(
             &self,
             request: tonic::Request<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::HostnameResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::HostnameResponse>, tonic::Status>;
         /// Lists peers that are allowed to initiate incoming connections.
         async fn get_incoming_allowed_peers(
             &self,
@@ -1348,18 +1121,12 @@ pub mod fungi_daemon_server {
         async fn get_all_file_transfer_clients(
             &self,
             request: tonic::Request<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::FileTransferClientsResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::FileTransferClientsResponse>, tonic::Status>;
         /// Returns the current FTP proxy settings for the file transfer service.
         async fn get_ftp_proxy(
             &self,
             request: tonic::Request<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::FtpProxyResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::FtpProxyResponse>, tonic::Status>;
         /// Updates the FTP proxy binding and restarts the proxy task if needed.
         async fn update_ftp_proxy(
             &self,
@@ -1369,10 +1136,7 @@ pub mod fungi_daemon_server {
         async fn get_webdav_proxy(
             &self,
             request: tonic::Request<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::WebdavProxyResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::WebdavProxyResponse>, tonic::Status>;
         /// Updates the WebDAV proxy binding and restarts the proxy task if needed.
         async fn update_webdav_proxy(
             &self,
@@ -1382,18 +1146,12 @@ pub mod fungi_daemon_server {
         async fn get_tcp_tunneling_config(
             &self,
             request: tonic::Request<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::TcpTunnelingConfigResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::TcpTunnelingConfigResponse>, tonic::Status>;
         /// Creates a new TCP forwarding rule and returns its generated identifier.
         async fn add_tcp_forwarding_rule(
             &self,
             request: tonic::Request<super::AddTcpForwardingRuleRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::TcpForwardingRuleResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::TcpForwardingRuleResponse>, tonic::Status>;
         /// Deletes an existing TCP forwarding rule by identifier.
         async fn remove_tcp_forwarding_rule(
             &self,
@@ -1403,10 +1161,7 @@ pub mod fungi_daemon_server {
         async fn add_tcp_listening_rule(
             &self,
             request: tonic::Request<super::AddTcpListeningRuleRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::TcpListeningRuleResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::TcpListeningRuleResponse>, tonic::Status>;
         /// Deletes an existing TCP listening rule by identifier.
         async fn remove_tcp_listening_rule(
             &self,
@@ -1416,18 +1171,12 @@ pub mod fungi_daemon_server {
         async fn list_mdns_devices(
             &self,
             request: tonic::Request<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::PeerInfoListResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::PeerInfoListResponse>, tonic::Status>;
         /// Lists every peer stored in the address book.
         async fn list_address_book_peers(
             &self,
             request: tonic::Request<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::PeerInfoListResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::PeerInfoListResponse>, tonic::Status>;
         /// Inserts or updates a peer entry in the address book.
         async fn update_address_book_peer(
             &self,
@@ -1437,10 +1186,7 @@ pub mod fungi_daemon_server {
         async fn get_address_book_peer(
             &self,
             request: tonic::Request<super::GetAddressBookPeerRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::PeerInfoResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::PeerInfoResponse>, tonic::Status>;
         /// Removes a peer from the address book.
         async fn remove_address_book_peer(
             &self,
@@ -1449,8 +1195,7 @@ pub mod fungi_daemon_server {
         /// Server streaming response type for the PingPeer method.
         type PingPeerStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<super::PingPeerEvent, tonic::Status>,
-            >
-            + std::marker::Send
+            > + std::marker::Send
             + 'static;
         /// Continuously pings all active connections to a peer and streams results.
         async fn ping_peer(
@@ -1462,10 +1207,7 @@ pub mod fungi_daemon_server {
         async fn list_connections(
             &self,
             request: tonic::Request<super::ListConnectionsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ListConnectionsResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::ListConnectionsResponse>, tonic::Status>;
     }
     /// Fungi daemon control API.
     ///
@@ -1493,10 +1235,7 @@ pub mod fungi_daemon_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -1551,21 +1290,13 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/Version" => {
                     #[allow(non_camel_case_types)]
                     struct VersionSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
-                    for VersionSvc<T> {
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for VersionSvc<T> {
                         type Response = super::VersionResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::Empty>,
-                        ) -> Self::Future {
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as FungiDaemon>::version(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as FungiDaemon>::version(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -1594,21 +1325,13 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/PeerId" => {
                     #[allow(non_camel_case_types)]
                     struct PeerIdSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
-                    for PeerIdSvc<T> {
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for PeerIdSvc<T> {
                         type Response = super::PeerIdResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::Empty>,
-                        ) -> Self::Future {
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as FungiDaemon>::peer_id(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as FungiDaemon>::peer_id(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -1637,17 +1360,10 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/ConfigFilePath" => {
                     #[allow(non_camel_case_types)]
                     struct ConfigFilePathSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
-                    for ConfigFilePathSvc<T> {
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for ConfigFilePathSvc<T> {
                         type Response = super::ConfigFilePathResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::Empty>,
-                        ) -> Self::Future {
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
                                 <T as FungiDaemon>::config_file_path(&inner, request).await
@@ -1680,21 +1396,13 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/Hostname" => {
                     #[allow(non_camel_case_types)]
                     struct HostnameSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
-                    for HostnameSvc<T> {
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for HostnameSvc<T> {
                         type Response = super::HostnameResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::Empty>,
-                        ) -> Self::Future {
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as FungiDaemon>::hostname(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as FungiDaemon>::hostname(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -1723,23 +1431,13 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/GetIncomingAllowedPeers" => {
                     #[allow(non_camel_case_types)]
                     struct GetIncomingAllowedPeersSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
-                    for GetIncomingAllowedPeersSvc<T> {
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for GetIncomingAllowedPeersSvc<T> {
                         type Response = super::IncomingAllowedPeersListResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::Empty>,
-                        ) -> Self::Future {
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::get_incoming_allowed_peers(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as FungiDaemon>::get_incoming_allowed_peers(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -1770,26 +1468,19 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/AddIncomingAllowedPeer" => {
                     #[allow(non_camel_case_types)]
                     struct AddIncomingAllowedPeerSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::AddIncomingAllowedPeerRequest>
-                    for AddIncomingAllowedPeerSvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::AddIncomingAllowedPeerRequest>
+                        for AddIncomingAllowedPeerSvc<T>
+                    {
                         type Response = super::Empty;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::AddIncomingAllowedPeerRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::add_incoming_allowed_peer(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                <T as FungiDaemon>::add_incoming_allowed_peer(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -1819,28 +1510,19 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/RemoveIncomingAllowedPeer" => {
                     #[allow(non_camel_case_types)]
                     struct RemoveIncomingAllowedPeerSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<
-                        super::RemoveIncomingAllowedPeerRequest,
-                    > for RemoveIncomingAllowedPeerSvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::RemoveIncomingAllowedPeerRequest>
+                        for RemoveIncomingAllowedPeerSvc<T>
+                    {
                         type Response = super::Empty;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::RemoveIncomingAllowedPeerRequest,
-                            >,
+                            request: tonic::Request<super::RemoveIncomingAllowedPeerRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::remove_incoming_allowed_peer(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as FungiDaemon>::remove_incoming_allowed_peer(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -1872,23 +1554,17 @@ pub mod fungi_daemon_server {
                     #[allow(non_camel_case_types)]
                     struct GetFileTransferServiceEnabledSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
-                    for GetFileTransferServiceEnabledSvc<T> {
+                        for GetFileTransferServiceEnabledSvc<T>
+                    {
                         type Response = super::FileTransferServiceEnabledResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::Empty>,
-                        ) -> Self::Future {
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
                                 <T as FungiDaemon>::get_file_transfer_service_enabled(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                    &inner, request,
+                                )
+                                .await
                             };
                             Box::pin(fut)
                         }
@@ -1919,23 +1595,17 @@ pub mod fungi_daemon_server {
                     #[allow(non_camel_case_types)]
                     struct GetFileTransferServiceRootDirSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
-                    for GetFileTransferServiceRootDirSvc<T> {
+                        for GetFileTransferServiceRootDirSvc<T>
+                    {
                         type Response = super::FileTransferServiceRootDirResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::Empty>,
-                        ) -> Self::Future {
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
                                 <T as FungiDaemon>::get_file_transfer_service_root_dir(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                    &inner, request,
+                                )
+                                .await
                             };
                             Box::pin(fut)
                         }
@@ -1965,27 +1635,19 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/StartFileTransferService" => {
                     #[allow(non_camel_case_types)]
                     struct StartFileTransferServiceSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::StartFileTransferServiceRequest>
-                    for StartFileTransferServiceSvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::StartFileTransferServiceRequest>
+                        for StartFileTransferServiceSvc<T>
+                    {
                         type Response = super::Empty;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::StartFileTransferServiceRequest,
-                            >,
+                            request: tonic::Request<super::StartFileTransferServiceRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::start_file_transfer_service(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as FungiDaemon>::start_file_transfer_service(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -2016,23 +1678,13 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/StopFileTransferService" => {
                     #[allow(non_camel_case_types)]
                     struct StopFileTransferServiceSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
-                    for StopFileTransferServiceSvc<T> {
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for StopFileTransferServiceSvc<T> {
                         type Response = super::Empty;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::Empty>,
-                        ) -> Self::Future {
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::stop_file_transfer_service(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as FungiDaemon>::stop_file_transfer_service(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -2063,26 +1715,19 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/AddFileTransferClient" => {
                     #[allow(non_camel_case_types)]
                     struct AddFileTransferClientSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::AddFileTransferClientRequest>
-                    for AddFileTransferClientSvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::AddFileTransferClientRequest>
+                        for AddFileTransferClientSvc<T>
+                    {
                         type Response = super::Empty;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::AddFileTransferClientRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::add_file_transfer_client(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                <T as FungiDaemon>::add_file_transfer_client(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2112,27 +1757,19 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/RemoveFileTransferClient" => {
                     #[allow(non_camel_case_types)]
                     struct RemoveFileTransferClientSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::RemoveFileTransferClientRequest>
-                    for RemoveFileTransferClientSvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::RemoveFileTransferClientRequest>
+                        for RemoveFileTransferClientSvc<T>
+                    {
                         type Response = super::Empty;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::RemoveFileTransferClientRequest,
-                            >,
+                            request: tonic::Request<super::RemoveFileTransferClientRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::remove_file_transfer_client(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as FungiDaemon>::remove_file_transfer_client(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -2163,27 +1800,19 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/EnableFileTransferClient" => {
                     #[allow(non_camel_case_types)]
                     struct EnableFileTransferClientSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::EnableFileTransferClientRequest>
-                    for EnableFileTransferClientSvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::EnableFileTransferClientRequest>
+                        for EnableFileTransferClientSvc<T>
+                    {
                         type Response = super::Empty;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::EnableFileTransferClientRequest,
-                            >,
+                            request: tonic::Request<super::EnableFileTransferClientRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::enable_file_transfer_client(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as FungiDaemon>::enable_file_transfer_client(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -2214,23 +1843,13 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/GetAllFileTransferClients" => {
                     #[allow(non_camel_case_types)]
                     struct GetAllFileTransferClientsSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
-                    for GetAllFileTransferClientsSvc<T> {
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for GetAllFileTransferClientsSvc<T> {
                         type Response = super::FileTransferClientsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::Empty>,
-                        ) -> Self::Future {
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::get_all_file_transfer_clients(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as FungiDaemon>::get_all_file_transfer_clients(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -2261,17 +1880,10 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/GetFtpProxy" => {
                     #[allow(non_camel_case_types)]
                     struct GetFtpProxySvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
-                    for GetFtpProxySvc<T> {
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for GetFtpProxySvc<T> {
                         type Response = super::FtpProxyResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::Empty>,
-                        ) -> Self::Future {
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
                                 <T as FungiDaemon>::get_ftp_proxy(&inner, request).await
@@ -2304,15 +1916,11 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/UpdateFtpProxy" => {
                     #[allow(non_camel_case_types)]
                     struct UpdateFtpProxySvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::UpdateFtpProxyRequest>
-                    for UpdateFtpProxySvc<T> {
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::UpdateFtpProxyRequest>
+                        for UpdateFtpProxySvc<T>
+                    {
                         type Response = super::Empty;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::UpdateFtpProxyRequest>,
@@ -2349,17 +1957,10 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/GetWebdavProxy" => {
                     #[allow(non_camel_case_types)]
                     struct GetWebdavProxySvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
-                    for GetWebdavProxySvc<T> {
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for GetWebdavProxySvc<T> {
                         type Response = super::WebdavProxyResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::Empty>,
-                        ) -> Self::Future {
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
                                 <T as FungiDaemon>::get_webdav_proxy(&inner, request).await
@@ -2392,23 +1993,19 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/UpdateWebdavProxy" => {
                     #[allow(non_camel_case_types)]
                     struct UpdateWebdavProxySvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::UpdateWebdavProxyRequest>
-                    for UpdateWebdavProxySvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::UpdateWebdavProxyRequest>
+                        for UpdateWebdavProxySvc<T>
+                    {
                         type Response = super::Empty;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::UpdateWebdavProxyRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::update_webdav_proxy(&inner, request)
-                                    .await
+                                <T as FungiDaemon>::update_webdav_proxy(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2438,24 +2035,13 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/GetTcpTunnelingConfig" => {
                     #[allow(non_camel_case_types)]
                     struct GetTcpTunnelingConfigSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
-                    for GetTcpTunnelingConfigSvc<T> {
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for GetTcpTunnelingConfigSvc<T> {
                         type Response = super::TcpTunnelingConfigResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::Empty>,
-                        ) -> Self::Future {
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::get_tcp_tunneling_config(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                <T as FungiDaemon>::get_tcp_tunneling_config(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2485,23 +2071,19 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/AddTcpForwardingRule" => {
                     #[allow(non_camel_case_types)]
                     struct AddTcpForwardingRuleSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::AddTcpForwardingRuleRequest>
-                    for AddTcpForwardingRuleSvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::AddTcpForwardingRuleRequest>
+                        for AddTcpForwardingRuleSvc<T>
+                    {
                         type Response = super::TcpForwardingRuleResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::AddTcpForwardingRuleRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::add_tcp_forwarding_rule(&inner, request)
-                                    .await
+                                <T as FungiDaemon>::add_tcp_forwarding_rule(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2531,27 +2113,19 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/RemoveTcpForwardingRule" => {
                     #[allow(non_camel_case_types)]
                     struct RemoveTcpForwardingRuleSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::RemoveTcpForwardingRuleRequest>
-                    for RemoveTcpForwardingRuleSvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::RemoveTcpForwardingRuleRequest>
+                        for RemoveTcpForwardingRuleSvc<T>
+                    {
                         type Response = super::Empty;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::RemoveTcpForwardingRuleRequest,
-                            >,
+                            request: tonic::Request<super::RemoveTcpForwardingRuleRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::remove_tcp_forwarding_rule(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as FungiDaemon>::remove_tcp_forwarding_rule(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -2582,23 +2156,19 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/AddTcpListeningRule" => {
                     #[allow(non_camel_case_types)]
                     struct AddTcpListeningRuleSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::AddTcpListeningRuleRequest>
-                    for AddTcpListeningRuleSvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::AddTcpListeningRuleRequest>
+                        for AddTcpListeningRuleSvc<T>
+                    {
                         type Response = super::TcpListeningRuleResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::AddTcpListeningRuleRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::add_tcp_listening_rule(&inner, request)
-                                    .await
+                                <T as FungiDaemon>::add_tcp_listening_rule(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2628,26 +2198,19 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/RemoveTcpListeningRule" => {
                     #[allow(non_camel_case_types)]
                     struct RemoveTcpListeningRuleSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::RemoveTcpListeningRuleRequest>
-                    for RemoveTcpListeningRuleSvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::RemoveTcpListeningRuleRequest>
+                        for RemoveTcpListeningRuleSvc<T>
+                    {
                         type Response = super::Empty;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::RemoveTcpListeningRuleRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::remove_tcp_listening_rule(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                <T as FungiDaemon>::remove_tcp_listening_rule(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2677,17 +2240,10 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/ListMdnsDevices" => {
                     #[allow(non_camel_case_types)]
                     struct ListMdnsDevicesSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
-                    for ListMdnsDevicesSvc<T> {
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for ListMdnsDevicesSvc<T> {
                         type Response = super::PeerInfoListResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::Empty>,
-                        ) -> Self::Future {
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
                                 <T as FungiDaemon>::list_mdns_devices(&inner, request).await
@@ -2720,21 +2276,13 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/ListAddressBookPeers" => {
                     #[allow(non_camel_case_types)]
                     struct ListAddressBookPeersSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
-                    for ListAddressBookPeersSvc<T> {
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for ListAddressBookPeersSvc<T> {
                         type Response = super::PeerInfoListResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::Empty>,
-                        ) -> Self::Future {
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::list_address_book_peers(&inner, request)
-                                    .await
+                                <T as FungiDaemon>::list_address_book_peers(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2764,26 +2312,19 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/UpdateAddressBookPeer" => {
                     #[allow(non_camel_case_types)]
                     struct UpdateAddressBookPeerSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::UpdateAddressBookPeerRequest>
-                    for UpdateAddressBookPeerSvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::UpdateAddressBookPeerRequest>
+                        for UpdateAddressBookPeerSvc<T>
+                    {
                         type Response = super::Empty;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::UpdateAddressBookPeerRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::update_address_book_peer(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                <T as FungiDaemon>::update_address_book_peer(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2813,23 +2354,19 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/GetAddressBookPeer" => {
                     #[allow(non_camel_case_types)]
                     struct GetAddressBookPeerSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::GetAddressBookPeerRequest>
-                    for GetAddressBookPeerSvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::GetAddressBookPeerRequest>
+                        for GetAddressBookPeerSvc<T>
+                    {
                         type Response = super::PeerInfoResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::GetAddressBookPeerRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::get_address_book_peer(&inner, request)
-                                    .await
+                                <T as FungiDaemon>::get_address_book_peer(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2859,26 +2396,19 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/RemoveAddressBookPeer" => {
                     #[allow(non_camel_case_types)]
                     struct RemoveAddressBookPeerSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::RemoveAddressBookPeerRequest>
-                    for RemoveAddressBookPeerSvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::RemoveAddressBookPeerRequest>
+                        for RemoveAddressBookPeerSvc<T>
+                    {
                         type Response = super::Empty;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::RemoveAddressBookPeerRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::remove_address_book_peer(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                <T as FungiDaemon>::remove_address_book_peer(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2908,24 +2438,21 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/PingPeer" => {
                     #[allow(non_camel_case_types)]
                     struct PingPeerSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::ServerStreamingService<super::PingPeerRequest>
-                    for PingPeerSvc<T> {
+                    impl<T: FungiDaemon>
+                        tonic::server::ServerStreamingService<super::PingPeerRequest>
+                        for PingPeerSvc<T>
+                    {
                         type Response = super::PingPeerEvent;
                         type ResponseStream = T::PingPeerStream;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
-                        >;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::PingPeerRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as FungiDaemon>::ping_peer(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as FungiDaemon>::ping_peer(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -2954,15 +2481,11 @@ pub mod fungi_daemon_server {
                 "/fungi_daemon.FungiDaemon/ListConnections" => {
                     #[allow(non_camel_case_types)]
                     struct ListConnectionsSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<
-                        T: FungiDaemon,
-                    > tonic::server::UnaryService<super::ListConnectionsRequest>
-                    for ListConnectionsSvc<T> {
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::ListConnectionsRequest>
+                        for ListConnectionsSvc<T>
+                    {
                         type Response = super::ListConnectionsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ListConnectionsRequest>,
@@ -2996,25 +2519,19 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
