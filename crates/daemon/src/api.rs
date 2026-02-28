@@ -10,6 +10,17 @@ use libp2p::swarm::ConnectionId;
 
 use crate::FungiDaemon;
 
+#[derive(Debug, Clone)]
+pub struct ConnectionSnapshot {
+    pub peer_id: String,
+    pub connection_id: String,
+    pub direction: String,
+    pub remote_addr: String,
+    pub is_relay: bool,
+    pub last_rtt_ms: u64,
+    pub last_ping_at: Option<std::time::SystemTime>,
+}
+
 impl FungiDaemon {
     pub fn host_name(&self) -> Option<String> {
         self.config().lock().get_hostname()
@@ -79,6 +90,72 @@ impl FungiDaemon {
 
     pub fn get_peer_connections(&self, peer_id: PeerId) -> Option<PeerConnections> {
         self.swarm_control().state().get_peer_connections(&peer_id)
+    }
+
+    pub fn list_connections(&self, peer_id: Option<PeerId>) -> Vec<ConnectionSnapshot> {
+        let state = self.swarm_control().state();
+        let peer_connections = state.peer_connections();
+        let peer_connections = peer_connections.lock();
+
+        let mut snapshots = Vec::new();
+        for (pid, peer_conn) in peer_connections.iter() {
+            if let Some(filter_peer_id) = peer_id
+                && *pid != filter_peer_id
+            {
+                continue;
+            }
+
+            for conn in peer_conn.inbound() {
+                let ping_info = state.connection_ping_info(&conn.connection_id());
+                let (last_rtt_ms, last_ping_at) = match ping_info {
+                    Some(info) if info.last_rtt_at != std::time::SystemTime::UNIX_EPOCH => {
+                        (info.last_rtt.as_millis() as u64, Some(info.last_rtt_at))
+                    }
+                    _ => (0, None),
+                };
+
+                let remote_addr = conn.multiaddr().to_string();
+                snapshots.push(ConnectionSnapshot {
+                    peer_id: pid.to_string(),
+                    connection_id: conn.connection_id().to_string(),
+                    direction: "inbound".to_string(),
+                    is_relay: remote_addr.contains("/p2p-circuit"),
+                    remote_addr,
+                    last_rtt_ms,
+                    last_ping_at,
+                });
+            }
+
+            for conn in peer_conn.outbound() {
+                let ping_info = state.connection_ping_info(&conn.connection_id());
+                let (last_rtt_ms, last_ping_at) = match ping_info {
+                    Some(info) if info.last_rtt_at != std::time::SystemTime::UNIX_EPOCH => {
+                        (info.last_rtt.as_millis() as u64, Some(info.last_rtt_at))
+                    }
+                    _ => (0, None),
+                };
+
+                let remote_addr = conn.multiaddr().to_string();
+                snapshots.push(ConnectionSnapshot {
+                    peer_id: pid.to_string(),
+                    connection_id: conn.connection_id().to_string(),
+                    direction: "outbound".to_string(),
+                    is_relay: remote_addr.contains("/p2p-circuit"),
+                    remote_addr,
+                    last_rtt_ms,
+                    last_ping_at,
+                });
+            }
+        }
+
+        snapshots.sort_by(|a, b| {
+            a.peer_id
+                .cmp(&b.peer_id)
+                .then(a.direction.cmp(&b.direction))
+                .then(a.connection_id.cmp(&b.connection_id))
+        });
+
+        snapshots
     }
 
     pub async fn dial_peer_once(&self, peer_id: PeerId) -> Result<()> {

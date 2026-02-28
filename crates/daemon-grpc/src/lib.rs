@@ -29,6 +29,12 @@ fn now_unix_ms() -> i64 {
         .as_millis() as i64
 }
 
+fn system_time_to_unix_ms(time: SystemTime) -> i64 {
+    time.duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64
+}
+
 fn ping_event(
     peer_id: &str,
     tick_seq: u64,
@@ -677,6 +683,38 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         Ok(Response::new(
             Box::pin(ReceiverStream::new(rx)) as Self::PingPeerStream
         ))
+    }
+
+    async fn list_connections(
+        &self,
+        request: Request<ListConnectionsRequest>,
+    ) -> Result<Response<ListConnectionsResponse>, Status> {
+        let peer_filter = request.into_inner().peer_id;
+        let peer_filter = if peer_filter.trim().is_empty() {
+            None
+        } else {
+            Some(
+                PeerId::from_str(&peer_filter)
+                    .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?,
+            )
+        };
+
+        let connections = self
+            .inner
+            .list_connections(peer_filter)
+            .into_iter()
+            .map(|c| ConnectionSnapshot {
+                peer_id: c.peer_id,
+                connection_id: c.connection_id,
+                direction: c.direction,
+                remote_addr: c.remote_addr,
+                is_relay: c.is_relay,
+                last_rtt_ms: c.last_rtt_ms,
+                last_ping_unix_ms: c.last_ping_at.map(system_time_to_unix_ms).unwrap_or(0),
+            })
+            .collect();
+
+        Ok(Response::new(ListConnectionsResponse { connections }))
     }
 }
 

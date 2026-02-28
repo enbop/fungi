@@ -104,6 +104,10 @@ service FungiDaemon {
 
   // Continuously pings all active connections to a peer and streams results.
   rpc PingPeer(PingPeerRequest) returns (stream PingPeerEvent) {}
+
+  // Lists currently established connections with latest ping metadata.
+  // If peer_id is provided, only that peer's connections are returned.
+  rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse) {}
 }
 
 message Empty {}
@@ -282,3 +286,21 @@ message PingPeerError {
   string remote_addr = 3;
   string message = 4;
 }
+
+message ListConnectionsRequest {
+  // Optional peer_id filter. Empty means all peers.
+  string peer_id = 1;
+}
+
+message ConnectionSnapshot {
+  string peer_id = 1;
+  string connection_id = 2;
+  string direction = 3;
+  string remote_addr = 4;
+  bool is_relay = 5;
+  uint64 last_rtt_ms = 6;
+  // 0 means no ping has been recorded yet.
+  int64 last_ping_unix_ms = 7;
+}
+
+message ListConnectionsResponse { repeated ConnectionSnapshot connections = 1; }

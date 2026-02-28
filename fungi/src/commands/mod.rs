@@ -80,6 +80,12 @@ pub enum Commands {
         #[arg(long, default_value_t = 1000)]
         interval_ms: u32,
     },
+    /// List active connections and latest ping results
+    Connections {
+        /// Optional peer ID filter
+        #[arg(long)]
+        peer_id: Option<String>,
+    },
 
     #[cfg(feature = "wasi")]
     /// [WASI runtime] Run a WebAssembly module (re-exported wasmtime command)

@@ -309,6 +309,35 @@ pub struct PingPeerError {
     #[prost(string, tag = "4")]
     pub message: ::prost::alloc::string::String,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListConnectionsRequest {
+    /// Optional peer_id filter. Empty means all peers.
+    #[prost(string, tag = "1")]
+    pub peer_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ConnectionSnapshot {
+    #[prost(string, tag = "1")]
+    pub peer_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub connection_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub direction: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub remote_addr: ::prost::alloc::string::String,
+    #[prost(bool, tag = "5")]
+    pub is_relay: bool,
+    #[prost(uint64, tag = "6")]
+    pub last_rtt_ms: u64,
+    /// 0 means no ping has been recorded yet.
+    #[prost(int64, tag = "7")]
+    pub last_ping_unix_ms: i64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListConnectionsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub connections: ::prost::alloc::vec::Vec<ConnectionSnapshot>,
+}
 /// Generated client implementations.
 pub mod fungi_daemon_client {
     #![allow(
@@ -1182,6 +1211,32 @@ pub mod fungi_daemon_client {
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "PingPeer"));
             self.inner.server_streaming(req, path, codec).await
         }
+        /// Lists currently established connections with latest ping metadata.
+        /// If peer_id is provided, only that peer's connections are returned.
+        pub async fn list_connections(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ListConnectionsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListConnectionsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/ListConnections",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "ListConnections"));
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -1397,6 +1452,15 @@ pub mod fungi_daemon_server {
             &self,
             request: tonic::Request<super::PingPeerRequest>,
         ) -> std::result::Result<tonic::Response<Self::PingPeerStream>, tonic::Status>;
+        /// Lists currently established connections with latest ping metadata.
+        /// If peer_id is provided, only that peer's connections are returned.
+        async fn list_connections(
+            &self,
+            request: tonic::Request<super::ListConnectionsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListConnectionsResponse>,
+            tonic::Status,
+        >;
     }
     #[derive(Debug)]
     pub struct FungiDaemonServer<T> {
@@ -2873,6 +2937,51 @@ pub mod fungi_daemon_server {
                                 max_encoding_message_size,
                             );
                         let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/ListConnections" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListConnectionsSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::ListConnectionsRequest>
+                    for ListConnectionsSvc<T> {
+                        type Response = super::ListConnectionsResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ListConnectionsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::list_connections(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListConnectionsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)

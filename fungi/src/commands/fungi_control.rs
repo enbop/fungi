@@ -5,12 +5,11 @@ use fungi_daemon_grpc::{
     fungi_daemon_grpc::{
         AddFileTransferClientRequest, AddIncomingAllowedPeerRequest, AddTcpForwardingRuleRequest,
         AddTcpListeningRuleRequest, Empty, EnableFileTransferClientRequest,
-        GetAddressBookPeerRequest, PeerInfo, RemoveAddressBookPeerRequest,
-        PingPeerRequest, ping_peer_event,
-        RemoveFileTransferClientRequest, RemoveIncomingAllowedPeerRequest,
-        RemoveTcpForwardingRuleRequest, RemoveTcpListeningRuleRequest,
-        StartFileTransferServiceRequest, UpdateFtpProxyRequest, UpdateWebdavProxyRequest,
-        fungi_daemon_client::FungiDaemonClient,
+        GetAddressBookPeerRequest, ListConnectionsRequest, PeerInfo, PingPeerRequest,
+        RemoveAddressBookPeerRequest, RemoveFileTransferClientRequest,
+        RemoveIncomingAllowedPeerRequest, RemoveTcpForwardingRuleRequest,
+        RemoveTcpListeningRuleRequest, StartFileTransferServiceRequest, UpdateFtpProxyRequest,
+        UpdateWebdavProxyRequest, fungi_daemon_client::FungiDaemonClient, ping_peer_event,
     },
 };
 
@@ -213,11 +212,7 @@ async fn get_rpc_client(args: &CommonArgs) -> Option<FungiDaemonClient<tonic::tr
     }
 }
 
-pub async fn execute_ping(
-    args: CommonArgs,
-    peer_id: String,
-    interval_ms: u32,
-) {
+pub async fn execute_ping(args: CommonArgs, peer_id: String, interval_ms: u32) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
         None => return,
@@ -278,6 +273,49 @@ pub async fn execute_ping(
                 println!("[tick={}] unknown event", event.tick_seq);
             }
         }
+    }
+}
+
+pub async fn execute_connections(args: CommonArgs, peer_id: Option<String>) {
+    let mut client = match get_rpc_client(&args).await {
+        Some(c) => c,
+        None => return,
+    };
+
+    let req = ListConnectionsRequest {
+        peer_id: peer_id.clone().unwrap_or_default(),
+    };
+
+    match client.list_connections(Request::new(req)).await {
+        Ok(resp) => {
+            let connections = resp.into_inner().connections;
+            if connections.is_empty() {
+                if let Some(pid) = peer_id {
+                    println!("No active connections for peer {}", pid);
+                } else {
+                    println!("No active connections");
+                }
+                return;
+            }
+
+            for conn in connections {
+                let ping = if conn.last_ping_unix_ms == 0 {
+                    "n/a".to_string()
+                } else {
+                    format!("{}ms @ {}", conn.last_rtt_ms, conn.last_ping_unix_ms)
+                };
+                println!(
+                    "peer={} conn={} dir={} relay={} addr={} last_ping={}",
+                    conn.peer_id,
+                    conn.connection_id,
+                    conn.direction,
+                    if conn.is_relay { "yes" } else { "no" },
+                    conn.remote_addr,
+                    ping,
+                );
+            }
+        }
+        Err(e) => eprintln!("Error: {}", e),
     }
 }
 
