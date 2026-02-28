@@ -2,7 +2,7 @@ pub mod ext;
 
 use std::ops::Deref;
 
-use libp2p::{dcutr, identify, identity::Keypair, mdns, ping, relay, swarm::NetworkBehaviour};
+use libp2p::{dcutr, identify, identity::Keypair, mdns, relay, swarm::NetworkBehaviour};
 
 use crate::State;
 
@@ -15,7 +15,6 @@ fn identify_user_agent() -> String {
 
 #[derive(NetworkBehaviour)]
 pub struct FungiBehaviours {
-    ping: ping::Behaviour,
     pub stream: libp2p_stream::Behaviour,
     pub mdns: mdns::tokio::Behaviour,
     identify: identify::Behaviour,
@@ -50,7 +49,6 @@ impl FungiBehaviours {
         );
 
         Self {
-            ping: ping::Behaviour::default(),
             stream: libp2p_stream::Behaviour::default(),
             mdns,
             identify,

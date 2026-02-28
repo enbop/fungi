@@ -11,6 +11,8 @@ tonic = "0.14.2"
 tonic-prost = "0.14.2"
 prost = "0.14"
 libp2p-identity = { workspace = true }
+tokio = { version = "1", features = ["time", "sync", "rt"] }
+tokio-stream = "0.1"
 
 [build-dependencies]
 tonic-prost-build = "0.14.2"

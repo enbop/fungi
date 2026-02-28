@@ -1,24 +1,28 @@
 use crate::{
+    ConnectionDirection, State, StreamObservationHandle,
     behaviours::{FungiBehaviours, FungiBehavioursEvent},
+    connection_state,
     peer_handshake::PeerHandshakePayload,
+    ping::{PING_PROTOCOL, PingRttEvent, PingState, send_ping_with_timeout},
 };
 use anyhow::{Result, bail};
 use async_result::{AsyncResult, Completer};
 use fungi_util::protocols::{FUNGI_PEER_HANDSHAKE_PROTOCOL, FUNGI_RELAY_HANDSHAKE_PROTOCOL};
 use libp2p::{
-    Multiaddr, PeerId, Swarm,
+    Multiaddr, PeerId, Stream, StreamProtocol, Swarm,
     futures::{AsyncReadExt, AsyncWriteExt, StreamExt},
     identity::Keypair,
     mdns,
     multiaddr::Protocol,
     noise,
-    swarm::{DialError, SwarmEvent, dial_opts::DialOpts},
+    swarm::{
+        ConnectionId, DialError, SwarmEvent,
+        dial_opts::{DialOpts, PeerCondition},
+    },
     tcp, yamux,
 };
-use parking_lot::{Mutex, RwLock};
 use std::{
     any::Any,
-    collections::{HashMap, HashSet},
     ops::Deref,
     sync::{
         Arc,
@@ -35,6 +39,7 @@ use tokio::{
 // Relay connection retry constants
 const RELAY_RETRY_MAX_ATTEMPTS: u32 = 4;
 const RELAY_RETRY_BASE_DELAY_MS: u64 = 500;
+const OUTBOUND_PING_INTERVAL: Duration = Duration::from_secs(15);
 
 /// Simple RAII guard to ensure atomic bool is reset when task completes
 struct TaskGuard {
@@ -79,67 +84,6 @@ pub type TSwarm = Swarm<FungiBehaviours>;
 type SwarmResponse = Box<dyn Any + Send>;
 type SwarmRequest = Box<dyn FnOnce(&mut TSwarm) -> SwarmResponse + Send + Sync>;
 
-pub struct ConnectedPeer {
-    handshake: Option<PeerHandshakePayload>,
-    multiaddr: Multiaddr,
-}
-
-impl ConnectedPeer {
-    pub fn with_multiaddr(multiaddr: Multiaddr) -> Self {
-        Self {
-            handshake: None,
-            multiaddr,
-        }
-    }
-
-    pub fn update_handshake(&mut self, handshake: PeerHandshakePayload) {
-        self.handshake = Some(handshake);
-    }
-
-    pub fn host_name(&self) -> Option<String> {
-        self.handshake.as_ref().and_then(|h| h.host_name())
-    }
-
-    pub fn multiaddr(&self) -> &Multiaddr {
-        &self.multiaddr
-    }
-}
-
-type DialCallback = Arc<Mutex<HashMap<PeerId, Completer<std::result::Result<(), DialError>>>>>;
-
-#[derive(Default, Clone)]
-pub struct State {
-    dial_callback: DialCallback,
-    connected_peers: Arc<Mutex<HashMap<PeerId, ConnectedPeer>>>,
-    incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
-}
-
-impl State {
-    pub fn new(incoming_allowed_peers: HashSet<PeerId>) -> Self {
-        Self {
-            dial_callback: Arc::new(Mutex::new(HashMap::new())),
-            connected_peers: Arc::new(Mutex::new(HashMap::new())),
-            incoming_allowed_peers: Arc::new(RwLock::new(incoming_allowed_peers)),
-        }
-    }
-
-    pub fn dial_callback(&self) -> DialCallback {
-        self.dial_callback.clone()
-    }
-
-    pub fn connected_peers(&self) -> Arc<Mutex<HashMap<PeerId, ConnectedPeer>>> {
-        self.connected_peers.clone()
-    }
-
-    pub fn incoming_allowed_peers(&self) -> Arc<RwLock<HashSet<PeerId>>> {
-        self.incoming_allowed_peers.clone()
-    }
-
-    pub fn get_incoming_allowed_peers_list(&self) -> Vec<PeerId> {
-        self.incoming_allowed_peers.read().iter().cloned().collect()
-    }
-}
-
 pub struct SwarmAsyncCall {
     request: SwarmRequest,
     response: Completer<SwarmResponse>,
@@ -176,15 +120,35 @@ pub struct SwarmControl {
     /// Prevents duplicate connection attempts to the same relay server
     relay_addresses_state: Arc<Vec<(Multiaddr, Arc<AtomicBool>)>>,
 
+    pub(crate) ping_state: Arc<PingState>,
+
     state: State,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ConnectionSelectionStrategy {
+    PreferDirect,
+    PreferRelay,
+    PreferLowLatency,
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectedConnection {
+    pub connection_id: ConnectionId,
+    pub direction: ConnectionDirection,
+    pub remote_addr: Multiaddr,
+    pub is_relay: bool,
+    pub last_rtt: Option<Duration>,
+}
+
 impl SwarmControl {
+    /// Create a new swarm control handle.
     pub fn new(
         local_peer_id: Arc<PeerId>,
         swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
         stream_control: libp2p_stream::Control,
         relay_addresses: Vec<Multiaddr>,
+        ping_state: Arc<PingState>,
         state: State,
     ) -> Self {
         let relay_addresses_state = Arc::new(
@@ -198,6 +162,7 @@ impl SwarmControl {
             swarm_caller_tx,
             stream_control,
             relay_addresses_state,
+            ping_state,
             state,
         }
     }
@@ -206,16 +171,274 @@ impl SwarmControl {
         *self.local_peer_id
     }
 
-    pub fn stream_control(&self) -> &libp2p_stream::Control {
-        &self.stream_control
-    }
-
-    pub fn stream_control_mut(&mut self) -> &mut libp2p_stream::Control {
-        &mut self.stream_control
-    }
-
     pub fn state(&self) -> &State {
         &self.state
+    }
+
+    /// Register acceptance of inbound streams for a protocol.
+    ///
+    /// This is the unified external entrypoint for inbound stream handling,
+    /// so daemon-side controls do not need direct access to `stream_control`.
+    pub fn accept_incoming_streams(
+        &self,
+        protocol: StreamProtocol,
+    ) -> std::result::Result<libp2p_stream::IncomingStreams, libp2p_stream::AlreadyRegistered> {
+        let mut stream_control = self.stream_control.clone();
+        stream_control.accept(protocol)
+    }
+
+    /// Ensure peer is connected and collect currently active connections,
+    /// then sort them using the requested strategy.
+    async fn connect_with_strategy(
+        &self,
+        peer_id: PeerId,
+        strategy: ConnectionSelectionStrategy,
+        sniff_wait: Duration,
+    ) -> Result<Vec<SelectedConnection>> {
+        self.connect(peer_id)
+            .await
+            .map_err(|e| anyhow::anyhow!("Connect failed: {e}"))?;
+
+        if matches!(
+            strategy,
+            ConnectionSelectionStrategy::PreferDirect
+                | ConnectionSelectionStrategy::PreferLowLatency
+        ) && !sniff_wait.is_zero()
+        {
+            let deadline = tokio::time::Instant::now() + sniff_wait;
+            loop {
+                let current = self.collect_selected_connections(peer_id);
+                if current.iter().any(|c| !c.is_relay) || tokio::time::Instant::now() >= deadline {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
+        }
+
+        let mut selected = self.collect_selected_connections(peer_id);
+        if selected.is_empty() {
+            bail!("No active connections for peer {peer_id}");
+        }
+
+        Self::sort_selected_connections(strategy, &mut selected);
+        Ok(selected)
+    }
+
+    /// Ping a specific connection and update cached RTT.
+    ///
+    /// If direct ping on the given connection fails, this falls back to the
+    /// unified stream-open entrypoint and retries ping on a recovered stream.
+    pub async fn ping_connection(
+        &self,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        timeout: Duration,
+    ) -> Result<Duration> {
+        let mapped_peer_id = self
+            .state
+            .peer_id_by_connection_id(&connection_id)
+            .ok_or_else(|| anyhow::anyhow!("Connection {connection_id:?} not found"))?;
+
+        if mapped_peer_id != peer_id {
+            bail!("Connection {connection_id:?} belongs to {mapped_peer_id}, not {peer_id}");
+        }
+
+        let rtt = self
+            .ping_state
+            .ping_now(peer_id, connection_id, timeout)
+            .await;
+
+        let rtt = match rtt {
+            Ok(rtt) => rtt,
+            Err(first_err) => {
+                log::warn!(
+                    "Ping on connection {:?} to {} failed: {}. Retrying via unified stream open path.",
+                    connection_id,
+                    peer_id,
+                    first_err
+                );
+
+                let (mut stream, _stream_observation_handle, recovered_connection_id) = self
+                    .open_stream_with_strategy(
+                        peer_id,
+                        PING_PROTOCOL,
+                        ConnectionSelectionStrategy::PreferLowLatency,
+                        Duration::from_millis(300),
+                    )
+                    .await
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "Primary ping failed: {first_err}; recovery stream open failed: {e}"
+                        )
+                    })?;
+                stream.ignore_for_keep_alive();
+                let recovered_rtt = send_ping_with_timeout(&mut stream, peer_id, timeout)
+                    .await
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "Primary ping failed: {first_err}; recovery ping on connection {:?} failed: {}",
+                            recovered_connection_id,
+                            e
+                        )
+                    })?;
+                self.state
+                    .update_connection_ping(&recovered_connection_id, recovered_rtt);
+                return Ok(recovered_rtt);
+            }
+        };
+        self.state.update_connection_ping(&connection_id, rtt);
+        Ok(rtt)
+    }
+
+    /// Unified outbound stream-open API used by ping, file transfer, tunneling,
+    /// and future stream-based features.
+    ///
+    /// Behavior:
+    /// - Select candidate connections according to strategy.
+    /// - Try opening stream on each candidate.
+    /// - On full failure, force one redial and retry once.
+    pub async fn open_stream_with_strategy(
+        &self,
+        target_peer: PeerId,
+        target_protocol: StreamProtocol,
+        strategy: ConnectionSelectionStrategy,
+        sniff_wait: Duration,
+    ) -> Result<(Stream, StreamObservationHandle, ConnectionId)> {
+        let mut stream_control = self.stream_control.clone();
+        let mut last_error_detail = String::from("no candidate connections returned");
+
+        for attempt in 0..2 {
+            if attempt == 1 {
+                log::info!(
+                    "Retrying stream open to peer {} after forced redial",
+                    target_peer
+                );
+                if let Err(e) = self.connect_force_redial(target_peer).await {
+                    log::warn!("Forced redial to peer {} failed: {}", target_peer, e);
+                }
+                tokio::time::sleep(Duration::from_millis(300)).await;
+            }
+
+            let candidates = match self
+                .connect_with_strategy(target_peer, strategy, sniff_wait)
+                .await
+            {
+                Ok(candidates) => candidates,
+                Err(e) => {
+                    last_error_detail = e.to_string();
+                    continue;
+                }
+            };
+
+            for selected in &candidates {
+                match stream_control
+                    .open_stream_on_connection(
+                        target_peer,
+                        selected.connection_id,
+                        target_protocol.clone(),
+                    )
+                    .await
+                {
+                    Ok(stream) => {
+                        let stream_observation_handle = self.state.track_outbound_stream_opened(
+                            target_peer,
+                            selected.connection_id,
+                            target_protocol.to_string(),
+                        );
+                        return Ok((stream, stream_observation_handle, selected.connection_id));
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to open stream on connection {} to peer {} (relay={}, addr={}): {}",
+                            selected.connection_id,
+                            target_peer,
+                            selected.is_relay,
+                            selected.remote_addr,
+                            e
+                        );
+                        last_error_detail = e.to_string();
+                    }
+                }
+            }
+        }
+
+        bail!(
+            "Failed to open stream to peer {} using selected connections: {}",
+            target_peer,
+            last_error_detail
+        )
+    }
+
+    fn collect_selected_connections(&self, peer_id: PeerId) -> Vec<SelectedConnection> {
+        let Some(peer_connections) = self.state.get_peer_connections(&peer_id) else {
+            return Vec::new();
+        };
+
+        let mut selected = Vec::new();
+        for conn in peer_connections.outbound() {
+            let ping_info = self.state.connection_ping_info(&conn.connection_id());
+            let last_rtt = ping_info.and_then(|info| info.last_rtt);
+            let remote_addr = conn.multiaddr().clone();
+            let is_relay = remote_addr.to_string().contains("/p2p-circuit");
+            selected.push(SelectedConnection {
+                connection_id: conn.connection_id(),
+                direction: ConnectionDirection::Outbound,
+                remote_addr,
+                is_relay,
+                last_rtt,
+            });
+        }
+
+        for conn in peer_connections.inbound() {
+            let ping_info = self.state.connection_ping_info(&conn.connection_id());
+            let last_rtt = ping_info.and_then(|info| info.last_rtt);
+            let remote_addr = conn.multiaddr().clone();
+            let is_relay = remote_addr.to_string().contains("/p2p-circuit");
+            selected.push(SelectedConnection {
+                connection_id: conn.connection_id(),
+                direction: ConnectionDirection::Inbound,
+                remote_addr,
+                is_relay,
+                last_rtt,
+            });
+        }
+
+        selected
+    }
+
+    fn sort_selected_connections(
+        strategy: ConnectionSelectionStrategy,
+        selected: &mut [SelectedConnection],
+    ) {
+        fn conn_id_key(id: ConnectionId) -> u64 {
+            let s = id.to_string();
+            if let Ok(v) = s.parse::<u64>() {
+                return v;
+            }
+            let digits: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
+            digits.parse::<u64>().unwrap_or(u64::MAX)
+        }
+
+        fn rtt_key(rtt: Option<Duration>) -> u128 {
+            rtt.map(|v| v.as_millis()).unwrap_or(u128::MAX)
+        }
+
+        selected.sort_by(|a, b| match strategy {
+            ConnectionSelectionStrategy::PreferDirect => a
+                .is_relay
+                .cmp(&b.is_relay)
+                .then(rtt_key(a.last_rtt).cmp(&rtt_key(b.last_rtt)))
+                .then(conn_id_key(a.connection_id).cmp(&conn_id_key(b.connection_id))),
+            ConnectionSelectionStrategy::PreferRelay => b
+                .is_relay
+                .cmp(&a.is_relay)
+                .then(rtt_key(a.last_rtt).cmp(&rtt_key(b.last_rtt)))
+                .then(conn_id_key(a.connection_id).cmp(&conn_id_key(b.connection_id))),
+            ConnectionSelectionStrategy::PreferLowLatency => rtt_key(a.last_rtt)
+                .cmp(&rtt_key(b.last_rtt))
+                .then(a.is_relay.cmp(&b.is_relay))
+                .then(conn_id_key(a.connection_id).cmp(&conn_id_key(b.connection_id))),
+        });
     }
 
     // TODO impl handshake
@@ -237,11 +460,11 @@ impl SwarmControl {
             handshake_res.host_name().unwrap_or_default(),
             peer_id
         );
-        self.state
-            .connected_peers
-            .lock()
-            .get_mut(&peer_id)
-            .expect("Peer should be connected")
+        let peer_connections = self.state.peer_connections();
+        let mut peer_connections = peer_connections.lock();
+        peer_connections
+            .entry(peer_id)
+            .or_default()
             .update_handshake(handshake_res);
 
         Ok(())
@@ -249,12 +472,22 @@ impl SwarmControl {
 
     // connect and handshake
     // TODO add a timeout
+    /// Best-effort idempotent connect.
     pub async fn connect(&self, peer_id: PeerId) -> Result<(), ConnectError> {
-        if self.state.connected_peers.lock().contains_key(&peer_id) {
-            return Ok(());
-        }
+        self.connect_internal(peer_id, false).await
+    }
 
-        if self.state.dial_callback.lock().contains_key(&peer_id) {
+    async fn connect_force_redial(&self, peer_id: PeerId) -> Result<(), ConnectError> {
+        self.connect_internal(peer_id, true).await
+    }
+
+    /// Internal connect primitive supporting optional forced redial.
+    async fn connect_internal(
+        &self,
+        peer_id: PeerId,
+        force_redial_when_connected: bool,
+    ) -> Result<(), ConnectError> {
+        if self.state.dial_callback().lock().contains_key(&peer_id) {
             log::warn!("Already dialing {peer_id}");
             return Err(ConnectError::AlreadyDialing { peer_id });
         }
@@ -264,12 +497,22 @@ impl SwarmControl {
         let relay_addresses_state = self.relay_addresses_state.clone();
         let dial_result = self
             .invoke_swarm(move |swarm| {
-                if swarm.is_connected(&peer_id) {
+                if swarm.is_connected(&peer_id) && !force_redial_when_connected {
                     log::info!("Already connected to {peer_id}");
                     completer.complete(Ok(()));
                     return Ok(());
                 }
-                if let Err(e) = swarm.dial(peer_id) {
+
+                let direct_dial_result = if force_redial_when_connected {
+                    let dial_opts = DialOpts::peer_id(peer_id)
+                        .condition(PeerCondition::Always)
+                        .build();
+                    swarm.dial(dial_opts)
+                } else {
+                    swarm.dial(peer_id)
+                };
+
+                if let Err(e) = direct_dial_result {
                     match e {
                         DialError::NoAddresses => {
                             if relay_addresses_state.is_empty() {
@@ -284,11 +527,13 @@ impl SwarmControl {
                             );
                             let mut full_addrs = Vec::new();
                             for (relay_addr, _) in relay_addresses_state.iter() {
-                                full_addrs.push(
-                                    peer_addr_with_relay(peer_id, relay_addr.clone()),
-                                );
+                                full_addrs.push(peer_addr_with_relay(peer_id, relay_addr.clone()));
                             }
-                            let dial_opts = DialOpts::peer_id(peer_id).addresses(full_addrs).build();
+                            let mut dial_opts = DialOpts::peer_id(peer_id).addresses(full_addrs);
+                            if force_redial_when_connected {
+                                dial_opts = dial_opts.condition(PeerCondition::Always);
+                            }
+                            let dial_opts = dial_opts.build();
                             swarm.dial(dial_opts)?;
                         }
                         _ => return Err(e),
@@ -296,7 +541,7 @@ impl SwarmControl {
                 };
                 swarm
                     .behaviour()
-                    .dial_callback
+                    .dial_callback()
                     .lock()
                     .insert(peer_id, completer);
                 Ok(())
@@ -348,6 +593,7 @@ impl FungiSwarm {
         keypair: Keypair,
         state: State,
         relay_addresses: Vec<Multiaddr>,
+        idle_connection_timeout: Duration,
         apply: impl FnOnce(&mut TSwarm),
     ) -> Result<(SwarmControl, JoinHandle<()>)> {
         let mdns =
@@ -365,11 +611,16 @@ impl FungiSwarm {
             .with_behaviour(|keypair, relay| {
                 FungiBehaviours::new(keypair, relay, mdns, state.clone())
             })?
-            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
+            .with_swarm_config(|c| c.with_idle_connection_timeout(idle_connection_timeout))
             .build();
 
         let local_peer_id = *swarm.local_peer_id();
         let stream_control = swarm.behaviour().stream.new_control();
+
+        let (ping_event_tx, ping_event_rx) = mpsc::unbounded_channel::<PingRttEvent>();
+        let mut ping_state = PingState::new(OUTBOUND_PING_INTERVAL, ping_event_tx);
+        ping_state.init(stream_control.clone());
+        let ping_state = Arc::new(ping_state);
 
         apply(&mut swarm);
 
@@ -377,106 +628,158 @@ impl FungiSwarm {
         let (swarm_event_tx, swarm_event_rx) =
             mpsc::unbounded_channel::<SwarmEvent<FungiBehavioursEvent>>();
 
-        let swarm_fut = Self::swarm_loop(swarm, swarm_caller_rx, swarm_event_tx);
+        let swarm_fut = swarm_loop(swarm, swarm_caller_rx, swarm_event_tx);
         let swarm_control = SwarmControl::new(
             Arc::new(local_peer_id),
             swarm_caller_tx,
             stream_control,
             relay_addresses,
+            ping_state,
             state,
         );
-        let event_handle_fut = Self::handle_swarm_event(swarm_control.clone(), swarm_event_rx);
+        let event_handle_fut = handle_swarm_event(swarm_control.clone(), swarm_event_rx);
+        let ping_handle_fut = handle_ping_event(swarm_control.clone(), ping_event_rx);
+
         let join_handle = tokio::spawn(async move {
             tokio::select! {
                 _ = swarm_fut => {},
                 _ = event_handle_fut => {},
+                _ = ping_handle_fut => {},
             }
         });
 
         Ok((swarm_control, join_handle))
     }
+}
 
-    async fn swarm_loop(
-        mut swarm: TSwarm,
-        mut swarm_caller_rx: UnboundedReceiver<SwarmAsyncCall>,
-        event_tx: mpsc::UnboundedSender<SwarmEvent<FungiBehavioursEvent>>,
-    ) {
-        loop {
-            tokio::select! {
-                // We use a separate task to handle swarm events, make sure to not block the swarm loop
-                swarm_events = swarm.select_next_some() => {
-                    if let Err(e) = event_tx.send(swarm_events) {
-                        log::error!("Failed to send swarm event: {e:?}");
-                        break;
-                    }
-                },
-                invoke = swarm_caller_rx.recv() => {
-                    let Some(SwarmAsyncCall{ request, response }) = invoke else {
-                        log::debug!("Swarm caller channel closed");
-                        break;
-                    };
-                    let res = request(&mut swarm);
-                    response.complete(res);
+async fn swarm_loop(
+    mut swarm: TSwarm,
+    mut swarm_caller_rx: UnboundedReceiver<SwarmAsyncCall>,
+    event_tx: mpsc::UnboundedSender<SwarmEvent<FungiBehavioursEvent>>,
+) {
+    loop {
+        tokio::select! {
+            // We use a separate task to handle swarm events, make sure to not block the swarm loop
+            swarm_events = swarm.select_next_some() => {
+                if let Err(e) = event_tx.send(swarm_events) {
+                    log::error!("Failed to send swarm event: {e:?}");
+                    break;
                 }
+            },
+            invoke = swarm_caller_rx.recv() => {
+                let Some(SwarmAsyncCall{ request, response }) = invoke else {
+                    log::debug!("Swarm caller channel closed");
+                    break;
+                };
+                let res = request(&mut swarm);
+                response.complete(res);
             }
         }
-        log::info!("Swarm loop exited");
     }
+    log::info!("Swarm loop exited");
+}
 
-    async fn handle_swarm_event(
-        swarm_control: SwarmControl,
-        mut event_rx: UnboundedReceiver<SwarmEvent<FungiBehavioursEvent>>,
-    ) {
-        while let Some(event) = event_rx.recv().await {
-            match event {
-                SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("[Swarm event] NewListenAddr {address:?}");
-                    handle_new_listen_addr(&swarm_control, address);
-                }
-                SwarmEvent::NewExternalAddrCandidate { address, .. } => {
-                    log::info!("[Swarm event] NewExternalAddrCandidate {address:?}");
-                }
-                // TODO: fix bug: dialer and listener should be handled separately
-                SwarmEvent::ConnectionEstablished {
-                    peer_id, endpoint, ..
-                } => {
-                    log::info!("[Swarm event] ConnectionEstablished {peer_id:?} at {endpoint:?}");
-                    // check dial callback
-                    if let Some(completer) =
-                        swarm_control.state().dial_callback.lock().remove(&peer_id)
-                    {
-                        completer.complete(Ok(()));
-                    }
-                    // add peer to connected peers
-                    swarm_control.state().connected_peers.lock().insert(
-                        peer_id,
-                        ConnectedPeer::with_multiaddr(endpoint.get_remote_address().clone()),
-                    );
-                }
-                SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
-                    log::info!("[Swarm event] OutgoingConnectionError {peer_id:?}: {error:?}");
-                    // check dial callback
-                    let Some(peer_id) = peer_id else {
-                        continue;
-                    };
-                    if let Some(completer) =
-                        swarm_control.state().dial_callback.lock().remove(&peer_id)
-                    {
-                        completer.complete(Err(error));
-                    }
-                }
-                SwarmEvent::ConnectionClosed { peer_id, cause, .. } => {
-                    log::info!("[Swarm event] ConnectionClosed {peer_id:?}: {cause:?}");
-                    // update connected peers
-                    swarm_control
-                        .state()
-                        .connected_peers
-                        .lock()
-                        .remove(&peer_id);
-                }
-                _ => {}
+async fn handle_swarm_event(
+    swarm_control: SwarmControl,
+    mut event_rx: UnboundedReceiver<SwarmEvent<FungiBehavioursEvent>>,
+) {
+    loop {
+        let Some(event) = event_rx.recv().await else {
+            log::debug!("Swarm event channel closed");
+            break;
+        };
+        match event {
+            SwarmEvent::NewListenAddr { address, .. } => {
+                println!("[Swarm event] NewListenAddr {address:?}");
+                handle_new_listen_addr(&swarm_control, address);
             }
+            SwarmEvent::NewExternalAddrCandidate { address, .. } => {
+                log::info!("[Swarm event] NewExternalAddrCandidate {address:?}");
+            }
+            SwarmEvent::ConnectionEstablished {
+                peer_id,
+                connection_id,
+                endpoint,
+                ..
+            } => {
+                log::debug!(
+                    "Established connection {:?} - peer_id {:?} - multiaddr {:?} - is_dialer {:?}",
+                    connection_id,
+                    peer_id,
+                    endpoint.get_remote_address(),
+                    endpoint.is_dialer()
+                );
+
+                connection_state::handle_connection_established(
+                    &swarm_control,
+                    peer_id,
+                    connection_id,
+                    &endpoint,
+                );
+            }
+            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                log::info!("[Swarm event] OutgoingConnectionError {peer_id:?}: {error:?}");
+                // check dial callback
+                let Some(peer_id) = peer_id else {
+                    continue;
+                };
+                handle_outgoing_connection_error(&swarm_control, peer_id, error);
+            }
+            SwarmEvent::ConnectionClosed {
+                peer_id,
+                connection_id,
+                endpoint,
+                cause,
+                ..
+            } => {
+                log::debug!(
+                    "Closed connection {} - peer_id {} - multiaddr {:?} - is_dialer {:?} - cause {:?}",
+                    connection_id,
+                    peer_id,
+                    endpoint.get_remote_address(),
+                    endpoint.is_dialer(),
+                    cause
+                );
+
+                connection_state::handle_connection_closed(&swarm_control, peer_id, connection_id);
+            }
+            _ => {}
         }
+    }
+}
+
+async fn handle_ping_event(
+    swarm_control: SwarmControl,
+    mut ping_event_rx: UnboundedReceiver<PingRttEvent>,
+) {
+    loop {
+        let Some(event) = ping_event_rx.recv().await else {
+            log::debug!("Ping event channel closed");
+            break;
+        };
+        log::debug!(
+            "Received ping event for connection {:?} with RTT {:?}",
+            event.connection_id,
+            event.rtt
+        );
+        swarm_control
+            .state()
+            .update_connection_ping(&event.connection_id, event.rtt);
+    }
+}
+
+fn handle_outgoing_connection_error(
+    swarm_control: &SwarmControl,
+    peer_id: PeerId,
+    error: DialError,
+) {
+    if let Some(completer) = swarm_control
+        .state()
+        .dial_callback()
+        .lock()
+        .remove(&peer_id)
+    {
+        completer.complete(Err(error));
     }
 }
 
@@ -602,7 +905,7 @@ async fn listen_relay_by_addr(swarm_control: SwarmControl, relay_addr: Multiaddr
     let Ok(stream_result) = tokio::time::timeout(
         Duration::from_secs(5),
         swarm_control
-            .stream_control()
+            .stream_control
             .clone()
             .open_stream(relay_peer, FUNGI_RELAY_HANDSHAKE_PROTOCOL),
     )

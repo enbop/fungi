@@ -247,6 +247,138 @@ pub struct RemoveAddressBookPeerRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PingPeerRequest {
+    #[prost(string, tag = "1")]
+    pub peer_id: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "2")]
+    pub interval_ms: u32,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PingPeerEvent {
+    #[prost(string, tag = "1")]
+    pub peer_id: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub tick_seq: u64,
+    #[prost(int64, tag = "3")]
+    pub ts_unix_ms: i64,
+    #[prost(oneof = "ping_peer_event::Event", tags = "10, 11, 12, 13, 14")]
+    pub event: ::core::option::Option<ping_peer_event::Event>,
+}
+/// Nested message and enum types in `PingPeerEvent`.
+pub mod ping_peer_event {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Event {
+        #[prost(message, tag = "10")]
+        Connecting(super::PingPeerConnecting),
+        #[prost(message, tag = "11")]
+        Connected(super::PingPeerConnected),
+        #[prost(message, tag = "12")]
+        Idle(super::PingPeerIdle),
+        #[prost(message, tag = "13")]
+        Result(super::PingPeerResult),
+        #[prost(message, tag = "14")]
+        Error(super::PingPeerError),
+    }
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PingPeerConnecting {}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PingPeerConnected {}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PingPeerIdle {}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PingPeerResult {
+    #[prost(string, tag = "1")]
+    pub connection_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub direction: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub remote_addr: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "4")]
+    pub rtt_ms: u64,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PingPeerError {
+    #[prost(string, tag = "1")]
+    pub connection_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub direction: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub remote_addr: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub message: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListConnectionsRequest {
+    /// Optional peer_id filter. Empty means all peers.
+    #[prost(string, tag = "1")]
+    pub peer_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConnectionSnapshot {
+    #[prost(string, tag = "1")]
+    pub peer_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub connection_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub direction: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub remote_addr: ::prost::alloc::string::String,
+    #[prost(bool, tag = "5")]
+    pub is_relay: bool,
+    #[prost(uint64, tag = "6")]
+    pub last_rtt_ms: u64,
+    /// 0 means no ping has been recorded yet.
+    #[prost(int64, tag = "7")]
+    pub last_ping_unix_ms: i64,
+    #[prost(uint64, tag = "8")]
+    pub active_streams_total: u64,
+    #[prost(message, repeated, tag = "9")]
+    pub active_streams_by_protocol: ::prost::alloc::vec::Vec<
+        ProtocolStreamCountSnapshot,
+    >,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ProtocolStreamCountSnapshot {
+    #[prost(string, tag = "1")]
+    pub protocol_name: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub stream_count: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListConnectionsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub connections: ::prost::alloc::vec::Vec<ConnectionSnapshot>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListActiveStreamsRequest {
+    /// Optional peer_id filter. Empty means all peers.
+    #[prost(string, tag = "1")]
+    pub peer_id: ::prost::alloc::string::String,
+    /// Optional protocol filter. Empty means all protocols.
+    #[prost(string, tag = "2")]
+    pub protocol_name: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ActiveStreamSnapshot {
+    #[prost(uint64, tag = "1")]
+    pub stream_id: u64,
+    #[prost(string, tag = "2")]
+    pub peer_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub connection_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub protocol_name: ::prost::alloc::string::String,
+    /// 0 means unknown.
+    #[prost(int64, tag = "5")]
+    pub opened_at_unix_ms: i64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListActiveStreamsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub streams: ::prost::alloc::vec::Vec<ActiveStreamSnapshot>,
+}
 /// Generated client implementations.
 pub mod fungi_daemon_client {
     #![allow(
@@ -258,6 +390,11 @@ pub mod fungi_daemon_client {
     )]
     use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    /// Fungi daemon control API.
+    ///
+    /// This service exposes runtime inspection and management operations for the
+    /// local daemon, including network state, transfer/tunneling config, and
+    /// peer/connection observability.
     #[derive(Debug, Clone)]
     pub struct FungiDaemonClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -1095,6 +1232,84 @@ pub mod fungi_daemon_client {
                 );
             self.inner.unary(req, path, codec).await
         }
+        /// Continuously pings all active connections to a peer and streams results.
+        pub async fn ping_peer(
+            &mut self,
+            request: impl tonic::IntoRequest<super::PingPeerRequest>,
+        ) -> std::result::Result<
+            tonic::Response<tonic::codec::Streaming<super::PingPeerEvent>>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/PingPeer",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "PingPeer"));
+            self.inner.server_streaming(req, path, codec).await
+        }
+        /// Lists currently established connections with latest ping metadata.
+        /// If peer_id is provided, only that peer's connections are returned.
+        pub async fn list_connections(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ListConnectionsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListConnectionsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/ListConnections",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "ListConnections"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Lists currently active streams with optional peer/protocol filters.
+        pub async fn list_active_streams(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ListActiveStreamsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListActiveStreamsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/ListActiveStreams",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("fungi_daemon.FungiDaemon", "ListActiveStreams"),
+                );
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -1299,7 +1514,40 @@ pub mod fungi_daemon_server {
             &self,
             request: tonic::Request<super::RemoveAddressBookPeerRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
+        /// Server streaming response type for the PingPeer method.
+        type PingPeerStream: tonic::codegen::tokio_stream::Stream<
+                Item = std::result::Result<super::PingPeerEvent, tonic::Status>,
+            >
+            + std::marker::Send
+            + 'static;
+        /// Continuously pings all active connections to a peer and streams results.
+        async fn ping_peer(
+            &self,
+            request: tonic::Request<super::PingPeerRequest>,
+        ) -> std::result::Result<tonic::Response<Self::PingPeerStream>, tonic::Status>;
+        /// Lists currently established connections with latest ping metadata.
+        /// If peer_id is provided, only that peer's connections are returned.
+        async fn list_connections(
+            &self,
+            request: tonic::Request<super::ListConnectionsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListConnectionsResponse>,
+            tonic::Status,
+        >;
+        /// Lists currently active streams with optional peer/protocol filters.
+        async fn list_active_streams(
+            &self,
+            request: tonic::Request<super::ListActiveStreamsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListActiveStreamsResponse>,
+            tonic::Status,
+        >;
     }
+    /// Fungi daemon control API.
+    ///
+    /// This service exposes runtime inspection and management operations for the
+    /// local daemon, including network state, transfer/tunneling config, and
+    /// peer/connection observability.
     #[derive(Debug)]
     pub struct FungiDaemonServer<T> {
         inner: Arc<T>,
@@ -2718,6 +2966,143 @@ pub mod fungi_daemon_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = RemoveAddressBookPeerSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/PingPeer" => {
+                    #[allow(non_camel_case_types)]
+                    struct PingPeerSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::ServerStreamingService<super::PingPeerRequest>
+                    for PingPeerSvc<T> {
+                        type Response = super::PingPeerEvent;
+                        type ResponseStream = T::PingPeerStream;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::ResponseStream>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::PingPeerRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::ping_peer(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = PingPeerSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/ListConnections" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListConnectionsSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::ListConnectionsRequest>
+                    for ListConnectionsSvc<T> {
+                        type Response = super::ListConnectionsResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ListConnectionsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::list_connections(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListConnectionsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/ListActiveStreams" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListActiveStreamsSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::ListActiveStreamsRequest>
+                    for ListActiveStreamsSvc<T> {
+                        type Response = super::ListActiveStreamsResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ListActiveStreamsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::list_active_streams(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListActiveStreamsSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

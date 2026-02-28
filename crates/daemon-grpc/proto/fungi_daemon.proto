@@ -2,6 +2,11 @@ syntax = "proto3";
 
 package fungi_daemon;
 
+// Fungi daemon control API.
+//
+// This service exposes runtime inspection and management operations for the
+// local daemon, including network state, transfer/tunneling config, and
+// peer/connection observability.
 service FungiDaemon {
   // Returns the running daemon version as a simple health check.
   rpc Version(Empty) returns (VersionResponse) {}
@@ -101,6 +106,17 @@ service FungiDaemon {
 
   // Removes a peer from the address book.
   rpc RemoveAddressBookPeer(RemoveAddressBookPeerRequest) returns (Empty) {}
+
+  // Continuously pings all active connections to a peer and streams results.
+  rpc PingPeer(PingPeerRequest) returns (stream PingPeerEvent) {}
+
+  // Lists currently established connections with latest ping metadata.
+  // If peer_id is provided, only that peer's connections are returned.
+  rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse) {}
+
+  // Lists currently active streams with optional peer/protocol filters.
+  rpc ListActiveStreams(ListActiveStreamsRequest)
+      returns (ListActiveStreamsResponse) {}
 }
 
 message Empty {}
@@ -240,3 +256,87 @@ message UpdateAddressBookPeerRequest { PeerInfo peer_info = 1; }
 message GetAddressBookPeerRequest { string peer_id = 1; }
 
 message RemoveAddressBookPeerRequest { string peer_id = 1; }
+
+message PingPeerRequest {
+  string peer_id = 1;
+  uint32 interval_ms = 2;
+}
+
+message PingPeerEvent {
+  string peer_id = 1;
+  uint64 tick_seq = 2;
+  int64 ts_unix_ms = 3;
+
+  oneof event {
+    PingPeerConnecting connecting = 10;
+    PingPeerConnected connected = 11;
+    PingPeerIdle idle = 12;
+    PingPeerResult result = 13;
+    PingPeerError error = 14;
+  }
+}
+
+message PingPeerConnecting {}
+
+message PingPeerConnected {}
+
+message PingPeerIdle {}
+
+message PingPeerResult {
+  string connection_id = 1;
+  string direction = 2;
+  string remote_addr = 3;
+  uint64 rtt_ms = 4;
+}
+
+message PingPeerError {
+  string connection_id = 1;
+  string direction = 2;
+  string remote_addr = 3;
+  string message = 4;
+}
+
+message ListConnectionsRequest {
+  // Optional peer_id filter. Empty means all peers.
+  string peer_id = 1;
+}
+
+message ConnectionSnapshot {
+  string peer_id = 1;
+  string connection_id = 2;
+  string direction = 3;
+  string remote_addr = 4;
+  bool is_relay = 5;
+  uint64 last_rtt_ms = 6;
+  // 0 means no ping has been recorded yet.
+  int64 last_ping_unix_ms = 7;
+  uint64 active_streams_total = 8;
+  repeated ProtocolStreamCountSnapshot active_streams_by_protocol = 9;
+}
+
+message ProtocolStreamCountSnapshot {
+  string protocol_name = 1;
+  uint64 stream_count = 2;
+}
+
+message ListConnectionsResponse { repeated ConnectionSnapshot connections = 1; }
+
+message ListActiveStreamsRequest {
+  // Optional peer_id filter. Empty means all peers.
+  string peer_id = 1;
+  // Optional protocol filter. Empty means all protocols.
+  string protocol_name = 2;
+}
+
+message ActiveStreamSnapshot {
+  uint64 stream_id = 1;
+  string peer_id = 2;
+  string connection_id = 3;
+  string protocol_name = 4;
+  // 0 means unknown.
+  int64 opened_at_unix_ms = 5;
+}
+
+message ListActiveStreamsResponse {
+  repeated ActiveStreamSnapshot streams = 1;
+}

@@ -72,7 +72,20 @@ pub enum Commands {
     /// Device discovery and address book
     #[command(subcommand)]
     Device(fungi_control::DeviceCommands),
-
+    /// Connection observability and diagnostics
+    #[command(subcommand, visible_alias = "conn")]
+    Connection(fungi_control::ConnectionCommands),
+    /// Continuously ping all active connections to a peer
+    Ping {
+        /// Peer ID to ping
+        peer_id: String,
+        /// Ping interval in milliseconds
+        #[arg(long, default_value_t = 2000)]
+        interval_ms: u32,
+        /// Show detailed output
+        #[arg(short, long, default_value_t = false)]
+        verbose: bool,
+    },
     #[cfg(feature = "wasi")]
     /// [WASI runtime] Run a WebAssembly module (re-exported wasmtime command)
     Run(wasmtime_cli::commands::RunCommand),
