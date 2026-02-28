@@ -239,6 +239,18 @@ fn simplify_multiaddr_peer_ids(addr: &str) -> String {
     format!("/{}", parts.join("/"))
 }
 
+fn connection_id_sort_key(connection_id: &str) -> u64 {
+    if let Ok(value) = connection_id.parse::<u64>() {
+        return value;
+    }
+
+    let digits: String = connection_id
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect();
+    digits.parse::<u64>().unwrap_or(u64::MAX)
+}
+
 pub async fn execute_ping(args: CommonArgs, peer_id: String, interval_ms: u32, verbose: bool) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
@@ -404,7 +416,7 @@ pub async fn execute_connections(args: CommonArgs, peer_id: Option<String>, verb
 
     match client.list_connections(Request::new(req)).await {
         Ok(resp) => {
-            let connections = resp.into_inner().connections;
+            let mut connections = resp.into_inner().connections;
             if connections.is_empty() {
                 if let Some(pid) = peer_id {
                     println!("No active connections for peer {}", pid);
@@ -413,6 +425,12 @@ pub async fn execute_connections(args: CommonArgs, peer_id: Option<String>, verb
                 }
                 return;
             }
+
+            connections.sort_by(|a, b| {
+                connection_id_sort_key(&a.connection_id)
+                    .cmp(&connection_id_sort_key(&b.connection_id))
+                    .then(a.peer_id.cmp(&b.peer_id))
+            });
 
             println!(
                 "Connections {}",
