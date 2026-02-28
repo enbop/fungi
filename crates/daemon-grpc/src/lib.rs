@@ -559,7 +559,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         let peer_id = PeerId::from_str(&req.peer_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
         let interval_ms = if req.interval_ms == 0 {
-            1000
+            2000
         } else {
             req.interval_ms
         };

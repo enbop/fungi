@@ -36,7 +36,7 @@ use tokio::{
 // Relay connection retry constants
 const RELAY_RETRY_MAX_ATTEMPTS: u32 = 4;
 const RELAY_RETRY_BASE_DELAY_MS: u64 = 500;
-const OUTBOUND_PING_INTERVAL: Duration = Duration::from_secs(5);
+const OUTBOUND_PING_INTERVAL: Duration = Duration::from_secs(15);
 
 /// Simple RAII guard to ensure atomic bool is reset when task completes
 struct TaskGuard {
@@ -178,9 +178,12 @@ impl SwarmControl {
             bail!("Connection {connection_id:?} belongs to {mapped_peer_id}, not {peer_id}");
         }
 
-        self.ping_state
+        let rtt = self
+            .ping_state
             .ping_now(peer_id, connection_id, timeout)
-            .await
+            .await?;
+        self.state.update_connection_ping(&connection_id, rtt);
+        Ok(rtt)
     }
 
     // TODO impl handshake

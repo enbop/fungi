@@ -77,7 +77,7 @@ pub enum Commands {
         /// Peer ID to ping
         peer_id: String,
         /// Ping interval in milliseconds
-        #[arg(long, default_value_t = 1000)]
+        #[arg(long, default_value_t = 2000)]
         interval_ms: u32,
         /// Show detailed output
         #[arg(short, long, default_value_t = false)]
