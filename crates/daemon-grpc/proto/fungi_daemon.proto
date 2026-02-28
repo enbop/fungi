@@ -2,6 +2,11 @@ syntax = "proto3";
 
 package fungi_daemon;
 
+// Fungi daemon control API.
+//
+// This service exposes runtime inspection and management operations for the
+// local daemon, including network state, transfer/tunneling config, and
+// peer/connection observability.
 service FungiDaemon {
   // Returns the running daemon version as a simple health check.
   rpc Version(Empty) returns (VersionResponse) {}
