@@ -105,6 +105,7 @@ impl Shared {
 
     pub(crate) fn on_connection_closed(&mut self, conn: ConnectionId) {
         self.connections.remove(&conn);
+        self.senders.remove(&conn);
     }
 
     pub(crate) fn on_dial_failure(&mut self, peer: PeerId, reason: String) {
@@ -149,6 +150,44 @@ impl Shared {
                 sender.clone()
             }
         }
+    }
+
+    pub(crate) fn connection_ids(&self, peer: PeerId) -> Vec<ConnectionId> {
+        self.connections
+            .iter()
+            .filter_map(|(connection_id, connected_peer)| {
+                (connected_peer == &peer).then_some(*connection_id)
+            })
+            .collect()
+    }
+
+    pub(crate) fn sender_on_connection(
+        &self,
+        peer: PeerId,
+        connection: ConnectionId,
+    ) -> Result<mpsc::Sender<NewStream>, crate::OpenStreamError> {
+        let Some(connected_peer) = self.connections.get(&connection) else {
+            return Err(crate::OpenStreamError::Io(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "Connection not found",
+            )));
+        };
+
+        if connected_peer != &peer {
+            return Err(crate::OpenStreamError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Connection does not belong to peer",
+            )));
+        }
+
+        let Some(sender) = self.senders.get(&connection) else {
+            return Err(crate::OpenStreamError::Io(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "Connection handler not available",
+            )));
+        };
+
+        Ok(sender.clone())
     }
 
     pub(crate) fn receiver(

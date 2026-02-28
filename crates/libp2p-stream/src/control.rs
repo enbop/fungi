@@ -11,7 +11,7 @@ use futures::{
     SinkExt as _, StreamExt as _,
 };
 use libp2p_identity::PeerId;
-use libp2p_swarm::{Stream, StreamProtocol};
+use libp2p_swarm::{ConnectionId, Stream, StreamProtocol};
 
 use crate::{handler::NewStream, shared::Shared, AlreadyRegistered};
 
@@ -62,6 +62,40 @@ impl Control {
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))??;
 
         Ok(stream)
+    }
+
+    /// Attempt to open a new stream for the given protocol on the given connection.
+    ///
+    /// In contrast to [`Control::open_stream`], this does **not** initiate a dial.
+    /// The provided [`ConnectionId`] must refer to an established connection to `peer`.
+    pub async fn open_stream_on_connection(
+        &mut self,
+        peer: PeerId,
+        connection: ConnectionId,
+        protocol: StreamProtocol,
+    ) -> Result<Stream, OpenStreamError> {
+        tracing::debug!(%peer, %connection, "Requesting new stream");
+
+        let mut new_stream_sender =
+            Shared::lock(&self.shared).sender_on_connection(peer, connection)?;
+
+        let (sender, receiver) = oneshot::channel();
+
+        new_stream_sender
+            .send(NewStream { protocol, sender })
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))?;
+
+        let stream = receiver
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))??;
+
+        Ok(stream)
+    }
+
+    /// Returns the currently known connection IDs for the given peer.
+    pub fn connection_ids(&self, peer: PeerId) -> Vec<ConnectionId> {
+        Shared::lock(&self.shared).connection_ids(peer)
     }
 
     /// Accept inbound streams for the provided protocol.

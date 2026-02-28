@@ -1,7 +1,6 @@
 {
   "git": {
-    "sha1": "70082df7e6181722630eabc5de5373733aac9a21",
-    "dirty": true
+    "sha1": "b5c6bd0391cf951fec3dc588733f83b0ec357559"
   },
   "path_in_vcs": "protocols/stream"
 }
