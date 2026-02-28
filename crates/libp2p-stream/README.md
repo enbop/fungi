@@ -1,3 +1,18 @@
+# NOTICE: DO NOT EDIT THIS DIRECTLY
+This is a fork of the original [libp2p-stream](https://github.com/libp2p/rust-libp2p/tree/master/protocols/stream).
+
+See the [forked repository](https://github.com/Heap-Hop/rust-libp2p/tree/libp2p-v0.56.0-fungi-stream-ext)
+
+This is generated from the rust-libp2p repository using the following command: 
+
+```bash
+cargo package --no-verify --allow-dirty -p libp2p-stream
+```
+
+## Main changes
+
+- Added `open_stream_on_connection` method and `connection_ids` retrieval
+
 # Generic (stream) protocols
 
 This module provides a generic [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour) for stream-oriented protocols.
