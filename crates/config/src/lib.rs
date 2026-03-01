@@ -5,9 +5,9 @@ mod libp2p;
 mod rpc;
 pub mod tcp_tunneling;
 
-pub use init::{init, init_for_daemon};
+pub use init::init;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use libp2p::*;
 use libp2p_identity::PeerId;
 use serde::{Deserialize, Serialize};
@@ -77,14 +77,14 @@ impl FungiConfig {
         }
 
         println!("Loading Fungi config from: {config_file:?}");
-        let s = std::fs::read_to_string(&config_file)?;
+        let s = std::fs::read_to_string(&config_file).context("Failed to read config file")?;
         let mut cfg = Self::parse_toml(&s)?;
         cfg.config_file = config_file;
         Ok(cfg)
     }
 
     pub fn parse_toml(s: &str) -> Result<Self> {
-        let config: Self = toml::from_str(s)?;
+        let config: Self = toml::from_str(s).context("Failed to parse config file")?;
         Ok(config)
     }
 

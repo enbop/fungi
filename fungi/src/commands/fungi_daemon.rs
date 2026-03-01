@@ -4,7 +4,7 @@ use fungi_daemon::FungiDaemon;
 use fungi_daemon_grpc::start_grpc_server;
 
 pub async fn run(args: DaemonArgs) -> Result<()> {
-    fungi_config::init_for_daemon(&args)?;
+    fungi_config::init(&args)?;
 
     log::info!("Starting Fungi daemon...");
 
