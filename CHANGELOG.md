@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-03-02
+
+### Changed
+
+- **Repository scope update**: Moved GUI application out of this repository. `fungi` is now focused on the pure Rust core (daemon + CLI), and the official GUI lives in [`fungi-app`](https://github.com/enbop/fungi-app) (Flutter + gRPC).
+- **Connection management refactor**: Improved connection selection strategy and stream handling for file transfer and TCP tunneling.
+
+### Added
+
+- **Connection observability**: Added `connection` command improvements, peer filtering support, and richer verbose output.
+- **Ping tooling**: Added `connection` command support with outbound ping state and RTT tracking integration.
+- **Logging system**: Introduced logging module and daemon-mode logging initialization improvements.
+
+### Fixed
+
+- Ensured `logs` directory creation and narrowed config existence checks to `config.toml`.
+
 ## [0.4.0] - 2025-10-25
 
 ### Added
