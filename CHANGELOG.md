@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2026-03-04
+
+### Changed
+
+- Updated daemon startup flow to accept a parent-supplied fungi directory path.
+- Removed redundant log output in core paths for cleaner runtime logs.
+
+### Fixed
+
+- Upgraded `mdns-sd` to `0.18` and adjusted related code.
+- Resolved mDNS leave-multicast panic on some macOS IPv6 interfaces.
+
 ## [0.5.0] - 2026-03-02
 
 ### Changed
