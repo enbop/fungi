@@ -226,17 +226,14 @@ fn start_pong_loop(mut incoming: libp2p_stream::IncomingStreams) {
                     // The listening peer echoes the same 32-byte payload back to the dialing peer.
                     // The dialing peer then measures the RTT from when it wrote the bytes to when it received them.
                     let mut buf = [0u8; 32];
-                    if let Err(e) = stream.read_exact(&mut buf).await {
-                        log::warn!("Failed to read ping payload: {}", e);
+                    if let Err(_) = stream.read_exact(&mut buf).await {
                         break;
                     }
-                    if let Err(e) = stream.write_all(&buf).await {
-                        log::warn!("Failed to write ping payload: {}", e);
+                    if let Err(_) = stream.write_all(&buf).await {
                         break;
                     }
                     log::trace!("Ponged ping from {}", peer_id);
                 }
-                log::info!("Ping pong loop ended for a stream from {}", peer_id);
             });
         }
     });

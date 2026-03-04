@@ -498,7 +498,7 @@ impl SwarmControl {
         let dial_result = self
             .invoke_swarm(move |swarm| {
                 if swarm.is_connected(&peer_id) && !force_redial_when_connected {
-                    log::info!("Already connected to {peer_id}");
+                    log::debug!("Already connected to {peer_id}");
                     completer.complete(Ok(()));
                     return Ok(());
                 }
