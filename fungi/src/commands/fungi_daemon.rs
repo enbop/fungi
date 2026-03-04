@@ -1,14 +1,16 @@
+use crate::commands::CommonArgs;
 use anyhow::Result;
+use fungi_config::FungiDir;
 pub use fungi_daemon::DaemonArgs;
 use fungi_daemon::FungiDaemon;
 use fungi_daemon_grpc::start_grpc_server;
 
-pub async fn run(args: DaemonArgs) -> Result<()> {
-    fungi_config::init(&args)?;
+pub async fn run(common: CommonArgs, args: DaemonArgs) -> Result<()> {
+    fungi_config::init(&common)?;
 
     log::info!("Starting Fungi daemon...");
 
-    let daemon = FungiDaemon::start(args.clone()).await?;
+    let daemon = FungiDaemon::start(common.fungi_dir(), args.clone()).await?;
 
     let swarm_control = daemon.swarm_control().clone();
     log::info!("Local Peer ID: {}", swarm_control.local_peer_id());

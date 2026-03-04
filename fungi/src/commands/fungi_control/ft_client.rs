@@ -148,7 +148,11 @@ pub async fn execute_ft_client(args: CommonArgs, cmd: FtClientCommands) {
                                 "{} - {} [{}]",
                                 client.peer_id,
                                 client.name,
-                                if client.enabled { "enabled" } else { "disabled" }
+                                if client.enabled {
+                                    "enabled"
+                                } else {
+                                    "disabled"
+                                }
                             );
                         }
                     }

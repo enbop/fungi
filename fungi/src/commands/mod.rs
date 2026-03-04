@@ -40,7 +40,15 @@ impl FungiDir for CommonArgs {
         self.fungi_dir
             .as_ref()
             .map(PathBuf::from)
-            .unwrap_or_else(|| home::home_dir().unwrap().join(DEFAULT_FUNGI_DIR))
+            .unwrap_or_else(|| {
+                home::home_dir()
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Unable to determine home directory. Please provide --fungi-dir explicitly."
+                        )
+                    })
+                    .join(DEFAULT_FUNGI_DIR)
+            })
     }
 }
 

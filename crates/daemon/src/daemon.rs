@@ -1,5 +1,6 @@
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    path::PathBuf,
     sync::Arc,
     time::Duration,
 };
@@ -13,7 +14,7 @@ use crate::{
 };
 use anyhow::Result;
 use fungi_config::{
-    FungiConfig, FungiDir,
+    FungiConfig,
     address_book::{AddressBookConfig, PeerInfo},
     file_transfer::{FileTransferClient as FTCConfig, FileTransferService as FTSConfig},
 };
@@ -74,8 +75,7 @@ impl FungiDaemon {
         &self.mdns_control
     }
 
-    pub async fn start(args: DaemonArgs) -> Result<Self> {
-        let fungi_dir = args.fungi_dir();
+    pub async fn start(fungi_dir: PathBuf, args: DaemonArgs) -> Result<Self> {
         println!("Fungi directory: {fungi_dir:?}");
 
         let config = FungiConfig::apply_from_dir(&fungi_dir)?;

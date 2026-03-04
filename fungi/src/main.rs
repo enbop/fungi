@@ -20,7 +20,7 @@ fn main() -> Result<()> {
         Commands::Serve(c) => c.execute()?,
 
         // fungi commands
-        Commands::Daemon(args) => block_on(fungi_daemon::run(args))?,
+        Commands::Daemon(args) => block_on(fungi_daemon::run(fungi_args.common.clone(), args))?,
         Commands::Init(_args) => block_on(fungi_init::run(fungi_args.common))?,
         Commands::Relay(args) => block_on(fungi_relay::run(args))?,
 
