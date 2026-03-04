@@ -1684,7 +1684,7 @@ dependencies = [
  "fungi-util",
  "libp2p-identity",
  "log",
- "mdns-sd 0.13.11",
+ "mdns-sd",
  "multiaddr",
  "serde",
  "tempfile",
@@ -1716,7 +1716,7 @@ dependencies = [
  "libp2p-stream",
  "libunftp",
  "log",
- "mdns-sd 0.18.1",
+ "mdns-sd",
  "once_cell",
  "parking_lot",
  "rand 0.8.5",
@@ -2493,16 +2493,6 @@ checksum = "cabb0019d51a643781ff15c9c8a3e5dedc365c47211270f4e8f82812fedd8f0a"
 dependencies = [
  "libc",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "if-addrs"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf39cc0423ee66021dc5eccface85580e4a001e0c5288bae8bea7ecb69225e90"
-dependencies = [
- "libc",
- "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3497,20 +3487,6 @@ checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
 dependencies = [
  "cfg-if",
  "digest",
-]
-
-[[package]]
-name = "mdns-sd"
-version = "0.13.11"
-source = "git+https://github.com/keepsimple1/mdns-sd?rev=1b194de004e7290eff8c116f3e0cb88fadf2f03e#1b194de004e7290eff8c116f3e0cb88fadf2f03e"
-dependencies = [
- "fastrand",
- "flume",
- "if-addrs 0.14.0",
- "log",
- "mio",
- "socket-pktinfo",
- "socket2 0.6.0",
 ]
 
 [[package]]

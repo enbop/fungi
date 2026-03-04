@@ -8,7 +8,7 @@ use std::{
 use anyhow::Result;
 use fungi_config::address_book::PeerInfo;
 use libp2p::PeerId;
-use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
+use mdns_sd::{ResolvedService, ServiceDaemon, ServiceEvent, ServiceInfo};
 use parking_lot::Mutex;
 
 const FUNGI_SERVICE_TYPE: &str = "_fungi._tcp.local.";
@@ -133,7 +133,7 @@ impl MdnsControl {
             match receiver.recv_timeout(Duration::from_millis(100)) {
                 Ok(event) => match event {
                     ServiceEvent::ServiceResolved(info) => {
-                        if let Some(remote_device) = Self::parse_service_info(&info)
+                        if let Some(remote_device) = Self::parse_service_info(info.as_ref())
                             && remote_device.peer_id != current_peer_id
                         {
                             log::info!("Discovered device: {:?}", remote_device.peer_id);
@@ -164,7 +164,7 @@ impl MdnsControl {
         Ok(())
     }
 
-    fn parse_service_info(info: &mdns_sd::ServiceInfo) -> Option<PeerInfo> {
+    fn parse_service_info(info: &ResolvedService) -> Option<PeerInfo> {
         let properties = info.get_properties();
 
         let mut peer_info: PeerInfo = properties.try_into().ok()?;
