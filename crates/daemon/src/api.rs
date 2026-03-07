@@ -10,7 +10,8 @@ use libp2p::swarm::ConnectionId;
 
 use crate::FungiDaemon;
 use crate::runtime::{
-    RuntimeKind, ServiceInstance, ServiceLogs, ServiceLogsOptions, ServiceManifest,
+    DiscoveredService, RuntimeKind, ServiceInstance, ServiceLogs, ServiceLogsOptions,
+    ServiceManifest,
 };
 
 #[derive(Debug, Clone)]
@@ -583,6 +584,16 @@ impl FungiDaemon {
     ) -> Result<ServiceLogs> {
         self.runtime_control()
             .logs_by_handle(&handle, &ServiceLogsOptions { tail })
+            .await
+    }
+
+    pub async fn list_exposed_services(&self) -> Result<Vec<DiscoveredService>> {
+        self.runtime_control().list_exposed_services().await
+    }
+
+    pub async fn discover_peer_services(&self, peer_id: PeerId) -> Result<Vec<DiscoveredService>> {
+        self.service_discovery_control()
+            .discover_peer_services(peer_id)
             .await
     }
 

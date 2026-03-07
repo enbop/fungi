@@ -135,6 +135,10 @@ service FungiDaemon {
 
   // Gets logs for a deployed service.
   rpc GetServiceLogs(GetServiceLogsRequest) returns (ServiceLogsResponse) {}
+
+  // Queries a remote peer for currently discoverable services.
+  rpc DiscoverPeerServices(DiscoverPeerServicesRequest)
+      returns (DiscoverPeerServicesResponse) {}
 }
 
 message Empty {}
@@ -384,3 +388,7 @@ message ServiceLogsResponse {
   bytes raw = 1;
   string text = 2;
 }
+
+message DiscoverPeerServicesRequest { string peer_id = 1; }
+
+message DiscoverPeerServicesResponse { string services_json = 1; }

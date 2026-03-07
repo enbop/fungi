@@ -919,6 +919,23 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             text: logs.text,
         }))
     }
+
+    async fn discover_peer_services(
+        &self,
+        request: Request<DiscoverPeerServicesRequest>,
+    ) -> Result<Response<DiscoverPeerServicesResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+        let services = self
+            .inner
+            .discover_peer_services(peer_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to discover peer services: {e}")))?;
+        let services_json = serde_json::to_string(&services)
+            .map_err(|e| Status::internal(format!("Failed to serialize peer services: {e}")))?;
+        Ok(Response::new(DiscoverPeerServicesResponse { services_json }))
+    }
 }
 
 // Helper functions to convert between domain and proto types

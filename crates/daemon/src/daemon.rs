@@ -9,8 +9,8 @@ use std::{
 use crate::{
     DaemonArgs,
     controls::{
-        DockerControl, FileTransferClientsControl, FileTransferServiceControl, TcpTunnelingControl,
-        mdns::MdnsControl,
+        DockerControl, FileTransferClientsControl, FileTransferServiceControl,
+        ServiceDiscoveryControl, TcpTunnelingControl, mdns::MdnsControl,
     },
     runtime::RuntimeControl,
 };
@@ -46,6 +46,7 @@ pub struct FungiDaemon {
     docker_control: Option<DockerControl>,
     tcp_tunneling_control: TcpTunnelingControl,
     runtime_control: RuntimeControl,
+    service_discovery_control: ServiceDiscoveryControl,
 
     task_handles: TaskHandles,
 }
@@ -81,6 +82,10 @@ impl FungiDaemon {
 
     pub fn runtime_control(&self) -> &RuntimeControl {
         &self.runtime_control
+    }
+
+    pub fn service_discovery_control(&self) -> &ServiceDiscoveryControl {
+        &self.service_discovery_control
     }
 
     pub fn mdns_control(&self) -> &MdnsControl {
@@ -167,6 +172,12 @@ impl FungiDaemon {
                 .map_err(|e| anyhow::anyhow!("Failed to resolve current executable: {e}"))?,
             docker_control.clone(),
         );
+        let service_discovery_control = ServiceDiscoveryControl::new(
+            swarm_control.clone(),
+            runtime_control.clone(),
+            state.incoming_allowed_peers().clone(),
+        );
+        service_discovery_control.start()?;
 
         let tcp_tunneling_control = TcpTunnelingControl::new(swarm_control.clone());
         tcp_tunneling_control
@@ -209,6 +220,7 @@ impl FungiDaemon {
             docker_control,
             tcp_tunneling_control,
             runtime_control,
+            service_discovery_control,
             task_handles,
         })
     }

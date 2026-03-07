@@ -117,6 +117,19 @@ pub struct ServiceStatus {
     pub running: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoveredService {
+    pub service_name: String,
+    pub service_id: String,
+    pub display_name: String,
+    pub runtime: RuntimeKind,
+    pub transport: ServiceExposeTransport,
+    pub usage: Option<ServiceExposeUsage>,
+    pub icon_url: Option<String>,
+    pub catalog_id: Option<String>,
+    pub status: ServiceStatus,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ServiceLogsOptions {
     pub tail: Option<String>,
@@ -668,6 +681,7 @@ pub struct RuntimeControl {
     docker: Option<DockerRuntimeProvider>,
     wasmtime: WasmtimeRuntimeProvider,
     service_index: Arc<Mutex<HashMap<String, RuntimeKind>>>,
+    service_manifests: Arc<Mutex<HashMap<String, ServiceManifest>>>,
 }
 
 impl RuntimeControl {
@@ -680,6 +694,7 @@ impl RuntimeControl {
             docker: docker.map(DockerRuntimeProvider::new),
             wasmtime: WasmtimeRuntimeProvider::new(runtime_root, launcher_path),
             service_index: Arc::new(Mutex::new(HashMap::new())),
+            service_manifests: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -691,6 +706,7 @@ impl RuntimeControl {
             docker: docker.map(DockerRuntimeProvider::new),
             wasmtime,
             service_index: Arc::new(Mutex::new(HashMap::new())),
+            service_manifests: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -717,6 +733,9 @@ impl RuntimeControl {
         self.service_index
             .lock()
             .insert(manifest.name.clone(), manifest.runtime);
+        self.service_manifests
+            .lock()
+            .insert(manifest.name.clone(), manifest.clone());
         Ok(instance)
     }
 
@@ -738,7 +757,10 @@ impl RuntimeControl {
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.remove(handle).await,
             RuntimeKind::Wasmtime => self.wasmtime.remove(handle).await,
-        }
+        }?;
+        self.service_index.lock().remove(handle);
+        self.service_manifests.lock().remove(handle);
+        Ok(())
     }
 
     pub async fn start_by_handle(&self, handle: &str) -> Result<()> {
@@ -753,9 +775,7 @@ impl RuntimeControl {
 
     pub async fn remove_by_handle(&self, handle: &str) -> Result<()> {
         let runtime = self.resolve_runtime(handle)?;
-        self.remove(runtime, handle).await?;
-        self.service_index.lock().remove(handle);
-        Ok(())
+        self.remove(runtime, handle).await
     }
 
     pub async fn inspect_by_handle(&self, handle: &str) -> Result<ServiceInstance> {
@@ -770,6 +790,53 @@ impl RuntimeControl {
     ) -> Result<ServiceLogs> {
         let runtime = self.resolve_runtime(handle)?;
         self.logs(runtime, handle, options).await
+    }
+
+    pub async fn list_exposed_services(&self) -> Result<Vec<DiscoveredService>> {
+        let manifests = self
+            .service_manifests
+            .lock()
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let mut services = Vec::new();
+        for manifest in manifests {
+            let Some(expose) = manifest.expose.clone() else {
+                continue;
+            };
+
+            let instance = match self.inspect(manifest.runtime, &manifest.name).await {
+                Ok(instance) => instance,
+                Err(error) => {
+                    log::warn!(
+                        "Failed to inspect service '{}' for discovery: {}",
+                        manifest.name,
+                        error
+                    );
+                    continue;
+                }
+            };
+
+            if !instance.status.running {
+                continue;
+            }
+
+            services.push(DiscoveredService {
+                service_name: manifest.name,
+                service_id: expose.service_id,
+                display_name: expose.display_name,
+                runtime: manifest.runtime,
+                transport: expose.transport,
+                usage: expose.usage,
+                icon_url: expose.icon_url,
+                catalog_id: expose.catalog_id,
+                status: instance.status,
+            });
+        }
+
+        services.sort_by(|left, right| left.service_id.cmp(&right.service_id));
+        Ok(services)
     }
 
     pub async fn inspect(&self, runtime: RuntimeKind, handle: &str) -> Result<ServiceInstance> {

@@ -1,10 +1,11 @@
 use clap::Subcommand;
 use fungi_config::FungiDir;
-use fungi_daemon::{ServiceInstance, load_service_manifest_yaml_file};
+use fungi_daemon::{DiscoveredService, ServiceInstance, load_service_manifest_yaml_file};
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
-        DeployServiceRequest, GetServiceLogsRequest, ServiceHandleRequest, ServiceInstanceResponse,
+        DeployServiceRequest, DiscoverPeerServicesRequest, GetServiceLogsRequest,
+        ServiceHandleRequest, ServiceInstanceResponse,
     },
 };
 
@@ -36,6 +37,8 @@ pub enum ServiceCommands {
     Stop { handle: String },
     /// Remove a deployed service by name
     Remove { handle: String },
+    /// List discoverable services from a remote peer
+    Discover { peer_id: String },
 }
 
 pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
@@ -105,6 +108,13 @@ pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
                 Err(e) => fatal_grpc(e),
             }
         }
+        ServiceCommands::Discover { peer_id } => {
+            let req = DiscoverPeerServicesRequest { peer_id };
+            match client.discover_peer_services(Request::new(req)).await {
+                Ok(resp) => print_discovered_services(&resp.into_inner().services_json),
+                Err(e) => fatal_grpc(e),
+            }
+        }
     }
 }
 
@@ -115,5 +125,15 @@ fn print_service_instance(resp: ServiceInstanceResponse) {
             Err(error) => fatal(format!("Failed to format service instance: {error}")),
         },
         Err(error) => fatal(format!("Failed to decode service instance: {error}")),
+    }
+}
+
+fn print_discovered_services(services_json: &str) {
+    match serde_json::from_str::<Vec<DiscoveredService>>(services_json) {
+        Ok(services) => match serde_json::to_string_pretty(&services) {
+            Ok(pretty) => println!("{}", pretty),
+            Err(error) => fatal(format!("Failed to format discovered services: {error}")),
+        },
+        Err(error) => fatal(format!("Failed to decode discovered services: {error}")),
     }
 }
