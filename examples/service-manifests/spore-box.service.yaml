@@ -41,7 +41,7 @@ spec:
   workingDir: null
 
 notes:
-  - This manifest can be deployed directly with `fungi service deploy`.
+  - "This manifest can be deployed directly with fungi service deploy."
   - The Wasmtime runtime automatically creates host mount directories before launch.
   - The current minimal implementation supports a single `.wasm` file URL.
-  - `spec.expose` is the future-facing discovery/UX metadata layer, separate from the runtime launch config.
+  - "spec.expose is the future-facing discovery/UX metadata layer, separate from the runtime launch config."

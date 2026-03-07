@@ -43,7 +43,7 @@ spec:
   workingDir: null
 
 notes:
-  - This manifest can be deployed directly with `fungi service deploy`.
+  - "This manifest can be deployed directly with fungi service deploy."
   - The Docker runtime now pulls the image automatically if it is missing locally.
   - start/inspect/logs/stop/remove now accept just the service name.
-  - `spec.expose` describes how the service should appear in discovery and what client UX is recommended.
+  - "spec.expose describes how the service should appear in discovery and what client UX is recommended."
