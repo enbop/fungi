@@ -21,7 +21,7 @@ fn main() -> Result<()> {
 
         // fungi commands
         Commands::Daemon(args) => block_on(fungi_daemon::run(fungi_args.common.clone(), args))?,
-        Commands::Init(_args) => block_on(fungi_init::run(fungi_args.common))?,
+        Commands::Init(args) => block_on(fungi_init::run(fungi_args.common, args))?,
         Commands::Relay(args) => block_on(fungi_relay::run(args))?,
 
         // control commands
