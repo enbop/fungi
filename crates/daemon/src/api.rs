@@ -533,12 +533,24 @@ impl FungiDaemon {
         self.runtime_control().start(runtime, &handle).await
     }
 
+    pub async fn start_service_by_handle(&self, handle: String) -> Result<()> {
+        self.runtime_control().start_by_handle(&handle).await
+    }
+
     pub async fn stop_service(&self, runtime: RuntimeKind, handle: String) -> Result<()> {
         self.runtime_control().stop(runtime, &handle).await
     }
 
+    pub async fn stop_service_by_handle(&self, handle: String) -> Result<()> {
+        self.runtime_control().stop_by_handle(&handle).await
+    }
+
     pub async fn remove_service(&self, runtime: RuntimeKind, handle: String) -> Result<()> {
         self.runtime_control().remove(runtime, &handle).await
+    }
+
+    pub async fn remove_service_by_handle(&self, handle: String) -> Result<()> {
+        self.runtime_control().remove_by_handle(&handle).await
     }
 
     pub async fn inspect_service(
@@ -549,6 +561,10 @@ impl FungiDaemon {
         self.runtime_control().inspect(runtime, &handle).await
     }
 
+    pub async fn inspect_service_by_handle(&self, handle: String) -> Result<ServiceInstance> {
+        self.runtime_control().inspect_by_handle(&handle).await
+    }
+
     pub async fn get_service_logs(
         &self,
         runtime: RuntimeKind,
@@ -557,6 +573,16 @@ impl FungiDaemon {
     ) -> Result<ServiceLogs> {
         self.runtime_control()
             .logs(runtime, &handle, &ServiceLogsOptions { tail })
+            .await
+    }
+
+    pub async fn get_service_logs_by_handle(
+        &self,
+        handle: String,
+        tail: Option<String>,
+    ) -> Result<ServiceLogs> {
+        self.runtime_control()
+            .logs_by_handle(&handle, &ServiceLogsOptions { tail })
             .await
     }
 

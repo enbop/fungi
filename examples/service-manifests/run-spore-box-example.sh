@@ -86,7 +86,7 @@ echo "== deploy spore-box manifest =="
 "$BIN" --fungi-dir "$FUNGI_DIR" service deploy "$EXAMPLE_DIR/spore-box.service.yaml"
 
 echo "== start spore-box service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service start wasmtime spore-box
+"$BIN" --fungi-dir "$FUNGI_DIR" service start spore-box
 
 echo "== waiting for spore-box http endpoint =="
 ready="false"
@@ -102,30 +102,30 @@ done
 if [[ "$ready" != "true" ]]; then
   echo "spore-box endpoint did not become ready" >&2
   echo "== inspect spore-box service ==" >&2
-  "$BIN" --fungi-dir "$FUNGI_DIR" service inspect wasmtime spore-box >&2 || true
+  "$BIN" --fungi-dir "$FUNGI_DIR" service inspect spore-box >&2 || true
   echo "== spore-box logs ==" >&2
-  "$BIN" --fungi-dir "$FUNGI_DIR" service logs wasmtime spore-box --tail 100 >&2 || true
+  "$BIN" --fungi-dir "$FUNGI_DIR" service logs spore-box --tail 100 >&2 || true
   echo "== daemon log ==" >&2
   tail -n 100 "$TMP_ROOT/daemon.log" >&2 || true
   exit 1
 fi
 
 echo "== inspect spore-box service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service inspect wasmtime spore-box
+"$BIN" --fungi-dir "$FUNGI_DIR" service inspect spore-box
 
 echo "== curl spore-box =="
 curl -fsS "http://127.0.0.1:$SERVICE_PORT/?device=manifest"
 echo
 
 echo "== spore-box logs =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service logs wasmtime spore-box --tail 50
+"$BIN" --fungi-dir "$FUNGI_DIR" service logs spore-box --tail 50
 
 echo
 echo "== stopping spore-box service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service stop wasmtime spore-box
+"$BIN" --fungi-dir "$FUNGI_DIR" service stop spore-box
 
 echo "== removing spore-box service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service remove wasmtime spore-box
+"$BIN" --fungi-dir "$FUNGI_DIR" service remove spore-box
 
 echo "== example completed =="
 echo "fungi dir: $FUNGI_DIR"

@@ -54,12 +54,11 @@ fn ping_event(
     }
 }
 
-fn proto_runtime_kind(kind: i32) -> Result<fungi_daemon::RuntimeKind, Status> {
+fn proto_runtime_kind(kind: i32) -> Result<Option<fungi_daemon::RuntimeKind>, Status> {
     match ServiceRuntimeKind::try_from(kind) {
-        Ok(ServiceRuntimeKind::Docker) => Ok(fungi_daemon::RuntimeKind::Docker),
-        Ok(ServiceRuntimeKind::Wasmtime) => {
-            Ok(fungi_daemon::RuntimeKind::Wasmtime)
-        }
+        Ok(ServiceRuntimeKind::Unspecified) => Ok(None),
+        Ok(ServiceRuntimeKind::Docker) => Ok(Some(fungi_daemon::RuntimeKind::Docker)),
+        Ok(ServiceRuntimeKind::Wasmtime) => Ok(Some(fungi_daemon::RuntimeKind::Wasmtime)),
         _ => Err(Status::invalid_argument("Invalid runtime kind")),
     }
 }
@@ -811,10 +810,18 @@ impl FungiDaemon for FungiDaemonRpcImpl {
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
         let runtime = proto_runtime_kind(req.runtime)?;
-        self.inner
-            .start_service(runtime, req.handle)
-            .await
-            .map_err(|e| Status::internal(format!("Failed to start service: {e}")))?;
+        match runtime {
+            Some(runtime) => self
+                .inner
+                .start_service(runtime, req.handle)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to start service: {e}")))?,
+            None => self
+                .inner
+                .start_service_by_handle(req.handle)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to start service: {e}")))?,
+        }
         Ok(Response::new(Empty {}))
     }
 
@@ -824,10 +831,18 @@ impl FungiDaemon for FungiDaemonRpcImpl {
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
         let runtime = proto_runtime_kind(req.runtime)?;
-        self.inner
-            .stop_service(runtime, req.handle)
-            .await
-            .map_err(|e| Status::internal(format!("Failed to stop service: {e}")))?;
+        match runtime {
+            Some(runtime) => self
+                .inner
+                .stop_service(runtime, req.handle)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to stop service: {e}")))?,
+            None => self
+                .inner
+                .stop_service_by_handle(req.handle)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to stop service: {e}")))?,
+        }
         Ok(Response::new(Empty {}))
     }
 
@@ -837,10 +852,18 @@ impl FungiDaemon for FungiDaemonRpcImpl {
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
         let runtime = proto_runtime_kind(req.runtime)?;
-        self.inner
-            .remove_service(runtime, req.handle)
-            .await
-            .map_err(|e| Status::internal(format!("Failed to remove service: {e}")))?;
+        match runtime {
+            Some(runtime) => self
+                .inner
+                .remove_service(runtime, req.handle)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to remove service: {e}")))?,
+            None => self
+                .inner
+                .remove_service_by_handle(req.handle)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to remove service: {e}")))?,
+        }
         Ok(Response::new(Empty {}))
     }
 
@@ -850,11 +873,18 @@ impl FungiDaemon for FungiDaemonRpcImpl {
     ) -> Result<Response<ServiceInstanceResponse>, Status> {
         let req = request.into_inner();
         let runtime = proto_runtime_kind(req.runtime)?;
-        let instance = self
-            .inner
-            .inspect_service(runtime, req.handle)
-            .await
-            .map_err(|e| Status::internal(format!("Failed to inspect service: {e}")))?;
+        let instance = match runtime {
+            Some(runtime) => self
+                .inner
+                .inspect_service(runtime, req.handle)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to inspect service: {e}")))?,
+            None => self
+                .inner
+                .inspect_service_by_handle(req.handle)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to inspect service: {e}")))?,
+        };
         let instance_json = serde_json::to_string(&instance)
             .map_err(|e| Status::internal(format!("Failed to serialize service instance: {e}")))?;
         Ok(Response::new(ServiceInstanceResponse { instance_json }))
@@ -866,19 +896,23 @@ impl FungiDaemon for FungiDaemonRpcImpl {
     ) -> Result<Response<ServiceLogsResponse>, Status> {
         let req = request.into_inner();
         let runtime = proto_runtime_kind(req.runtime)?;
-        let logs = self
-            .inner
-            .get_service_logs(
-                runtime,
-                req.handle,
-                if req.tail.trim().is_empty() {
-                    None
-                } else {
-                    Some(req.tail)
-                },
-            )
-            .await
-            .map_err(|e| Status::internal(format!("Failed to get service logs: {e}")))?;
+        let tail = if req.tail.trim().is_empty() {
+            None
+        } else {
+            Some(req.tail)
+        };
+        let logs = match runtime {
+            Some(runtime) => self
+                .inner
+                .get_service_logs(runtime, req.handle, tail)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to get service logs: {e}")))?,
+            None => self
+                .inner
+                .get_service_logs_by_handle(req.handle, tail)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to get service logs: {e}")))?,
+        };
 
         Ok(Response::new(ServiceLogsResponse {
             raw: logs.raw,

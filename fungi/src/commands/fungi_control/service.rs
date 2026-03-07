@@ -1,4 +1,4 @@
-use clap::{Subcommand, ValueEnum};
+use clap::Subcommand;
 use fungi_config::FungiDir;
 use fungi_daemon::{ServiceInstance, load_service_manifest_yaml_file};
 use fungi_daemon_grpc::{
@@ -10,7 +10,10 @@ use fungi_daemon_grpc::{
 
 use crate::commands::CommonArgs;
 
-use super::{client::get_rpc_client, shared::{fatal, fatal_grpc}};
+use super::{
+    client::get_rpc_client,
+    shared::{fatal, fatal_grpc},
+};
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum ServiceCommands {
@@ -19,53 +22,20 @@ pub enum ServiceCommands {
         /// Path to a service manifest YAML file
         manifest: String,
     },
-    /// Start a deployed service by runtime and handle/name
-    Start {
-        #[arg(value_enum)]
-        runtime: ServiceRuntimeArg,
-        handle: String,
-    },
-    /// Inspect a deployed service by runtime and handle/name
-    Inspect {
-        #[arg(value_enum)]
-        runtime: ServiceRuntimeArg,
-        handle: String,
-    },
-    /// Get service logs by runtime and handle/name
+    /// Start a deployed service by name
+    Start { handle: String },
+    /// Inspect a deployed service by name
+    Inspect { handle: String },
+    /// Get service logs by name
     Logs {
-        #[arg(value_enum)]
-        runtime: ServiceRuntimeArg,
         handle: String,
         #[arg(long)]
         tail: Option<String>,
     },
-    /// Stop a deployed service by runtime and handle/name
-    Stop {
-        #[arg(value_enum)]
-        runtime: ServiceRuntimeArg,
-        handle: String,
-    },
-    /// Remove a deployed service by runtime and handle/name
-    Remove {
-        #[arg(value_enum)]
-        runtime: ServiceRuntimeArg,
-        handle: String,
-    },
-}
-
-#[derive(Debug, Clone, Copy, ValueEnum)]
-pub enum ServiceRuntimeArg {
-    Docker,
-    Wasmtime,
-}
-
-impl ServiceRuntimeArg {
-    fn to_proto_value(self) -> i32 {
-        match self {
-            Self::Docker => 1,
-            Self::Wasmtime => 2,
-        }
-    }
+    /// Stop a deployed service by name
+    Stop { handle: String },
+    /// Remove a deployed service by name
+    Remove { handle: String },
 }
 
 pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
@@ -93,33 +63,23 @@ pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
                 Err(e) => fatal_grpc(e),
             }
         }
-        ServiceCommands::Start { runtime, handle } => {
-            let req = ServiceHandleRequest {
-                runtime: runtime.to_proto_value(),
-                handle,
-            };
+        ServiceCommands::Start { handle } => {
+            let req = ServiceHandleRequest { runtime: 0, handle };
             match client.start_service(Request::new(req)).await {
                 Ok(_) => println!("Service started"),
                 Err(e) => fatal_grpc(e),
             }
         }
-        ServiceCommands::Inspect { runtime, handle } => {
-            let req = ServiceHandleRequest {
-                runtime: runtime.to_proto_value(),
-                handle,
-            };
+        ServiceCommands::Inspect { handle } => {
+            let req = ServiceHandleRequest { runtime: 0, handle };
             match client.inspect_service(Request::new(req)).await {
                 Ok(resp) => print_service_instance(resp.into_inner()),
                 Err(e) => fatal_grpc(e),
             }
         }
-        ServiceCommands::Logs {
-            runtime,
-            handle,
-            tail,
-        } => {
+        ServiceCommands::Logs { handle, tail } => {
             let req = GetServiceLogsRequest {
-                runtime: runtime.to_proto_value(),
+                runtime: 0,
                 handle,
                 tail: tail.unwrap_or_default(),
             };
@@ -131,21 +91,15 @@ pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
                 Err(e) => fatal_grpc(e),
             }
         }
-        ServiceCommands::Stop { runtime, handle } => {
-            let req = ServiceHandleRequest {
-                runtime: runtime.to_proto_value(),
-                handle,
-            };
+        ServiceCommands::Stop { handle } => {
+            let req = ServiceHandleRequest { runtime: 0, handle };
             match client.stop_service(Request::new(req)).await {
                 Ok(_) => println!("Service stopped"),
                 Err(e) => fatal_grpc(e),
             }
         }
-        ServiceCommands::Remove { runtime, handle } => {
-            let req = ServiceHandleRequest {
-                runtime: runtime.to_proto_value(),
-                handle,
-            };
+        ServiceCommands::Remove { handle } => {
+            let req = ServiceHandleRequest { runtime: 0, handle };
             match client.remove_service(Request::new(req)).await {
                 Ok(_) => println!("Service removed"),
                 Err(e) => fatal_grpc(e),

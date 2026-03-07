@@ -534,6 +534,7 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
 pub struct RuntimeControl {
     docker: Option<DockerRuntimeProvider>,
     wasmtime: WasmtimeRuntimeProvider,
+    service_index: Arc<Mutex<HashMap<String, RuntimeKind>>>,
 }
 
 impl RuntimeControl {
@@ -545,6 +546,7 @@ impl RuntimeControl {
         Self {
             docker: docker.map(DockerRuntimeProvider::new),
             wasmtime: WasmtimeRuntimeProvider::new(runtime_root, launcher_path),
+            service_index: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -555,6 +557,7 @@ impl RuntimeControl {
         Self {
             docker: docker.map(DockerRuntimeProvider::new),
             wasmtime,
+            service_index: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -566,10 +569,22 @@ impl RuntimeControl {
     }
 
     pub async fn deploy(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
-        match manifest.runtime {
+        {
+            let services = self.service_index.lock();
+            if services.contains_key(&manifest.name) {
+                bail!("service already exists: {}", manifest.name);
+            }
+        }
+
+        let instance = match manifest.runtime {
             RuntimeKind::Docker => self.docker_provider()?.deploy(manifest).await,
             RuntimeKind::Wasmtime => self.wasmtime.deploy(manifest).await,
-        }
+        }?;
+
+        self.service_index
+            .lock()
+            .insert(manifest.name.clone(), manifest.runtime);
+        Ok(instance)
     }
 
     pub async fn start(&self, runtime: RuntimeKind, handle: &str) -> Result<()> {
@@ -591,6 +606,37 @@ impl RuntimeControl {
             RuntimeKind::Docker => self.docker_provider()?.remove(handle).await,
             RuntimeKind::Wasmtime => self.wasmtime.remove(handle).await,
         }
+    }
+
+    pub async fn start_by_handle(&self, handle: &str) -> Result<()> {
+        let runtime = self.resolve_runtime(handle)?;
+        self.start(runtime, handle).await
+    }
+
+    pub async fn stop_by_handle(&self, handle: &str) -> Result<()> {
+        let runtime = self.resolve_runtime(handle)?;
+        self.stop(runtime, handle).await
+    }
+
+    pub async fn remove_by_handle(&self, handle: &str) -> Result<()> {
+        let runtime = self.resolve_runtime(handle)?;
+        self.remove(runtime, handle).await?;
+        self.service_index.lock().remove(handle);
+        Ok(())
+    }
+
+    pub async fn inspect_by_handle(&self, handle: &str) -> Result<ServiceInstance> {
+        let runtime = self.resolve_runtime(handle)?;
+        self.inspect(runtime, handle).await
+    }
+
+    pub async fn logs_by_handle(
+        &self,
+        handle: &str,
+        options: &ServiceLogsOptions,
+    ) -> Result<ServiceLogs> {
+        let runtime = self.resolve_runtime(handle)?;
+        self.logs(runtime, handle, options).await
     }
 
     pub async fn inspect(&self, runtime: RuntimeKind, handle: &str) -> Result<ServiceInstance> {
@@ -616,6 +662,14 @@ impl RuntimeControl {
         self.docker
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("docker runtime is not enabled in config"))
+    }
+
+    fn resolve_runtime(&self, handle: &str) -> Result<RuntimeKind> {
+        self.service_index
+            .lock()
+            .get(handle)
+            .copied()
+            .ok_or_else(|| anyhow::anyhow!("service not found: {handle}"))
     }
 }
 

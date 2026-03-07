@@ -97,7 +97,7 @@ echo "== deploy filebrowser manifest =="
 "$BIN" --fungi-dir "$FUNGI_DIR" service deploy "$EXAMPLE_DIR/filebrowser.service.yaml"
 
 echo "== start filebrowser service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service start docker filebrowser
+"$BIN" --fungi-dir "$FUNGI_DIR" service start filebrowser
 
 echo "== waiting for filebrowser http endpoint =="
 ready="false"
@@ -113,30 +113,30 @@ done
 if [[ "$ready" != "true" ]]; then
   echo "filebrowser endpoint did not become ready" >&2
   echo "== inspect filebrowser service ==" >&2
-  "$BIN" --fungi-dir "$FUNGI_DIR" service inspect docker filebrowser >&2 || true
+  "$BIN" --fungi-dir "$FUNGI_DIR" service inspect filebrowser >&2 || true
   echo "== filebrowser logs ==" >&2
-  "$BIN" --fungi-dir "$FUNGI_DIR" service logs docker filebrowser --tail 100 >&2 || true
+  "$BIN" --fungi-dir "$FUNGI_DIR" service logs filebrowser --tail 100 >&2 || true
   echo "== daemon log ==" >&2
   tail -n 100 "$TMP_ROOT/daemon.log" >&2 || true
   exit 1
 fi
 
 echo "== inspect filebrowser service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service inspect docker filebrowser
+"$BIN" --fungi-dir "$FUNGI_DIR" service inspect filebrowser
 
 echo "== curl filebrowser =="
 curl -fsS "http://127.0.0.1:$SERVICE_PORT/" | head -n 5
 echo
 
 echo "== filebrowser logs =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service logs docker filebrowser --tail 50
+"$BIN" --fungi-dir "$FUNGI_DIR" service logs filebrowser --tail 50
 
 echo
 echo "== stopping filebrowser service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service stop docker filebrowser
+"$BIN" --fungi-dir "$FUNGI_DIR" service stop filebrowser
 
 echo "== removing filebrowser service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service remove docker filebrowser
+"$BIN" --fungi-dir "$FUNGI_DIR" service remove filebrowser
 
 echo "== example completed =="
 echo "fungi dir: $FUNGI_DIR"
