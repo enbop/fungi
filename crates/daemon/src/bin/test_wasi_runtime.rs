@@ -60,6 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         name: args.name.clone(),
         runtime: RuntimeKind::Wasmtime,
         source,
+        expose: None,
         env: BTreeMap::new(),
         mounts: vec![ServiceMount {
             host_path: args.mount_dir.clone(),

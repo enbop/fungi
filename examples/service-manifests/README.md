@@ -1,6 +1,7 @@
 # Service Manifest Examples
 
 This directory contains runnable service manifest examples for the Fungi runtime-provider flow.
+The manifests now also include a `spec.expose` block for future service discovery metadata.
 
 Documentation:
 

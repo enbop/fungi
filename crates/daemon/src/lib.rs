@@ -6,9 +6,12 @@ pub mod runtime;
 use clap::Parser;
 pub use daemon::FungiDaemon;
 pub use runtime::{
-    RuntimeControl, RuntimeKind, ServiceInstance, ServiceLogs, ServiceLogsOptions, ServiceManifest,
-    ServiceManifestDocument, ServiceMount, ServicePort, ServicePortProtocol, ServiceSource,
-    ServiceStatus, load_service_manifest_yaml_file, parse_service_manifest_yaml,
+    RuntimeControl, RuntimeKind, ServiceExpose, ServiceExposeTransport, ServiceExposeTransportKind,
+    ServiceExposeUsage, ServiceExposeUsageKind, ServiceInstance, ServiceLogs, ServiceLogsOptions,
+    ServiceManifest, ServiceManifestDocument, ServiceManifestExpose,
+    ServiceManifestExposeTransport, ServiceManifestExposeUsage, ServiceMount, ServicePort,
+    ServicePortProtocol, ServiceSource, ServiceStatus, load_service_manifest_yaml_file,
+    parse_service_manifest_yaml,
 };
 
 #[derive(Debug, Clone, Default, Parser)]

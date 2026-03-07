@@ -10,6 +10,17 @@ metadata:
 spec:
   runtime: wasmtime
 
+  expose:
+    enabled: true
+    serviceId: spore-box
+    displayName: Spore Box
+    transport:
+      kind: tcp
+    usage:
+      kind: web
+      path: /
+    catalogId: dev.enbop.spore-box
+
   source:
     url: https://github.com/enbop/spore-box/releases/download/v0.2.0/spore-box.wasm
 
@@ -33,3 +44,4 @@ notes:
   - This manifest can be deployed directly with `fungi service deploy`.
   - The Wasmtime runtime automatically creates host mount directories before launch.
   - The current minimal implementation supports a single `.wasm` file URL.
+  - `spec.expose` is the future-facing discovery/UX metadata layer, separate from the runtime launch config.

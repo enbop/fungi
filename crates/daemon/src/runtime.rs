@@ -28,6 +28,7 @@ pub struct ServiceManifest {
     pub name: String,
     pub runtime: RuntimeKind,
     pub source: ServiceSource,
+    pub expose: Option<ServiceExpose>,
     pub env: BTreeMap<String, String>,
     pub mounts: Vec<ServiceMount>,
     pub ports: Vec<ServicePort>,
@@ -42,6 +43,42 @@ pub enum ServiceSource {
     Docker { image: String },
     WasmtimeFile { component: PathBuf },
     WasmtimeUrl { url: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceExpose {
+    pub service_id: String,
+    pub display_name: String,
+    pub transport: ServiceExposeTransport,
+    pub usage: Option<ServiceExposeUsage>,
+    pub icon_url: Option<String>,
+    pub catalog_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceExposeTransport {
+    pub kind: ServiceExposeTransportKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ServiceExposeTransportKind {
+    Tcp,
+    Raw,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceExposeUsage {
+    pub kind: ServiceExposeUsageKind,
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ServiceExposeUsageKind {
+    Web,
+    Ssh,
+    Raw,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +148,7 @@ pub struct ServiceManifestMetadata {
 pub struct ServiceManifestSpec {
     pub runtime: RuntimeKind,
     pub source: ServiceManifestSource,
+    pub expose: Option<ServiceManifestExpose>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
     #[serde(default)]
@@ -149,6 +187,33 @@ pub struct ServiceManifestPort {
     pub protocol: ServicePortProtocol,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceManifestExpose {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(rename = "serviceId")]
+    pub service_id: Option<String>,
+    #[serde(rename = "displayName")]
+    pub display_name: Option<String>,
+    pub transport: Option<ServiceManifestExposeTransport>,
+    pub usage: Option<ServiceManifestExposeUsage>,
+    #[serde(rename = "iconUrl")]
+    pub icon_url: Option<String>,
+    #[serde(rename = "catalogId")]
+    pub catalog_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceManifestExposeTransport {
+    pub kind: ServiceExposeTransportKind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceManifestExposeUsage {
+    pub kind: ServiceExposeUsageKind,
+    pub path: Option<String>,
+}
+
 pub fn load_service_manifest_yaml_file(path: &Path, fungi_home: &Path) -> Result<ServiceManifest> {
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read service manifest: {}", path.display()))?;
@@ -176,15 +241,24 @@ impl ServiceManifestDocument {
             bail!("Unsupported manifest kind: {}", self.kind);
         }
 
-        let runtime = self.spec.runtime;
+        let ServiceManifestDocument {
+            api_version: _,
+            kind: _,
+            metadata,
+            spec,
+        } = self;
+        let service_name = metadata.name;
+        let metadata_labels = metadata.labels;
+
+        let runtime = spec.runtime;
         let source = match runtime {
             RuntimeKind::Docker => {
-                let Some(image) = self.spec.source.image else {
+                let Some(image) = spec.source.image else {
                     bail!("docker service manifest requires spec.source.image");
                 };
                 ServiceSource::Docker { image }
             }
-            RuntimeKind::Wasmtime => match (self.spec.source.file, self.spec.source.url) {
+            RuntimeKind::Wasmtime => match (spec.source.file, spec.source.url) {
                 (Some(file), None) => ServiceSource::WasmtimeFile {
                     component: resolve_manifest_path(&file, base_dir, fungi_home),
                 },
@@ -201,12 +275,12 @@ impl ServiceManifestDocument {
         };
 
         Ok(ServiceManifest {
-            name: self.metadata.name,
+            name: service_name.clone(),
             runtime,
             source,
-            env: self.spec.env,
-            mounts: self
-                .spec
+            expose: parse_manifest_expose(spec.expose, &service_name)?,
+            env: spec.env,
+            mounts: spec
                 .mounts
                 .into_iter()
                 .map(|mount| ServiceMount {
@@ -214,8 +288,7 @@ impl ServiceManifestDocument {
                     runtime_path: mount.runtime_path,
                 })
                 .collect(),
-            ports: self
-                .spec
+            ports: spec
                 .ports
                 .into_iter()
                 .map(|port| ServicePort {
@@ -224,15 +297,75 @@ impl ServiceManifestDocument {
                     protocol: port.protocol,
                 })
                 .collect(),
-            command: self.spec.command,
-            entrypoint: self.spec.entrypoint,
-            working_dir: self
-                .spec
+            command: spec.command,
+            entrypoint: spec.entrypoint,
+            working_dir: spec
                 .working_dir
                 .map(|value| resolve_manifest_path_string(&value, base_dir, fungi_home)),
-            labels: self.metadata.labels,
+            labels: metadata_labels,
         })
     }
+}
+
+fn parse_manifest_expose(
+    expose: Option<ServiceManifestExpose>,
+    manifest_name: &str,
+) -> Result<Option<ServiceExpose>> {
+    let Some(expose) = expose else {
+        return Ok(None);
+    };
+
+    if !expose.enabled {
+        return Ok(None);
+    }
+
+    let transport = expose.transport.ok_or_else(|| {
+        anyhow::anyhow!("spec.expose.transport is required when expose.enabled=true")
+    })?;
+    let service_id = normalize_non_empty(
+        expose.service_id.as_deref().unwrap_or(manifest_name),
+        "spec.expose.serviceId",
+    )?;
+    let display_name = normalize_non_empty(
+        expose.display_name.as_deref().unwrap_or(manifest_name),
+        "spec.expose.displayName",
+    )?;
+    let icon_url = normalize_optional(expose.icon_url);
+    let catalog_id = normalize_optional(expose.catalog_id);
+    let usage = expose.usage.map(|usage| ServiceExposeUsage {
+        kind: usage.kind,
+        path: normalize_optional(usage.path),
+    });
+
+    Ok(Some(ServiceExpose {
+        service_id,
+        display_name,
+        transport: ServiceExposeTransport {
+            kind: transport.kind,
+        },
+        usage,
+        icon_url,
+        catalog_id,
+    }))
+}
+
+fn normalize_non_empty(value: &str, field_name: &str) -> Result<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        bail!("{field_name} must not be empty");
+    }
+    Ok(trimmed.to_string())
+}
+
+fn normalize_optional(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
 }
 
 fn resolve_manifest_path(path: &str, base_dir: &Path, fungi_home: &Path) -> PathBuf {
@@ -917,6 +1050,7 @@ mod tests {
             source: ServiceSource::Docker {
                 image: "filebrowser/filebrowser:latest".into(),
             },
+            expose: None,
             env: BTreeMap::from([(String::from("FB_NOAUTH"), String::from("true"))]),
             mounts: vec![ServiceMount {
                 host_path: PathBuf::from("/tmp/fungi/data"),
@@ -949,6 +1083,7 @@ mod tests {
             source: ServiceSource::WasmtimeFile {
                 component: temp_dir.path().join("demo.wasm"),
             },
+            expose: None,
             env: BTreeMap::new(),
             mounts: vec![ServiceMount {
                 host_path: mount_path.clone(),
@@ -973,6 +1108,7 @@ mod tests {
             source: ServiceSource::WasmtimeFile {
                 component: PathBuf::from("/tmp/app.wasm"),
             },
+            expose: None,
             env: BTreeMap::new(),
             mounts: Vec::new(),
             ports: Vec::new(),
@@ -999,6 +1135,7 @@ mod tests {
             source: ServiceSource::WasmtimeFile {
                 component: component.clone(),
             },
+            expose: None,
             env: BTreeMap::new(),
             mounts: vec![ServiceMount {
                 host_path: temp_dir.path().join("data"),
@@ -1068,6 +1205,7 @@ mod tests {
             source: ServiceSource::WasmtimeUrl {
                 url: server.url.clone(),
             },
+            expose: None,
             env: BTreeMap::new(),
             mounts: Vec::new(),
             ports: Vec::new(),
@@ -1086,6 +1224,59 @@ mod tests {
                 .exists()
         );
         drop(server);
+    }
+
+    #[test]
+    fn parse_manifest_expose_defaults_service_identity() {
+        let yaml = r#"
+apiVersion: fungi.dev/v1alpha1
+kind: ServiceManifest
+metadata:
+    name: filebrowser
+spec:
+    runtime: docker
+    expose:
+        enabled: true
+        transport:
+            kind: tcp
+        usage:
+            kind: web
+            path: /
+    source:
+        image: filebrowser/filebrowser:latest
+"#;
+
+        let manifest =
+            parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
+        let expose = manifest.expose.expect("expected expose config");
+        assert_eq!(expose.service_id, "filebrowser");
+        assert_eq!(expose.display_name, "filebrowser");
+        assert_eq!(expose.transport.kind, ServiceExposeTransportKind::Tcp);
+        let usage = expose.usage.expect("expected usage config");
+        assert_eq!(usage.kind, ServiceExposeUsageKind::Web);
+        assert_eq!(usage.path.as_deref(), Some("/"));
+    }
+
+    #[test]
+    fn parse_manifest_expose_disabled_returns_none() {
+        let yaml = r#"
+apiVersion: fungi.dev/v1alpha1
+kind: ServiceManifest
+metadata:
+    name: raw-service
+spec:
+    runtime: docker
+    expose:
+        enabled: false
+        transport:
+            kind: tcp
+    source:
+        image: example/raw:latest
+"#;
+
+        let manifest =
+            parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
+        assert!(manifest.expose.is_none());
     }
 
     fn create_fake_launcher(dir: &Path) -> Result<PathBuf> {
