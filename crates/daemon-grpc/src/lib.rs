@@ -934,7 +934,28 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .map_err(|e| Status::internal(format!("Failed to discover peer services: {e}")))?;
         let services_json = serde_json::to_string(&services)
             .map_err(|e| Status::internal(format!("Failed to serialize peer services: {e}")))?;
-        Ok(Response::new(DiscoverPeerServicesResponse { services_json }))
+        Ok(Response::new(DiscoverPeerServicesResponse {
+            services_json,
+        }))
+    }
+
+    async fn discover_peer_capabilities(
+        &self,
+        request: Request<DiscoverPeerCapabilitiesRequest>,
+    ) -> Result<Response<DiscoverPeerCapabilitiesResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+        let capabilities = self
+            .inner
+            .discover_peer_capabilities(peer_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to discover peer capabilities: {e}")))?;
+        let capabilities_json = serde_json::to_string(&capabilities)
+            .map_err(|e| Status::internal(format!("Failed to serialize peer capabilities: {e}")))?;
+        Ok(Response::new(DiscoverPeerCapabilitiesResponse {
+            capabilities_json,
+        }))
     }
 }
 

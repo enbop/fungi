@@ -10,5 +10,7 @@ pub const FUNGI_PEER_HANDSHAKE_PROTOCOL: StreamProtocol =
     StreamProtocol::new("/fungi/peer-handshake/0.1.0");
 pub const FUNGI_SERVICE_DISCOVERY_PROTOCOL: StreamProtocol =
     StreamProtocol::new("/fungi/services/0.1.0");
+pub const FUNGI_NODE_CAPABILITIES_PROTOCOL: StreamProtocol =
+    StreamProtocol::new("/fungi/node-capabilities/0.1.0");
 
 pub const FUNGI_TUNNEL_PROTOCOL: &str = "/fungi/tunnel/0.1.0";

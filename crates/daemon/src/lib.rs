@@ -1,10 +1,15 @@
 mod api;
 mod controls;
 mod daemon;
+mod node_capabilities;
 pub mod runtime;
 
 use clap::Parser;
 pub use daemon::FungiDaemon;
+pub use node_capabilities::{
+    NodeAllowedTcpPorts, NodeCapabilities, NodePortRange, NodeRuntimeCapabilities,
+    build_local_node_capabilities,
+};
 pub use runtime::{
     DiscoveredService, RuntimeControl, RuntimeKind, ServiceExpose, ServiceExposeTransport,
     ServiceExposeTransportKind, ServiceExposeUsage, ServiceExposeUsageKind, ServiceInstance,

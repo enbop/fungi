@@ -10,7 +10,7 @@ use crate::{
     DaemonArgs,
     controls::{
         DockerControl, FileTransferClientsControl, FileTransferServiceControl,
-        ServiceDiscoveryControl, TcpTunnelingControl, mdns::MdnsControl,
+        NodeCapabilitiesControl, ServiceDiscoveryControl, TcpTunnelingControl, mdns::MdnsControl,
     },
     runtime::RuntimeControl,
 };
@@ -47,6 +47,7 @@ pub struct FungiDaemon {
     tcp_tunneling_control: TcpTunnelingControl,
     runtime_control: RuntimeControl,
     service_discovery_control: ServiceDiscoveryControl,
+    node_capabilities_control: NodeCapabilitiesControl,
 
     task_handles: TaskHandles,
 }
@@ -86,6 +87,10 @@ impl FungiDaemon {
 
     pub fn service_discovery_control(&self) -> &ServiceDiscoveryControl {
         &self.service_discovery_control
+    }
+
+    pub fn node_capabilities_control(&self) -> &NodeCapabilitiesControl {
+        &self.node_capabilities_control
     }
 
     pub fn mdns_control(&self) -> &MdnsControl {
@@ -178,6 +183,13 @@ impl FungiDaemon {
             state.incoming_allowed_peers().clone(),
         );
         service_discovery_control.start()?;
+        let node_capabilities_control = NodeCapabilitiesControl::new(
+            swarm_control.clone(),
+            Arc::new(Mutex::new(config.clone())),
+            runtime_control.clone(),
+            state.incoming_allowed_peers().clone(),
+        );
+        node_capabilities_control.start()?;
 
         let tcp_tunneling_control = TcpTunnelingControl::new(swarm_control.clone());
         tcp_tunneling_control
@@ -221,6 +233,7 @@ impl FungiDaemon {
             tcp_tunneling_control,
             runtime_control,
             service_discovery_control,
+            node_capabilities_control,
             task_handles,
         })
     }

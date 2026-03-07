@@ -8,11 +8,11 @@ use fungi_swarm::PeerConnections;
 use libp2p::PeerId;
 use libp2p::swarm::ConnectionId;
 
-use crate::FungiDaemon;
 use crate::runtime::{
     DiscoveredService, RuntimeKind, ServiceInstance, ServiceLogs, ServiceLogsOptions,
     ServiceManifest,
 };
+use crate::{FungiDaemon, NodeCapabilities, build_local_node_capabilities};
 
 #[derive(Debug, Clone)]
 pub struct ConnectionSnapshot {
@@ -594,6 +594,17 @@ impl FungiDaemon {
     pub async fn discover_peer_services(&self, peer_id: PeerId) -> Result<Vec<DiscoveredService>> {
         self.service_discovery_control()
             .discover_peer_services(peer_id)
+            .await
+    }
+
+    pub fn local_node_capabilities(&self) -> NodeCapabilities {
+        let config = self.config().lock().clone();
+        build_local_node_capabilities(&config, self.runtime_control())
+    }
+
+    pub async fn discover_peer_capabilities(&self, peer_id: PeerId) -> Result<NodeCapabilities> {
+        self.node_capabilities_control()
+            .discover_peer_capabilities(peer_id)
             .await
     }
 

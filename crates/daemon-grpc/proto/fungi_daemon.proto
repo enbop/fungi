@@ -139,6 +139,10 @@ service FungiDaemon {
   // Queries a remote peer for currently discoverable services.
   rpc DiscoverPeerServices(DiscoverPeerServicesRequest)
       returns (DiscoverPeerServicesResponse) {}
+
+    // Queries a remote peer for minimal node deployment capabilities.
+    rpc DiscoverPeerCapabilities(DiscoverPeerCapabilitiesRequest)
+      returns (DiscoverPeerCapabilitiesResponse) {}
 }
 
 message Empty {}
@@ -392,3 +396,7 @@ message ServiceLogsResponse {
 message DiscoverPeerServicesRequest { string peer_id = 1; }
 
 message DiscoverPeerServicesResponse { string services_json = 1; }
+
+message DiscoverPeerCapabilitiesRequest { string peer_id = 1; }
+
+message DiscoverPeerCapabilitiesResponse { string capabilities_json = 1; }

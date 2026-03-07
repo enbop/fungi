@@ -1,11 +1,13 @@
 use clap::Subcommand;
 use fungi_config::FungiDir;
-use fungi_daemon::{DiscoveredService, ServiceInstance, load_service_manifest_yaml_file};
+use fungi_daemon::{
+    DiscoveredService, NodeCapabilities, ServiceInstance, load_service_manifest_yaml_file,
+};
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
-        DeployServiceRequest, DiscoverPeerServicesRequest, GetServiceLogsRequest,
-        ServiceHandleRequest, ServiceInstanceResponse,
+        DeployServiceRequest, DiscoverPeerCapabilitiesRequest, DiscoverPeerServicesRequest,
+        GetServiceLogsRequest, ServiceHandleRequest, ServiceInstanceResponse,
     },
 };
 
@@ -39,6 +41,8 @@ pub enum ServiceCommands {
     Remove { handle: String },
     /// List discoverable services from a remote peer
     Discover { peer_id: String },
+    /// Query minimal deployment capabilities from a remote peer
+    Capabilities { peer_id: String },
 }
 
 pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
@@ -115,6 +119,13 @@ pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
                 Err(e) => fatal_grpc(e),
             }
         }
+        ServiceCommands::Capabilities { peer_id } => {
+            let req = DiscoverPeerCapabilitiesRequest { peer_id };
+            match client.discover_peer_capabilities(Request::new(req)).await {
+                Ok(resp) => print_node_capabilities(&resp.into_inner().capabilities_json),
+                Err(e) => fatal_grpc(e),
+            }
+        }
     }
 }
 
@@ -135,5 +146,15 @@ fn print_discovered_services(services_json: &str) {
             Err(error) => fatal(format!("Failed to format discovered services: {error}")),
         },
         Err(error) => fatal(format!("Failed to decode discovered services: {error}")),
+    }
+}
+
+fn print_node_capabilities(capabilities_json: &str) {
+    match serde_json::from_str::<NodeCapabilities>(capabilities_json) {
+        Ok(capabilities) => match serde_json::to_string_pretty(&capabilities) {
+            Ok(pretty) => println!("{}", pretty),
+            Err(error) => fatal(format!("Failed to format node capabilities: {error}")),
+        },
+        Err(error) => fatal(format!("Failed to decode node capabilities: {error}")),
     }
 }
