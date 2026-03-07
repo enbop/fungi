@@ -1,9 +1,14 @@
 mod api;
 mod controls;
 mod daemon;
+pub mod runtime;
 
 use clap::Parser;
 pub use daemon::FungiDaemon;
+pub use runtime::{
+    RuntimeControl, RuntimeKind, ServiceInstance, ServiceLogs, ServiceLogsOptions, ServiceManifest,
+    ServiceMount, ServicePort, ServiceSource, ServiceStatus,
+};
 
 #[derive(Debug, Clone, Default, Parser)]
 pub struct DaemonArgs {

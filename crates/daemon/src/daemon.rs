@@ -8,9 +8,10 @@ use std::{
 use crate::{
     DaemonArgs,
     controls::{
-        FileTransferClientsControl, FileTransferServiceControl, TcpTunnelingControl,
+        DockerControl, FileTransferClientsControl, FileTransferServiceControl, TcpTunnelingControl,
         mdns::MdnsControl,
     },
+    runtime::RuntimeControl,
 };
 use anyhow::Result;
 use fungi_config::{
@@ -41,7 +42,9 @@ pub struct FungiDaemon {
     mdns_control: MdnsControl,
     fts_control: FileTransferServiceControl,
     ftc_control: FileTransferClientsControl,
+    docker_control: Option<DockerControl>,
     tcp_tunneling_control: TcpTunnelingControl,
+    runtime_control: RuntimeControl,
 
     task_handles: TaskHandles,
 }
@@ -67,8 +70,16 @@ impl FungiDaemon {
         &self.ftc_control
     }
 
+    pub fn docker_control(&self) -> Option<&DockerControl> {
+        self.docker_control.as_ref()
+    }
+
     pub fn tcp_tunneling_control(&self) -> &TcpTunnelingControl {
         &self.tcp_tunneling_control
+    }
+
+    pub fn runtime_control(&self) -> &RuntimeControl {
+        &self.runtime_control
     }
 
     pub fn mdns_control(&self) -> &MdnsControl {
@@ -143,6 +154,9 @@ impl FungiDaemon {
         let ftc_control = FileTransferClientsControl::new(swarm_control.clone());
         Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
 
+        let docker_control = DockerControl::from_config(&config.docker)?;
+        let runtime_control = RuntimeControl::new(docker_control.clone());
+
         let tcp_tunneling_control = TcpTunnelingControl::new(swarm_control.clone());
         tcp_tunneling_control
             .init_from_config(&config.tcp_tunneling)
@@ -181,7 +195,9 @@ impl FungiDaemon {
             mdns_control,
             fts_control,
             ftc_control,
+            docker_control,
             tcp_tunneling_control,
+            runtime_control,
             task_handles,
         })
     }

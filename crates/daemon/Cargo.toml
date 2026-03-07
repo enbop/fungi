@@ -10,6 +10,7 @@ edition.workspace = true
 
 [dependencies]
 fungi-config = { path = "../config" }
+fungi-docker-agent = { path = "../docker-agent" }
 fungi-swarm = { path = "../swarm" }
 fungi-util = { path = "../util" }
 log = { workspace = true }

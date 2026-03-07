@@ -1704,6 +1704,7 @@ dependencies = [
  "env_logger 0.11.8",
  "flume",
  "fungi-config",
+ "fungi-docker-agent",
  "fungi-fs",
  "fungi-swarm",
  "fungi-util",

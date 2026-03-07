@@ -9,6 +9,9 @@ use libp2p::PeerId;
 use libp2p::swarm::ConnectionId;
 
 use crate::FungiDaemon;
+use crate::runtime::{
+    RuntimeKind, ServiceInstance, ServiceLogs, ServiceLogsOptions, ServiceManifest,
+};
 
 #[derive(Debug, Clone)]
 pub struct ConnectionSnapshot {
@@ -508,6 +511,53 @@ impl FungiDaemon {
 
     pub fn get_tcp_tunneling_config(&self) -> fungi_config::tcp_tunneling::TcpTunneling {
         self.config().lock().tcp_tunneling.clone()
+    }
+
+    pub fn docker_enabled(&self) -> bool {
+        self.config().lock().docker.enabled
+    }
+
+    pub fn get_docker_config(&self) -> fungi_config::docker::Docker {
+        self.config().lock().docker.clone()
+    }
+
+    pub fn supports_runtime(&self, runtime: RuntimeKind) -> bool {
+        self.runtime_control().supports(runtime)
+    }
+
+    pub async fn deploy_service(&self, manifest: ServiceManifest) -> Result<ServiceInstance> {
+        self.runtime_control().deploy(&manifest).await
+    }
+
+    pub async fn start_service(&self, runtime: RuntimeKind, handle: String) -> Result<()> {
+        self.runtime_control().start(runtime, &handle).await
+    }
+
+    pub async fn stop_service(&self, runtime: RuntimeKind, handle: String) -> Result<()> {
+        self.runtime_control().stop(runtime, &handle).await
+    }
+
+    pub async fn remove_service(&self, runtime: RuntimeKind, handle: String) -> Result<()> {
+        self.runtime_control().remove(runtime, &handle).await
+    }
+
+    pub async fn inspect_service(
+        &self,
+        runtime: RuntimeKind,
+        handle: String,
+    ) -> Result<ServiceInstance> {
+        self.runtime_control().inspect(runtime, &handle).await
+    }
+
+    pub async fn get_service_logs(
+        &self,
+        runtime: RuntimeKind,
+        handle: String,
+        tail: Option<String>,
+    ) -> Result<ServiceLogs> {
+        self.runtime_control()
+            .logs(runtime, &handle, &ServiceLogsOptions { tail })
+            .await
     }
 
     pub async fn mdns_get_local_devices(&self) -> Result<Vec<PeerInfo>> {

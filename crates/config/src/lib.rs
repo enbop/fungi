@@ -1,4 +1,5 @@
 pub mod address_book;
+pub mod docker;
 pub mod file_transfer;
 mod init;
 mod libp2p;
@@ -17,7 +18,10 @@ use std::{
 };
 use tcp_tunneling::*;
 
-use crate::file_transfer::{FileTransfer, FileTransferClient, FileTransferService};
+use crate::{
+    docker::Docker,
+    file_transfer::{FileTransfer, FileTransferClient, FileTransferService},
+};
 
 pub const DEFAULT_CONFIG_FILE: &str = "config.toml";
 pub const DEFAULT_FUNGI_DIR: &str = ".fungi";
@@ -33,6 +37,8 @@ pub struct FungiConfig {
     pub tcp_tunneling: TcpTunneling,
     #[serde(default)]
     pub file_transfer: FileTransfer,
+    #[serde(default)]
+    pub docker: Docker,
 
     #[serde(default)]
     custom_hostname: Option<String>,
