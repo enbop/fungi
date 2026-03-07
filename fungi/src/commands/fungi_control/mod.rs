@@ -6,6 +6,7 @@ mod ft_client;
 mod ft_service;
 mod info;
 mod ping;
+mod service;
 mod shared;
 mod tunnel;
 
@@ -16,4 +17,5 @@ pub use ft_client::{FtClientCommands, execute_ft_client};
 pub use ft_service::{FtServiceCommands, execute_ft_service};
 pub use info::{InfoCommands, execute_info};
 pub use ping::execute_ping;
+pub use service::{ServiceCommands, execute_service};
 pub use tunnel::{TunnelCommands, execute_tunnel};

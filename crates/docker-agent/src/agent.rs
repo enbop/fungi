@@ -6,6 +6,7 @@ use crate::{
     },
     spec::{ContainerSpec, LogsOptions, PortProtocol},
 };
+use hyper::StatusCode;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -27,7 +28,16 @@ impl DockerAgent {
             name: spec.name.clone(),
             body: to_create_body(spec, &self.policy),
         };
-        let created = self.client.create_container(&request).await?;
+        let created = match self.client.create_container(&request).await {
+            Ok(created) => created,
+            Err(DockerAgentError::DockerApi { status, message })
+                if status == StatusCode::NOT_FOUND && missing_image_message(&message, &spec.image) =>
+            {
+                self.client.pull_image(&spec.image).await?;
+                self.client.create_container(&request).await?
+            }
+            Err(error) => return Err(error),
+        };
         self.inspect_container(&created.id).await
     }
 
@@ -65,6 +75,12 @@ impl DockerAgent {
         let details = self.client.inspect_container(id).await?;
         ensure_managed_labels(&self.policy, &details)
     }
+}
+
+fn missing_image_message(message: &str, image: &str) -> bool {
+    let normalized_message = message.to_ascii_lowercase();
+    let normalized_image = image.to_ascii_lowercase();
+    normalized_message.contains("no such image") && normalized_message.contains(&normalized_image)
 }
 
 #[derive(Debug, Clone, Serialize)]

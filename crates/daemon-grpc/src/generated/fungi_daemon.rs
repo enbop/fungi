@@ -379,6 +379,68 @@ pub struct ListActiveStreamsResponse {
     #[prost(message, repeated, tag = "1")]
     pub streams: ::prost::alloc::vec::Vec<ActiveStreamSnapshot>,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DeployServiceRequest {
+    #[prost(string, tag = "1")]
+    pub manifest_json: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ServiceHandleRequest {
+    #[prost(enumeration = "ServiceRuntimeKind", tag = "1")]
+    pub runtime: i32,
+    #[prost(string, tag = "2")]
+    pub handle: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetServiceLogsRequest {
+    #[prost(enumeration = "ServiceRuntimeKind", tag = "1")]
+    pub runtime: i32,
+    #[prost(string, tag = "2")]
+    pub handle: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub tail: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ServiceInstanceResponse {
+    #[prost(string, tag = "1")]
+    pub instance_json: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ServiceLogsResponse {
+    #[prost(bytes = "vec", tag = "1")]
+    pub raw: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag = "2")]
+    pub text: ::prost::alloc::string::String,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ServiceRuntimeKind {
+    Unspecified = 0,
+    Docker = 1,
+    Wasmtime = 2,
+}
+impl ServiceRuntimeKind {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SERVICE_RUNTIME_KIND_UNSPECIFIED",
+            Self::Docker => "SERVICE_RUNTIME_KIND_DOCKER",
+            Self::Wasmtime => "SERVICE_RUNTIME_KIND_WASMTIME",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SERVICE_RUNTIME_KIND_UNSPECIFIED" => Some(Self::Unspecified),
+            "SERVICE_RUNTIME_KIND_DOCKER" => Some(Self::Docker),
+            "SERVICE_RUNTIME_KIND_WASMTIME" => Some(Self::Wasmtime),
+            _ => None,
+        }
+    }
+}
 /// Generated client implementations.
 pub mod fungi_daemon_client {
     #![allow(
@@ -1310,6 +1372,147 @@ pub mod fungi_daemon_client {
                 );
             self.inner.unary(req, path, codec).await
         }
+        /// Deploys a service from a serialized manifest payload.
+        pub async fn deploy_service(
+            &mut self,
+            request: impl tonic::IntoRequest<super::DeployServiceRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ServiceInstanceResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/DeployService",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "DeployService"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Starts a deployed service.
+        pub async fn start_service(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ServiceHandleRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/StartService",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "StartService"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Stops a deployed service.
+        pub async fn stop_service(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ServiceHandleRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/StopService",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "StopService"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Removes a deployed service.
+        pub async fn remove_service(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ServiceHandleRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/RemoveService",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "RemoveService"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Inspects a deployed service.
+        pub async fn inspect_service(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ServiceHandleRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ServiceInstanceResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/InspectService",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "InspectService"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Gets logs for a deployed service.
+        pub async fn get_service_logs(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetServiceLogsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ServiceLogsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/GetServiceLogs",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "GetServiceLogs"));
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -1540,6 +1743,45 @@ pub mod fungi_daemon_server {
             request: tonic::Request<super::ListActiveStreamsRequest>,
         ) -> std::result::Result<
             tonic::Response<super::ListActiveStreamsResponse>,
+            tonic::Status,
+        >;
+        /// Deploys a service from a serialized manifest payload.
+        async fn deploy_service(
+            &self,
+            request: tonic::Request<super::DeployServiceRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ServiceInstanceResponse>,
+            tonic::Status,
+        >;
+        /// Starts a deployed service.
+        async fn start_service(
+            &self,
+            request: tonic::Request<super::ServiceHandleRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
+        /// Stops a deployed service.
+        async fn stop_service(
+            &self,
+            request: tonic::Request<super::ServiceHandleRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
+        /// Removes a deployed service.
+        async fn remove_service(
+            &self,
+            request: tonic::Request<super::ServiceHandleRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
+        /// Inspects a deployed service.
+        async fn inspect_service(
+            &self,
+            request: tonic::Request<super::ServiceHandleRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ServiceInstanceResponse>,
+            tonic::Status,
+        >;
+        /// Gets logs for a deployed service.
+        async fn get_service_logs(
+            &self,
+            request: tonic::Request<super::GetServiceLogsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ServiceLogsResponse>,
             tonic::Status,
         >;
     }
@@ -3103,6 +3345,276 @@ pub mod fungi_daemon_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = ListActiveStreamsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/DeployService" => {
+                    #[allow(non_camel_case_types)]
+                    struct DeployServiceSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::DeployServiceRequest>
+                    for DeployServiceSvc<T> {
+                        type Response = super::ServiceInstanceResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::DeployServiceRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::deploy_service(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = DeployServiceSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/StartService" => {
+                    #[allow(non_camel_case_types)]
+                    struct StartServiceSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::ServiceHandleRequest>
+                    for StartServiceSvc<T> {
+                        type Response = super::Empty;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ServiceHandleRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::start_service(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = StartServiceSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/StopService" => {
+                    #[allow(non_camel_case_types)]
+                    struct StopServiceSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::ServiceHandleRequest>
+                    for StopServiceSvc<T> {
+                        type Response = super::Empty;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ServiceHandleRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::stop_service(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = StopServiceSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/RemoveService" => {
+                    #[allow(non_camel_case_types)]
+                    struct RemoveServiceSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::ServiceHandleRequest>
+                    for RemoveServiceSvc<T> {
+                        type Response = super::Empty;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ServiceHandleRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::remove_service(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = RemoveServiceSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/InspectService" => {
+                    #[allow(non_camel_case_types)]
+                    struct InspectServiceSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::ServiceHandleRequest>
+                    for InspectServiceSvc<T> {
+                        type Response = super::ServiceInstanceResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ServiceHandleRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::inspect_service(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = InspectServiceSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/GetServiceLogs" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetServiceLogsSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::GetServiceLogsRequest>
+                    for GetServiceLogsSvc<T> {
+                        type Response = super::ServiceLogsResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetServiceLogsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::get_service_logs(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetServiceLogsSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

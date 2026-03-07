@@ -1,0 +1,35 @@
+apiVersion: fungi.dev/v1alpha1
+kind: ServiceManifest
+
+metadata:
+  name: spore-box
+  labels:
+    app: spore-box
+    managedBy: fungi
+
+spec:
+  runtime: wasmtime
+
+  source:
+    url: https://github.com/enbop/spore-box/releases/download/v0.2.0/spore-box.wasm
+
+  ports:
+    - hostPort: 28081
+      servicePort: 8081
+      protocol: tcp
+
+  mounts:
+    - hostPath: ${FUNGI_HOME}/services/spore-box/data
+      runtimePath: data
+
+  env: {}
+
+  command: []
+  entrypoint: []
+
+  workingDir: null
+
+notes:
+  - This manifest can be deployed directly with `fungi service deploy`.
+  - The Wasmtime runtime automatically creates host mount directories before launch.
+  - The current minimal implementation supports a single `.wasm` file URL.

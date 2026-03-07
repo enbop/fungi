@@ -7,7 +7,8 @@ use clap::Parser;
 pub use daemon::FungiDaemon;
 pub use runtime::{
     RuntimeControl, RuntimeKind, ServiceInstance, ServiceLogs, ServiceLogsOptions, ServiceManifest,
-    ServiceMount, ServicePort, ServiceSource, ServiceStatus,
+    ServiceManifestDocument, ServiceMount, ServicePort, ServicePortProtocol, ServiceSource,
+    ServiceStatus, load_service_manifest_yaml_file, parse_service_manifest_yaml,
 };
 
 #[derive(Debug, Clone, Default, Parser)]

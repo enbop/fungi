@@ -15,6 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use fungi_daemon_grpc::fungi_daemon_server::FungiDaemon;
 use fungi_daemon_grpc::*;
 use libp2p_identity::PeerId;
+use serde_json;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tokio_stream::wrappers::ReceiverStream;
@@ -50,6 +51,16 @@ fn ping_event(
         tick_seq,
         ts_unix_ms,
         event: Some(event),
+    }
+}
+
+fn proto_runtime_kind(kind: i32) -> Result<fungi_daemon::RuntimeKind, Status> {
+    match ServiceRuntimeKind::try_from(kind) {
+        Ok(ServiceRuntimeKind::Docker) => Ok(fungi_daemon::RuntimeKind::Docker),
+        Ok(ServiceRuntimeKind::Wasmtime) => {
+            Ok(fungi_daemon::RuntimeKind::Wasmtime)
+        }
+        _ => Err(Status::invalid_argument("Invalid runtime kind")),
     }
 }
 
@@ -773,6 +784,106 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .collect();
 
         Ok(Response::new(ListActiveStreamsResponse { streams }))
+    }
+
+    async fn deploy_service(
+        &self,
+        request: Request<DeployServiceRequest>,
+    ) -> Result<Response<ServiceInstanceResponse>, Status> {
+        let req = request.into_inner();
+        let manifest: fungi_daemon::ServiceManifest = serde_json::from_str(&req.manifest_json)
+            .map_err(|e| Status::invalid_argument(format!("Invalid manifest_json: {e}")))?;
+
+        let instance = self
+            .inner
+            .deploy_service(manifest)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to deploy service: {e}")))?;
+
+        let instance_json = serde_json::to_string(&instance)
+            .map_err(|e| Status::internal(format!("Failed to serialize service instance: {e}")))?;
+        Ok(Response::new(ServiceInstanceResponse { instance_json }))
+    }
+
+    async fn start_service(
+        &self,
+        request: Request<ServiceHandleRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let runtime = proto_runtime_kind(req.runtime)?;
+        self.inner
+            .start_service(runtime, req.handle)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to start service: {e}")))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn stop_service(
+        &self,
+        request: Request<ServiceHandleRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let runtime = proto_runtime_kind(req.runtime)?;
+        self.inner
+            .stop_service(runtime, req.handle)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to stop service: {e}")))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn remove_service(
+        &self,
+        request: Request<ServiceHandleRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let runtime = proto_runtime_kind(req.runtime)?;
+        self.inner
+            .remove_service(runtime, req.handle)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove service: {e}")))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn inspect_service(
+        &self,
+        request: Request<ServiceHandleRequest>,
+    ) -> Result<Response<ServiceInstanceResponse>, Status> {
+        let req = request.into_inner();
+        let runtime = proto_runtime_kind(req.runtime)?;
+        let instance = self
+            .inner
+            .inspect_service(runtime, req.handle)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to inspect service: {e}")))?;
+        let instance_json = serde_json::to_string(&instance)
+            .map_err(|e| Status::internal(format!("Failed to serialize service instance: {e}")))?;
+        Ok(Response::new(ServiceInstanceResponse { instance_json }))
+    }
+
+    async fn get_service_logs(
+        &self,
+        request: Request<GetServiceLogsRequest>,
+    ) -> Result<Response<ServiceLogsResponse>, Status> {
+        let req = request.into_inner();
+        let runtime = proto_runtime_kind(req.runtime)?;
+        let logs = self
+            .inner
+            .get_service_logs(
+                runtime,
+                req.handle,
+                if req.tail.trim().is_empty() {
+                    None
+                } else {
+                    Some(req.tail)
+                },
+            )
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get service logs: {e}")))?;
+
+        Ok(Response::new(ServiceLogsResponse {
+            raw: logs.raw,
+            text: logs.text,
+        }))
     }
 }
 

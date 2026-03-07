@@ -9,7 +9,7 @@ use fungi_daemon_grpc::{
 
 use crate::commands::CommonArgs;
 
-use super::{client::get_rpc_client, shared::parse_address};
+use super::{client::get_rpc_client, shared::{fatal, fatal_grpc, parse_address}};
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum TunnelCommands {
@@ -48,7 +48,7 @@ pub enum TunnelCommands {
 pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
-        None => return,
+        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
     };
 
     match cmd {
@@ -96,7 +96,7 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
                         }
                     }
                 }
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         TunnelCommands::AddForward {
@@ -106,10 +106,7 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
         } => {
             let (local_host, local_port) = match parse_address(&local_address) {
                 Ok(addr) => addr,
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    return;
-                }
+                Err(e) => fatal(e),
             };
 
             let req = AddTcpForwardingRuleRequest {
@@ -120,7 +117,7 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
             };
             match client.add_tcp_forwarding_rule(Request::new(req)).await {
                 Ok(resp) => println!("Forwarding rule added: {}", resp.into_inner().rule_id),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         TunnelCommands::RemoveForward {
@@ -130,10 +127,7 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
         } => {
             let (local_host, local_port) = match parse_address(&local_address) {
                 Ok(addr) => addr,
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    return;
-                }
+                Err(e) => fatal(e),
             };
 
             let req = RemoveTcpForwardingRuleRequest {
@@ -144,16 +138,13 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
             };
             match client.remove_tcp_forwarding_rule(Request::new(req)).await {
                 Ok(_) => println!("Forwarding rule removed successfully"),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         TunnelCommands::AddListen { local_address } => {
             let (local_host, local_port) = match parse_address(&local_address) {
                 Ok(addr) => addr,
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    return;
-                }
+                Err(e) => fatal(e),
             };
 
             let req = AddTcpListeningRuleRequest {
@@ -163,16 +154,13 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
             };
             match client.add_tcp_listening_rule(Request::new(req)).await {
                 Ok(resp) => println!("Listening rule added: {}", resp.into_inner().rule_id),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         TunnelCommands::RemoveListen { local_address } => {
             let (local_host, local_port) = match parse_address(&local_address) {
                 Ok(addr) => addr,
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    return;
-                }
+                Err(e) => fatal(e),
             };
 
             let req = RemoveTcpListeningRuleRequest {
@@ -181,7 +169,7 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
             };
             match client.remove_tcp_listening_rule(Request::new(req)).await {
                 Ok(_) => println!("Listening rule removed successfully"),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
     }

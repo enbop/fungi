@@ -68,6 +68,36 @@ async fn fetches_logs() {
     assert!(logs.text.contains("hello"));
 }
 
+#[tokio::test]
+async fn pulls_missing_image_and_retries_create() {
+    let fixture = ServerFixture::start_missing_image_once().await;
+    let agent = DockerAgent::new(sample_policy(fixture.socket_path.clone()));
+
+    let spec = ContainerSpec {
+        name: Some("filebrowser".into()),
+        image: "filebrowser/filebrowser:latest".into(),
+        mounts: vec![BindMount {
+            host_path: PathBuf::from("/tmp/fungi/data"),
+            container_path: "/srv".into(),
+        }],
+        ports: vec![PortBinding {
+            host_port: 8080,
+            container_port: 80,
+            protocol: Default::default(),
+        }],
+        ..Default::default()
+    };
+
+    let details = agent.create_container(&spec).await.unwrap();
+    assert_eq!(details.name, "filebrowser");
+
+    let requests = fixture.requests.lock().await.clone();
+    assert!(requests[0].path.starts_with("/containers/create?name=filebrowser"));
+    assert_eq!(requests[1].method, "POST");
+    assert!(requests[1].path.starts_with("/images/create?fromImage=filebrowser"));
+    assert!(requests[2].path.starts_with("/containers/create?name=filebrowser"));
+}
+
 fn sample_policy(socket_path: PathBuf) -> AgentPolicy {
     AgentPolicy {
         socket_path,
@@ -86,19 +116,25 @@ struct ServerFixture {
 
 impl ServerFixture {
     async fn start() -> Self {
-        Self::spawn(false).await
+        Self::spawn(ServerMode::Default).await
     }
 
     async fn start_unmanaged() -> Self {
-        Self::spawn(true).await
+        Self::spawn(ServerMode::Unmanaged).await
     }
 
-    async fn spawn(unmanaged: bool) -> Self {
+    async fn start_missing_image_once() -> Self {
+        Self::spawn(ServerMode::MissingImageOnce).await
+    }
+
+    async fn spawn(mode: ServerMode) -> Self {
         let dir = tempdir().unwrap();
         let socket_path = dir.path().join("docker.sock");
         let listener = UnixListener::bind(&socket_path).unwrap();
         let requests = Arc::new(Mutex::new(Vec::new()));
         let recorded = requests.clone();
+        let create_calls = Arc::new(Mutex::new(0usize));
+        let create_calls_for_task = create_calls.clone();
 
         tokio::spawn(async move {
             loop {
@@ -106,10 +142,11 @@ impl ServerFixture {
                     break;
                 };
                 let recorded = recorded.clone();
+                let create_calls = create_calls_for_task.clone();
                 tokio::spawn(async move {
                     let request = read_request(&mut stream).await.unwrap();
                     recorded.lock().await.push(request.clone());
-                    let response = response_for(&request, unmanaged);
+                    let response = response_for(&request, &mode, &create_calls).await;
                     let _ = stream.write_all(response.as_bytes()).await;
                 });
             }
@@ -120,6 +157,13 @@ impl ServerFixture {
             requests,
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum ServerMode {
+    Default,
+    Unmanaged,
+    MissingImageOnce,
 }
 
 async fn read_request(stream: &mut tokio::net::UnixStream) -> std::io::Result<RecordedRequest> {
@@ -172,12 +216,29 @@ fn find_header_end(bytes: &[u8]) -> Option<usize> {
     bytes.windows(4).position(|window| window == b"\r\n\r\n")
 }
 
-fn response_for(request: &RecordedRequest, unmanaged: bool) -> String {
+async fn response_for(
+    request: &RecordedRequest,
+    mode: &ServerMode,
+    create_calls: &Arc<Mutex<usize>>,
+) -> String {
     match (request.method.as_str(), request.path.as_str()) {
         ("POST", path) if path.starts_with("/containers/create") => http_response(
-            201,
+            match mode {
+                ServerMode::MissingImageOnce => {
+                    let mut calls = create_calls.lock().await;
+                    *calls += 1;
+                    if *calls == 1 {
+                        return http_response(404, r#"{"message":"No such image: filebrowser/filebrowser:latest"}"#);
+                    }
+                    201
+                }
+                _ => 201,
+            },
             r#"{"Id":"container-1","Warnings":[]}"#,
         ),
+        ("POST", path) if path.starts_with("/images/create?fromImage=filebrowser") => {
+            http_response(200, r#"{"status":"Pulling from filebrowser/filebrowser"}"#)
+        }
         ("GET", "/containers/container-1/json") => http_response(
             200,
             r#"{"Id":"container-1","Name":"/filebrowser","Config":{"Image":"filebrowser/filebrowser:latest","Labels":{"managed_by":"fungi"}},"State":{"Status":"created","Running":false}}"#,
@@ -187,7 +248,7 @@ fn response_for(request: &RecordedRequest, unmanaged: bool) -> String {
             200,
             &[1, 0, 0, 0, 0, 0, 0, 6, b'h', b'e', b'l', b'l', b'o', b'\n'],
         ),
-        ("GET", "/containers/legacy/json") if unmanaged => http_response(
+        ("GET", "/containers/legacy/json") if matches!(mode, ServerMode::Unmanaged) => http_response(
             200,
             r#"{"Id":"legacy","Name":"/legacy","Config":{"Image":"busybox","Labels":{"owner":"user"}},"State":{"Status":"running","Running":true}}"#,
         ),

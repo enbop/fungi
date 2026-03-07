@@ -6,7 +6,7 @@ use fungi_daemon_grpc::{
 
 use crate::commands::CommonArgs;
 
-use super::client::get_rpc_client;
+use super::{client::get_rpc_client, shared::{fatal, fatal_grpc}};
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum DeviceCommands {
@@ -29,7 +29,7 @@ pub enum DeviceCommands {
 pub async fn execute_device(args: CommonArgs, cmd: DeviceCommands) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
-        None => return,
+        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
     };
 
     match cmd {
@@ -44,7 +44,7 @@ pub async fn execute_device(args: CommonArgs, cmd: DeviceCommands) {
                     }
                 }
             }
-            Err(e) => eprintln!("Error: {}", e),
+            Err(e) => fatal_grpc(e),
         },
         DeviceCommands::List => {
             match client.list_address_book_peers(Request::new(Empty {})).await {
@@ -58,7 +58,7 @@ pub async fn execute_device(args: CommonArgs, cmd: DeviceCommands) {
                         }
                     }
                 }
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         DeviceCommands::Get { peer_id } => {
@@ -71,14 +71,14 @@ pub async fn execute_device(args: CommonArgs, cmd: DeviceCommands) {
                         println!("Peer not found");
                     }
                 }
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         DeviceCommands::Remove { peer_id } => {
             let req = RemoveAddressBookPeerRequest { peer_id };
             match client.remove_address_book_peer(Request::new(req)).await {
                 Ok(_) => println!("Peer removed successfully"),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
     }

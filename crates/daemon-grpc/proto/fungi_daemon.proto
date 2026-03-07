@@ -117,6 +117,24 @@ service FungiDaemon {
   // Lists currently active streams with optional peer/protocol filters.
   rpc ListActiveStreams(ListActiveStreamsRequest)
       returns (ListActiveStreamsResponse) {}
+
+  // Deploys a service from a serialized manifest payload.
+  rpc DeployService(DeployServiceRequest) returns (ServiceInstanceResponse) {}
+
+  // Starts a deployed service.
+  rpc StartService(ServiceHandleRequest) returns (Empty) {}
+
+  // Stops a deployed service.
+  rpc StopService(ServiceHandleRequest) returns (Empty) {}
+
+  // Removes a deployed service.
+  rpc RemoveService(ServiceHandleRequest) returns (Empty) {}
+
+  // Inspects a deployed service.
+  rpc InspectService(ServiceHandleRequest) returns (ServiceInstanceResponse) {}
+
+  // Gets logs for a deployed service.
+  rpc GetServiceLogs(GetServiceLogsRequest) returns (ServiceLogsResponse) {}
 }
 
 message Empty {}
@@ -339,4 +357,30 @@ message ActiveStreamSnapshot {
 
 message ListActiveStreamsResponse {
   repeated ActiveStreamSnapshot streams = 1;
+}
+
+enum ServiceRuntimeKind {
+  SERVICE_RUNTIME_KIND_UNSPECIFIED = 0;
+  SERVICE_RUNTIME_KIND_DOCKER = 1;
+  SERVICE_RUNTIME_KIND_WASMTIME = 2;
+}
+
+message DeployServiceRequest { string manifest_json = 1; }
+
+message ServiceHandleRequest {
+  ServiceRuntimeKind runtime = 1;
+  string handle = 2;
+}
+
+message GetServiceLogsRequest {
+  ServiceRuntimeKind runtime = 1;
+  string handle = 2;
+  string tail = 3;
+}
+
+message ServiceInstanceResponse { string instance_json = 1; }
+
+message ServiceLogsResponse {
+  bytes raw = 1;
+  string text = 2;
 }

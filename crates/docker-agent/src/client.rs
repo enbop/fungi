@@ -42,6 +42,16 @@ impl DockerClient {
             .await
     }
 
+    pub async fn pull_image(&self, image: &str) -> Result<()> {
+        let mut path = String::from("/images/create?fromImage=");
+        path.push_str(&utf8_percent_encode(image, QUERY_ENCODE_SET).to_string());
+        let response = self.send(Method::POST, &path, Vec::new(), None).await?;
+        if !response.status.is_success() {
+            return Err(api_error(response.status, &response.body)?);
+        }
+        Ok(())
+    }
+
     pub async fn start_container(&self, id: &str) -> Result<()> {
         let path = format!("/containers/{id}/start");
         self.send_empty(Method::POST, &path).await

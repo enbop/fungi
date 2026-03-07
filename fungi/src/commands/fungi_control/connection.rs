@@ -8,7 +8,10 @@ use crate::commands::CommonArgs;
 
 use super::{
     client::get_rpc_client,
-    shared::{connection_id_sort_key, shorten_peer_id, simplify_multiaddr_peer_ids},
+    shared::{
+        connection_id_sort_key, fatal, fatal_grpc, shorten_peer_id,
+        simplify_multiaddr_peer_ids,
+    },
 };
 
 #[derive(Subcommand, Debug, Clone)]
@@ -62,7 +65,7 @@ async fn execute_connections(
 ) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
-        None => return,
+        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
     };
 
     let req = ListConnectionsRequest {
@@ -183,7 +186,7 @@ async fn execute_connections(
                 );
             }
         }
-        Err(e) => eprintln!("Error: {}", e),
+        Err(e) => fatal_grpc(e),
     }
 }
 
@@ -195,7 +198,7 @@ async fn execute_connection_streams(
 ) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
-        None => return,
+        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
     };
 
     let req = ListActiveStreamsRequest {
@@ -266,6 +269,6 @@ async fn execute_connection_streams(
                 );
             }
         }
-        Err(e) => eprintln!("Error: {}", e),
+        Err(e) => fatal_grpc(e),
     }
 }

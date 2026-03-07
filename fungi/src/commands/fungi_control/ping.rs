@@ -7,13 +7,16 @@ use crate::commands::CommonArgs;
 
 use super::{
     client::get_rpc_client,
-    shared::{shorten_peer_id, simplify_multiaddr_peer_ids, summarize_ping_error_message},
+    shared::{
+        fatal, fatal_grpc, shorten_peer_id, simplify_multiaddr_peer_ids,
+        summarize_ping_error_message,
+    },
 };
 
 pub async fn execute_ping(args: CommonArgs, peer_id: String, interval_ms: u32, verbose: bool) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
-        None => return,
+        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
     };
 
     let req = PingPeerRequest {
@@ -23,10 +26,7 @@ pub async fn execute_ping(args: CommonArgs, peer_id: String, interval_ms: u32, v
 
     let response = match client.ping_peer(Request::new(req)).await {
         Ok(resp) => resp,
-        Err(e) => {
-            eprintln!("Error: {}", e);
-            return;
-        }
+        Err(e) => fatal_grpc(e),
     };
 
     let mut stream = response.into_inner();

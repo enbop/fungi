@@ -1,0 +1,36 @@
+apiVersion: fungi.dev/v1alpha1
+kind: ServiceManifest
+
+metadata:
+  name: filebrowser
+  labels:
+    app: filebrowser
+    managedBy: fungi
+
+spec:
+  runtime: docker
+
+  source:
+    image: filebrowser/filebrowser:latest
+
+  ports:
+    - hostPort: 28080
+      servicePort: 80
+      protocol: tcp
+
+  mounts:
+    - hostPath: ${FUNGI_HOME}/services/filebrowser/data
+      runtimePath: /srv
+
+  env:
+    FB_NOAUTH: "true"
+
+  command: []
+  entrypoint: []
+
+  workingDir: null
+
+notes:
+  - This manifest can be deployed directly with `fungi service deploy`.
+  - The Docker runtime now pulls the image automatically if it is missing locally.
+  - start/inspect/logs/stop/remove currently still require explicit runtime and handle arguments.

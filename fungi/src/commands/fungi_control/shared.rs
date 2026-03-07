@@ -15,6 +15,15 @@ pub fn parse_address(address: &str) -> Result<(String, u16), String> {
     Ok((host, port))
 }
 
+pub fn fatal(message: impl std::fmt::Display) -> ! {
+    eprintln!("{message}");
+    std::process::exit(1);
+}
+
+pub fn fatal_grpc(error: impl std::fmt::Display) -> ! {
+    fatal(format!("Error: {error}"))
+}
+
 pub fn shorten_peer_id(peer_id: &str) -> String {
     if peer_id.len() <= 18 {
         return peer_id.to_string();

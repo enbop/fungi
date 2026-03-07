@@ -6,7 +6,7 @@ use fungi_daemon_grpc::{
 
 use crate::commands::CommonArgs;
 
-use super::client::get_rpc_client;
+use super::{client::get_rpc_client, shared::{fatal, fatal_grpc}};
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum AllowedPeerCommands {
@@ -27,7 +27,7 @@ pub enum AllowedPeerCommands {
 pub async fn execute_allowed_peer(args: CommonArgs, cmd: AllowedPeerCommands) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
-        None => return,
+        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
     };
 
     match cmd {
@@ -46,21 +46,21 @@ pub async fn execute_allowed_peer(args: CommonArgs, cmd: AllowedPeerCommands) {
                         }
                     }
                 }
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         AllowedPeerCommands::Add { peer_id } => {
             let req = AddIncomingAllowedPeerRequest { peer_id };
             match client.add_incoming_allowed_peer(Request::new(req)).await {
                 Ok(_) => println!("Peer added successfully"),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         AllowedPeerCommands::Remove { peer_id } => {
             let req = RemoveIncomingAllowedPeerRequest { peer_id };
             match client.remove_incoming_allowed_peer(Request::new(req)).await {
                 Ok(_) => println!("Peer removed successfully"),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
     }

@@ -77,6 +77,9 @@ pub enum Commands {
     /// Manage TCP tunneling
     #[command(subcommand, visible_alias = "tn")]
     Tunnel(fungi_control::TunnelCommands),
+    /// Manage runtime services from manifests or service handles
+    #[command(subcommand, visible_alias = "svc")]
+    Service(fungi_control::ServiceCommands),
     /// Device discovery and address book
     #[command(subcommand)]
     Device(fungi_control::DeviceCommands),

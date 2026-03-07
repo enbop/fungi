@@ -1,4 +1,5 @@
 use std::{
+    env,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::PathBuf,
     sync::Arc,
@@ -155,7 +156,17 @@ impl FungiDaemon {
         Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
 
         let docker_control = DockerControl::from_config(&config.docker)?;
-        let runtime_control = RuntimeControl::new(docker_control.clone());
+        let runtime_root = config
+            .config_file_path()
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("runtime");
+        let runtime_control = RuntimeControl::new(
+            runtime_root,
+            env::current_exe()
+                .map_err(|e| anyhow::anyhow!("Failed to resolve current executable: {e}"))?,
+            docker_control.clone(),
+        );
 
         let tcp_tunneling_control = TcpTunnelingControl::new(swarm_control.clone());
         tcp_tunneling_control
