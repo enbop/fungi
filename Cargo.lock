@@ -1747,6 +1747,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "fungi-docker-agent"
+version = "0.5.1"
+dependencies = [
+ "bytes",
+ "clap",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "percent-encoding",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tokio",
+]
+
+[[package]]
 name = "fungi-fs"
 version = "0.5.1"
 dependencies = [
