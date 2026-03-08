@@ -12,7 +12,9 @@ use crate::runtime::{
     DiscoveredService, RuntimeKind, ServiceInstance, ServiceLogs, ServiceLogsOptions,
     ServiceManifest,
 };
-use crate::{FungiDaemon, NodeCapabilities, build_local_node_capabilities};
+use crate::{
+    FungiDaemon, NodeCapabilities, ServiceControlResponse, build_local_node_capabilities,
+};
 
 #[derive(Debug, Clone)]
 pub struct ConnectionSnapshot {
@@ -605,6 +607,46 @@ impl FungiDaemon {
     pub async fn discover_peer_capabilities(&self, peer_id: PeerId) -> Result<NodeCapabilities> {
         self.node_capabilities_control()
             .discover_peer_capabilities(peer_id)
+            .await
+    }
+
+    pub async fn remote_deploy_service(
+        &self,
+        peer_id: PeerId,
+        manifest: ServiceManifest,
+    ) -> Result<ServiceControlResponse> {
+        self.service_control_protocol_control()
+            .deploy_peer_service(peer_id, manifest)
+            .await
+    }
+
+    pub async fn remote_start_service(
+        &self,
+        peer_id: PeerId,
+        handle: String,
+    ) -> Result<ServiceControlResponse> {
+        self.service_control_protocol_control()
+            .start_peer_service(peer_id, handle)
+            .await
+    }
+
+    pub async fn remote_stop_service(
+        &self,
+        peer_id: PeerId,
+        handle: String,
+    ) -> Result<ServiceControlResponse> {
+        self.service_control_protocol_control()
+            .stop_peer_service(peer_id, handle)
+            .await
+    }
+
+    pub async fn remote_remove_service(
+        &self,
+        peer_id: PeerId,
+        handle: String,
+    ) -> Result<ServiceControlResponse> {
+        self.service_control_protocol_control()
+            .remove_peer_service(peer_id, handle)
             .await
     }
 

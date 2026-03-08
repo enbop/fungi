@@ -12,5 +12,7 @@ pub const FUNGI_SERVICE_DISCOVERY_PROTOCOL: StreamProtocol =
     StreamProtocol::new("/fungi/services/0.1.0");
 pub const FUNGI_NODE_CAPABILITIES_PROTOCOL: StreamProtocol =
     StreamProtocol::new("/fungi/node-capabilities/0.1.0");
+pub const FUNGI_SERVICE_CONTROL_PROTOCOL: StreamProtocol =
+    StreamProtocol::new("/fungi/service-control/0.1.0");
 
 pub const FUNGI_TUNNEL_PROTOCOL: &str = "/fungi/tunnel/0.1.0";

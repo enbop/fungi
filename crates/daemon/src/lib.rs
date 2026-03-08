@@ -3,6 +3,7 @@ mod controls;
 mod daemon;
 mod node_capabilities;
 pub mod runtime;
+mod service_control;
 
 use clap::Parser;
 pub use daemon::FungiDaemon;
@@ -17,6 +18,9 @@ pub use runtime::{
     ServiceManifestExpose, ServiceManifestExposeTransport, ServiceManifestExposeUsage,
     ServiceMount, ServicePort, ServicePortProtocol, ServiceSource, ServiceStatus,
     load_service_manifest_yaml_file, parse_service_manifest_yaml,
+};
+pub use service_control::{
+    ServiceControlError, ServiceControlRequest, ServiceControlResponse, ServiceControlServiceRef,
 };
 
 #[derive(Debug, Clone, Default, Parser)]
