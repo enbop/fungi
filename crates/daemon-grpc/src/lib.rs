@@ -957,6 +957,96 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             capabilities_json,
         }))
     }
+
+    async fn remote_deploy_service(
+        &self,
+        request: Request<RemoteDeployServiceRequest>,
+    ) -> Result<Response<RemoteServiceControlResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+        let manifest: fungi_daemon::ServiceManifest = serde_json::from_str(&req.manifest_json)
+            .map_err(|e| Status::invalid_argument(format!("Invalid manifest_json: {e}")))?;
+
+        let response = self
+            .inner
+            .remote_deploy_service(peer_id, manifest)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to deploy remote service: {e}")))?;
+
+        Ok(Response::new(RemoteServiceControlResponse {
+            service_name: response
+                .service
+                .map(|service| service.name)
+                .unwrap_or_default(),
+        }))
+    }
+
+    async fn remote_start_service(
+        &self,
+        request: Request<RemoteServiceHandleRequest>,
+    ) -> Result<Response<RemoteServiceControlResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        let response = self
+            .inner
+            .remote_start_service(peer_id, req.handle)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to start remote service: {e}")))?;
+
+        Ok(Response::new(RemoteServiceControlResponse {
+            service_name: response
+                .service
+                .map(|service| service.name)
+                .unwrap_or_default(),
+        }))
+    }
+
+    async fn remote_stop_service(
+        &self,
+        request: Request<RemoteServiceHandleRequest>,
+    ) -> Result<Response<RemoteServiceControlResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        let response = self
+            .inner
+            .remote_stop_service(peer_id, req.handle)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to stop remote service: {e}")))?;
+
+        Ok(Response::new(RemoteServiceControlResponse {
+            service_name: response
+                .service
+                .map(|service| service.name)
+                .unwrap_or_default(),
+        }))
+    }
+
+    async fn remote_remove_service(
+        &self,
+        request: Request<RemoteServiceHandleRequest>,
+    ) -> Result<Response<RemoteServiceControlResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        let response = self
+            .inner
+            .remote_remove_service(peer_id, req.handle)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove remote service: {e}")))?;
+
+        Ok(Response::new(RemoteServiceControlResponse {
+            service_name: response
+                .service
+                .map(|service| service.name)
+                .unwrap_or_default(),
+        }))
+    }
 }
 
 // Helper functions to convert between domain and proto types

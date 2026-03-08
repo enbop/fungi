@@ -143,6 +143,22 @@ service FungiDaemon {
     // Queries a remote peer for minimal node deployment capabilities.
     rpc DiscoverPeerCapabilities(DiscoverPeerCapabilitiesRequest)
       returns (DiscoverPeerCapabilitiesResponse) {}
+
+    // Controls a service on a remote peer by sending a manifest to the local daemon.
+    rpc RemoteDeployService(RemoteDeployServiceRequest)
+      returns (RemoteServiceControlResponse) {}
+
+    // Starts a service on a remote peer by service name.
+    rpc RemoteStartService(RemoteServiceHandleRequest)
+      returns (RemoteServiceControlResponse) {}
+
+    // Stops a service on a remote peer by service name.
+    rpc RemoteStopService(RemoteServiceHandleRequest)
+      returns (RemoteServiceControlResponse) {}
+
+    // Removes a service on a remote peer by service name.
+    rpc RemoteRemoveService(RemoteServiceHandleRequest)
+      returns (RemoteServiceControlResponse) {}
 }
 
 message Empty {}
@@ -400,3 +416,15 @@ message DiscoverPeerServicesResponse { string services_json = 1; }
 message DiscoverPeerCapabilitiesRequest { string peer_id = 1; }
 
 message DiscoverPeerCapabilitiesResponse { string capabilities_json = 1; }
+
+message RemoteDeployServiceRequest {
+  string peer_id = 1;
+  string manifest_json = 2;
+}
+
+message RemoteServiceHandleRequest {
+  string peer_id = 1;
+  string handle = 2;
+}
+
+message RemoteServiceControlResponse { string service_name = 1; }

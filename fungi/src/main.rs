@@ -31,6 +31,7 @@ fn main() -> Result<()> {
         Commands::FtClient(cmd) => block_on(execute_ft_client(fungi_args.common, cmd)),
         Commands::Tunnel(cmd) => block_on(execute_tunnel(fungi_args.common, cmd)),
         Commands::Service(cmd) => block_on(execute_service(fungi_args.common, cmd)),
+        Commands::Remote(cmd) => block_on(execute_remote(fungi_args.common, cmd)),
         Commands::Device(cmd) => block_on(execute_device(fungi_args.common, cmd)),
         Commands::Connection(cmd) => block_on(execute_connection(fungi_args.common, cmd)),
         Commands::Ping {

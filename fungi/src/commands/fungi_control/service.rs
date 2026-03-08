@@ -129,7 +129,7 @@ pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
     }
 }
 
-fn print_service_instance(resp: ServiceInstanceResponse) {
+pub(crate) fn print_service_instance(resp: ServiceInstanceResponse) {
     match serde_json::from_str::<ServiceInstance>(&resp.instance_json) {
         Ok(instance) => match serde_json::to_string_pretty(&instance) {
             Ok(pretty) => println!("{}", pretty),
@@ -139,7 +139,7 @@ fn print_service_instance(resp: ServiceInstanceResponse) {
     }
 }
 
-fn print_discovered_services(services_json: &str) {
+pub(crate) fn print_discovered_services(services_json: &str) {
     match serde_json::from_str::<Vec<DiscoveredService>>(services_json) {
         Ok(services) => match serde_json::to_string_pretty(&services) {
             Ok(pretty) => println!("{}", pretty),
@@ -149,7 +149,7 @@ fn print_discovered_services(services_json: &str) {
     }
 }
 
-fn print_node_capabilities(capabilities_json: &str) {
+pub(crate) fn print_node_capabilities(capabilities_json: &str) {
     match serde_json::from_str::<NodeCapabilities>(capabilities_json) {
         Ok(capabilities) => match serde_json::to_string_pretty(&capabilities) {
             Ok(pretty) => println!("{}", pretty),
