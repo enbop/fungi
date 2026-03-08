@@ -994,6 +994,24 @@ impl RuntimeControl {
         Ok(services)
     }
 
+    pub async fn list_services(&self) -> Result<Vec<ServiceInstance>> {
+        let manifests = self
+            .service_manifests
+            .lock()
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let mut services = Vec::new();
+        for manifest in manifests {
+            let instance = self.inspect(manifest.runtime, &manifest.name).await?;
+            services.push(instance);
+        }
+
+        services.sort_by(|left, right| left.name.cmp(&right.name));
+        Ok(services)
+    }
+
     pub async fn inspect(&self, runtime: RuntimeKind, handle: &str) -> Result<ServiceInstance> {
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.inspect(handle).await,

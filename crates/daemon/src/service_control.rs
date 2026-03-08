@@ -7,6 +7,9 @@ pub enum ServiceControlRequest {
         request_id: Option<String>,
         manifest_yaml: String,
     },
+    ListServices {
+        request_id: Option<String>,
+    },
     StartService {
         request_id: Option<String>,
         service: String,
@@ -25,6 +28,7 @@ impl ServiceControlRequest {
     pub fn request_id(&self) -> Option<&str> {
         match self {
             Self::DeployService { request_id, .. }
+            | Self::ListServices { request_id, .. }
             | Self::StartService { request_id, .. }
             | Self::StopService { request_id, .. }
             | Self::RemoveService { request_id, .. } => request_id.as_deref(),
@@ -34,6 +38,7 @@ impl ServiceControlRequest {
     pub fn service_name(&self) -> Option<String> {
         match self {
             Self::DeployService { .. } => None,
+            Self::ListServices { .. } => None,
             Self::StartService { service, .. }
             | Self::StopService { service, .. }
             | Self::RemoveService { service, .. } => Some(service.clone()),
@@ -48,6 +53,8 @@ pub struct ServiceControlResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service: Option<ServiceControlServiceRef>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub services_json: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ServiceControlError>,
 }
 
@@ -57,6 +64,17 @@ impl ServiceControlResponse {
             request_id,
             ok: true,
             service: Some(ServiceControlServiceRef { name: service_name }),
+            services_json: None,
+            error: None,
+        }
+    }
+
+    pub fn success_services(request_id: Option<String>, services_json: String) -> Self {
+        Self {
+            request_id,
+            ok: true,
+            service: None,
+            services_json: Some(services_json),
             error: None,
         }
     }
@@ -66,6 +84,7 @@ impl ServiceControlResponse {
             request_id,
             ok: false,
             service: None,
+            services_json: None,
             error: Some(ServiceControlError {
                 code: code.to_string(),
                 message,

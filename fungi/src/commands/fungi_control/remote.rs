@@ -3,7 +3,7 @@ use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
         DiscoverPeerCapabilitiesRequest, DiscoverPeerServicesRequest, RemoteDeployServiceRequest,
-        RemoteServiceControlResponse, RemoteServiceHandleRequest,
+        RemotePeerRequest, RemoteServiceControlResponse, RemoteServiceHandleRequest,
     },
 };
 
@@ -11,7 +11,10 @@ use crate::commands::CommonArgs;
 
 use super::{
     client::get_rpc_client,
-    service::{print_discovered_services, print_node_capabilities, read_manifest_yaml_file},
+    service::{
+        print_discovered_services, print_node_capabilities, print_service_instances,
+        read_manifest_yaml_file,
+    },
     shared::{fatal, fatal_grpc},
 };
 
@@ -29,6 +32,11 @@ pub enum RemoteCommands {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum RemoteServiceCommands {
+    /// List deployed services from a remote peer, including stopped ones
+    List {
+        /// Peer ID to query
+        peer_id: String,
+    },
     /// List discoverable services from a remote peer
     Discover {
         /// Peer ID to query
@@ -79,6 +87,13 @@ pub async fn execute_remote(args: CommonArgs, cmd: RemoteCommands) {
             }
         }
         RemoteCommands::Service(service_cmd) => match service_cmd {
+            RemoteServiceCommands::List { peer_id } => {
+                let req = RemotePeerRequest { peer_id };
+                match client.remote_list_services(Request::new(req)).await {
+                    Ok(resp) => print_service_instances(resp.into_inner()),
+                    Err(e) => fatal_grpc(e),
+                }
+            }
             RemoteServiceCommands::Discover { peer_id } => {
                 let req = DiscoverPeerServicesRequest { peer_id };
                 match client.discover_peer_services(Request::new(req)).await {

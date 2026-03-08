@@ -621,6 +621,10 @@ impl FungiDaemon {
             .await
     }
 
+    pub async fn list_services(&self) -> Result<Vec<ServiceInstance>> {
+        self.runtime_control().list_services().await
+    }
+
     pub async fn list_exposed_services(&self) -> Result<Vec<DiscoveredService>> {
         self.runtime_control().list_exposed_services().await
     }
@@ -659,6 +663,12 @@ impl FungiDaemon {
     ) -> Result<ServiceControlResponse> {
         self.service_control_protocol_control()
             .start_peer_service(peer_id, handle)
+            .await
+    }
+
+    pub async fn remote_list_services(&self, peer_id: PeerId) -> Result<ServiceControlResponse> {
+        self.service_control_protocol_control()
+            .list_peer_services(peer_id)
             .await
     }
 

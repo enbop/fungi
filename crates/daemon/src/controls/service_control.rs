@@ -90,6 +90,14 @@ impl ServiceControlProtocolControl {
         .await
     }
 
+    pub async fn list_peer_services(&self, peer_id: PeerId) -> Result<ServiceControlResponse> {
+        self.send_request(
+            peer_id,
+            ServiceControlRequest::ListServices { request_id: None },
+        )
+        .await
+    }
+
     pub async fn stop_peer_service(
         &self,
         peer_id: PeerId,
@@ -206,6 +214,23 @@ impl ServiceControlProtocolControl {
                     )
                     .await
                     .map(|instance| instance.name)
+            }
+            ServiceControlRequest::ListServices { .. } => {
+                let services = self.runtime_control.list_services().await;
+                match services {
+                    Ok(services) => match serde_json::to_string(&services) {
+                        Ok(services_json) => {
+                            return ServiceControlResponse::success_services(
+                                request_id,
+                                services_json,
+                            );
+                        }
+                        Err(error) => Err(anyhow::anyhow!(
+                            "Failed to serialize service list: {error}"
+                        )),
+                    },
+                    Err(error) => Err(error),
+                }
             }
             ServiceControlRequest::StartService { service, .. } => {
                 self.runtime_control.start_by_handle(&service).await.map(|_| service)

@@ -136,6 +136,9 @@ service FungiDaemon {
   // Gets logs for a deployed service.
   rpc GetServiceLogs(GetServiceLogsRequest) returns (ServiceLogsResponse) {}
 
+  // Lists all deployed services on the local node, including stopped ones.
+  rpc ListServices(Empty) returns (ListServicesResponse) {}
+
   // Queries a remote peer for currently discoverable services.
   rpc DiscoverPeerServices(DiscoverPeerServicesRequest)
       returns (DiscoverPeerServicesResponse) {}
@@ -159,6 +162,10 @@ service FungiDaemon {
     // Removes a service on a remote peer by service name.
     rpc RemoteRemoveService(RemoteServiceHandleRequest)
       returns (RemoteServiceControlResponse) {}
+
+    // Lists deployed services on a remote peer, including stopped ones.
+    rpc RemoteListServices(RemotePeerRequest)
+      returns (ListServicesResponse) {}
 }
 
 message Empty {}
@@ -412,6 +419,8 @@ message ServiceLogsResponse {
   string text = 2;
 }
 
+message ListServicesResponse { string services_json = 1; }
+
 message DiscoverPeerServicesRequest { string peer_id = 1; }
 
 message DiscoverPeerServicesResponse { string services_json = 1; }
@@ -429,5 +438,7 @@ message RemoteServiceHandleRequest {
   string peer_id = 1;
   string handle = 2;
 }
+
+message RemotePeerRequest { string peer_id = 1; }
 
 message RemoteServiceControlResponse { string service_name = 1; }

@@ -3,8 +3,8 @@ use fungi_daemon::{DiscoveredService, NodeCapabilities, ServiceInstance};
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
-        DeployServiceRequest, DiscoverPeerCapabilitiesRequest, DiscoverPeerServicesRequest,
-        GetServiceLogsRequest, ServiceHandleRequest, ServiceInstanceResponse,
+        DeployServiceRequest, Empty, GetServiceLogsRequest, ListServicesResponse,
+        ServiceHandleRequest, ServiceInstanceResponse,
     },
 };
 
@@ -17,6 +17,8 @@ use super::{
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum ServiceCommands {
+    /// List deployed services on the local node, including stopped ones
+    List,
     /// Deploy a service from a YAML manifest file
     Deploy {
         /// Path to a service manifest YAML file
@@ -36,10 +38,6 @@ pub enum ServiceCommands {
     Stop { handle: String },
     /// Remove a deployed service by name
     Remove { handle: String },
-    /// List discoverable services from a remote peer
-    Discover { peer_id: String },
-    /// Query minimal deployment capabilities from a remote peer
-    Capabilities { peer_id: String },
 }
 
 pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
@@ -49,6 +47,10 @@ pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
     };
 
     match cmd {
+        ServiceCommands::List => match client.list_services(Request::new(Empty {})).await {
+            Ok(resp) => print_service_instances(resp.into_inner()),
+            Err(e) => fatal_grpc(e),
+        },
         ServiceCommands::Deploy { manifest } => {
             let (manifest_yaml, manifest_base_dir) = read_manifest_yaml_file(&manifest);
             let req = DeployServiceRequest {
@@ -102,20 +104,6 @@ pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
                 Err(e) => fatal_grpc(e),
             }
         }
-        ServiceCommands::Discover { peer_id } => {
-            let req = DiscoverPeerServicesRequest { peer_id };
-            match client.discover_peer_services(Request::new(req)).await {
-                Ok(resp) => print_discovered_services(&resp.into_inner().services_json),
-                Err(e) => fatal_grpc(e),
-            }
-        }
-        ServiceCommands::Capabilities { peer_id } => {
-            let req = DiscoverPeerCapabilitiesRequest { peer_id };
-            match client.discover_peer_capabilities(Request::new(req)).await {
-                Ok(resp) => print_node_capabilities(&resp.into_inner().capabilities_json),
-                Err(e) => fatal_grpc(e),
-            }
-        }
     }
 }
 
@@ -143,6 +131,16 @@ pub(crate) fn print_service_instance(resp: ServiceInstanceResponse) {
             Err(error) => fatal(format!("Failed to format service instance: {error}")),
         },
         Err(error) => fatal(format!("Failed to decode service instance: {error}")),
+    }
+}
+
+pub(crate) fn print_service_instances(resp: ListServicesResponse) {
+    match serde_json::from_str::<Vec<ServiceInstance>>(&resp.services_json) {
+        Ok(services) => match serde_json::to_string_pretty(&services) {
+            Ok(pretty) => println!("{}", pretty),
+            Err(error) => fatal(format!("Failed to format service list: {error}")),
+        },
+        Err(error) => fatal(format!("Failed to decode service list: {error}")),
     }
 }
 

@@ -415,6 +415,11 @@ pub struct ServiceLogsResponse {
     pub text: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListServicesResponse {
+    #[prost(string, tag = "1")]
+    pub services_json: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DiscoverPeerServicesRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
@@ -447,6 +452,11 @@ pub struct RemoteServiceHandleRequest {
     pub peer_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub handle: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RemotePeerRequest {
+    #[prost(string, tag = "1")]
+    pub peer_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RemoteServiceControlResponse {
@@ -1554,6 +1564,31 @@ pub mod fungi_daemon_client {
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "GetServiceLogs"));
             self.inner.unary(req, path, codec).await
         }
+        /// Lists all deployed services on the local node, including stopped ones.
+        pub async fn list_services(
+            &mut self,
+            request: impl tonic::IntoRequest<super::Empty>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListServicesResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/ListServices",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "ListServices"));
+            self.inner.unary(req, path, codec).await
+        }
         /// Queries a remote peer for currently discoverable services.
         pub async fn discover_peer_services(
             &mut self,
@@ -1716,6 +1751,33 @@ pub mod fungi_daemon_client {
             req.extensions_mut()
                 .insert(
                     GrpcMethod::new("fungi_daemon.FungiDaemon", "RemoteRemoveService"),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        /// Lists deployed services on a remote peer, including stopped ones.
+        pub async fn remote_list_services(
+            &mut self,
+            request: impl tonic::IntoRequest<super::RemotePeerRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListServicesResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/RemoteListServices",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("fungi_daemon.FungiDaemon", "RemoteListServices"),
                 );
             self.inner.unary(req, path, codec).await
         }
@@ -1990,6 +2052,14 @@ pub mod fungi_daemon_server {
             tonic::Response<super::ServiceLogsResponse>,
             tonic::Status,
         >;
+        /// Lists all deployed services on the local node, including stopped ones.
+        async fn list_services(
+            &self,
+            request: tonic::Request<super::Empty>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListServicesResponse>,
+            tonic::Status,
+        >;
         /// Queries a remote peer for currently discoverable services.
         async fn discover_peer_services(
             &self,
@@ -2036,6 +2106,14 @@ pub mod fungi_daemon_server {
             request: tonic::Request<super::RemoteServiceHandleRequest>,
         ) -> std::result::Result<
             tonic::Response<super::RemoteServiceControlResponse>,
+            tonic::Status,
+        >;
+        /// Lists deployed services on a remote peer, including stopped ones.
+        async fn remote_list_services(
+            &self,
+            request: tonic::Request<super::RemotePeerRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListServicesResponse>,
             tonic::Status,
         >;
     }
@@ -3884,6 +3962,49 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
+                "/fungi_daemon.FungiDaemon/ListServices" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListServicesSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
+                    for ListServicesSvc<T> {
+                        type Response = super::ListServicesResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::Empty>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::list_services(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListServicesSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 "/fungi_daemon.FungiDaemon/DiscoverPeerServices" => {
                     #[allow(non_camel_case_types)]
                     struct DiscoverPeerServicesSvc<T: FungiDaemon>(pub Arc<T>);
@@ -4150,6 +4271,52 @@ pub mod fungi_daemon_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = RemoteRemoveServiceSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/RemoteListServices" => {
+                    #[allow(non_camel_case_types)]
+                    struct RemoteListServicesSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::RemotePeerRequest>
+                    for RemoteListServicesSvc<T> {
+                        type Response = super::ListServicesResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::RemotePeerRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::remote_list_services(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = RemoteListServicesSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

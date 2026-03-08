@@ -924,6 +924,20 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         }))
     }
 
+    async fn list_services(
+        &self,
+        _request: Request<Empty>,
+    ) -> Result<Response<ListServicesResponse>, Status> {
+        let services = self
+            .inner
+            .list_services()
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list services: {e}")))?;
+        let services_json = serde_json::to_string(&services)
+            .map_err(|e| Status::internal(format!("Failed to serialize services: {e}")))?;
+        Ok(Response::new(ListServicesResponse { services_json }))
+    }
+
     async fn discover_peer_services(
         &self,
         request: Request<DiscoverPeerServicesRequest>,
@@ -1047,6 +1061,25 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 .service
                 .map(|service| service.name)
                 .unwrap_or_default(),
+        }))
+    }
+
+    async fn remote_list_services(
+        &self,
+        request: Request<RemotePeerRequest>,
+    ) -> Result<Response<ListServicesResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        let response = self
+            .inner
+            .remote_list_services(peer_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list remote services: {e}")))?;
+
+        Ok(Response::new(ListServicesResponse {
+            services_json: response.services_json.unwrap_or_default(),
         }))
     }
 }
