@@ -12,6 +12,7 @@ use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use fungi_config::docker::AllowedPortRange;
 use fungi_docker_agent::{ContainerSpec, LogsOptions, PortProtocol};
+use fungi_util::protocols::service_port_protocol;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tokio::process::{Child, Command};
@@ -136,7 +137,24 @@ pub struct DiscoveredService {
     pub usage: Option<ServiceExposeUsage>,
     pub icon_url: Option<String>,
     pub catalog_id: Option<String>,
+    #[serde(default)]
+    pub endpoints: Vec<DiscoveredServiceEndpoint>,
     pub status: ServiceStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoveredServiceEndpoint {
+    pub name: String,
+    pub protocol: String,
+    pub service_port: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceExposeEndpointBinding {
+    pub name: String,
+    pub protocol: String,
+    pub host_port: u16,
+    pub service_port: u16,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -338,11 +356,32 @@ impl ServiceManifestDocument {
             },
         };
 
+        let ports = spec
+            .ports
+            .into_iter()
+            .map(|port| {
+                Ok(ServicePort {
+                    name: normalize_optional(port.name),
+                    host_port: resolve_manifest_host_port(
+                        port.host_port,
+                        port.protocol,
+                        policy,
+                        &mut reserved_host_ports,
+                    )?,
+                    service_port: port.service_port,
+                    protocol: port.protocol,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let expose = parse_manifest_expose(spec.expose, &service_name)?;
+        validate_manifest_exposed_ports(expose.as_ref(), &ports)?;
+
         Ok(ServiceManifest {
             name: service_name.clone(),
             runtime,
             source,
-            expose: parse_manifest_expose(spec.expose, &service_name)?,
+            expose,
             env: spec.env,
             mounts: spec
                 .mounts
@@ -357,23 +396,7 @@ impl ServiceManifestDocument {
                     runtime_path: mount.runtime_path,
                 })
                 .collect(),
-            ports: spec
-                .ports
-                .into_iter()
-                .map(|port| {
-                    Ok(ServicePort {
-                        name: normalize_optional(port.name),
-                        host_port: resolve_manifest_host_port(
-                            port.host_port,
-                            port.protocol,
-                            policy,
-                            &mut reserved_host_ports,
-                        )?,
-                        service_port: port.service_port,
-                        protocol: port.protocol,
-                    })
-                })
-                .collect::<Result<Vec<_>>>()?,
+            ports,
             command: spec.command,
             entrypoint: spec.entrypoint,
             working_dir: spec
@@ -445,6 +468,61 @@ fn normalize_optional(value: Option<String>) -> Option<String> {
             Some(trimmed.to_string())
         }
     })
+}
+
+fn validate_manifest_exposed_ports(
+    expose: Option<&ServiceExpose>,
+    ports: &[ServicePort],
+) -> Result<()> {
+    let Some(expose) = expose else {
+        return Ok(());
+    };
+
+    if expose.transport.kind != ServiceExposeTransportKind::Tcp {
+        return Ok(());
+    }
+
+    if ports.iter().any(|port| {
+        port.protocol == ServicePortProtocol::Tcp && port.name.as_ref().is_some_and(|name| !name.is_empty())
+    }) {
+        return Ok(());
+    }
+
+    bail!(
+        "spec.expose.enabled=true with tcp transport requires at least one named TCP port in spec.ports[].name"
+    )
+}
+
+pub fn service_expose_endpoint_bindings(manifest: &ServiceManifest) -> Vec<ServiceExposeEndpointBinding> {
+    let Some(expose) = &manifest.expose else {
+        return Vec::new();
+    };
+
+    if expose.transport.kind != ServiceExposeTransportKind::Tcp {
+        return Vec::new();
+    }
+
+    let mut endpoints = manifest
+        .ports
+        .iter()
+        .filter(|port| port.protocol == ServicePortProtocol::Tcp)
+        .filter_map(|port| {
+            let name = port.name.as_ref()?.trim();
+            if name.is_empty() {
+                return None;
+            }
+
+            Some(ServiceExposeEndpointBinding {
+                name: name.to_string(),
+                protocol: service_port_protocol(&expose.service_id, name),
+                host_port: port.host_port,
+                service_port: port.service_port,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    endpoints.sort_by(|left, right| left.name.cmp(&right.name));
+    endpoints
 }
 
 fn resolve_manifest_host_port(
@@ -923,6 +1001,10 @@ impl RuntimeControl {
         self.start(runtime, handle).await
     }
 
+    pub fn get_service_manifest(&self, handle: &str) -> Option<ServiceManifest> {
+        self.service_manifests.lock().get(handle).cloned()
+    }
+
     pub async fn stop_by_handle(&self, handle: &str) -> Result<()> {
         let runtime = self.resolve_runtime(handle)?;
         self.stop(runtime, handle).await
@@ -978,7 +1060,7 @@ impl RuntimeControl {
             }
 
             services.push(DiscoveredService {
-                service_name: manifest.name,
+                service_name: manifest.name.clone(),
                 service_id: expose.service_id,
                 display_name: expose.display_name,
                 runtime: manifest.runtime,
@@ -986,6 +1068,14 @@ impl RuntimeControl {
                 usage: expose.usage,
                 icon_url: expose.icon_url,
                 catalog_id: expose.catalog_id,
+                endpoints: service_expose_endpoint_bindings(&manifest)
+                    .into_iter()
+                    .map(|endpoint| DiscoveredServiceEndpoint {
+                        name: endpoint.name,
+                        protocol: endpoint.protocol,
+                        service_port: endpoint.service_port,
+                    })
+                    .collect(),
                 status: instance.status,
             });
         }

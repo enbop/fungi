@@ -202,19 +202,21 @@ impl FungiDaemon {
             state.incoming_allowed_peers().clone(),
         );
         node_capabilities_control.start()?;
-        let service_control_protocol_control = ServiceControlProtocolControl::new(
-            swarm_control.clone(),
-            shared_config.clone(),
-            fungi_home,
-            runtime_control.clone(),
-            state.incoming_allowed_peers().clone(),
-        );
-        service_control_protocol_control.start()?;
 
         let tcp_tunneling_control = TcpTunnelingControl::new(swarm_control.clone());
         tcp_tunneling_control
             .init_from_config(&config.tcp_tunneling)
             .await;
+
+        let service_control_protocol_control = ServiceControlProtocolControl::new(
+            swarm_control.clone(),
+            shared_config.clone(),
+            fungi_home,
+            runtime_control.clone(),
+            tcp_tunneling_control.clone(),
+            state.incoming_allowed_peers().clone(),
+        );
+        service_control_protocol_control.start()?;
 
         let proxy_ftp_task = if config.file_transfer.proxy_ftp.enabled {
             Some(tokio::spawn(crate::controls::start_ftp_proxy_service(

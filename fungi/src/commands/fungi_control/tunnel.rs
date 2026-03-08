@@ -79,20 +79,34 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
                     if !config.forwarding_rules.is_empty() {
                         println!("\nForwarding Rules:");
                         for rule in config.forwarding_rules {
-                            println!(
-                                "  {}:{} -> {}:{}",
-                                rule.local_host,
-                                rule.local_port,
-                                rule.remote_peer_id,
-                                rule.remote_port
-                            );
+                            if rule.remote_protocol.is_empty() {
+                                println!(
+                                    "  {}:{} -> {}:{}",
+                                    rule.local_host,
+                                    rule.local_port,
+                                    rule.remote_peer_id,
+                                    rule.remote_port
+                                );
+                            } else {
+                                println!(
+                                    "  {}:{} -> {} [{}]",
+                                    rule.local_host,
+                                    rule.local_port,
+                                    rule.remote_peer_id,
+                                    rule.remote_protocol
+                                );
+                            }
                         }
                     }
 
                     if !config.listening_rules.is_empty() {
                         println!("\nListening Rules:");
                         for rule in config.listening_rules {
-                            println!("  {}:{}", rule.host, rule.port);
+                            if rule.protocol.is_empty() {
+                                println!("  {}:{}", rule.host, rule.port);
+                            } else {
+                                println!("  {}:{} [{}]", rule.host, rule.port, rule.protocol);
+                            }
                         }
                     }
                 }
@@ -114,6 +128,10 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
                 local_port: local_port as i32,
                 peer_id: remote_peer_id,
                 remote_port: remote_port as i32,
+                remote_protocol: String::new(),
+                remote_service_id: String::new(),
+                remote_service_name: String::new(),
+                remote_service_port_name: String::new(),
             };
             match client.add_tcp_forwarding_rule(Request::new(req)).await {
                 Ok(resp) => println!("Forwarding rule added: {}", resp.into_inner().rule_id),
@@ -135,6 +153,7 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
                 local_port: local_port as i32,
                 peer_id: remote_peer_id,
                 remote_port: remote_port as i32,
+                remote_protocol: String::new(),
             };
             match client.remove_tcp_forwarding_rule(Request::new(req)).await {
                 Ok(_) => println!("Forwarding rule removed successfully"),
@@ -151,6 +170,7 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
                 local_host,
                 local_port: local_port as i32,
                 allowed_peers: vec![],
+                protocol: String::new(),
             };
             match client.add_tcp_listening_rule(Request::new(req)).await {
                 Ok(resp) => println!("Listening rule added: {}", resp.into_inner().rule_id),
@@ -166,6 +186,7 @@ pub async fn execute_tunnel(args: CommonArgs, cmd: TunnelCommands) {
             let req = RemoveTcpListeningRuleRequest {
                 local_host,
                 local_port: local_port as i32,
+                protocol: String::new(),
             };
             match client.remove_tcp_listening_rule(Request::new(req)).await {
                 Ok(_) => println!("Listening rule removed successfully"),

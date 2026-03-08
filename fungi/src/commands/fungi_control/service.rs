@@ -1,5 +1,7 @@
 use clap::Subcommand;
-use fungi_daemon::{DiscoveredService, NodeCapabilities, ServiceInstance};
+use fungi_daemon::{
+    DiscoveredService, EnabledRemoteService, NodeCapabilities, ServiceInstance,
+};
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
@@ -161,5 +163,25 @@ pub(crate) fn print_node_capabilities(capabilities_json: &str) {
             Err(error) => fatal(format!("Failed to format node capabilities: {error}")),
         },
         Err(error) => fatal(format!("Failed to decode node capabilities: {error}")),
+    }
+}
+
+pub(crate) fn print_enabled_remote_service(service_json: &str) {
+    match serde_json::from_str::<EnabledRemoteService>(service_json) {
+        Ok(service) => match serde_json::to_string_pretty(&service) {
+            Ok(pretty) => println!("{}", pretty),
+            Err(error) => fatal(format!("Failed to format enabled remote service: {error}")),
+        },
+        Err(error) => fatal(format!("Failed to decode enabled remote service: {error}")),
+    }
+}
+
+pub(crate) fn print_enabled_remote_services(services_json: &str) {
+    match serde_json::from_str::<Vec<EnabledRemoteService>>(services_json) {
+        Ok(services) => match serde_json::to_string_pretty(&services) {
+            Ok(pretty) => println!("{}", pretty),
+            Err(error) => fatal(format!("Failed to format enabled remote services: {error}")),
+        },
+        Err(error) => fatal(format!("Failed to decode enabled remote services: {error}")),
     }
 }

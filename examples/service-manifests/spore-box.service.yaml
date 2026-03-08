@@ -26,6 +26,7 @@ spec:
 
   ports:
     - hostPort: auto
+      name: http
       servicePort: 8081
       protocol: tcp
 
@@ -44,6 +45,7 @@ notes:
   - "This manifest can be deployed directly with fungi service deploy."
   - "${APP_HOME} resolves on the target node to fungi_home/services/<service-name>."
   - "hostPort: auto asks the target node to choose an available port from its allowed port policy."
+  - "For exposed TCP services, each forwarded port should have a stable spec.ports[].name so peers can enable it locally."
   - The Wasmtime runtime automatically creates host mount directories before launch.
   - The current minimal implementation supports a single `.wasm` file URL.
   - "spec.expose is the future-facing discovery/UX metadata layer, separate from the runtime launch config."

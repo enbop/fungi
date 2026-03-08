@@ -396,6 +396,10 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 local_port: rule.local_port as i32,
                 remote_peer_id: rule.remote_peer_id,
                 remote_port: rule.remote_port as i32,
+                remote_protocol: rule.remote_protocol.unwrap_or_default(),
+                remote_service_id: rule.remote_service_id.unwrap_or_default(),
+                remote_service_name: rule.remote_service_name.unwrap_or_default(),
+                remote_service_port_name: rule.remote_service_port_name.unwrap_or_default(),
             })
             .collect();
 
@@ -407,6 +411,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 host: rule.host,
                 port: rule.port as i32,
                 allowed_peers: vec![], // TODO: add allowed_peers to config
+                protocol: rule.protocol.unwrap_or_default(),
             })
             .collect();
 
@@ -426,11 +431,15 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
         let rule_id = self
             .inner
-            .add_tcp_forwarding_rule(
+            .add_tcp_forwarding_rule_with_details(
                 req.local_host,
                 req.local_port as u16,
                 req.peer_id,
                 req.remote_port as u16,
+                empty_to_none(req.remote_protocol),
+                empty_to_none(req.remote_service_id),
+                empty_to_none(req.remote_service_name),
+                empty_to_none(req.remote_service_port_name),
             )
             .await
             .map_err(|e| Status::internal(format!("Failed to add forwarding rule: {}", e)))?;
@@ -445,11 +454,12 @@ impl FungiDaemon for FungiDaemonRpcImpl {
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
         self.inner
-            .remove_tcp_forwarding_rule(
+            .remove_tcp_forwarding_rule_with_protocol(
                 req.local_host,
                 req.local_port as u16,
                 req.peer_id,
                 req.remote_port as u16,
+                empty_to_none(req.remote_protocol),
             )
             .map_err(|e| Status::internal(format!("Failed to remove forwarding rule: {}", e)))?;
 
@@ -464,7 +474,11 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
         let rule_id = self
             .inner
-            .add_tcp_listening_rule(req.local_host, req.local_port as u16, req.allowed_peers)
+            .add_tcp_listening_rule_with_protocol(
+                req.local_host,
+                req.local_port as u16,
+                empty_to_none(req.protocol),
+            )
             .await
             .map_err(|e| Status::internal(format!("Failed to add listening rule: {}", e)))?;
 
@@ -478,7 +492,11 @@ impl FungiDaemon for FungiDaemonRpcImpl {
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
         self.inner
-            .remove_tcp_listening_rule(req.local_host, req.local_port as u16)
+            .remove_tcp_listening_rule_with_protocol(
+                req.local_host,
+                req.local_port as u16,
+                empty_to_none(req.protocol),
+            )
             .map_err(|e| Status::internal(format!("Failed to remove listening rule: {}", e)))?;
 
         Ok(Response::new(Empty {}))
@@ -1081,6 +1099,75 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         Ok(Response::new(ListServicesResponse {
             services_json: response.services_json.unwrap_or_default(),
         }))
+    }
+
+    async fn enable_remote_service(
+        &self,
+        request: Request<EnableRemoteServiceRequest>,
+    ) -> Result<Response<EnabledRemoteServiceResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        let enabled_service = self
+            .inner
+            .enable_remote_service(peer_id, req.service_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to enable remote service: {e}")))?;
+
+        let enabled_service_json = serde_json::to_string(&enabled_service)
+            .map_err(|e| Status::internal(format!("Failed to serialize enabled service: {e}")))?;
+
+        Ok(Response::new(EnabledRemoteServiceResponse {
+            enabled_service_json,
+        }))
+    }
+
+    async fn disable_remote_service(
+        &self,
+        request: Request<DisableRemoteServiceRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        self.inner
+            .disable_remote_service(peer_id, req.service_id)
+            .map_err(|e| Status::internal(format!("Failed to disable remote service: {e}")))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn list_enabled_remote_services(
+        &self,
+        request: Request<ListEnabledRemoteServicesRequest>,
+    ) -> Result<Response<EnabledRemoteServicesResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = if req.peer_id.trim().is_empty() {
+            None
+        } else {
+            Some(
+                PeerId::from_str(&req.peer_id)
+                    .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?,
+            )
+        };
+
+        let enabled_services = self.inner.list_enabled_remote_services(peer_id);
+        let enabled_services_json = serde_json::to_string(&enabled_services).map_err(|e| {
+            Status::internal(format!("Failed to serialize enabled remote services: {e}"))
+        })?;
+
+        Ok(Response::new(EnabledRemoteServicesResponse {
+            enabled_services_json,
+        }))
+    }
+}
+
+fn empty_to_none(value: String) -> Option<String> {
+    if value.trim().is_empty() {
+        None
+    } else {
+        Some(value)
     }
 }
 

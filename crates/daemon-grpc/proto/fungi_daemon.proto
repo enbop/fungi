@@ -166,6 +166,18 @@ service FungiDaemon {
     // Lists deployed services on a remote peer, including stopped ones.
     rpc RemoteListServices(RemotePeerRequest)
       returns (ListServicesResponse) {}
+
+    // Enables automatic local forwarding for all named endpoints of a remote service.
+    rpc EnableRemoteService(EnableRemoteServiceRequest)
+      returns (EnabledRemoteServiceResponse) {}
+
+    // Disables automatic local forwarding for a previously enabled remote service.
+    rpc DisableRemoteService(DisableRemoteServiceRequest)
+      returns (Empty) {}
+
+    // Lists remote services that are currently enabled for local forwarding.
+    rpc ListEnabledRemoteServices(ListEnabledRemoteServicesRequest)
+      returns (EnabledRemoteServicesResponse) {}
 }
 
 message Empty {}
@@ -240,12 +252,17 @@ message ForwardingRule {
   int32 local_port = 2;
   string remote_peer_id = 3;
   int32 remote_port = 4;
+  string remote_protocol = 5;
+  string remote_service_id = 6;
+  string remote_service_name = 7;
+  string remote_service_port_name = 8;
 }
 
 message ListeningRule {
   string host = 1;
   int32 port = 2;
   repeated string allowed_peers = 3;
+  string protocol = 4;
 }
 
 message TcpTunnelingConfigResponse {
@@ -260,6 +277,10 @@ message AddTcpForwardingRuleRequest {
   int32 local_port = 2;
   string peer_id = 3;
   int32 remote_port = 4;
+  string remote_protocol = 5;
+  string remote_service_id = 6;
+  string remote_service_name = 7;
+  string remote_service_port_name = 8;
 }
 
 message TcpForwardingRuleResponse { string rule_id = 1; }
@@ -269,12 +290,14 @@ message RemoveTcpForwardingRuleRequest {
   int32 local_port = 2;
   string peer_id = 3;
   int32 remote_port = 4;
+  string remote_protocol = 5;
 }
 
 message AddTcpListeningRuleRequest {
   string local_host = 1;
   int32 local_port = 2;
   repeated string allowed_peers = 3;
+  string protocol = 4;
 }
 
 message TcpListeningRuleResponse { string rule_id = 1; }
@@ -282,6 +305,7 @@ message TcpListeningRuleResponse { string rule_id = 1; }
 message RemoveTcpListeningRuleRequest {
   string local_host = 1;
   int32 local_port = 2;
+  string protocol = 3;
 }
 
 message PeerInfo {
@@ -442,3 +466,21 @@ message RemoteServiceHandleRequest {
 message RemotePeerRequest { string peer_id = 1; }
 
 message RemoteServiceControlResponse { string service_name = 1; }
+
+message EnableRemoteServiceRequest {
+  string peer_id = 1;
+  string service_id = 2;
+}
+
+message DisableRemoteServiceRequest {
+  string peer_id = 1;
+  string service_id = 2;
+}
+
+message ListEnabledRemoteServicesRequest {
+  string peer_id = 1;
+}
+
+message EnabledRemoteServiceResponse { string enabled_service_json = 1; }
+
+message EnabledRemoteServicesResponse { string enabled_services_json = 1; }

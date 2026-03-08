@@ -252,6 +252,7 @@ impl FungiConfig {
             r.local_host == rule.local_host
                 && r.local_port == rule.local_port
                 && r.remote_peer_id == rule.remote_peer_id
+                && r.remote_protocol == rule.remote_protocol
                 && r.remote_port == rule.remote_port
         });
 
@@ -276,6 +277,7 @@ impl FungiConfig {
                 !(r.local_host == rule.local_host
                     && r.local_port == rule.local_port
                     && r.remote_peer_id == rule.remote_peer_id
+                    && r.remote_protocol == rule.remote_protocol
                     && r.remote_port == rule.remote_port)
             });
         })
@@ -291,7 +293,7 @@ impl FungiConfig {
             .listening
             .rules
             .iter()
-            .any(|r| r.host == rule.host && r.port == rule.port);
+            .any(|r| r.host == rule.host && r.port == rule.port && r.protocol == rule.protocol);
 
         if rule_exists {
             return Ok(self.clone());
@@ -314,7 +316,7 @@ impl FungiConfig {
                 .tcp_tunneling
                 .listening
                 .rules
-                .retain(|r| !(r.host == rule.host && r.port == rule.port));
+                .retain(|r| !(r.host == rule.host && r.port == rule.port && r.protocol == rule.protocol));
         })
     }
 }

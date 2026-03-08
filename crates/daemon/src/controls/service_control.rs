@@ -14,8 +14,10 @@ use libp2p_stream::IncomingStreams;
 use parking_lot::{Mutex, RwLock};
 use serde::{Serialize, de::DeserializeOwned};
 
+use crate::controls::TcpTunnelingControl;
 use crate::{
     ManifestResolutionPolicy, RuntimeControl, ServiceControlRequest, ServiceControlResponse,
+    ServiceManifest, service_expose_endpoint_bindings,
 };
 
 const MAX_CONTROL_FRAME_LEN: usize = 2 * 1024 * 1024;
@@ -26,6 +28,7 @@ pub struct ServiceControlProtocolControl {
     config: Arc<Mutex<FungiConfig>>,
     fungi_home: PathBuf,
     runtime_control: RuntimeControl,
+    tcp_tunneling_control: TcpTunnelingControl,
     incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
 }
 
@@ -37,6 +40,7 @@ impl ServiceControlProtocolControl {
         config: Arc<Mutex<FungiConfig>>,
         fungi_home: PathBuf,
         runtime_control: RuntimeControl,
+        tcp_tunneling_control: TcpTunnelingControl,
         incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
     ) -> Self {
         Self {
@@ -44,6 +48,7 @@ impl ServiceControlProtocolControl {
             config,
             fungi_home,
             runtime_control,
+            tcp_tunneling_control,
             incoming_allowed_peers,
         }
     }
@@ -233,13 +238,41 @@ impl ServiceControlProtocolControl {
                 }
             }
             ServiceControlRequest::StartService { service, .. } => {
-                self.runtime_control.start_by_handle(&service).await.map(|_| service)
+                match self.runtime_control.start_by_handle(&service).await {
+                    Ok(()) => match self
+                        .sync_service_endpoint_listeners_by_handle(&service, true)
+                        .await
+                    {
+                        Ok(()) => Ok(service),
+                        Err(error) => Err(error),
+                    },
+                    Err(error) => Err(error),
+                }
             }
             ServiceControlRequest::StopService { service, .. } => {
-                self.runtime_control.stop_by_handle(&service).await.map(|_| service)
+                match self.runtime_control.stop_by_handle(&service).await {
+                    Ok(()) => match self
+                        .sync_service_endpoint_listeners_by_handle(&service, false)
+                        .await
+                    {
+                        Ok(()) => Ok(service),
+                        Err(error) => Err(error),
+                    },
+                    Err(error) => Err(error),
+                }
             }
             ServiceControlRequest::RemoveService { service, .. } => {
-                self.runtime_control.remove_by_handle(&service).await.map(|_| service)
+                let manifest = self.runtime_control.get_service_manifest(&service);
+                match self.runtime_control.remove_by_handle(&service).await {
+                    Ok(()) => match self
+                        .sync_service_endpoint_listeners_for_manifest(manifest.as_ref(), false)
+                        .await
+                    {
+                        Ok(()) => Ok(service),
+                        Err(error) => Err(error),
+                    },
+                    Err(error) => Err(error),
+                }
             }
         };
 
@@ -259,6 +292,55 @@ impl ServiceControlProtocolControl {
             allowed_tcp_ports: config.docker.allowed_ports.clone(),
             allowed_tcp_port_ranges: config.docker.allowed_port_ranges.clone(),
         }
+    }
+
+    async fn sync_service_endpoint_listeners_by_handle(
+        &self,
+        handle: &str,
+        enabled: bool,
+    ) -> Result<()> {
+        let manifest = self.runtime_control.get_service_manifest(handle);
+        self.sync_service_endpoint_listeners_for_manifest(manifest.as_ref(), enabled)
+            .await
+    }
+
+    async fn sync_service_endpoint_listeners_for_manifest(
+        &self,
+        manifest: Option<&ServiceManifest>,
+        enabled: bool,
+    ) -> Result<()> {
+        let Some(manifest) = manifest else {
+            return Ok(());
+        };
+
+        let endpoints = service_expose_endpoint_bindings(manifest);
+        let listening_rules = self.tcp_tunneling_control.get_listening_rules();
+
+        for endpoint in endpoints {
+            let existing_rule_id = listening_rules
+                .iter()
+                .find(|(_, rule)| {
+                    rule.port == endpoint.host_port
+                        && rule.protocol.as_deref() == Some(endpoint.protocol.as_str())
+                })
+                .map(|(rule_id, _)| rule_id.clone());
+
+            if enabled {
+                if existing_rule_id.is_none() {
+                    self.tcp_tunneling_control
+                        .add_listening_rule(fungi_config::tcp_tunneling::ListeningRule {
+                            host: "127.0.0.1".to_string(),
+                            port: endpoint.host_port,
+                            protocol: Some(endpoint.protocol),
+                        })
+                        .await?;
+                }
+            } else if let Some(rule_id) = existing_rule_id {
+                self.tcp_tunneling_control.remove_listening_rule(&rule_id)?;
+            }
+        }
+
+        Ok(())
     }
 }
 

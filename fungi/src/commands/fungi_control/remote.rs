@@ -2,8 +2,10 @@ use clap::Subcommand;
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
-        DiscoverPeerCapabilitiesRequest, DiscoverPeerServicesRequest, RemoteDeployServiceRequest,
-        RemotePeerRequest, RemoteServiceControlResponse, RemoteServiceHandleRequest,
+        DisableRemoteServiceRequest, DiscoverPeerCapabilitiesRequest,
+        DiscoverPeerServicesRequest, EnableRemoteServiceRequest,
+        ListEnabledRemoteServicesRequest, RemoteDeployServiceRequest, RemotePeerRequest,
+        RemoteServiceControlResponse, RemoteServiceHandleRequest,
     },
 };
 
@@ -12,7 +14,8 @@ use crate::commands::CommonArgs;
 use super::{
     client::get_rpc_client,
     service::{
-        print_discovered_services, print_node_capabilities, print_service_instances,
+        print_discovered_services, print_enabled_remote_service,
+        print_enabled_remote_services, print_node_capabilities, print_service_instances,
         read_manifest_yaml_file,
     },
     shared::{fatal, fatal_grpc},
@@ -41,6 +44,25 @@ pub enum RemoteServiceCommands {
     Discover {
         /// Peer ID to query
         peer_id: String,
+    },
+    /// Enable automatic local forwarding for a discovered remote service
+    Enable {
+        /// Peer ID to control
+        peer_id: String,
+        /// Stable remote service ID
+        service_id: String,
+    },
+    /// Disable automatic local forwarding for a remote service
+    Disable {
+        /// Peer ID to control
+        peer_id: String,
+        /// Stable remote service ID
+        service_id: String,
+    },
+    /// List remote services currently enabled for local forwarding
+    Enabled {
+        /// Optional peer ID filter
+        peer_id: Option<String>,
     },
     /// Deploy a service manifest to a remote peer
     Deploy {
@@ -98,6 +120,43 @@ pub async fn execute_remote(args: CommonArgs, cmd: RemoteCommands) {
                 let req = DiscoverPeerServicesRequest { peer_id };
                 match client.discover_peer_services(Request::new(req)).await {
                     Ok(resp) => print_discovered_services(&resp.into_inner().services_json),
+                    Err(e) => fatal_grpc(e),
+                }
+            }
+            RemoteServiceCommands::Enable {
+                peer_id,
+                service_id,
+            } => {
+                let req = EnableRemoteServiceRequest {
+                    peer_id,
+                    service_id,
+                };
+                match client.enable_remote_service(Request::new(req)).await {
+                    Ok(resp) => print_enabled_remote_service(&resp.into_inner().enabled_service_json),
+                    Err(e) => fatal_grpc(e),
+                }
+            }
+            RemoteServiceCommands::Disable {
+                peer_id,
+                service_id,
+            } => {
+                let req = DisableRemoteServiceRequest {
+                    peer_id,
+                    service_id,
+                };
+                match client.disable_remote_service(Request::new(req)).await {
+                    Ok(_) => println!("Remote service forwarding disabled"),
+                    Err(e) => fatal_grpc(e),
+                }
+            }
+            RemoteServiceCommands::Enabled { peer_id } => {
+                let req = ListEnabledRemoteServicesRequest {
+                    peer_id: peer_id.unwrap_or_default(),
+                };
+                match client.list_enabled_remote_services(Request::new(req)).await {
+                    Ok(resp) => {
+                        print_enabled_remote_services(&resp.into_inner().enabled_services_json)
+                    }
                     Err(e) => fatal_grpc(e),
                 }
             }
