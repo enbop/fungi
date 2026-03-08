@@ -588,7 +588,10 @@ impl FungiDaemon {
             .ok_or_else(|| anyhow::anyhow!("remote service not found: {}", service_id))?;
 
         if service.endpoints.is_empty() {
-            bail!("remote service exposes no named TCP endpoints: {}", service.service_id);
+            bail!(
+                "remote service exposes no named TCP endpoints: {}",
+                service.service_id
+            );
         }
 
         let peer_id_string = peer_id.to_string();
@@ -614,20 +617,22 @@ impl FungiDaemon {
                 continue;
             }
 
-            let local_port = allocate_local_forward_port(endpoint.service_port, &reserved_local_ports)?;
+            let local_port =
+                allocate_local_forward_port(endpoint.service_port, &reserved_local_ports)?;
             reserved_local_ports.insert(local_port);
 
-            self.add_tcp_forwarding_rule_with_details(
-                "127.0.0.1".to_string(),
-                local_port,
-                peer_id_string.clone(),
-                0,
-                Some(endpoint.protocol.clone()),
-                Some(service.service_id.clone()),
-                Some(service.service_name.clone()),
-                Some(endpoint.name.clone()),
-            )
-            .await?;
+            self.tcp_tunneling_control()
+                .add_forwarding_rule(fungi_config::tcp_tunneling::ForwardingRule {
+                    local_host: "127.0.0.1".to_string(),
+                    local_port,
+                    remote_peer_id: peer_id_string.clone(),
+                    remote_protocol: Some(endpoint.protocol.clone()),
+                    remote_port: 0,
+                    remote_service_id: Some(service.service_id.clone()),
+                    remote_service_name: Some(service.service_name.clone()),
+                    remote_service_port_name: Some(endpoint.name.clone()),
+                })
+                .await?;
 
             enabled_endpoints.push(EnabledRemoteServiceEndpoint {
                 name: endpoint.name,
@@ -647,13 +652,18 @@ impl FungiDaemon {
     }
 
     pub fn disable_remote_service(&self, peer_id: PeerId, service_id: String) -> Result<()> {
+        self.disable_remote_service_by_match(peer_id, &service_id)
+    }
+
+    pub fn disable_remote_service_by_match(&self, peer_id: PeerId, matcher: &str) -> Result<()> {
         let peer_id_string = peer_id.to_string();
         let rules_to_remove = self
             .get_tcp_forwarding_rules()
             .into_iter()
             .filter(|(_, rule)| {
                 rule.remote_peer_id == peer_id_string
-                    && rule.remote_service_id.as_deref() == Some(service_id.as_str())
+                    && (rule.remote_service_id.as_deref() == Some(matcher)
+                        || rule.remote_service_name.as_deref() == Some(matcher))
             })
             .map(|(rule_id, _)| rule_id)
             .collect::<Vec<_>>();
@@ -665,9 +675,13 @@ impl FungiDaemon {
         Ok(())
     }
 
-    pub fn list_enabled_remote_services(&self, peer_id: Option<PeerId>) -> Vec<EnabledRemoteService> {
+    pub fn list_enabled_remote_services(
+        &self,
+        peer_id: Option<PeerId>,
+    ) -> Vec<EnabledRemoteService> {
         let peer_filter = peer_id.map(|peer_id| peer_id.to_string());
-        let mut grouped = BTreeMap::<(String, String, String), Vec<EnabledRemoteServiceEndpoint>>::new();
+        let mut grouped =
+            BTreeMap::<(String, String, String), Vec<EnabledRemoteServiceEndpoint>>::new();
 
         for (_, rule) in self.get_tcp_forwarding_rules() {
             let Some(service_id) = rule.remote_service_id.clone() else {
@@ -790,7 +804,8 @@ impl FungiDaemon {
                         .await?;
                 }
             } else if let Some(rule_id) = existing_rule_id {
-                self.tcp_tunneling_control().remove_listening_rule(&rule_id)?;
+                self.tcp_tunneling_control()
+                    .remove_listening_rule(&rule_id)?;
             }
         }
 
@@ -967,9 +982,20 @@ impl FungiDaemon {
         peer_id: PeerId,
         handle: String,
     ) -> Result<ServiceControlResponse> {
-        self.service_control_protocol_control()
+        let response = self
+            .service_control_protocol_control()
             .stop_peer_service(peer_id, handle)
-            .await
+            .await?;
+        let service_key = response
+            .service
+            .as_ref()
+            .map(|service| service.name.as_str())
+            .unwrap_or_default()
+            .to_string();
+        if !service_key.is_empty() {
+            let _ = self.disable_remote_service_by_match(peer_id, &service_key);
+        }
+        Ok(response)
     }
 
     pub async fn remote_remove_service(
@@ -977,9 +1003,20 @@ impl FungiDaemon {
         peer_id: PeerId,
         handle: String,
     ) -> Result<ServiceControlResponse> {
-        self.service_control_protocol_control()
+        let response = self
+            .service_control_protocol_control()
             .remove_peer_service(peer_id, handle)
-            .await
+            .await?;
+        let service_key = response
+            .service
+            .as_ref()
+            .map(|service| service.name.as_str())
+            .unwrap_or_default()
+            .to_string();
+        if !service_key.is_empty() {
+            let _ = self.disable_remote_service_by_match(peer_id, &service_key);
+        }
+        Ok(response)
     }
 
     pub async fn mdns_get_local_devices(&self) -> Result<Vec<PeerInfo>> {

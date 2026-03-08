@@ -401,9 +401,7 @@ impl ServiceManifestDocument {
             entrypoint: spec.entrypoint,
             working_dir: spec
                 .working_dir
-                .map(|value| {
-                    resolve_manifest_path_string(&value, base_dir, fungi_home, &app_home)
-                }),
+                .map(|value| resolve_manifest_path_string(&value, base_dir, fungi_home, &app_home)),
             labels: metadata_labels,
         })
     }
@@ -483,7 +481,8 @@ fn validate_manifest_exposed_ports(
     }
 
     if ports.iter().any(|port| {
-        port.protocol == ServicePortProtocol::Tcp && port.name.as_ref().is_some_and(|name| !name.is_empty())
+        port.protocol == ServicePortProtocol::Tcp
+            && port.name.as_ref().is_some_and(|name| !name.is_empty())
     }) {
         return Ok(());
     }
@@ -493,7 +492,9 @@ fn validate_manifest_exposed_ports(
     )
 }
 
-pub fn service_expose_endpoint_bindings(manifest: &ServiceManifest) -> Vec<ServiceExposeEndpointBinding> {
+pub fn service_expose_endpoint_bindings(
+    manifest: &ServiceManifest,
+) -> Vec<ServiceExposeEndpointBinding> {
     let Some(expose) = &manifest.expose else {
         return Vec::new();
     };
@@ -540,8 +541,8 @@ fn resolve_manifest_host_port(
         }
         ServiceManifestHostPort::Keyword(value) => {
             let keyword = value.trim().to_ascii_lowercase();
-            if keyword != "auto" && keyword != "any" {
-                bail!("hostPort must be a number or one of: auto, any");
+            if keyword != "auto" {
+                bail!("hostPort must be a number or the keyword: auto");
             }
 
             for port in iter_allowed_tcp_ports(policy) {
@@ -580,7 +581,12 @@ fn is_host_port_available(port: u16, protocol: ServicePortProtocol) -> bool {
     }
 }
 
-fn resolve_manifest_path(path: &str, base_dir: &Path, fungi_home: &Path, app_home: &Path) -> PathBuf {
+fn resolve_manifest_path(
+    path: &str,
+    base_dir: &Path,
+    fungi_home: &Path,
+    app_home: &Path,
+) -> PathBuf {
     let expanded = resolve_manifest_path_string(path, base_dir, fungi_home, app_home);
     PathBuf::from(expanded)
 }
@@ -969,7 +975,13 @@ impl RuntimeControl {
         policy: &ManifestResolutionPolicy,
     ) -> Result<ServiceManifest> {
         let used_host_ports = self.reserved_host_ports();
-        parse_service_manifest_yaml_with_policy(content, base_dir, fungi_home, policy, &used_host_ports)
+        parse_service_manifest_yaml_with_policy(
+            content,
+            base_dir,
+            fungi_home,
+            policy,
+            &used_host_ports,
+        )
     }
 
     pub async fn start(&self, runtime: RuntimeKind, handle: &str) -> Result<()> {
@@ -1532,9 +1544,9 @@ mod tests {
         assert!(provider.inspect("demo-service").await.is_err());
     }
 
-        #[test]
-        fn manifest_document_supports_app_home_and_auto_host_port() {
-                let yaml = r#"
+    #[test]
+    fn manifest_document_supports_app_home_and_auto_host_port() {
+        let yaml = r#"
 apiVersion: fungi.dev/v1alpha1
 kind: ServiceManifest
 metadata:
@@ -1552,22 +1564,25 @@ spec:
             protocol: tcp
 "#;
 
-                let fungi_home = PathBuf::from("/tmp/fungi-home");
-                let manifest = parse_service_manifest_yaml_with_policy(
-                        yaml,
-                        Path::new("."),
-                        &fungi_home,
-                        &ManifestResolutionPolicy {
-                                allowed_tcp_ports: vec![28080],
-                                allowed_tcp_port_ranges: Vec::new(),
-                        },
-                        &BTreeSet::new(),
-                )
-                .unwrap();
+        let fungi_home = PathBuf::from("/tmp/fungi-home");
+        let manifest = parse_service_manifest_yaml_with_policy(
+            yaml,
+            Path::new("."),
+            &fungi_home,
+            &ManifestResolutionPolicy {
+                allowed_tcp_ports: vec![28080],
+                allowed_tcp_port_ranges: Vec::new(),
+            },
+            &BTreeSet::new(),
+        )
+        .unwrap();
 
-                assert_eq!(manifest.mounts[0].host_path, fungi_home.join("services/filebrowser/data"));
-                assert_eq!(manifest.ports[0].host_port, 28080);
-        }
+        assert_eq!(
+            manifest.mounts[0].host_path,
+            fungi_home.join("services/filebrowser/data")
+        );
+        assert_eq!(manifest.ports[0].host_port, 28080);
+    }
 
     #[tokio::test]
     async fn wasmtime_provider_downloads_remote_component() {

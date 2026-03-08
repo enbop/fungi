@@ -1,6 +1,6 @@
 use clap::Subcommand;
 use fungi_daemon::{
-    DiscoveredService, EnabledRemoteService, NodeCapabilities, ServiceInstance,
+    DiscoveredService, EnabledRemoteService, NodeCapabilities, RuntimeKind, ServiceInstance,
 };
 use fungi_daemon_grpc::{
     Request,
@@ -9,6 +9,7 @@ use fungi_daemon_grpc::{
         ServiceHandleRequest, ServiceInstanceResponse,
     },
 };
+use serde::Serialize;
 
 use crate::commands::CommonArgs;
 
@@ -183,5 +184,113 @@ pub(crate) fn print_enabled_remote_services(services_json: &str) {
             Err(error) => fatal(format!("Failed to format enabled remote services: {error}")),
         },
         Err(error) => fatal(format!("Failed to decode enabled remote services: {error}")),
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct RemoteServiceListEntry {
+    service_name: String,
+    runtime: RuntimeKind,
+    state: String,
+    running: bool,
+    discoverable: bool,
+    service_id: Option<String>,
+    local_forwarded: bool,
+    available_endpoints: Vec<RemoteServiceEndpointView>,
+    local_forwarded_endpoints: Vec<RemoteForwardedEndpointView>,
+}
+
+#[derive(Debug, Serialize)]
+struct RemoteServiceEndpointView {
+    name: String,
+    protocol: String,
+    service_port: u16,
+}
+
+#[derive(Debug, Serialize)]
+struct RemoteForwardedEndpointView {
+    name: String,
+    local_host: String,
+    local_port: u16,
+    protocol: String,
+}
+
+pub(crate) fn print_remote_service_list(
+    services_json: &str,
+    discovered_json: &str,
+    enabled_json: &str,
+) {
+    let services = match serde_json::from_str::<Vec<ServiceInstance>>(services_json) {
+        Ok(value) => value,
+        Err(error) => fatal(format!("Failed to decode remote service list: {error}")),
+    };
+    let discovered = match serde_json::from_str::<Vec<DiscoveredService>>(discovered_json) {
+        Ok(value) => value,
+        Err(error) => fatal(format!("Failed to decode discovered services: {error}")),
+    };
+    let enabled = match serde_json::from_str::<Vec<EnabledRemoteService>>(enabled_json) {
+        Ok(value) => value,
+        Err(error) => fatal(format!(
+            "Failed to decode forwarded remote services: {error}"
+        )),
+    };
+
+    let discovered_by_name = discovered
+        .into_iter()
+        .map(|service| (service.service_name.clone(), service))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let enabled_by_name = enabled
+        .into_iter()
+        .map(|service| (service.service_name.clone(), service))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    let rows = services
+        .into_iter()
+        .map(|service| {
+            let discovered = discovered_by_name.get(&service.name);
+            let enabled = enabled_by_name.get(&service.name);
+
+            RemoteServiceListEntry {
+                service_name: service.name,
+                runtime: service.runtime,
+                state: service.status.state,
+                running: service.status.running,
+                discoverable: discovered.is_some(),
+                service_id: discovered.map(|value| value.service_id.clone()),
+                local_forwarded: enabled.is_some(),
+                available_endpoints: discovered
+                    .map(|value| {
+                        value
+                            .endpoints
+                            .iter()
+                            .map(|endpoint| RemoteServiceEndpointView {
+                                name: endpoint.name.clone(),
+                                protocol: endpoint.protocol.clone(),
+                                service_port: endpoint.service_port,
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default(),
+                local_forwarded_endpoints: enabled
+                    .map(|value| {
+                        value
+                            .endpoints
+                            .iter()
+                            .map(|endpoint| RemoteForwardedEndpointView {
+                                name: endpoint.name.clone(),
+                                local_host: endpoint.local_host.clone(),
+                                local_port: endpoint.local_port,
+                                protocol: endpoint.protocol.clone(),
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default(),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    match serde_json::to_string_pretty(&rows) {
+        Ok(pretty) => println!("{}", pretty),
+        Err(error) => fatal(format!("Failed to format remote service list: {error}")),
     }
 }
