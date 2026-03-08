@@ -67,6 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             runtime_path: args.mount_target.clone(),
         }],
         ports: vec![ServicePort {
+            name: None,
             host_port: args.port,
             service_port: args.port,
             protocol: ServicePortProtocol::Tcp,

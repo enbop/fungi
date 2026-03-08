@@ -1,6 +1,4 @@
 use clap::Subcommand;
-use fungi_config::FungiDir;
-use fungi_daemon::load_service_manifest_yaml_file;
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
@@ -13,7 +11,7 @@ use crate::commands::CommonArgs;
 
 use super::{
     client::get_rpc_client,
-    service::{print_discovered_services, print_node_capabilities},
+    service::{print_discovered_services, print_node_capabilities, read_manifest_yaml_file},
     shared::{fatal, fatal_grpc},
 };
 
@@ -89,20 +87,11 @@ pub async fn execute_remote(args: CommonArgs, cmd: RemoteCommands) {
                 }
             }
             RemoteServiceCommands::Deploy { peer_id, manifest } => {
-                let manifest_path = std::path::PathBuf::from(&manifest);
-                let loaded = match load_service_manifest_yaml_file(&manifest_path, &args.fungi_dir()) {
-                    Ok(value) => value,
-                    Err(error) => fatal(format!("Failed to load manifest: {error}")),
-                };
-
-                let manifest_json = match serde_json::to_string(&loaded) {
-                    Ok(value) => value,
-                    Err(error) => fatal(format!("Failed to serialize manifest: {error}")),
-                };
+                let (manifest_yaml, _manifest_base_dir) = read_manifest_yaml_file(&manifest);
 
                 let req = RemoteDeployServiceRequest {
                     peer_id,
-                    manifest_json,
+                    manifest_yaml,
                 };
                 match client.remote_deploy_service(Request::new(req)).await {
                     Ok(resp) => print_remote_service_result("deployed", resp.into_inner()),

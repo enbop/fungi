@@ -2,6 +2,8 @@
 
 This directory contains runnable service manifest examples for the Fungi runtime-provider flow.
 The manifests now also include a `spec.expose` block for future service discovery metadata.
+The examples use `${APP_HOME}` for per-service storage and `hostPort: auto` so the target node
+resolves paths and port assignments locally.
 
 Documentation:
 
@@ -20,4 +22,7 @@ From the repository root:
 cd fungi
 bash examples/service-manifests/run-filebrowser-example.sh
 bash examples/service-manifests/run-spore-box-example.sh
+
+# optional: override the demo port used by the helper scripts
+SERVICE_PORT=28181 bash examples/service-manifests/run-spore-box-example.sh
 ```

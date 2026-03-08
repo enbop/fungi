@@ -12,12 +12,12 @@ pub use node_capabilities::{
     build_local_node_capabilities,
 };
 pub use runtime::{
-    DiscoveredService, RuntimeControl, RuntimeKind, ServiceExpose, ServiceExposeTransport,
-    ServiceExposeTransportKind, ServiceExposeUsage, ServiceExposeUsageKind, ServiceInstance,
-    ServiceLogs, ServiceLogsOptions, ServiceManifest, ServiceManifestDocument,
+    DiscoveredService, ManifestResolutionPolicy, RuntimeControl, RuntimeKind, ServiceExpose,
+    ServiceExposeTransport, ServiceExposeTransportKind, ServiceExposeUsage, ServiceExposeUsageKind,
+    ServiceInstance, ServiceLogs, ServiceLogsOptions, ServiceManifest, ServiceManifestDocument,
     ServiceManifestExpose, ServiceManifestExposeTransport, ServiceManifestExposeUsage,
-    ServiceMount, ServicePort, ServicePortProtocol, ServiceSource, ServiceStatus,
-    load_service_manifest_yaml_file, parse_service_manifest_yaml,
+    ServiceManifestHostPort, ServiceMount, ServicePort, ServicePortProtocol, ServiceSource,
+    ServiceStatus, load_service_manifest_yaml_file, parse_service_manifest_yaml,
 };
 pub use service_control::{
     ServiceControlError, ServiceControlRequest, ServiceControlResponse, ServiceControlServiceRef,

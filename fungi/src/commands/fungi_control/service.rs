@@ -1,8 +1,5 @@
 use clap::Subcommand;
-use fungi_config::FungiDir;
-use fungi_daemon::{
-    DiscoveredService, NodeCapabilities, ServiceInstance, load_service_manifest_yaml_file,
-};
+use fungi_daemon::{DiscoveredService, NodeCapabilities, ServiceInstance};
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
@@ -53,18 +50,11 @@ pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
 
     match cmd {
         ServiceCommands::Deploy { manifest } => {
-            let manifest_path = std::path::PathBuf::from(&manifest);
-            let loaded = match load_service_manifest_yaml_file(&manifest_path, &args.fungi_dir()) {
-                Ok(value) => value,
-                Err(error) => fatal(format!("Failed to load manifest: {error}")),
+            let (manifest_yaml, manifest_base_dir) = read_manifest_yaml_file(&manifest);
+            let req = DeployServiceRequest {
+                manifest_yaml,
+                manifest_base_dir,
             };
-
-            let manifest_json = match serde_json::to_string(&loaded) {
-                Ok(value) => value,
-                Err(error) => fatal(format!("Failed to serialize manifest: {error}")),
-            };
-
-            let req = DeployServiceRequest { manifest_json };
             match client.deploy_service(Request::new(req)).await {
                 Ok(resp) => print_service_instance(resp.into_inner()),
                 Err(e) => fatal_grpc(e),
@@ -127,6 +117,23 @@ pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
             }
         }
     }
+}
+
+pub(crate) fn read_manifest_yaml_file(path: &str) -> (String, String) {
+    let manifest_path = std::path::PathBuf::from(path);
+    let absolute_manifest_path = match std::fs::canonicalize(&manifest_path) {
+        Ok(path) => path,
+        Err(error) => fatal(format!("Failed to resolve manifest path: {error}")),
+    };
+    let manifest_yaml = match std::fs::read_to_string(&absolute_manifest_path) {
+        Ok(value) => value,
+        Err(error) => fatal(format!("Failed to read manifest: {error}")),
+    };
+    let manifest_base_dir = absolute_manifest_path
+        .parent()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_default();
+    (manifest_yaml, manifest_base_dir)
 }
 
 pub(crate) fn print_service_instance(resp: ServiceInstanceResponse) {

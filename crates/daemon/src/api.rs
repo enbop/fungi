@@ -13,7 +13,8 @@ use crate::runtime::{
     ServiceManifest,
 };
 use crate::{
-    FungiDaemon, NodeCapabilities, ServiceControlResponse, build_local_node_capabilities,
+    FungiDaemon, ManifestResolutionPolicy, NodeCapabilities, ServiceControlResponse,
+    build_local_node_capabilities,
 };
 
 #[derive(Debug, Clone)]
@@ -528,8 +529,39 @@ impl FungiDaemon {
         self.runtime_control().supports(runtime)
     }
 
+    fn fungi_home_dir(&self) -> PathBuf {
+        self.config()
+            .lock()
+            .config_file_path()
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .to_path_buf()
+    }
+
+    fn manifest_resolution_policy(&self) -> ManifestResolutionPolicy {
+        let config_handle = self.config();
+        let config = config_handle.lock();
+        ManifestResolutionPolicy {
+            allowed_tcp_ports: config.docker.allowed_ports.clone(),
+            allowed_tcp_port_ranges: config.docker.allowed_port_ranges.clone(),
+        }
+    }
+
     pub async fn deploy_service(&self, manifest: ServiceManifest) -> Result<ServiceInstance> {
         self.runtime_control().deploy(&manifest).await
+    }
+
+    pub async fn deploy_service_from_manifest_yaml(
+        &self,
+        manifest_yaml: String,
+        manifest_base_dir: Option<PathBuf>,
+    ) -> Result<ServiceInstance> {
+        let fungi_home = self.fungi_home_dir();
+        let base_dir = manifest_base_dir.unwrap_or_else(|| fungi_home.clone());
+        let policy = self.manifest_resolution_policy();
+        self.runtime_control()
+            .deploy_manifest_yaml(&manifest_yaml, &base_dir, &fungi_home, &policy)
+            .await
     }
 
     pub async fn start_service(&self, runtime: RuntimeKind, handle: String) -> Result<()> {
@@ -613,10 +645,10 @@ impl FungiDaemon {
     pub async fn remote_deploy_service(
         &self,
         peer_id: PeerId,
-        manifest: ServiceManifest,
+        manifest_yaml: String,
     ) -> Result<ServiceControlResponse> {
         self.service_control_protocol_control()
-            .deploy_peer_service(peer_id, manifest)
+            .deploy_peer_service(peer_id, manifest_yaml)
             .await
     }
 

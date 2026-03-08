@@ -790,12 +790,16 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         request: Request<DeployServiceRequest>,
     ) -> Result<Response<ServiceInstanceResponse>, Status> {
         let req = request.into_inner();
-        let manifest: fungi_daemon::ServiceManifest = serde_json::from_str(&req.manifest_json)
-            .map_err(|e| Status::invalid_argument(format!("Invalid manifest_json: {e}")))?;
-
         let instance = self
             .inner
-            .deploy_service(manifest)
+            .deploy_service_from_manifest_yaml(
+                req.manifest_yaml,
+                if req.manifest_base_dir.trim().is_empty() {
+                    None
+                } else {
+                    Some(std::path::PathBuf::from(req.manifest_base_dir))
+                },
+            )
             .await
             .map_err(|e| Status::internal(format!("Failed to deploy service: {e}")))?;
 
@@ -965,12 +969,10 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         let req = request.into_inner();
         let peer_id = PeerId::from_str(&req.peer_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
-        let manifest: fungi_daemon::ServiceManifest = serde_json::from_str(&req.manifest_json)
-            .map_err(|e| Status::invalid_argument(format!("Invalid manifest_json: {e}")))?;
 
         let response = self
             .inner
-            .remote_deploy_service(peer_id, manifest)
+            .remote_deploy_service(peer_id, req.manifest_yaml)
             .await
             .map_err(|e| Status::internal(format!("Failed to deploy remote service: {e}")))?;
 

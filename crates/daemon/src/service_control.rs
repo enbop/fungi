@@ -1,13 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-use crate::ServiceManifest;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum ServiceControlRequest {
     DeployService {
         request_id: Option<String>,
-        manifest: ServiceManifest,
+        manifest_yaml: String,
     },
     StartService {
         request_id: Option<String>,
@@ -33,12 +31,12 @@ impl ServiceControlRequest {
         }
     }
 
-    pub fn service_name(&self) -> String {
+    pub fn service_name(&self) -> Option<String> {
         match self {
-            Self::DeployService { manifest, .. } => manifest.name.clone(),
+            Self::DeployService { .. } => None,
             Self::StartService { service, .. }
             | Self::StopService { service, .. }
-            | Self::RemoveService { service, .. } => service.clone(),
+            | Self::RemoveService { service, .. } => Some(service.clone()),
         }
     }
 }

@@ -6,7 +6,7 @@ EXAMPLE_DIR="$(cd "$(dirname "$0")" && pwd)"
 TMP_ROOT="$(mktemp -d /tmp/fungi-filebrowser-example.XXXXXX)"
 FUNGI_DIR="$TMP_ROOT/fungi-home"
 RPC_ADDR="127.0.0.1:55405"
-SERVICE_PORT="28080"
+SERVICE_PORT="${SERVICE_PORT:-28080}"
 BIN="$ROOT_DIR/target/debug/fungi"
 DAEMON_PID=""
 

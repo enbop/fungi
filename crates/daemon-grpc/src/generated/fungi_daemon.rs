@@ -382,7 +382,9 @@ pub struct ListActiveStreamsResponse {
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DeployServiceRequest {
     #[prost(string, tag = "1")]
-    pub manifest_json: ::prost::alloc::string::String,
+    pub manifest_yaml: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub manifest_base_dir: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ServiceHandleRequest {
@@ -437,7 +439,7 @@ pub struct RemoteDeployServiceRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub manifest_json: ::prost::alloc::string::String,
+    pub manifest_yaml: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RemoteServiceHandleRequest {

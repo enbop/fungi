@@ -389,7 +389,10 @@ enum ServiceRuntimeKind {
   SERVICE_RUNTIME_KIND_WASMTIME = 2;
 }
 
-message DeployServiceRequest { string manifest_json = 1; }
+message DeployServiceRequest {
+  string manifest_yaml = 1;
+  string manifest_base_dir = 2;
+}
 
 message ServiceHandleRequest {
   ServiceRuntimeKind runtime = 1;
@@ -419,7 +422,7 @@ message DiscoverPeerCapabilitiesResponse { string capabilities_json = 1; }
 
 message RemoteDeployServiceRequest {
   string peer_id = 1;
-  string manifest_json = 2;
+  string manifest_yaml = 2;
 }
 
 message RemoteServiceHandleRequest {

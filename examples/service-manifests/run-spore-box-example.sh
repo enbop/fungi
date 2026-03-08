@@ -6,7 +6,7 @@ EXAMPLE_DIR="$(cd "$(dirname "$0")" && pwd)"
 TMP_ROOT="$(mktemp -d /tmp/fungi-spore-box-example.XXXXXX)"
 FUNGI_DIR="$TMP_ROOT/fungi-home"
 RPC_ADDR="127.0.0.1:55406"
-SERVICE_PORT="28081"
+SERVICE_PORT="${SERVICE_PORT:-28081}"
 BIN="$ROOT_DIR/target/debug/fungi"
 DAEMON_PID=""
 
@@ -55,7 +55,7 @@ port = 8181
 [docker]
 enabled = false
 allowed_host_paths = []
-allowed_ports = []
+allowed_ports = [$SERVICE_PORT]
 EOF
 
 echo "== starting daemon =="

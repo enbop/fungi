@@ -172,6 +172,12 @@ impl FungiDaemon {
         Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
 
         let docker_control = DockerControl::from_config(&config.docker)?;
+        let shared_config = Arc::new(Mutex::new(config.clone()));
+        let fungi_home = config
+            .config_file_path()
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .to_path_buf();
         let runtime_root = config
             .config_file_path()
             .parent()
@@ -191,13 +197,15 @@ impl FungiDaemon {
         service_discovery_control.start()?;
         let node_capabilities_control = NodeCapabilitiesControl::new(
             swarm_control.clone(),
-            Arc::new(Mutex::new(config.clone())),
+            shared_config.clone(),
             runtime_control.clone(),
             state.incoming_allowed_peers().clone(),
         );
         node_capabilities_control.start()?;
         let service_control_protocol_control = ServiceControlProtocolControl::new(
             swarm_control.clone(),
+            shared_config.clone(),
+            fungi_home,
             runtime_control.clone(),
             state.incoming_allowed_peers().clone(),
         );
@@ -234,7 +242,7 @@ impl FungiDaemon {
             proxy_webdav_task: Arc::new(Mutex::new(proxy_webdav_task)),
         };
         Ok(Self {
-            config: Arc::new(Mutex::new(config)),
+            config: shared_config,
             address_book_config: Arc::new(Mutex::new(address_book_config)),
             args,
             swarm_control,

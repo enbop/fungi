@@ -1,7 +1,8 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fs::{self, OpenOptions},
     io::Read,
+    net::{TcpListener as StdTcpListener, UdpSocket as StdUdpSocket},
     path::{Path, PathBuf},
     process::Stdio,
     sync::Arc,
@@ -9,6 +10,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
+use fungi_config::docker::AllowedPortRange;
 use fungi_docker_agent::{ContainerSpec, LogsOptions, PortProtocol};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -89,6 +91,7 @@ pub struct ServiceMount {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServicePort {
+    pub name: Option<String>,
     pub host_port: u16,
     pub service_port: u16,
     pub protocol: ServicePortProtocol,
@@ -99,6 +102,12 @@ pub struct ServicePort {
 pub enum ServicePortProtocol {
     Tcp,
     Udp,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ManifestResolutionPolicy {
+    pub allowed_tcp_ports: Vec<u16>,
+    pub allowed_tcp_port_ranges: Vec<AllowedPortRange>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,10 +203,19 @@ pub struct ServiceManifestMount {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceManifestPort {
     #[serde(rename = "hostPort")]
-    pub host_port: u16,
+    pub host_port: ServiceManifestHostPort,
     #[serde(rename = "servicePort")]
     pub service_port: u16,
+    #[serde(default)]
+    pub name: Option<String>,
     pub protocol: ServicePortProtocol,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ServiceManifestHostPort {
+    Fixed(u16),
+    Keyword(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -239,9 +257,25 @@ pub fn parse_service_manifest_yaml(
     base_dir: &Path,
     fungi_home: &Path,
 ) -> Result<ServiceManifest> {
+    parse_service_manifest_yaml_with_policy(
+        content,
+        base_dir,
+        fungi_home,
+        &ManifestResolutionPolicy::default(),
+        &BTreeSet::new(),
+    )
+}
+
+pub fn parse_service_manifest_yaml_with_policy(
+    content: &str,
+    base_dir: &Path,
+    fungi_home: &Path,
+    policy: &ManifestResolutionPolicy,
+    used_host_ports: &BTreeSet<u16>,
+) -> Result<ServiceManifest> {
     let document: ServiceManifestDocument =
         serde_yaml::from_str(content).context("Failed to parse service manifest YAML")?;
-    document.into_service_manifest(base_dir, fungi_home)
+    document.into_service_manifest_for_node(base_dir, fungi_home, policy, used_host_ports)
 }
 
 impl ServiceManifestDocument {
@@ -249,6 +283,21 @@ impl ServiceManifestDocument {
         self,
         base_dir: &Path,
         fungi_home: &Path,
+    ) -> Result<ServiceManifest> {
+        self.into_service_manifest_for_node(
+            base_dir,
+            fungi_home,
+            &ManifestResolutionPolicy::default(),
+            &BTreeSet::new(),
+        )
+    }
+
+    pub fn into_service_manifest_for_node(
+        self,
+        base_dir: &Path,
+        fungi_home: &Path,
+        policy: &ManifestResolutionPolicy,
+        used_host_ports: &BTreeSet<u16>,
     ) -> Result<ServiceManifest> {
         if self.kind != "ServiceManifest" {
             bail!("Unsupported manifest kind: {}", self.kind);
@@ -262,6 +311,8 @@ impl ServiceManifestDocument {
         } = self;
         let service_name = metadata.name;
         let metadata_labels = metadata.labels;
+        let app_home = fungi_home.join("services").join(&service_name);
+        let mut reserved_host_ports = used_host_ports.clone();
 
         let runtime = spec.runtime;
         let source = match runtime {
@@ -273,7 +324,7 @@ impl ServiceManifestDocument {
             }
             RuntimeKind::Wasmtime => match (spec.source.file, spec.source.url) {
                 (Some(file), None) => ServiceSource::WasmtimeFile {
-                    component: resolve_manifest_path(&file, base_dir, fungi_home),
+                    component: resolve_manifest_path(&file, base_dir, fungi_home, &app_home),
                 },
                 (None, Some(url)) => ServiceSource::WasmtimeUrl { url },
                 (Some(_), Some(_)) => {
@@ -297,24 +348,39 @@ impl ServiceManifestDocument {
                 .mounts
                 .into_iter()
                 .map(|mount| ServiceMount {
-                    host_path: resolve_manifest_path(&mount.host_path, base_dir, fungi_home),
+                    host_path: resolve_manifest_path(
+                        &mount.host_path,
+                        base_dir,
+                        fungi_home,
+                        &app_home,
+                    ),
                     runtime_path: mount.runtime_path,
                 })
                 .collect(),
             ports: spec
                 .ports
                 .into_iter()
-                .map(|port| ServicePort {
-                    host_port: port.host_port,
-                    service_port: port.service_port,
-                    protocol: port.protocol,
+                .map(|port| {
+                    Ok(ServicePort {
+                        name: normalize_optional(port.name),
+                        host_port: resolve_manifest_host_port(
+                            port.host_port,
+                            port.protocol,
+                            policy,
+                            &mut reserved_host_ports,
+                        )?,
+                        service_port: port.service_port,
+                        protocol: port.protocol,
+                    })
                 })
-                .collect(),
+                .collect::<Result<Vec<_>>>()?,
             command: spec.command,
             entrypoint: spec.entrypoint,
             working_dir: spec
                 .working_dir
-                .map(|value| resolve_manifest_path_string(&value, base_dir, fungi_home)),
+                .map(|value| {
+                    resolve_manifest_path_string(&value, base_dir, fungi_home, &app_home)
+                }),
             labels: metadata_labels,
         })
     }
@@ -381,16 +447,83 @@ fn normalize_optional(value: Option<String>) -> Option<String> {
     })
 }
 
-fn resolve_manifest_path(path: &str, base_dir: &Path, fungi_home: &Path) -> PathBuf {
-    let expanded = resolve_manifest_path_string(path, base_dir, fungi_home);
+fn resolve_manifest_host_port(
+    host_port: ServiceManifestHostPort,
+    protocol: ServicePortProtocol,
+    policy: &ManifestResolutionPolicy,
+    reserved_host_ports: &mut BTreeSet<u16>,
+) -> Result<u16> {
+    match host_port {
+        ServiceManifestHostPort::Fixed(port) => {
+            if !reserved_host_ports.insert(port) {
+                bail!("host port is already reserved in this manifest or node: {port}");
+            }
+            Ok(port)
+        }
+        ServiceManifestHostPort::Keyword(value) => {
+            let keyword = value.trim().to_ascii_lowercase();
+            if keyword != "auto" && keyword != "any" {
+                bail!("hostPort must be a number or one of: auto, any");
+            }
+
+            for port in iter_allowed_tcp_ports(policy) {
+                if reserved_host_ports.contains(&port) {
+                    continue;
+                }
+                if !is_host_port_available(port, protocol) {
+                    continue;
+                }
+                reserved_host_ports.insert(port);
+                return Ok(port);
+            }
+
+            bail!("failed to allocate host port automatically from allowed port policy")
+        }
+    }
+}
+
+fn iter_allowed_tcp_ports(policy: &ManifestResolutionPolicy) -> Vec<u16> {
+    let mut ports = BTreeSet::new();
+    for port in &policy.allowed_tcp_ports {
+        ports.insert(*port);
+    }
+    for range in &policy.allowed_tcp_port_ranges {
+        for port in range.start..=range.end {
+            ports.insert(port);
+        }
+    }
+    ports.into_iter().collect()
+}
+
+fn is_host_port_available(port: u16, protocol: ServicePortProtocol) -> bool {
+    match protocol {
+        ServicePortProtocol::Tcp => StdTcpListener::bind(("0.0.0.0", port)).is_ok(),
+        ServicePortProtocol::Udp => StdUdpSocket::bind(("0.0.0.0", port)).is_ok(),
+    }
+}
+
+fn resolve_manifest_path(path: &str, base_dir: &Path, fungi_home: &Path, app_home: &Path) -> PathBuf {
+    let expanded = resolve_manifest_path_string(path, base_dir, fungi_home, app_home);
     PathBuf::from(expanded)
 }
 
-fn resolve_manifest_path_string(path: &str, base_dir: &Path, fungi_home: &Path) -> String {
+fn resolve_manifest_path_string(
+    path: &str,
+    base_dir: &Path,
+    fungi_home: &Path,
+    app_home: &Path,
+) -> String {
     let fungi_home_value = fungi_home.to_string_lossy();
+    let app_home_value = app_home.to_string_lossy();
     let expanded = path
         .replace("${FUNGI_HOME}", &fungi_home_value)
-        .replace("$FUNGI_HOME", &fungi_home_value);
+        .replace("$FUNGI_HOME", &fungi_home_value)
+        .replace("${fungi_home}", &fungi_home_value)
+        .replace("$fungi_home", &fungi_home_value)
+        .replace("${APP_HOME}", &app_home_value)
+        .replace("$APP_HOME", &app_home_value)
+        .replace("${app_home}", &app_home_value)
+        .replace("$app_home", &app_home_value);
     let resolved = PathBuf::from(&expanded);
     if resolved.is_absolute() {
         resolved.to_string_lossy().to_string()
@@ -739,6 +872,28 @@ impl RuntimeControl {
         Ok(instance)
     }
 
+    pub async fn deploy_manifest_yaml(
+        &self,
+        content: &str,
+        base_dir: &Path,
+        fungi_home: &Path,
+        policy: &ManifestResolutionPolicy,
+    ) -> Result<ServiceInstance> {
+        let manifest = self.resolve_manifest_yaml(content, base_dir, fungi_home, policy)?;
+        self.deploy(&manifest).await
+    }
+
+    pub fn resolve_manifest_yaml(
+        &self,
+        content: &str,
+        base_dir: &Path,
+        fungi_home: &Path,
+        policy: &ManifestResolutionPolicy,
+    ) -> Result<ServiceManifest> {
+        let used_host_ports = self.reserved_host_ports();
+        parse_service_manifest_yaml_with_policy(content, base_dir, fungi_home, policy, &used_host_ports)
+    }
+
     pub async fn start(&self, runtime: RuntimeKind, handle: &str) -> Result<()> {
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.start(handle).await,
@@ -870,6 +1025,14 @@ impl RuntimeControl {
             .get(handle)
             .copied()
             .ok_or_else(|| anyhow::anyhow!("service not found: {handle}"))
+    }
+
+    fn reserved_host_ports(&self) -> BTreeSet<u16> {
+        self.service_manifests
+            .lock()
+            .values()
+            .flat_map(|manifest| manifest.ports.iter().map(|port| port.host_port))
+            .collect()
     }
 }
 
@@ -1124,6 +1287,7 @@ mod tests {
                 runtime_path: "/srv".into(),
             }],
             ports: vec![ServicePort {
+                name: None,
                 host_port: 8080,
                 service_port: 80,
                 protocol: ServicePortProtocol::Tcp,
@@ -1209,6 +1373,7 @@ mod tests {
                 runtime_path: "data".into(),
             }],
             ports: vec![ServicePort {
+                name: None,
                 host_port: 18081,
                 service_port: 8081,
                 protocol: ServicePortProtocol::Tcp,
@@ -1258,6 +1423,43 @@ mod tests {
         provider.remove("demo-service").await.unwrap();
         assert!(provider.inspect("demo-service").await.is_err());
     }
+
+        #[test]
+        fn manifest_document_supports_app_home_and_auto_host_port() {
+                let yaml = r#"
+apiVersion: fungi.dev/v1alpha1
+kind: ServiceManifest
+metadata:
+    name: filebrowser
+spec:
+    runtime: docker
+    source:
+        image: filebrowser/filebrowser:latest
+    mounts:
+        - hostPath: ${APP_HOME}/data
+            runtimePath: /srv
+    ports:
+        - hostPort: auto
+            servicePort: 80
+            protocol: tcp
+"#;
+
+                let fungi_home = PathBuf::from("/tmp/fungi-home");
+                let manifest = parse_service_manifest_yaml_with_policy(
+                        yaml,
+                        Path::new("."),
+                        &fungi_home,
+                        &ManifestResolutionPolicy {
+                                allowed_tcp_ports: vec![28080],
+                                allowed_tcp_port_ranges: Vec::new(),
+                        },
+                        &BTreeSet::new(),
+                )
+                .unwrap();
+
+                assert_eq!(manifest.mounts[0].host_path, fungi_home.join("services/filebrowser/data"));
+                assert_eq!(manifest.ports[0].host_port, 28080);
+        }
 
     #[tokio::test]
     async fn wasmtime_provider_downloads_remote_component() {

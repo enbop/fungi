@@ -25,12 +25,12 @@ spec:
     url: https://github.com/enbop/spore-box/releases/download/v0.2.0/spore-box.wasm
 
   ports:
-    - hostPort: 28081
+    - hostPort: auto
       servicePort: 8081
       protocol: tcp
 
   mounts:
-    - hostPath: ${FUNGI_HOME}/services/spore-box/data
+    - hostPath: ${APP_HOME}/data
       runtimePath: data
 
   env: {}
@@ -42,6 +42,8 @@ spec:
 
 notes:
   - "This manifest can be deployed directly with fungi service deploy."
+  - "${APP_HOME} resolves on the target node to fungi_home/services/<service-name>."
+  - "hostPort: auto asks the target node to choose an available port from its allowed port policy."
   - The Wasmtime runtime automatically creates host mount directories before launch.
   - The current minimal implementation supports a single `.wasm` file URL.
   - "spec.expose is the future-facing discovery/UX metadata layer, separate from the runtime launch config."

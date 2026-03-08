@@ -1,6 +1,7 @@
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{collections::HashSet, path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::Result;
+use fungi_config::FungiConfig;
 use fungi_swarm::{ConnectionSelectionStrategy, SwarmControl};
 use fungi_util::protocols::FUNGI_SERVICE_CONTROL_PROTOCOL;
 use futures::StreamExt;
@@ -10,16 +11,20 @@ use libp2p::{
     futures::{AsyncReadExt, AsyncWriteExt},
 };
 use libp2p_stream::IncomingStreams;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::{RuntimeControl, ServiceControlRequest, ServiceControlResponse, ServiceManifest};
+use crate::{
+    ManifestResolutionPolicy, RuntimeControl, ServiceControlRequest, ServiceControlResponse,
+};
 
 const MAX_CONTROL_FRAME_LEN: usize = 2 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct ServiceControlProtocolControl {
     swarm_control: SwarmControl,
+    config: Arc<Mutex<FungiConfig>>,
+    fungi_home: PathBuf,
     runtime_control: RuntimeControl,
     incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
 }
@@ -29,11 +34,15 @@ impl ServiceControlProtocolControl {
 
     pub fn new(
         swarm_control: SwarmControl,
+        config: Arc<Mutex<FungiConfig>>,
+        fungi_home: PathBuf,
         runtime_control: RuntimeControl,
         incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
     ) -> Self {
         Self {
             swarm_control,
+            config,
+            fungi_home,
             runtime_control,
             incoming_allowed_peers,
         }
@@ -54,13 +63,13 @@ impl ServiceControlProtocolControl {
     pub async fn deploy_peer_service(
         &self,
         peer_id: PeerId,
-        manifest: ServiceManifest,
+        manifest_yaml: String,
     ) -> Result<ServiceControlResponse> {
         self.send_request(
             peer_id,
             ServiceControlRequest::DeployService {
                 request_id: None,
-                manifest,
+                manifest_yaml,
             },
         )
         .await
@@ -184,30 +193,46 @@ impl ServiceControlProtocolControl {
 
     async fn handle_request(&self, request: ServiceControlRequest) -> ServiceControlResponse {
         let request_id = request.request_id().map(str::to_string);
-        let service_name = request.service_name();
 
         let result = match request {
-            ServiceControlRequest::DeployService { manifest, .. } => {
-                self.runtime_control.deploy(&manifest).await.map(|_| ())
+            ServiceControlRequest::DeployService { manifest_yaml, .. } => {
+                let policy = self.manifest_resolution_policy();
+                self.runtime_control
+                    .deploy_manifest_yaml(
+                        &manifest_yaml,
+                        &self.fungi_home,
+                        &self.fungi_home,
+                        &policy,
+                    )
+                    .await
+                    .map(|instance| instance.name)
             }
             ServiceControlRequest::StartService { service, .. } => {
-                self.runtime_control.start_by_handle(&service).await
+                self.runtime_control.start_by_handle(&service).await.map(|_| service)
             }
             ServiceControlRequest::StopService { service, .. } => {
-                self.runtime_control.stop_by_handle(&service).await
+                self.runtime_control.stop_by_handle(&service).await.map(|_| service)
             }
             ServiceControlRequest::RemoveService { service, .. } => {
-                self.runtime_control.remove_by_handle(&service).await
+                self.runtime_control.remove_by_handle(&service).await.map(|_| service)
             }
         };
 
         match result {
-            Ok(()) => ServiceControlResponse::success(request_id, service_name),
+            Ok(service_name) => ServiceControlResponse::success(request_id, service_name),
             Err(error) => ServiceControlResponse::error(
                 request_id,
                 "execution_failed",
                 error.to_string(),
             ),
+        }
+    }
+
+    fn manifest_resolution_policy(&self) -> ManifestResolutionPolicy {
+        let config = self.config.lock();
+        ManifestResolutionPolicy {
+            allowed_tcp_ports: config.docker.allowed_ports.clone(),
+            allowed_tcp_port_ranges: config.docker.allowed_port_ranges.clone(),
         }
     }
 }

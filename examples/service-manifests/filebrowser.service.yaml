@@ -26,12 +26,12 @@ spec:
     image: filebrowser/filebrowser:latest
 
   ports:
-    - hostPort: 28080
+    - hostPort: auto
       servicePort: 80
       protocol: tcp
 
   mounts:
-    - hostPath: ${FUNGI_HOME}/services/filebrowser/data
+    - hostPath: ${APP_HOME}/data
       runtimePath: /srv
 
   env:
@@ -44,6 +44,8 @@ spec:
 
 notes:
   - "This manifest can be deployed directly with fungi service deploy."
+  - "${APP_HOME} resolves on the target node to fungi_home/services/<service-name>."
+  - "hostPort: auto asks the target node to choose an available port from its allowed port policy."
   - The Docker runtime now pulls the image automatically if it is missing locally.
   - start/inspect/logs/stop/remove now accept just the service name.
   - "spec.expose describes how the service should appear in discovery and what client UX is recommended."
