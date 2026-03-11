@@ -17,7 +17,10 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tokio::process::{Child, Command};
 
-use crate::controls::DockerControl;
+use crate::{
+    controls::DockerControl,
+    service_state::{DesiredServiceState, PersistedService, ServiceStateStore},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -711,6 +714,17 @@ impl WasmtimeRuntimeProvider {
             services: Arc::new(Mutex::new(HashMap::new())),
         }
     }
+
+    pub fn has_service(&self, handle: &str) -> bool {
+        self.services.lock().contains_key(handle)
+    }
+
+    async fn restore(&self, manifest: &ServiceManifest) -> Result<()> {
+        let state = build_wasmtime_state(&self.runtime_root, manifest, false).await?;
+        let mut services = self.services.lock();
+        services.entry(manifest.name.clone()).or_insert(state);
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -720,34 +734,7 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
     }
 
     async fn deploy(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
-        ensure_wasmtime_manifest(manifest)?;
-
-        let service_dir = self.runtime_root.join("wasmtime").join(&manifest.name);
-        fs::create_dir_all(&service_dir).with_context(|| {
-            format!(
-                "Failed to create runtime directory: {}",
-                service_dir.display()
-            )
-        })?;
-        ensure_wasmtime_mount_dirs(manifest)?;
-
-        let staged_component_path = stage_wasmtime_component(manifest, &service_dir).await?;
-        let log_file_path = service_dir.join("runtime.log");
-        if !log_file_path.exists() {
-            fs::File::create(&log_file_path).with_context(|| {
-                format!("Failed to create log file: {}", log_file_path.display())
-            })?;
-        }
-
-        let state = WasmtimeServiceState {
-            manifest: manifest.clone(),
-            source_display: source_display(&manifest.source),
-            staged_component_path,
-            service_dir,
-            log_file_path,
-            child: None,
-            last_exit_code: None,
-        };
+        let state = build_wasmtime_state(&self.runtime_root, manifest, true).await?;
 
         {
             let mut services = self.services.lock();
@@ -844,15 +831,15 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
             services.remove(handle)
         };
 
-        let Some(state) = state else {
-            bail!("wasmtime service not found: {handle}");
-        };
+        let service_dir = state.map(|state| state.service_dir).unwrap_or_else(|| {
+            self.runtime_root.join("wasmtime").join(handle)
+        });
 
-        if state.service_dir.exists() {
-            fs::remove_dir_all(&state.service_dir).with_context(|| {
+        if service_dir.exists() {
+            fs::remove_dir_all(&service_dir).with_context(|| {
                 format!(
                     "Failed to remove runtime directory: {}",
-                    state.service_dir.display()
+                    service_dir.display()
                 )
             })?;
         }
@@ -899,6 +886,7 @@ pub struct RuntimeControl {
     wasmtime: WasmtimeRuntimeProvider,
     service_index: Arc<Mutex<HashMap<String, RuntimeKind>>>,
     service_manifests: Arc<Mutex<HashMap<String, ServiceManifest>>>,
+    service_state: Arc<Mutex<ServiceStateStore>>,
 }
 
 impl RuntimeControl {
@@ -906,25 +894,29 @@ impl RuntimeControl {
         runtime_root: PathBuf,
         launcher_path: PathBuf,
         docker: Option<DockerControl>,
-    ) -> Self {
-        Self {
+        service_state_file: PathBuf,
+    ) -> Result<Self> {
+        Ok(Self {
             docker: docker.map(DockerRuntimeProvider::new),
             wasmtime: WasmtimeRuntimeProvider::new(runtime_root, launcher_path),
             service_index: Arc::new(Mutex::new(HashMap::new())),
             service_manifests: Arc::new(Mutex::new(HashMap::new())),
-        }
+            service_state: Arc::new(Mutex::new(ServiceStateStore::load(service_state_file)?)),
+        })
     }
 
     pub fn with_wasmtime_provider(
         wasmtime: WasmtimeRuntimeProvider,
         docker: Option<DockerControl>,
-    ) -> Self {
-        Self {
+        service_state_file: PathBuf,
+    ) -> Result<Self> {
+        Ok(Self {
             docker: docker.map(DockerRuntimeProvider::new),
             wasmtime,
             service_index: Arc::new(Mutex::new(HashMap::new())),
             service_manifests: Arc::new(Mutex::new(HashMap::new())),
-        }
+            service_state: Arc::new(Mutex::new(ServiceStateStore::load(service_state_file)?)),
+        })
     }
 
     pub fn supports(&self, runtime: RuntimeKind) -> bool {
@@ -953,6 +945,7 @@ impl RuntimeControl {
         self.service_manifests
             .lock()
             .insert(manifest.name.clone(), manifest.clone());
+        self.persist_service(manifest, DesiredServiceState::Stopped)?;
         Ok(instance)
     }
 
@@ -985,17 +978,21 @@ impl RuntimeControl {
     }
 
     pub async fn start(&self, runtime: RuntimeKind, handle: &str) -> Result<()> {
+        self.ensure_runtime_service(runtime, handle).await?;
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.start(handle).await,
             RuntimeKind::Wasmtime => self.wasmtime.start(handle).await,
-        }
+        }?;
+        self.set_desired_state(handle, DesiredServiceState::Running)
     }
 
     pub async fn stop(&self, runtime: RuntimeKind, handle: &str) -> Result<()> {
+        let _ = self.ensure_runtime_service(runtime, handle).await;
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.stop(handle).await,
             RuntimeKind::Wasmtime => self.wasmtime.stop(handle).await,
-        }
+        }?;
+        self.set_desired_state(handle, DesiredServiceState::Stopped)
     }
 
     pub async fn remove(&self, runtime: RuntimeKind, handle: &str) -> Result<()> {
@@ -1005,6 +1002,7 @@ impl RuntimeControl {
         }?;
         self.service_index.lock().remove(handle);
         self.service_manifests.lock().remove(handle);
+        self.service_state.lock().remove_service(handle)?;
         Ok(())
     }
 
@@ -1106,7 +1104,17 @@ impl RuntimeControl {
 
         let mut services = Vec::new();
         for manifest in manifests {
-            let instance = self.inspect(manifest.runtime, &manifest.name).await?;
+            let instance = match self.inspect(manifest.runtime, &manifest.name).await {
+                Ok(instance) => instance,
+                Err(error) => {
+                    log::warn!(
+                        "Failed to inspect service '{}' during list: {}",
+                        manifest.name,
+                        error
+                    );
+                    missing_instance_from_manifest(&manifest)
+                }
+            };
             services.push(instance);
         }
 
@@ -1115,6 +1123,14 @@ impl RuntimeControl {
     }
 
     pub async fn inspect(&self, runtime: RuntimeKind, handle: &str) -> Result<ServiceInstance> {
+        if let Err(error) = self.ensure_runtime_service(runtime, handle).await {
+            if let Some(manifest) = self.get_service_manifest(handle) {
+                log::warn!("Failed to restore service '{}' for inspect: {}", handle, error);
+                return Ok(missing_instance_from_manifest(&manifest));
+            }
+            return Err(error);
+        }
+
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.inspect(handle).await,
             RuntimeKind::Wasmtime => self.wasmtime.inspect(handle).await,
@@ -1127,16 +1143,86 @@ impl RuntimeControl {
         handle: &str,
         options: &ServiceLogsOptions,
     ) -> Result<ServiceLogs> {
+        self.ensure_runtime_service(runtime, handle).await?;
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.logs(handle, options).await,
             RuntimeKind::Wasmtime => self.wasmtime.logs(handle, options).await,
         }
     }
 
+    pub async fn restore_persisted_state(&self) -> Result<()> {
+        let persisted_services = { self.service_state.lock().persisted_services() };
+
+        for PersistedService {
+            manifest,
+            desired_state,
+        } in persisted_services
+        {
+            self.service_index
+                .lock()
+                .insert(manifest.name.clone(), manifest.runtime);
+            self.service_manifests
+                .lock()
+                .insert(manifest.name.clone(), manifest.clone());
+
+            if manifest.runtime == RuntimeKind::Wasmtime
+                && let Err(error) = self.wasmtime.restore(&manifest).await
+            {
+                log::warn!(
+                    "Failed to restore persisted wasmtime service '{}': {}",
+                    manifest.name,
+                    error
+                );
+            }
+
+            if desired_state == DesiredServiceState::Running
+                && let Err(error) = self.start(manifest.runtime, &manifest.name).await
+            {
+                log::warn!(
+                    "Failed to reconcile persisted service '{}' to running: {}",
+                    manifest.name,
+                    error
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     fn docker_provider(&self) -> Result<&DockerRuntimeProvider> {
         self.docker
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("docker runtime is not enabled in config"))
+    }
+
+    async fn ensure_runtime_service(&self, runtime: RuntimeKind, handle: &str) -> Result<()> {
+        if runtime != RuntimeKind::Wasmtime || self.wasmtime.has_service(handle) {
+            return Ok(());
+        }
+
+        let manifest = self
+            .service_manifests
+            .lock()
+            .get(handle)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("service not found: {handle}"))?;
+        self.wasmtime.restore(&manifest).await
+    }
+
+    fn persist_service(
+        &self,
+        manifest: &ServiceManifest,
+        desired_state: DesiredServiceState,
+    ) -> Result<()> {
+        self.service_state
+            .lock()
+            .upsert_service(manifest, desired_state)
+    }
+
+    fn set_desired_state(&self, handle: &str, desired_state: DesiredServiceState) -> Result<()> {
+        self.service_state
+            .lock()
+            .set_desired_state(handle, desired_state)
     }
 
     fn resolve_runtime(&self, handle: &str) -> Result<RuntimeKind> {
@@ -1267,6 +1353,46 @@ async fn stage_wasmtime_component(
     Ok(target_path)
 }
 
+async fn build_wasmtime_state(
+    runtime_root: &Path,
+    manifest: &ServiceManifest,
+    restage_component: bool,
+) -> Result<WasmtimeServiceState> {
+    ensure_wasmtime_manifest(manifest)?;
+
+    let service_dir = runtime_root.join("wasmtime").join(&manifest.name);
+    fs::create_dir_all(&service_dir).with_context(|| {
+        format!(
+            "Failed to create runtime directory: {}",
+            service_dir.display()
+        )
+    })?;
+    ensure_wasmtime_mount_dirs(manifest)?;
+
+    let staged_component_path = service_dir.join("component.wasm");
+    let staged_component_path = if restage_component || !staged_component_path.exists() {
+        stage_wasmtime_component(manifest, &service_dir).await?
+    } else {
+        staged_component_path
+    };
+
+    let log_file_path = service_dir.join("runtime.log");
+    if !log_file_path.exists() {
+        fs::File::create(&log_file_path)
+            .with_context(|| format!("Failed to create log file: {}", log_file_path.display()))?;
+    }
+
+    Ok(WasmtimeServiceState {
+        manifest: manifest.clone(),
+        source_display: source_display(&manifest.source),
+        staged_component_path,
+        service_dir,
+        log_file_path,
+        child: None,
+        last_exit_code: None,
+    })
+}
+
 fn build_wasmtime_command(launcher_path: &Path, state: &WasmtimeServiceState) -> Result<Command> {
     let mut command = Command::new(launcher_path);
     command.kill_on_drop(true);
@@ -1353,6 +1479,20 @@ fn map_wasmtime_instance(handle: &str, state: &WasmtimeServiceState) -> ServiceI
         status: ServiceStatus {
             state: status,
             running,
+        },
+    }
+}
+
+fn missing_instance_from_manifest(manifest: &ServiceManifest) -> ServiceInstance {
+    ServiceInstance {
+        runtime: manifest.runtime,
+        handle: manifest.name.clone(),
+        name: manifest.name.clone(),
+        source: source_display(&manifest.source),
+        labels: manifest.labels.clone(),
+        status: ServiceStatus {
+            state: "missing".to_string(),
+            running: false,
         },
     }
 }

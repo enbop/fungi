@@ -4,6 +4,7 @@ mod daemon;
 mod node_capabilities;
 pub mod runtime;
 mod service_control;
+mod service_state;
 
 pub use api::{EnabledRemoteService, EnabledRemoteServiceEndpoint};
 use clap::Parser;

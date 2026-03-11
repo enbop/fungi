@@ -188,7 +188,9 @@ impl FungiDaemon {
             env::current_exe()
                 .map_err(|e| anyhow::anyhow!("Failed to resolve current executable: {e}"))?,
             docker_control.clone(),
-        );
+            fungi_home.join("services-state.json"),
+        )?;
+        runtime_control.restore_persisted_state().await?;
         let service_discovery_control = ServiceDiscoveryControl::new(
             swarm_control.clone(),
             runtime_control.clone(),
