@@ -1,9 +1,9 @@
 pub mod address_book;
-pub mod docker;
 pub mod file_transfer;
 mod init;
 mod libp2p;
 mod rpc;
+pub mod runtime;
 pub mod tcp_tunneling;
 
 pub use init::init;
@@ -19,8 +19,8 @@ use std::{
 use tcp_tunneling::*;
 
 use crate::{
-    docker::Docker,
     file_transfer::{FileTransfer, FileTransferClient, FileTransferService},
+    runtime::{AllowedPortRange, Runtime},
 };
 
 pub const DEFAULT_CONFIG_FILE: &str = "config.toml";
@@ -38,7 +38,7 @@ pub struct FungiConfig {
     #[serde(default)]
     pub file_transfer: FileTransfer,
     #[serde(default)]
-    pub docker: Docker,
+    pub runtime: Runtime,
 
     #[serde(default)]
     custom_hostname: Option<String>,
@@ -56,10 +56,17 @@ impl FungiConfig {
         if config_file.exists() {
             return Ok(());
         }
-        let config = FungiConfig::default();
+        let fungi_dir = config_file.parent().unwrap_or_else(|| Path::new("."));
+        let config = FungiConfig::default_for_dir(fungi_dir);
         let toml_string = toml::to_string(&config)?;
         std::fs::write(&config_file, toml_string)?;
         Ok(())
+    }
+
+    fn default_for_dir(fungi_dir: &Path) -> Self {
+        let mut config = FungiConfig::default();
+        config.apply_runtime_defaults(fungi_dir);
+        config
     }
 
     pub fn try_read_from_dir(fungi_dir: &Path) -> Result<Self> {
@@ -72,6 +79,7 @@ impl FungiConfig {
         }
         let s = std::fs::read_to_string(&config_file)?;
         let mut cfg = Self::parse_toml(&s)?;
+        cfg.apply_runtime_defaults(fungi_dir);
         cfg.config_file = config_file;
         Ok(cfg)
     }
@@ -85,6 +93,7 @@ impl FungiConfig {
         println!("Loading Fungi config from: {config_file:?}");
         let s = std::fs::read_to_string(&config_file).context("Failed to read config file")?;
         let mut cfg = Self::parse_toml(&s)?;
+        cfg.apply_runtime_defaults(fungi_dir);
         cfg.config_file = config_file;
         Ok(cfg)
     }
@@ -122,6 +131,62 @@ impl FungiConfig {
     pub fn set_custom_hostname(&self, hostname: Option<String>) -> Result<Self> {
         self.update_and_save(|config| {
             config.custom_hostname = hostname;
+        })
+    }
+
+    pub fn get_runtime_config(&self) -> Runtime {
+        self.runtime.clone()
+    }
+
+    pub fn add_runtime_allowed_host_path(&self, path: PathBuf) -> Result<Self> {
+        self.update_and_save(|config| {
+            if !config.runtime.allowed_host_paths.iter().any(|entry| entry == &path) {
+                config.runtime.allowed_host_paths.push(path.clone());
+                config.runtime.allowed_host_paths.sort();
+            }
+        })
+    }
+
+    pub fn remove_runtime_allowed_host_path(&self, path: &Path) -> Result<Self> {
+        self.update_and_save(|config| {
+            config.runtime.allowed_host_paths.retain(|entry| entry != path);
+        })
+    }
+
+    pub fn add_runtime_allowed_port(&self, port: u16) -> Result<Self> {
+        self.update_and_save(|config| {
+            if !config.runtime.allowed_ports.contains(&port) {
+                config.runtime.allowed_ports.push(port);
+                config.runtime.allowed_ports.sort_unstable();
+            }
+        })
+    }
+
+    pub fn remove_runtime_allowed_port(&self, port: u16) -> Result<Self> {
+        self.update_and_save(|config| {
+            config.runtime.allowed_ports.retain(|entry| *entry != port);
+        })
+    }
+
+    pub fn add_runtime_allowed_port_range(&self, range: AllowedPortRange) -> Result<Self> {
+        if range.start == 0 || range.end == 0 || range.start > range.end {
+            return Err(anyhow::anyhow!("invalid allowed port range"));
+        }
+
+        self.update_and_save(|config| {
+            if !config.runtime.allowed_port_ranges.iter().any(|entry| entry == &range) {
+                config.runtime.allowed_port_ranges.push(range.clone());
+                config
+                    .runtime
+                    .allowed_port_ranges
+                    .sort_by(|left, right| left.start.cmp(&right.start).then(left.end.cmp(&right.end)));
+            }
+        })
+    }
+
+    pub fn remove_runtime_allowed_port_range(&self, range: &AllowedPortRange) -> Result<Self> {
+        self.update_and_save(|config| {
+            config.runtime.allowed_port_ranges.retain(|entry| entry != range);
         })
     }
 
@@ -321,6 +386,12 @@ impl FungiConfig {
     }
 }
 
+impl FungiConfig {
+    fn apply_runtime_defaults(&mut self, fungi_dir: &Path) {
+        self.runtime.apply_default_allowed_host_paths(fungi_dir);
+    }
+}
+
 pub trait FungiDir {
     fn fungi_dir(&self) -> PathBuf;
 }
@@ -352,6 +423,7 @@ mod tests {
         assert!(content.contains("[network]"));
         assert!(content.contains("[tcp_tunneling"));
         assert!(content.contains("[file_transfer"));
+        assert!(content.contains("[runtime]"));
     }
 
     #[test]

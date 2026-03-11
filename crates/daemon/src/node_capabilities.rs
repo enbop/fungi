@@ -32,12 +32,12 @@ pub fn build_local_node_capabilities(
     config: &FungiConfig,
     runtime_control: &RuntimeControl,
 ) -> NodeCapabilities {
-    let mut allowed_ports = config.docker.allowed_ports.clone();
+    let mut allowed_ports = config.runtime.allowed_ports.clone();
     allowed_ports.sort_unstable();
     allowed_ports.dedup();
 
     let mut ranges = config
-        .docker
+        .runtime
         .allowed_port_ranges
         .iter()
         .map(|range| NodePortRange {
@@ -45,11 +45,7 @@ pub fn build_local_node_capabilities(
             end: range.end,
         })
         .collect::<Vec<_>>();
-    ranges.sort_by(|left, right| {
-        left.start
-            .cmp(&right.start)
-            .then(left.end.cmp(&right.end))
-    });
+    ranges.sort_by(|left, right| left.start.cmp(&right.start).then(left.end.cmp(&right.end)));
 
     NodeCapabilities {
         runtimes: NodeRuntimeCapabilities {

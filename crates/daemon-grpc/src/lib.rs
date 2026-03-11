@@ -6,6 +6,7 @@ pub mod fungi_daemon_grpc {
 
 use std::collections::HashSet;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -197,6 +198,118 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .remove_incoming_allowed_peer(peer_id)
             .map_err(|e| Status::internal(format!("Failed to remove peer: {}", e)))?;
 
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn get_runtime_config(
+        &self,
+        _request: Request<Empty>,
+    ) -> Result<Response<RuntimeConfigResponse>, Status> {
+        let config = self.inner.get_runtime_config();
+        Ok(Response::new(RuntimeConfigResponse {
+            disable_docker: config.disable_docker,
+            disable_wasmtime: config.disable_wasmtime,
+            allowed_host_paths: config
+                .allowed_host_paths
+                .into_iter()
+                .map(|path| path.to_string_lossy().to_string())
+                .collect(),
+            allowed_ports: config.allowed_ports.into_iter().map(i32::from).collect(),
+            allowed_port_ranges: config
+                .allowed_port_ranges
+                .into_iter()
+                .map(|range| RuntimeAllowedPortRange {
+                    start: i32::from(range.start),
+                    end: i32::from(range.end),
+                })
+                .collect(),
+        }))
+    }
+
+    async fn add_runtime_allowed_host_path(
+        &self,
+        request: Request<RuntimeAllowedHostPathRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let path = PathBuf::from(request.into_inner().path);
+        self.inner
+            .add_runtime_allowed_host_path(path)
+            .map_err(|e| {
+                Status::internal(format!("Failed to add runtime allowed host path: {}", e))
+            })?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn remove_runtime_allowed_host_path(
+        &self,
+        request: Request<RuntimeAllowedHostPathRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let path = PathBuf::from(request.into_inner().path);
+        self.inner
+            .remove_runtime_allowed_host_path(&path)
+            .map_err(|e| {
+                Status::internal(format!("Failed to remove runtime allowed host path: {}", e))
+            })?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn add_runtime_allowed_port(
+        &self,
+        request: Request<RuntimeAllowedPortRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let port = u16::try_from(request.into_inner().port)
+            .map_err(|_| Status::invalid_argument("Invalid port"))?;
+        self.inner
+            .add_runtime_allowed_port(port)
+            .map_err(|e| Status::internal(format!("Failed to add runtime allowed port: {}", e)))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn remove_runtime_allowed_port(
+        &self,
+        request: Request<RuntimeAllowedPortRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let port = u16::try_from(request.into_inner().port)
+            .map_err(|_| Status::invalid_argument("Invalid port"))?;
+        self.inner.remove_runtime_allowed_port(port).map_err(|e| {
+            Status::internal(format!("Failed to remove runtime allowed port: {}", e))
+        })?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn add_runtime_allowed_port_range(
+        &self,
+        request: Request<RuntimeAllowedPortRangeRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let start = u16::try_from(req.start)
+            .map_err(|_| Status::invalid_argument("Invalid range start"))?;
+        let end =
+            u16::try_from(req.end).map_err(|_| Status::invalid_argument("Invalid range end"))?;
+        self.inner
+            .add_runtime_allowed_port_range(start, end)
+            .map_err(|e| {
+                Status::internal(format!("Failed to add runtime allowed port range: {}", e))
+            })?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn remove_runtime_allowed_port_range(
+        &self,
+        request: Request<RuntimeAllowedPortRangeRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let start = u16::try_from(req.start)
+            .map_err(|_| Status::invalid_argument("Invalid range start"))?;
+        let end =
+            u16::try_from(req.end).map_err(|_| Status::invalid_argument("Invalid range end"))?;
+        self.inner
+            .remove_runtime_allowed_port_range(start, end)
+            .map_err(|e| {
+                Status::internal(format!(
+                    "Failed to remove runtime allowed port range: {}",
+                    e
+                ))
+            })?;
         Ok(Response::new(Empty {}))
     }
 

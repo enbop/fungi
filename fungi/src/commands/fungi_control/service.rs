@@ -1,6 +1,7 @@
 use clap::Subcommand;
 use fungi_daemon::{
     DiscoveredService, EnabledRemoteService, NodeCapabilities, RuntimeKind, ServiceInstance,
+    ServicePortProtocol,
 };
 use fungi_daemon_grpc::{
     Request,
@@ -129,20 +130,28 @@ pub(crate) fn read_manifest_yaml_file(path: &str) -> (String, String) {
 
 pub(crate) fn print_service_instance(resp: ServiceInstanceResponse) {
     match serde_json::from_str::<ServiceInstance>(&resp.instance_json) {
-        Ok(instance) => match serde_json::to_string_pretty(&instance) {
-            Ok(pretty) => println!("{}", pretty),
-            Err(error) => fatal(format!("Failed to format service instance: {error}")),
-        },
+        Ok(instance) => {
+            match serde_json::to_string_pretty(&LocalServiceInspectView::from(instance)) {
+                Ok(pretty) => println!("{}", pretty),
+                Err(error) => fatal(format!("Failed to format service instance: {error}")),
+            }
+        }
         Err(error) => fatal(format!("Failed to decode service instance: {error}")),
     }
 }
 
 pub(crate) fn print_service_instances(resp: ListServicesResponse) {
     match serde_json::from_str::<Vec<ServiceInstance>>(&resp.services_json) {
-        Ok(services) => match serde_json::to_string_pretty(&services) {
-            Ok(pretty) => println!("{}", pretty),
-            Err(error) => fatal(format!("Failed to format service list: {error}")),
-        },
+        Ok(services) => {
+            let views = services
+                .into_iter()
+                .map(LocalServiceListEntry::from)
+                .collect::<Vec<_>>();
+            match serde_json::to_string_pretty(&views) {
+                Ok(pretty) => println!("{}", pretty),
+                Err(error) => fatal(format!("Failed to format service list: {error}")),
+            }
+        }
         Err(error) => fatal(format!("Failed to decode service list: {error}")),
     }
 }
@@ -213,6 +222,107 @@ struct RemoteForwardedEndpointView {
     local_host: String,
     local_port: u16,
     protocol: String,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalServiceListEntry {
+    service_name: String,
+    runtime: RuntimeKind,
+    state: String,
+    running: bool,
+    local_endpoints: Vec<LocalServiceEndpointView>,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalServiceInspectView {
+    handle: String,
+    service_name: String,
+    runtime: RuntimeKind,
+    source: String,
+    labels: std::collections::BTreeMap<String, String>,
+    state: String,
+    running: bool,
+    local_endpoints: Vec<LocalServiceEndpointView>,
+    exposed_endpoints: Vec<LocalExposedEndpointView>,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalServiceEndpointView {
+    name: Option<String>,
+    protocol: String,
+    local_host: String,
+    local_port: u16,
+    service_port: u16,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalExposedEndpointView {
+    name: String,
+    protocol: String,
+    local_host: String,
+    local_port: u16,
+    service_port: u16,
+}
+
+impl From<ServiceInstance> for LocalServiceListEntry {
+    fn from(instance: ServiceInstance) -> Self {
+        let local_endpoints = local_endpoint_views(&instance);
+        Self {
+            service_name: instance.name,
+            runtime: instance.runtime,
+            state: instance.status.state,
+            running: instance.status.running,
+            local_endpoints,
+        }
+    }
+}
+
+impl From<ServiceInstance> for LocalServiceInspectView {
+    fn from(instance: ServiceInstance) -> Self {
+        let local_endpoints = local_endpoint_views(&instance);
+        Self {
+            handle: instance.handle,
+            service_name: instance.name,
+            runtime: instance.runtime,
+            source: instance.source,
+            labels: instance.labels,
+            state: instance.status.state,
+            running: instance.status.running,
+            local_endpoints,
+            exposed_endpoints: instance
+                .exposed_endpoints
+                .into_iter()
+                .map(|endpoint| LocalExposedEndpointView {
+                    name: endpoint.name,
+                    protocol: endpoint.protocol,
+                    local_host: "127.0.0.1".to_string(),
+                    local_port: endpoint.host_port,
+                    service_port: endpoint.service_port,
+                })
+                .collect(),
+        }
+    }
+}
+
+fn local_endpoint_views(instance: &ServiceInstance) -> Vec<LocalServiceEndpointView> {
+    instance
+        .ports
+        .iter()
+        .map(|port| LocalServiceEndpointView {
+            name: port.name.clone(),
+            protocol: local_port_protocol_name(port.protocol).to_string(),
+            local_host: "127.0.0.1".to_string(),
+            local_port: port.host_port,
+            service_port: port.service_port,
+        })
+        .collect()
+}
+
+fn local_port_protocol_name(protocol: ServicePortProtocol) -> &'static str {
+    match protocol {
+        ServicePortProtocol::Tcp => "tcp",
+        ServicePortProtocol::Udp => "udp",
+    }
 }
 
 pub(crate) fn print_remote_service_list(

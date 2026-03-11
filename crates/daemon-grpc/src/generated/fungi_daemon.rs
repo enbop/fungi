@@ -36,6 +36,43 @@ pub struct RemoveIncomingAllowedPeerRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RuntimeAllowedHostPathRequest {
+    #[prost(string, tag = "1")]
+    pub path: ::prost::alloc::string::String,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RuntimeAllowedPortRequest {
+    #[prost(int32, tag = "1")]
+    pub port: i32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RuntimeAllowedPortRangeRequest {
+    #[prost(int32, tag = "1")]
+    pub start: i32,
+    #[prost(int32, tag = "2")]
+    pub end: i32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RuntimeAllowedPortRange {
+    #[prost(int32, tag = "1")]
+    pub start: i32,
+    #[prost(int32, tag = "2")]
+    pub end: i32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RuntimeConfigResponse {
+    #[prost(bool, tag = "1")]
+    pub disable_docker: bool,
+    #[prost(bool, tag = "2")]
+    pub disable_wasmtime: bool,
+    #[prost(string, repeated, tag = "3")]
+    pub allowed_host_paths: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(int32, repeated, tag = "4")]
+    pub allowed_ports: ::prost::alloc::vec::Vec<i32>,
+    #[prost(message, repeated, tag = "5")]
+    pub allowed_port_ranges: ::prost::alloc::vec::Vec<RuntimeAllowedPortRange>,
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FileTransferServiceEnabledResponse {
     #[prost(bool, tag = "1")]
@@ -815,6 +852,190 @@ pub mod fungi_daemon_client {
                     GrpcMethod::new(
                         "fungi_daemon.FungiDaemon",
                         "RemoveIncomingAllowedPeer",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        /// Returns runtime enablement flags and the current shared safety boundary.
+        pub async fn get_runtime_config(
+            &mut self,
+            request: impl tonic::IntoRequest<super::Empty>,
+        ) -> std::result::Result<
+            tonic::Response<super::RuntimeConfigResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/GetRuntimeConfig",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "GetRuntimeConfig"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Adds a host path root to the shared runtime safety boundary.
+        pub async fn add_runtime_allowed_host_path(
+            &mut self,
+            request: impl tonic::IntoRequest<super::RuntimeAllowedHostPathRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/AddRuntimeAllowedHostPath",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "fungi_daemon.FungiDaemon",
+                        "AddRuntimeAllowedHostPath",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        /// Removes a host path root from the shared runtime safety boundary.
+        pub async fn remove_runtime_allowed_host_path(
+            &mut self,
+            request: impl tonic::IntoRequest<super::RuntimeAllowedHostPathRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/RemoveRuntimeAllowedHostPath",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "fungi_daemon.FungiDaemon",
+                        "RemoveRuntimeAllowedHostPath",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        /// Adds a single TCP port to the shared runtime safety boundary.
+        pub async fn add_runtime_allowed_port(
+            &mut self,
+            request: impl tonic::IntoRequest<super::RuntimeAllowedPortRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/AddRuntimeAllowedPort",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("fungi_daemon.FungiDaemon", "AddRuntimeAllowedPort"),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        /// Removes a single TCP port from the shared runtime safety boundary.
+        pub async fn remove_runtime_allowed_port(
+            &mut self,
+            request: impl tonic::IntoRequest<super::RuntimeAllowedPortRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/RemoveRuntimeAllowedPort",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "fungi_daemon.FungiDaemon",
+                        "RemoveRuntimeAllowedPort",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        /// Adds a TCP port range to the shared runtime safety boundary.
+        pub async fn add_runtime_allowed_port_range(
+            &mut self,
+            request: impl tonic::IntoRequest<super::RuntimeAllowedPortRangeRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/AddRuntimeAllowedPortRange",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "fungi_daemon.FungiDaemon",
+                        "AddRuntimeAllowedPortRange",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        /// Removes a TCP port range from the shared runtime safety boundary.
+        pub async fn remove_runtime_allowed_port_range(
+            &mut self,
+            request: impl tonic::IntoRequest<super::RuntimeAllowedPortRangeRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/RemoveRuntimeAllowedPortRange",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "fungi_daemon.FungiDaemon",
+                        "RemoveRuntimeAllowedPortRange",
                     ),
                 );
             self.inner.unary(req, path, codec).await
@@ -1974,6 +2195,44 @@ pub mod fungi_daemon_server {
             &self,
             request: tonic::Request<super::RemoveIncomingAllowedPeerRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
+        /// Returns runtime enablement flags and the current shared safety boundary.
+        async fn get_runtime_config(
+            &self,
+            request: tonic::Request<super::Empty>,
+        ) -> std::result::Result<
+            tonic::Response<super::RuntimeConfigResponse>,
+            tonic::Status,
+        >;
+        /// Adds a host path root to the shared runtime safety boundary.
+        async fn add_runtime_allowed_host_path(
+            &self,
+            request: tonic::Request<super::RuntimeAllowedHostPathRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
+        /// Removes a host path root from the shared runtime safety boundary.
+        async fn remove_runtime_allowed_host_path(
+            &self,
+            request: tonic::Request<super::RuntimeAllowedHostPathRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
+        /// Adds a single TCP port to the shared runtime safety boundary.
+        async fn add_runtime_allowed_port(
+            &self,
+            request: tonic::Request<super::RuntimeAllowedPortRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
+        /// Removes a single TCP port from the shared runtime safety boundary.
+        async fn remove_runtime_allowed_port(
+            &self,
+            request: tonic::Request<super::RuntimeAllowedPortRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
+        /// Adds a TCP port range to the shared runtime safety boundary.
+        async fn add_runtime_allowed_port_range(
+            &self,
+            request: tonic::Request<super::RuntimeAllowedPortRangeRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
+        /// Removes a TCP port range from the shared runtime safety boundary.
+        async fn remove_runtime_allowed_port_range(
+            &self,
+            request: tonic::Request<super::RuntimeAllowedPortRangeRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
         /// Indicates whether the embedded file transfer service is running.
         async fn get_file_transfer_service_enabled(
             &self,
@@ -2658,6 +2917,348 @@ pub mod fungi_daemon_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = RemoveIncomingAllowedPeerSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/GetRuntimeConfig" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetRuntimeConfigSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
+                    for GetRuntimeConfigSvc<T> {
+                        type Response = super::RuntimeConfigResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::Empty>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::get_runtime_config(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetRuntimeConfigSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/AddRuntimeAllowedHostPath" => {
+                    #[allow(non_camel_case_types)]
+                    struct AddRuntimeAllowedHostPathSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::RuntimeAllowedHostPathRequest>
+                    for AddRuntimeAllowedHostPathSvc<T> {
+                        type Response = super::Empty;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::RuntimeAllowedHostPathRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::add_runtime_allowed_host_path(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = AddRuntimeAllowedHostPathSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/RemoveRuntimeAllowedHostPath" => {
+                    #[allow(non_camel_case_types)]
+                    struct RemoveRuntimeAllowedHostPathSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::RuntimeAllowedHostPathRequest>
+                    for RemoveRuntimeAllowedHostPathSvc<T> {
+                        type Response = super::Empty;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::RuntimeAllowedHostPathRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::remove_runtime_allowed_host_path(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = RemoveRuntimeAllowedHostPathSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/AddRuntimeAllowedPort" => {
+                    #[allow(non_camel_case_types)]
+                    struct AddRuntimeAllowedPortSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::RuntimeAllowedPortRequest>
+                    for AddRuntimeAllowedPortSvc<T> {
+                        type Response = super::Empty;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::RuntimeAllowedPortRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::add_runtime_allowed_port(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = AddRuntimeAllowedPortSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/RemoveRuntimeAllowedPort" => {
+                    #[allow(non_camel_case_types)]
+                    struct RemoveRuntimeAllowedPortSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::RuntimeAllowedPortRequest>
+                    for RemoveRuntimeAllowedPortSvc<T> {
+                        type Response = super::Empty;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::RuntimeAllowedPortRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::remove_runtime_allowed_port(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = RemoveRuntimeAllowedPortSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/AddRuntimeAllowedPortRange" => {
+                    #[allow(non_camel_case_types)]
+                    struct AddRuntimeAllowedPortRangeSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::RuntimeAllowedPortRangeRequest>
+                    for AddRuntimeAllowedPortRangeSvc<T> {
+                        type Response = super::Empty;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::RuntimeAllowedPortRangeRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::add_runtime_allowed_port_range(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = AddRuntimeAllowedPortRangeSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/RemoveRuntimeAllowedPortRange" => {
+                    #[allow(non_camel_case_types)]
+                    struct RemoveRuntimeAllowedPortRangeSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<
+                        T: FungiDaemon,
+                    > tonic::server::UnaryService<super::RuntimeAllowedPortRangeRequest>
+                    for RemoveRuntimeAllowedPortRangeSvc<T> {
+                        type Response = super::Empty;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::RuntimeAllowedPortRangeRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::remove_runtime_allowed_port_range(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = RemoveRuntimeAllowedPortRangeSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

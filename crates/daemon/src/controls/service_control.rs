@@ -147,7 +147,9 @@ impl ServiceControlProtocolControl {
                 Self::CONNECT_SNIFF_WAIT,
             )
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to open service-control stream to peer {peer_id}: {e}"))?;
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to open service-control stream to peer {peer_id}: {e}")
+            })?;
 
         write_frame(&mut stream, &request).await.map_err(|e| {
             anyhow::anyhow!("Failed to write service-control request to peer {peer_id}: {e}")
@@ -230,9 +232,9 @@ impl ServiceControlProtocolControl {
                                 services_json,
                             );
                         }
-                        Err(error) => Err(anyhow::anyhow!(
-                            "Failed to serialize service list: {error}"
-                        )),
+                        Err(error) => {
+                            Err(anyhow::anyhow!("Failed to serialize service list: {error}"))
+                        }
                     },
                     Err(error) => Err(error),
                 }
@@ -278,19 +280,17 @@ impl ServiceControlProtocolControl {
 
         match result {
             Ok(service_name) => ServiceControlResponse::success(request_id, service_name),
-            Err(error) => ServiceControlResponse::error(
-                request_id,
-                "execution_failed",
-                error.to_string(),
-            ),
+            Err(error) => {
+                ServiceControlResponse::error(request_id, "execution_failed", error.to_string())
+            }
         }
     }
 
     fn manifest_resolution_policy(&self) -> ManifestResolutionPolicy {
         let config = self.config.lock();
         ManifestResolutionPolicy {
-            allowed_tcp_ports: config.docker.allowed_ports.clone(),
-            allowed_tcp_port_ranges: config.docker.allowed_port_ranges.clone(),
+            allowed_tcp_ports: config.runtime.allowed_ports.clone(),
+            allowed_tcp_port_ranges: config.runtime.allowed_port_ranges.clone(),
         }
     }
 

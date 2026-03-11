@@ -45,11 +45,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     fs::create_dir_all(&args.mount_dir)?;
-    let provider = fungi_daemon::runtime::WasmtimeRuntimeProvider::new(runtime_root, args.launcher);
+    let provider = fungi_daemon::runtime::WasmtimeRuntimeProvider::new(
+        runtime_root,
+        args.launcher,
+        vec![args.mount_dir.clone()],
+    );
     let runtime = RuntimeControl::with_wasmtime_provider(
         provider,
         None,
         args.mount_dir.join("services-state.json"),
+        true,
     )?;
 
     let source = if let Some(path) = args.wasm_path.clone() {

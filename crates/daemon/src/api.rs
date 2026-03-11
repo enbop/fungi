@@ -1,11 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::TcpListener as StdTcpListener;
 use std::time::Duration;
-use std::{net::IpAddr, path::PathBuf};
+use std::{
+    net::IpAddr,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Result, bail};
 use fungi_config::address_book::PeerInfo;
 use fungi_config::file_transfer::{FileTransferClient, FtpProxy, WebdavProxy};
+use fungi_config::runtime::{AllowedPortRange, Runtime as RuntimeConfig};
 use fungi_swarm::PeerConnections;
 use libp2p::PeerId;
 use libp2p::swarm::ConnectionId;
@@ -621,18 +625,17 @@ impl FungiDaemon {
                 allocate_local_forward_port(endpoint.service_port, &reserved_local_ports)?;
             reserved_local_ports.insert(local_port);
 
-            self.tcp_tunneling_control()
-                .add_forwarding_rule(fungi_config::tcp_tunneling::ForwardingRule {
-                    local_host: "127.0.0.1".to_string(),
-                    local_port,
-                    remote_peer_id: peer_id_string.clone(),
-                    remote_protocol: Some(endpoint.protocol.clone()),
-                    remote_port: 0,
-                    remote_service_id: Some(service.service_id.clone()),
-                    remote_service_name: Some(service.service_name.clone()),
-                    remote_service_port_name: Some(endpoint.name.clone()),
-                })
-                .await?;
+            self.add_tcp_forwarding_rule_with_details(
+                "127.0.0.1".to_string(),
+                local_port,
+                peer_id_string.clone(),
+                0,
+                Some(endpoint.protocol.clone()),
+                Some(service.service_id.clone()),
+                Some(service.service_name.clone()),
+                Some(endpoint.name.clone()),
+            )
+            .await?;
 
             enabled_endpoints.push(EnabledRemoteServiceEndpoint {
                 name: endpoint.name,
@@ -759,7 +762,49 @@ impl FungiDaemon {
     }
 
     pub fn docker_enabled(&self) -> bool {
-        self.config().lock().docker.enabled
+        self.config().lock().runtime.docker_enabled()
+    }
+
+    pub fn get_runtime_config(&self) -> RuntimeConfig {
+        self.config().lock().get_runtime_config()
+    }
+
+    pub fn add_runtime_allowed_host_path(&self, path: PathBuf) -> Result<()> {
+        let current_config = self.config().lock().clone();
+        let updated_config = current_config.add_runtime_allowed_host_path(path)?;
+        self.apply_runtime_config_update(updated_config)
+    }
+
+    pub fn remove_runtime_allowed_host_path(&self, path: &Path) -> Result<()> {
+        let current_config = self.config().lock().clone();
+        let updated_config = current_config.remove_runtime_allowed_host_path(path)?;
+        self.apply_runtime_config_update(updated_config)
+    }
+
+    pub fn add_runtime_allowed_port(&self, port: u16) -> Result<()> {
+        let current_config = self.config().lock().clone();
+        let updated_config = current_config.add_runtime_allowed_port(port)?;
+        self.apply_runtime_config_update(updated_config)
+    }
+
+    pub fn remove_runtime_allowed_port(&self, port: u16) -> Result<()> {
+        let current_config = self.config().lock().clone();
+        let updated_config = current_config.remove_runtime_allowed_port(port)?;
+        self.apply_runtime_config_update(updated_config)
+    }
+
+    pub fn add_runtime_allowed_port_range(&self, start: u16, end: u16) -> Result<()> {
+        let current_config = self.config().lock().clone();
+        let updated_config =
+            current_config.add_runtime_allowed_port_range(AllowedPortRange { start, end })?;
+        self.apply_runtime_config_update(updated_config)
+    }
+
+    pub fn remove_runtime_allowed_port_range(&self, start: u16, end: u16) -> Result<()> {
+        let current_config = self.config().lock().clone();
+        let updated_config =
+            current_config.remove_runtime_allowed_port_range(&AllowedPortRange { start, end })?;
+        self.apply_runtime_config_update(updated_config)
     }
 
     async fn sync_service_endpoint_listeners_by_handle(
@@ -812,10 +857,6 @@ impl FungiDaemon {
         Ok(())
     }
 
-    pub fn get_docker_config(&self) -> fungi_config::docker::Docker {
-        self.config().lock().docker.clone()
-    }
-
     pub fn supports_runtime(&self, runtime: RuntimeKind) -> bool {
         self.runtime_control().supports(runtime)
     }
@@ -833,9 +874,19 @@ impl FungiDaemon {
         let config_handle = self.config();
         let config = config_handle.lock();
         ManifestResolutionPolicy {
-            allowed_tcp_ports: config.docker.allowed_ports.clone(),
-            allowed_tcp_port_ranges: config.docker.allowed_port_ranges.clone(),
+            allowed_tcp_ports: config.runtime.allowed_ports.clone(),
+            allowed_tcp_port_ranges: config.runtime.allowed_port_ranges.clone(),
         }
+    }
+
+    fn apply_runtime_config_update(&self, updated_config: fungi_config::FungiConfig) -> Result<()> {
+        if let Some(docker_control) = self.docker_control() {
+            docker_control.update_runtime_config(&updated_config.runtime)?;
+        }
+        self.runtime_control()
+            .update_allowed_host_paths(updated_config.runtime.allowed_host_paths.clone());
+        *self.config().lock() = updated_config;
+        Ok(())
     }
 
     pub async fn deploy_service(&self, manifest: ServiceManifest) -> Result<ServiceInstance> {

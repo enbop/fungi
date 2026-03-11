@@ -68,6 +68,9 @@ pub enum Commands {
     /// Manage incoming allowed peers
     #[command(subcommand, visible_alias = "ap")]
     AllowedPeers(fungi_control::AllowedPeerCommands),
+    /// Manage runtime safety boundary settings
+    #[command(subcommand, visible_alias = "sec")]
+    Security(fungi_control::SecurityCommands),
     /// Manage file transfer service
     #[command(subcommand, visible_alias = "fs")]
     FtService(fungi_control::FtServiceCommands),

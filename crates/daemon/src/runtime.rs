@@ -3,14 +3,14 @@ use std::{
     fs::{self, OpenOptions},
     io::Read,
     net::{TcpListener as StdTcpListener, UdpSocket as StdUdpSocket},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     process::Stdio,
     sync::Arc,
 };
 
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
-use fungi_config::docker::AllowedPortRange;
+use fungi_config::runtime::AllowedPortRange;
 use fungi_docker_agent::{ContainerSpec, LogsOptions, PortProtocol};
 use fungi_util::protocols::service_port_protocol;
 use parking_lot::Mutex;
@@ -121,6 +121,10 @@ pub struct ServiceInstance {
     pub name: String,
     pub source: String,
     pub labels: BTreeMap<String, String>,
+    #[serde(default)]
+    pub ports: Vec<ServicePort>,
+    #[serde(default)]
+    pub exposed_endpoints: Vec<ServiceExposeEndpointBinding>,
     pub status: ServiceStatus,
 }
 
@@ -693,6 +697,7 @@ impl RuntimeProvider for DockerRuntimeProvider {
 pub struct WasmtimeRuntimeProvider {
     runtime_root: PathBuf,
     launcher_path: PathBuf,
+    allowed_host_paths: Arc<Mutex<Vec<PathBuf>>>,
     services: Arc<Mutex<HashMap<String, WasmtimeServiceState>>>,
 }
 
@@ -707,12 +712,21 @@ struct WasmtimeServiceState {
 }
 
 impl WasmtimeRuntimeProvider {
-    pub fn new(runtime_root: PathBuf, launcher_path: PathBuf) -> Self {
+    pub fn new(
+        runtime_root: PathBuf,
+        launcher_path: PathBuf,
+        allowed_host_paths: Vec<PathBuf>,
+    ) -> Self {
         Self {
             runtime_root,
             launcher_path,
+            allowed_host_paths: Arc::new(Mutex::new(allowed_host_paths)),
             services: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    pub fn update_allowed_host_paths(&self, allowed_host_paths: Vec<PathBuf>) {
+        *self.allowed_host_paths.lock() = allowed_host_paths;
     }
 
     pub fn has_service(&self, handle: &str) -> bool {
@@ -720,7 +734,9 @@ impl WasmtimeRuntimeProvider {
     }
 
     async fn restore(&self, manifest: &ServiceManifest) -> Result<()> {
-        let state = build_wasmtime_state(&self.runtime_root, manifest, false).await?;
+        let allowed_host_paths = self.allowed_host_paths.lock().clone();
+        let state =
+            build_wasmtime_state(&self.runtime_root, &allowed_host_paths, manifest, false).await?;
         let mut services = self.services.lock();
         services.entry(manifest.name.clone()).or_insert(state);
         Ok(())
@@ -734,7 +750,9 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
     }
 
     async fn deploy(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
-        let state = build_wasmtime_state(&self.runtime_root, manifest, true).await?;
+        let allowed_host_paths = self.allowed_host_paths.lock().clone();
+        let state =
+            build_wasmtime_state(&self.runtime_root, &allowed_host_paths, manifest, true).await?;
 
         {
             let mut services = self.services.lock();
@@ -831,9 +849,9 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
             services.remove(handle)
         };
 
-        let service_dir = state.map(|state| state.service_dir).unwrap_or_else(|| {
-            self.runtime_root.join("wasmtime").join(handle)
-        });
+        let service_dir = state
+            .map(|state| state.service_dir)
+            .unwrap_or_else(|| self.runtime_root.join("wasmtime").join(handle));
 
         if service_dir.exists() {
             fs::remove_dir_all(&service_dir).with_context(|| {
@@ -884,6 +902,7 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
 pub struct RuntimeControl {
     docker: Option<DockerRuntimeProvider>,
     wasmtime: WasmtimeRuntimeProvider,
+    wasmtime_enabled: bool,
     service_index: Arc<Mutex<HashMap<String, RuntimeKind>>>,
     service_manifests: Arc<Mutex<HashMap<String, ServiceManifest>>>,
     service_state: Arc<Mutex<ServiceStateStore>>,
@@ -895,10 +914,13 @@ impl RuntimeControl {
         launcher_path: PathBuf,
         docker: Option<DockerControl>,
         service_state_file: PathBuf,
+        allowed_host_paths: Vec<PathBuf>,
+        wasmtime_enabled: bool,
     ) -> Result<Self> {
         Ok(Self {
             docker: docker.map(DockerRuntimeProvider::new),
-            wasmtime: WasmtimeRuntimeProvider::new(runtime_root, launcher_path),
+            wasmtime: WasmtimeRuntimeProvider::new(runtime_root, launcher_path, allowed_host_paths),
+            wasmtime_enabled,
             service_index: Arc::new(Mutex::new(HashMap::new())),
             service_manifests: Arc::new(Mutex::new(HashMap::new())),
             service_state: Arc::new(Mutex::new(ServiceStateStore::load(service_state_file)?)),
@@ -909,10 +931,12 @@ impl RuntimeControl {
         wasmtime: WasmtimeRuntimeProvider,
         docker: Option<DockerControl>,
         service_state_file: PathBuf,
+        wasmtime_enabled: bool,
     ) -> Result<Self> {
         Ok(Self {
             docker: docker.map(DockerRuntimeProvider::new),
             wasmtime,
+            wasmtime_enabled,
             service_index: Arc::new(Mutex::new(HashMap::new())),
             service_manifests: Arc::new(Mutex::new(HashMap::new())),
             service_state: Arc::new(Mutex::new(ServiceStateStore::load(service_state_file)?)),
@@ -922,11 +946,16 @@ impl RuntimeControl {
     pub fn supports(&self, runtime: RuntimeKind) -> bool {
         match runtime {
             RuntimeKind::Docker => self.docker.is_some(),
-            RuntimeKind::Wasmtime => true,
+            RuntimeKind::Wasmtime => self.wasmtime_enabled,
         }
     }
 
+    pub fn update_allowed_host_paths(&self, allowed_host_paths: Vec<PathBuf>) {
+        self.wasmtime.update_allowed_host_paths(allowed_host_paths);
+    }
+
     pub async fn deploy(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
+        self.ensure_runtime_enabled(manifest.runtime)?;
         {
             let services = self.service_index.lock();
             if services.contains_key(&manifest.name) {
@@ -946,7 +975,7 @@ impl RuntimeControl {
             .lock()
             .insert(manifest.name.clone(), manifest.clone());
         self.persist_service(manifest, DesiredServiceState::Stopped)?;
-        Ok(instance)
+        Ok(enrich_instance_from_manifest(instance, manifest))
     }
 
     pub async fn deploy_manifest_yaml(
@@ -978,6 +1007,7 @@ impl RuntimeControl {
     }
 
     pub async fn start(&self, runtime: RuntimeKind, handle: &str) -> Result<()> {
+        self.ensure_runtime_enabled(runtime)?;
         self.ensure_runtime_service(runtime, handle).await?;
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.start(handle).await,
@@ -1115,7 +1145,7 @@ impl RuntimeControl {
                     missing_instance_from_manifest(&manifest)
                 }
             };
-            services.push(instance);
+            services.push(enrich_instance_from_manifest(instance, &manifest));
         }
 
         services.sort_by(|left, right| left.name.cmp(&right.name));
@@ -1125,15 +1155,25 @@ impl RuntimeControl {
     pub async fn inspect(&self, runtime: RuntimeKind, handle: &str) -> Result<ServiceInstance> {
         if let Err(error) = self.ensure_runtime_service(runtime, handle).await {
             if let Some(manifest) = self.get_service_manifest(handle) {
-                log::warn!("Failed to restore service '{}' for inspect: {}", handle, error);
+                log::warn!(
+                    "Failed to restore service '{}' for inspect: {}",
+                    handle,
+                    error
+                );
                 return Ok(missing_instance_from_manifest(&manifest));
             }
             return Err(error);
         }
 
-        match runtime {
+        let instance = match runtime {
             RuntimeKind::Docker => self.docker_provider()?.inspect(handle).await,
             RuntimeKind::Wasmtime => self.wasmtime.inspect(handle).await,
+        }?;
+
+        if let Some(manifest) = self.get_service_manifest(handle) {
+            Ok(enrich_instance_from_manifest(instance, &manifest))
+        } else {
+            Ok(instance)
         }
     }
 
@@ -1143,6 +1183,7 @@ impl RuntimeControl {
         handle: &str,
         options: &ServiceLogsOptions,
     ) -> Result<ServiceLogs> {
+        self.ensure_runtime_enabled(runtime)?;
         self.ensure_runtime_service(runtime, handle).await?;
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.logs(handle, options).await,
@@ -1166,6 +1207,7 @@ impl RuntimeControl {
                 .insert(manifest.name.clone(), manifest.clone());
 
             if manifest.runtime == RuntimeKind::Wasmtime
+                && self.wasmtime_enabled
                 && let Err(error) = self.wasmtime.restore(&manifest).await
             {
                 log::warn!(
@@ -1193,6 +1235,22 @@ impl RuntimeControl {
         self.docker
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("docker runtime is not enabled in config"))
+    }
+
+    fn ensure_runtime_enabled(&self, runtime: RuntimeKind) -> Result<()> {
+        match runtime {
+            RuntimeKind::Docker => {
+                if self.docker.is_none() {
+                    bail!("docker runtime is not available");
+                }
+            }
+            RuntimeKind::Wasmtime => {
+                if !self.wasmtime_enabled {
+                    bail!("wasmtime runtime is disabled in config");
+                }
+            }
+        }
+        Ok(())
     }
 
     async fn ensure_runtime_service(&self, runtime: RuntimeKind, handle: &str) -> Result<()> {
@@ -1316,6 +1374,31 @@ fn ensure_wasmtime_mount_dirs(manifest: &ServiceManifest) -> Result<()> {
     Ok(())
 }
 
+fn validate_allowed_host_paths(
+    manifest: &ServiceManifest,
+    allowed_host_paths: &[PathBuf],
+) -> Result<()> {
+    let normalized_roots = allowed_host_paths
+        .iter()
+        .map(|path| normalize_absolute_path(path))
+        .collect::<Result<Vec<_>>>()?;
+
+    for mount in &manifest.mounts {
+        let host_path = normalize_absolute_path(&mount.host_path)?;
+        let allowed = normalized_roots
+            .iter()
+            .any(|allowed_root| host_path.starts_with(allowed_root));
+        if !allowed {
+            bail!(
+                "wasmtime host path is outside allowed roots: {}",
+                mount.host_path.display()
+            );
+        }
+    }
+
+    Ok(())
+}
+
 async fn stage_wasmtime_component(
     manifest: &ServiceManifest,
     service_dir: &Path,
@@ -1355,10 +1438,12 @@ async fn stage_wasmtime_component(
 
 async fn build_wasmtime_state(
     runtime_root: &Path,
+    allowed_host_paths: &[PathBuf],
     manifest: &ServiceManifest,
     restage_component: bool,
 ) -> Result<WasmtimeServiceState> {
     ensure_wasmtime_manifest(manifest)?;
+    validate_allowed_host_paths(manifest, allowed_host_paths)?;
 
     let service_dir = runtime_root.join("wasmtime").join(&manifest.name);
     fs::create_dir_all(&service_dir).with_context(|| {
@@ -1449,6 +1534,8 @@ fn map_docker_instance(details: fungi_docker_agent::ContainerDetails) -> Service
         name: details.name,
         source: details.image,
         labels: details.labels,
+        ports: Vec::new(),
+        exposed_endpoints: Vec::new(),
         status: ServiceStatus {
             state: details.state.status,
             running: details.state.running,
@@ -1476,6 +1563,8 @@ fn map_wasmtime_instance(handle: &str, state: &WasmtimeServiceState) -> ServiceI
         name: state.manifest.name.clone(),
         source: state.source_display.clone(),
         labels: state.manifest.labels.clone(),
+        ports: Vec::new(),
+        exposed_endpoints: Vec::new(),
         status: ServiceStatus {
             state: status,
             running,
@@ -1490,11 +1579,22 @@ fn missing_instance_from_manifest(manifest: &ServiceManifest) -> ServiceInstance
         name: manifest.name.clone(),
         source: source_display(&manifest.source),
         labels: manifest.labels.clone(),
+        ports: manifest.ports.clone(),
+        exposed_endpoints: service_expose_endpoint_bindings(manifest),
         status: ServiceStatus {
             state: "missing".to_string(),
             running: false,
         },
     }
+}
+
+fn enrich_instance_from_manifest(
+    mut instance: ServiceInstance,
+    manifest: &ServiceManifest,
+) -> ServiceInstance {
+    instance.ports = manifest.ports.clone();
+    instance.exposed_endpoints = service_expose_endpoint_bindings(manifest);
+    instance
 }
 
 fn source_display(source: &ServiceSource) -> String {
@@ -1503,6 +1603,26 @@ fn source_display(source: &ServiceSource) -> String {
         ServiceSource::WasmtimeFile { component } => component.display().to_string(),
         ServiceSource::WasmtimeUrl { url } => url.clone(),
     }
+}
+
+fn normalize_absolute_path(path: &Path) -> Result<PathBuf> {
+    if !path.is_absolute() {
+        bail!("host path must be absolute: {}", path.display());
+    }
+
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::RootDir => normalized.push(component.as_os_str()),
+            Component::Normal(part) => normalized.push(part),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::Prefix(_) => normalized.push(component.as_os_str()),
+        }
+    }
+    Ok(normalized)
 }
 
 fn tail_lines(text: &str, tail: Option<&str>) -> String {
@@ -1619,7 +1739,11 @@ mod tests {
         let component = temp_dir.path().join("demo.wasm");
         fs::write(&component, b"wasm-bytes").unwrap();
 
-        let provider = WasmtimeRuntimeProvider::new(temp_dir.path().join("runtime"), launcher);
+        let provider = WasmtimeRuntimeProvider::new(
+            temp_dir.path().join("runtime"),
+            launcher,
+            vec![temp_dir.path().to_path_buf()],
+        );
         let manifest = ServiceManifest {
             name: "demo-service".into(),
             runtime: RuntimeKind::Wasmtime,
@@ -1730,7 +1854,11 @@ spec:
         let launcher = create_fake_launcher(temp_dir.path()).unwrap();
         let server = spawn_http_server(b"downloaded-wasm".to_vec()).await;
 
-        let provider = WasmtimeRuntimeProvider::new(temp_dir.path().join("runtime"), launcher);
+        let provider = WasmtimeRuntimeProvider::new(
+            temp_dir.path().join("runtime"),
+            launcher,
+            vec![temp_dir.path().to_path_buf()],
+        );
         let manifest = ServiceManifest {
             name: "download-service".into(),
             runtime: RuntimeKind::Wasmtime,

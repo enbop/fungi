@@ -171,7 +171,7 @@ impl FungiDaemon {
         let ftc_control = FileTransferClientsControl::new(swarm_control.clone());
         Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
 
-        let docker_control = DockerControl::from_config(&config.docker)?;
+        let docker_control = DockerControl::from_config(&config.runtime)?;
         let shared_config = Arc::new(Mutex::new(config.clone()));
         let fungi_home = config
             .config_file_path()
@@ -189,6 +189,8 @@ impl FungiDaemon {
                 .map_err(|e| anyhow::anyhow!("Failed to resolve current executable: {e}"))?,
             docker_control.clone(),
             fungi_home.join("services-state.json"),
+            config.runtime.allowed_host_paths.clone(),
+            config.runtime.wasmtime_enabled(),
         )?;
         runtime_control.restore_persisted_state().await?;
         let service_discovery_control = ServiceDiscoveryControl::new(
@@ -245,7 +247,7 @@ impl FungiDaemon {
             proxy_ftp_task: Arc::new(Mutex::new(proxy_ftp_task)),
             proxy_webdav_task: Arc::new(Mutex::new(proxy_webdav_task)),
         };
-        Ok(Self {
+        let daemon = Self {
             config: shared_config,
             address_book_config: Arc::new(Mutex::new(address_book_config)),
             args,
@@ -260,7 +262,11 @@ impl FungiDaemon {
             node_capabilities_control,
             service_control_protocol_control,
             task_handles,
-        })
+        };
+
+        daemon.restore_service_endpoint_listeners().await?;
+
+        Ok(daemon)
     }
 
     pub async fn wait_all(self) {
@@ -280,6 +286,50 @@ impl FungiDaemon {
         {
             log::warn!("Failed to add file transfer service: {e}");
         }
+    }
+
+    async fn restore_service_endpoint_listeners(&self) -> Result<()> {
+        let mut listening_rules = self.tcp_tunneling_control.get_listening_rules();
+
+        for service in self.runtime_control.list_services().await? {
+            if !service.status.running {
+                continue;
+            }
+
+            for endpoint in service.exposed_endpoints {
+                let already_present = listening_rules.iter().any(|(_, rule)| {
+                    rule.host == "127.0.0.1"
+                        && rule.port == endpoint.host_port
+                        && rule.protocol.as_deref() == Some(endpoint.protocol.as_str())
+                });
+                if already_present {
+                    continue;
+                }
+
+                let rule = fungi_config::tcp_tunneling::ListeningRule {
+                    host: "127.0.0.1".to_string(),
+                    port: endpoint.host_port,
+                    protocol: Some(endpoint.protocol),
+                };
+
+                match self
+                    .tcp_tunneling_control
+                    .add_listening_rule(rule.clone())
+                    .await
+                {
+                    Ok(rule_id) => listening_rules.push((rule_id, rule)),
+                    Err(error) => {
+                        log::warn!(
+                            "Failed to restore service endpoint listener on 127.0.0.1:{}: {}",
+                            endpoint.host_port,
+                            error
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn init_ftc(clients: Vec<FTCConfig>, ftc_control: FileTransferClientsControl) {

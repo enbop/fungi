@@ -31,6 +31,30 @@ service FungiDaemon {
   rpc RemoveIncomingAllowedPeer(RemoveIncomingAllowedPeerRequest)
       returns (Empty) {}
 
+    // Returns runtime enablement flags and the current shared safety boundary.
+    rpc GetRuntimeConfig(Empty) returns (RuntimeConfigResponse) {}
+
+    // Adds a host path root to the shared runtime safety boundary.
+    rpc AddRuntimeAllowedHostPath(RuntimeAllowedHostPathRequest) returns (Empty) {}
+
+    // Removes a host path root from the shared runtime safety boundary.
+    rpc RemoveRuntimeAllowedHostPath(RuntimeAllowedHostPathRequest)
+      returns (Empty) {}
+
+    // Adds a single TCP port to the shared runtime safety boundary.
+    rpc AddRuntimeAllowedPort(RuntimeAllowedPortRequest) returns (Empty) {}
+
+    // Removes a single TCP port from the shared runtime safety boundary.
+    rpc RemoveRuntimeAllowedPort(RuntimeAllowedPortRequest) returns (Empty) {}
+
+    // Adds a TCP port range to the shared runtime safety boundary.
+    rpc AddRuntimeAllowedPortRange(RuntimeAllowedPortRangeRequest)
+      returns (Empty) {}
+
+    // Removes a TCP port range from the shared runtime safety boundary.
+    rpc RemoveRuntimeAllowedPortRange(RuntimeAllowedPortRangeRequest)
+      returns (Empty) {}
+
   // Indicates whether the embedded file transfer service is running.
   rpc GetFileTransferServiceEnabled(Empty)
       returns (FileTransferServiceEnabledResponse) {}
@@ -195,6 +219,28 @@ message IncomingAllowedPeersListResponse { repeated PeerInfo peers = 1; }
 message AddIncomingAllowedPeerRequest { string peer_id = 1; }
 
 message RemoveIncomingAllowedPeerRequest { string peer_id = 1; }
+
+message RuntimeAllowedHostPathRequest { string path = 1; }
+
+message RuntimeAllowedPortRequest { int32 port = 1; }
+
+message RuntimeAllowedPortRangeRequest {
+  int32 start = 1;
+  int32 end = 2;
+}
+
+message RuntimeAllowedPortRange {
+  int32 start = 1;
+  int32 end = 2;
+}
+
+message RuntimeConfigResponse {
+  bool disable_docker = 1;
+  bool disable_wasmtime = 2;
+  repeated string allowed_host_paths = 3;
+  repeated int32 allowed_ports = 4;
+  repeated RuntimeAllowedPortRange allowed_port_ranges = 5;
+}
 
 message FileTransferServiceEnabledResponse { bool enabled = 1; }
 
