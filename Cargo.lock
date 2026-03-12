@@ -1808,6 +1808,7 @@ dependencies = [
  "anyhow",
  "env_logger 0.11.8",
  "log",
+ "serde_json",
  "tempfile",
 ]
 

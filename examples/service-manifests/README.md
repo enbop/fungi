@@ -12,17 +12,25 @@ Documentation:
 Included examples:
 
 - `filebrowser.service.yaml` for the Docker runtime
-- `spore-box.service.yaml` for the Wasmtime runtime
+- `filebrowser-lite-wasi.service.yaml` for the Wasmtime runtime
 - `run-filebrowser-example.sh` to run the Docker example end to end
-- `run-spore-box-example.sh` to run the Wasmtime example end to end
+- `run-filebrowser-lite-wasi-example.sh` to run the Wasmtime example end to end
+
+The WASI example now tracks `github.com/enbop/filebrowser-lite` and downloads:
+
+```bash
+https://github.com/enbop/filebrowser-lite/releases/latest/download/filebrowser-lite-wasi.wasm
+```
+
+It expects a `wasmtime serve` compatible component and serves the embedded File Browser frontend from a single `.wasm`.
 
 From the repository root:
 
 ```bash
 cd fungi
 bash examples/service-manifests/run-filebrowser-example.sh
-bash examples/service-manifests/run-spore-box-example.sh
+bash examples/service-manifests/run-filebrowser-lite-wasi-example.sh
 
 # optional: override the demo port used by the helper scripts
-SERVICE_PORT=28181 bash examples/service-manifests/run-spore-box-example.sh
+SERVICE_PORT=28182 bash examples/service-manifests/run-filebrowser-lite-wasi-example.sh
 ```

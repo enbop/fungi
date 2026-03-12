@@ -3,10 +3,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 EXAMPLE_DIR="$(cd "$(dirname "$0")" && pwd)"
-TMP_ROOT="$(mktemp -d /tmp/fungi-spore-box-example.XXXXXX)"
+TMP_ROOT="$(mktemp -d /tmp/fungi-filebrowser-lite-wasi-example.XXXXXX)"
 FUNGI_DIR="$TMP_ROOT/fungi-home"
 RPC_ADDR="127.0.0.1:55406"
-SERVICE_PORT="${SERVICE_PORT:-28081}"
+SERVICE_PORT="${SERVICE_PORT:-28082}"
 BIN="$ROOT_DIR/target/debug/fungi"
 DAEMON_PID=""
 
@@ -38,24 +38,12 @@ cat > "$FUNGI_DIR/config.toml" <<EOF
 [rpc]
 listen_address = "$RPC_ADDR"
 
-[file_transfer.server]
-enabled = false
-shared_root_dir = ""
-
-[file_transfer.proxy_ftp]
-enabled = false
-host = "127.0.0.1"
-port = 2121
-
-[file_transfer.proxy_webdav]
-enabled = false
-host = "127.0.0.1"
-port = 8181
-
-[docker]
-enabled = false
-allowed_host_paths = []
+[runtime]
+disable_docker = true
+disable_wasmtime = false
+allowed_host_paths = ["$FUNGI_DIR", "$FUNGI_DIR/services"]
 allowed_ports = [$SERVICE_PORT]
+allowed_port_ranges = []
 EOF
 
 echo "== starting daemon =="
@@ -82,17 +70,17 @@ if [[ "$daemon_ready" != "true" ]]; then
   exit 1
 fi
 
-echo "== deploy spore-box manifest =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service deploy "$EXAMPLE_DIR/spore-box.service.yaml"
+echo "== deploy filebrowser-lite-wasi manifest =="
+"$BIN" --fungi-dir "$FUNGI_DIR" service deploy "$EXAMPLE_DIR/filebrowser-lite-wasi.service.yaml"
 
-echo "== start spore-box service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service start spore-box
+echo "== start filebrowser-lite-wasi service =="
+"$BIN" --fungi-dir "$FUNGI_DIR" service start filebrowser-lite-wasi
 
-echo "== waiting for spore-box http endpoint =="
+echo "== waiting for filebrowser-lite-wasi http endpoint =="
 ready="false"
-for attempt in $(seq 1 40); do
-  echo "waiting attempt $attempt/40"
-  if curl --connect-timeout 1 --max-time 2 -fsS "http://127.0.0.1:$SERVICE_PORT/?device=manifest" >/dev/null 2>&1; then
+for attempt in $(seq 1 60); do
+  echo "waiting attempt $attempt/60"
+  if curl --connect-timeout 1 --max-time 3 -fsS "http://127.0.0.1:$SERVICE_PORT/" >/dev/null 2>&1; then
     ready="true"
     break
   fi
@@ -100,32 +88,32 @@ for attempt in $(seq 1 40); do
 done
 
 if [[ "$ready" != "true" ]]; then
-  echo "spore-box endpoint did not become ready" >&2
-  echo "== inspect spore-box service ==" >&2
-  "$BIN" --fungi-dir "$FUNGI_DIR" service inspect spore-box >&2 || true
-  echo "== spore-box logs ==" >&2
-  "$BIN" --fungi-dir "$FUNGI_DIR" service logs spore-box --tail 100 >&2 || true
+  echo "filebrowser-lite-wasi endpoint did not become ready" >&2
+  echo "== inspect filebrowser-lite-wasi service ==" >&2
+  "$BIN" --fungi-dir "$FUNGI_DIR" service inspect filebrowser-lite-wasi >&2 || true
+  echo "== filebrowser-lite-wasi logs ==" >&2
+  "$BIN" --fungi-dir "$FUNGI_DIR" service logs filebrowser-lite-wasi --tail 100 >&2 || true
   echo "== daemon log ==" >&2
   tail -n 100 "$TMP_ROOT/daemon.log" >&2 || true
   exit 1
 fi
 
-echo "== inspect spore-box service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service inspect spore-box
+echo "== inspect filebrowser-lite-wasi service =="
+"$BIN" --fungi-dir "$FUNGI_DIR" service inspect filebrowser-lite-wasi
 
-echo "== curl spore-box =="
-curl -fsS "http://127.0.0.1:$SERVICE_PORT/?device=manifest"
+echo "== curl filebrowser-lite-wasi =="
+curl -fsS "http://127.0.0.1:$SERVICE_PORT/" | head -n 10
 echo
 
-echo "== spore-box logs =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service logs spore-box --tail 50
+echo "== filebrowser-lite-wasi logs =="
+"$BIN" --fungi-dir "$FUNGI_DIR" service logs filebrowser-lite-wasi --tail 50
 
 echo
-echo "== stopping spore-box service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service stop spore-box
+echo "== stopping filebrowser-lite-wasi service =="
+"$BIN" --fungi-dir "$FUNGI_DIR" service stop filebrowser-lite-wasi
 
-echo "== removing spore-box service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service remove spore-box
+echo "== removing filebrowser-lite-wasi service =="
+"$BIN" --fungi-dir "$FUNGI_DIR" service remove filebrowser-lite-wasi
 
 echo "== example completed =="
 echo "fungi dir: $FUNGI_DIR"
