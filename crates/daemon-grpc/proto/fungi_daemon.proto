@@ -146,16 +146,16 @@ service FungiDaemon {
   rpc DeployService(DeployServiceRequest) returns (ServiceInstanceResponse) {}
 
   // Starts a deployed service.
-  rpc StartService(ServiceHandleRequest) returns (Empty) {}
+  rpc StartService(ServiceNameRequest) returns (Empty) {}
 
   // Stops a deployed service.
-  rpc StopService(ServiceHandleRequest) returns (Empty) {}
+  rpc StopService(ServiceNameRequest) returns (Empty) {}
 
   // Removes a deployed service.
-  rpc RemoveService(ServiceHandleRequest) returns (Empty) {}
+  rpc RemoveService(ServiceNameRequest) returns (Empty) {}
 
   // Inspects a deployed service.
-  rpc InspectService(ServiceHandleRequest) returns (ServiceInstanceResponse) {}
+  rpc InspectService(ServiceNameRequest) returns (ServiceInstanceResponse) {}
 
   // Gets logs for a deployed service.
   rpc GetServiceLogs(GetServiceLogsRequest) returns (ServiceLogsResponse) {}
@@ -176,15 +176,15 @@ service FungiDaemon {
       returns (RemoteServiceControlResponse) {}
 
     // Starts a service on a remote peer by service name.
-    rpc RemoteStartService(RemoteServiceHandleRequest)
+    rpc RemoteStartService(RemoteServiceNameRequest)
       returns (RemoteServiceControlResponse) {}
 
     // Stops a service on a remote peer by service name.
-    rpc RemoteStopService(RemoteServiceHandleRequest)
+    rpc RemoteStopService(RemoteServiceNameRequest)
       returns (RemoteServiceControlResponse) {}
 
     // Removes a service on a remote peer by service name.
-    rpc RemoteRemoveService(RemoteServiceHandleRequest)
+    rpc RemoteRemoveService(RemoteServiceNameRequest)
       returns (RemoteServiceControlResponse) {}
 
     // Lists deployed services on a remote peer, including stopped ones.
@@ -471,14 +471,14 @@ message DeployServiceRequest {
   string manifest_base_dir = 2;
 }
 
-message ServiceHandleRequest {
+message ServiceNameRequest {
   ServiceRuntimeKind runtime = 1;
-  string handle = 2;
+  string name = 2;
 }
 
 message GetServiceLogsRequest {
   ServiceRuntimeKind runtime = 1;
-  string handle = 2;
+  string name = 2;
   string tail = 3;
 }
 
@@ -504,9 +504,9 @@ message RemoteDeployServiceRequest {
   string manifest_yaml = 2;
 }
 
-message RemoteServiceHandleRequest {
+message RemoteServiceNameRequest {
   string peer_id = 1;
-  string handle = 2;
+  string name = 2;
 }
 
 message RemotePeerRequest { string peer_id = 1; }

@@ -448,18 +448,18 @@ pub struct DeployServiceRequest {
     pub manifest_base_dir: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ServiceHandleRequest {
+pub struct ServiceNameRequest {
     #[prost(enumeration = "ServiceRuntimeKind", tag = "1")]
     pub runtime: i32,
     #[prost(string, tag = "2")]
-    pub handle: ::prost::alloc::string::String,
+    pub name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetServiceLogsRequest {
     #[prost(enumeration = "ServiceRuntimeKind", tag = "1")]
     pub runtime: i32,
     #[prost(string, tag = "2")]
-    pub handle: ::prost::alloc::string::String,
+    pub name: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub tail: ::prost::alloc::string::String,
 }
@@ -508,11 +508,11 @@ pub struct RemoteDeployServiceRequest {
     pub manifest_yaml: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RemoteServiceHandleRequest {
+pub struct RemoteServiceNameRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub handle: ::prost::alloc::string::String,
+    pub name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RemotePeerRequest {
@@ -1725,7 +1725,7 @@ pub mod fungi_daemon_client {
         /// Starts a deployed service.
         pub async fn start_service(
             &mut self,
-            request: impl tonic::IntoRequest<super::ServiceHandleRequest>,
+            request: impl tonic::IntoRequest<super::ServiceNameRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
             self.inner
                 .ready()
@@ -1747,7 +1747,7 @@ pub mod fungi_daemon_client {
         /// Stops a deployed service.
         pub async fn stop_service(
             &mut self,
-            request: impl tonic::IntoRequest<super::ServiceHandleRequest>,
+            request: impl tonic::IntoRequest<super::ServiceNameRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
             self.inner
                 .ready()
@@ -1769,7 +1769,7 @@ pub mod fungi_daemon_client {
         /// Removes a deployed service.
         pub async fn remove_service(
             &mut self,
-            request: impl tonic::IntoRequest<super::ServiceHandleRequest>,
+            request: impl tonic::IntoRequest<super::ServiceNameRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
             self.inner
                 .ready()
@@ -1791,7 +1791,7 @@ pub mod fungi_daemon_client {
         /// Inspects a deployed service.
         pub async fn inspect_service(
             &mut self,
-            request: impl tonic::IntoRequest<super::ServiceHandleRequest>,
+            request: impl tonic::IntoRequest<super::ServiceNameRequest>,
         ) -> std::result::Result<
             tonic::Response<super::ServiceInstanceResponse>,
             tonic::Status,
@@ -1950,7 +1950,7 @@ pub mod fungi_daemon_client {
         /// Starts a service on a remote peer by service name.
         pub async fn remote_start_service(
             &mut self,
-            request: impl tonic::IntoRequest<super::RemoteServiceHandleRequest>,
+            request: impl tonic::IntoRequest<super::RemoteServiceNameRequest>,
         ) -> std::result::Result<
             tonic::Response<super::RemoteServiceControlResponse>,
             tonic::Status,
@@ -1977,7 +1977,7 @@ pub mod fungi_daemon_client {
         /// Stops a service on a remote peer by service name.
         pub async fn remote_stop_service(
             &mut self,
-            request: impl tonic::IntoRequest<super::RemoteServiceHandleRequest>,
+            request: impl tonic::IntoRequest<super::RemoteServiceNameRequest>,
         ) -> std::result::Result<
             tonic::Response<super::RemoteServiceControlResponse>,
             tonic::Status,
@@ -2004,7 +2004,7 @@ pub mod fungi_daemon_client {
         /// Removes a service on a remote peer by service name.
         pub async fn remote_remove_service(
             &mut self,
-            request: impl tonic::IntoRequest<super::RemoteServiceHandleRequest>,
+            request: impl tonic::IntoRequest<super::RemoteServiceNameRequest>,
         ) -> std::result::Result<
             tonic::Response<super::RemoteServiceControlResponse>,
             tonic::Status,
@@ -2417,22 +2417,22 @@ pub mod fungi_daemon_server {
         /// Starts a deployed service.
         async fn start_service(
             &self,
-            request: tonic::Request<super::ServiceHandleRequest>,
+            request: tonic::Request<super::ServiceNameRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
         /// Stops a deployed service.
         async fn stop_service(
             &self,
-            request: tonic::Request<super::ServiceHandleRequest>,
+            request: tonic::Request<super::ServiceNameRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
         /// Removes a deployed service.
         async fn remove_service(
             &self,
-            request: tonic::Request<super::ServiceHandleRequest>,
+            request: tonic::Request<super::ServiceNameRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
         /// Inspects a deployed service.
         async fn inspect_service(
             &self,
-            request: tonic::Request<super::ServiceHandleRequest>,
+            request: tonic::Request<super::ServiceNameRequest>,
         ) -> std::result::Result<
             tonic::Response<super::ServiceInstanceResponse>,
             tonic::Status,
@@ -2480,7 +2480,7 @@ pub mod fungi_daemon_server {
         /// Starts a service on a remote peer by service name.
         async fn remote_start_service(
             &self,
-            request: tonic::Request<super::RemoteServiceHandleRequest>,
+            request: tonic::Request<super::RemoteServiceNameRequest>,
         ) -> std::result::Result<
             tonic::Response<super::RemoteServiceControlResponse>,
             tonic::Status,
@@ -2488,7 +2488,7 @@ pub mod fungi_daemon_server {
         /// Stops a service on a remote peer by service name.
         async fn remote_stop_service(
             &self,
-            request: tonic::Request<super::RemoteServiceHandleRequest>,
+            request: tonic::Request<super::RemoteServiceNameRequest>,
         ) -> std::result::Result<
             tonic::Response<super::RemoteServiceControlResponse>,
             tonic::Status,
@@ -2496,7 +2496,7 @@ pub mod fungi_daemon_server {
         /// Removes a service on a remote peer by service name.
         async fn remote_remove_service(
             &self,
-            request: tonic::Request<super::RemoteServiceHandleRequest>,
+            request: tonic::Request<super::RemoteServiceNameRequest>,
         ) -> std::result::Result<
             tonic::Response<super::RemoteServiceControlResponse>,
             tonic::Status,
@@ -4498,7 +4498,7 @@ pub mod fungi_daemon_server {
                     struct StartServiceSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<
                         T: FungiDaemon,
-                    > tonic::server::UnaryService<super::ServiceHandleRequest>
+                    > tonic::server::UnaryService<super::ServiceNameRequest>
                     for StartServiceSvc<T> {
                         type Response = super::Empty;
                         type Future = BoxFuture<
@@ -4507,7 +4507,7 @@ pub mod fungi_daemon_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::ServiceHandleRequest>,
+                            request: tonic::Request<super::ServiceNameRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -4543,7 +4543,7 @@ pub mod fungi_daemon_server {
                     struct StopServiceSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<
                         T: FungiDaemon,
-                    > tonic::server::UnaryService<super::ServiceHandleRequest>
+                    > tonic::server::UnaryService<super::ServiceNameRequest>
                     for StopServiceSvc<T> {
                         type Response = super::Empty;
                         type Future = BoxFuture<
@@ -4552,7 +4552,7 @@ pub mod fungi_daemon_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::ServiceHandleRequest>,
+                            request: tonic::Request<super::ServiceNameRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -4588,7 +4588,7 @@ pub mod fungi_daemon_server {
                     struct RemoveServiceSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<
                         T: FungiDaemon,
-                    > tonic::server::UnaryService<super::ServiceHandleRequest>
+                    > tonic::server::UnaryService<super::ServiceNameRequest>
                     for RemoveServiceSvc<T> {
                         type Response = super::Empty;
                         type Future = BoxFuture<
@@ -4597,7 +4597,7 @@ pub mod fungi_daemon_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::ServiceHandleRequest>,
+                            request: tonic::Request<super::ServiceNameRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -4633,7 +4633,7 @@ pub mod fungi_daemon_server {
                     struct InspectServiceSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<
                         T: FungiDaemon,
-                    > tonic::server::UnaryService<super::ServiceHandleRequest>
+                    > tonic::server::UnaryService<super::ServiceNameRequest>
                     for InspectServiceSvc<T> {
                         type Response = super::ServiceInstanceResponse;
                         type Future = BoxFuture<
@@ -4642,7 +4642,7 @@ pub mod fungi_daemon_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::ServiceHandleRequest>,
+                            request: tonic::Request<super::ServiceNameRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -4909,7 +4909,7 @@ pub mod fungi_daemon_server {
                     struct RemoteStartServiceSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<
                         T: FungiDaemon,
-                    > tonic::server::UnaryService<super::RemoteServiceHandleRequest>
+                    > tonic::server::UnaryService<super::RemoteServiceNameRequest>
                     for RemoteStartServiceSvc<T> {
                         type Response = super::RemoteServiceControlResponse;
                         type Future = BoxFuture<
@@ -4918,7 +4918,7 @@ pub mod fungi_daemon_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::RemoteServiceHandleRequest>,
+                            request: tonic::Request<super::RemoteServiceNameRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -4955,7 +4955,7 @@ pub mod fungi_daemon_server {
                     struct RemoteStopServiceSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<
                         T: FungiDaemon,
-                    > tonic::server::UnaryService<super::RemoteServiceHandleRequest>
+                    > tonic::server::UnaryService<super::RemoteServiceNameRequest>
                     for RemoteStopServiceSvc<T> {
                         type Response = super::RemoteServiceControlResponse;
                         type Future = BoxFuture<
@@ -4964,7 +4964,7 @@ pub mod fungi_daemon_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::RemoteServiceHandleRequest>,
+                            request: tonic::Request<super::RemoteServiceNameRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -5001,7 +5001,7 @@ pub mod fungi_daemon_server {
                     struct RemoteRemoveServiceSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<
                         T: FungiDaemon,
-                    > tonic::server::UnaryService<super::RemoteServiceHandleRequest>
+                    > tonic::server::UnaryService<super::RemoteServiceNameRequest>
                     for RemoteRemoveServiceSvc<T> {
                         type Response = super::RemoteServiceControlResponse;
                         type Future = BoxFuture<
@@ -5010,7 +5010,7 @@ pub mod fungi_daemon_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::RemoteServiceHandleRequest>,
+                            request: tonic::Request<super::RemoteServiceNameRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {

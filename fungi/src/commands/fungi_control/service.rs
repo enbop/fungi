@@ -7,7 +7,7 @@ use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
         DeployServiceRequest, Empty, GetServiceLogsRequest, ListServicesResponse,
-        ServiceHandleRequest, ServiceInstanceResponse,
+        ServiceInstanceResponse, ServiceNameRequest,
     },
 };
 use serde::Serialize;
@@ -29,19 +29,19 @@ pub enum ServiceCommands {
         manifest: String,
     },
     /// Start a deployed service by name
-    Start { handle: String },
+    Start { name: String },
     /// Inspect a deployed service by name
-    Inspect { handle: String },
+    Inspect { name: String },
     /// Get service logs by name
     Logs {
-        handle: String,
+        name: String,
         #[arg(long)]
         tail: Option<String>,
     },
     /// Stop a deployed service by name
-    Stop { handle: String },
+    Stop { name: String },
     /// Remove a deployed service by name
-    Remove { handle: String },
+    Remove { name: String },
 }
 
 pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
@@ -66,24 +66,24 @@ pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
                 Err(e) => fatal_grpc(e),
             }
         }
-        ServiceCommands::Start { handle } => {
-            let req = ServiceHandleRequest { runtime: 0, handle };
+        ServiceCommands::Start { name } => {
+            let req = ServiceNameRequest { runtime: 0, name };
             match client.start_service(Request::new(req)).await {
                 Ok(_) => println!("Service started"),
                 Err(e) => fatal_grpc(e),
             }
         }
-        ServiceCommands::Inspect { handle } => {
-            let req = ServiceHandleRequest { runtime: 0, handle };
+        ServiceCommands::Inspect { name } => {
+            let req = ServiceNameRequest { runtime: 0, name };
             match client.inspect_service(Request::new(req)).await {
                 Ok(resp) => print_service_instance(resp.into_inner()),
                 Err(e) => fatal_grpc(e),
             }
         }
-        ServiceCommands::Logs { handle, tail } => {
+        ServiceCommands::Logs { name, tail } => {
             let req = GetServiceLogsRequest {
                 runtime: 0,
-                handle,
+                name,
                 tail: tail.unwrap_or_default(),
             };
             match client.get_service_logs(Request::new(req)).await {
@@ -94,15 +94,15 @@ pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
                 Err(e) => fatal_grpc(e),
             }
         }
-        ServiceCommands::Stop { handle } => {
-            let req = ServiceHandleRequest { runtime: 0, handle };
+        ServiceCommands::Stop { name } => {
+            let req = ServiceNameRequest { runtime: 0, name };
             match client.stop_service(Request::new(req)).await {
                 Ok(_) => println!("Service stopped"),
                 Err(e) => fatal_grpc(e),
             }
         }
-        ServiceCommands::Remove { handle } => {
-            let req = ServiceHandleRequest { runtime: 0, handle };
+        ServiceCommands::Remove { name } => {
+            let req = ServiceNameRequest { runtime: 0, name };
             match client.remove_service(Request::new(req)).await {
                 Ok(_) => println!("Service removed"),
                 Err(e) => fatal_grpc(e),
@@ -235,8 +235,8 @@ struct LocalServiceListEntry {
 
 #[derive(Debug, Serialize)]
 struct LocalServiceInspectView {
-    handle: String,
-    service_name: String,
+    id: String,
+    name: String,
     runtime: RuntimeKind,
     source: String,
     labels: std::collections::BTreeMap<String, String>,
@@ -281,8 +281,8 @@ impl From<ServiceInstance> for LocalServiceInspectView {
     fn from(instance: ServiceInstance) -> Self {
         let local_endpoints = local_endpoint_views(&instance);
         Self {
-            handle: instance.handle,
-            service_name: instance.name,
+            id: instance.id,
+            name: instance.name,
             runtime: instance.runtime,
             source: instance.source,
             labels: instance.labels,

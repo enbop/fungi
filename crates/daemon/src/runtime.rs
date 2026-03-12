@@ -116,8 +116,9 @@ pub struct ManifestResolutionPolicy {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceInstance {
+    #[serde(default)]
+    pub id: String,
     pub runtime: RuntimeKind,
-    pub handle: String,
     pub name: String,
     pub source: String,
     pub labels: BTreeMap<String, String>,
@@ -627,11 +628,11 @@ fn resolve_manifest_path_string(
 pub trait RuntimeProvider: Send + Sync {
     fn runtime_kind(&self) -> RuntimeKind;
     async fn deploy(&self, manifest: &ServiceManifest) -> Result<ServiceInstance>;
-    async fn start(&self, handle: &str) -> Result<()>;
-    async fn stop(&self, handle: &str) -> Result<()>;
-    async fn remove(&self, handle: &str) -> Result<()>;
-    async fn inspect(&self, handle: &str) -> Result<ServiceInstance>;
-    async fn logs(&self, handle: &str, options: &ServiceLogsOptions) -> Result<ServiceLogs>;
+    async fn start(&self, name: &str) -> Result<()>;
+    async fn stop(&self, name: &str) -> Result<()>;
+    async fn remove(&self, name: &str) -> Result<()>;
+    async fn inspect(&self, name: &str) -> Result<ServiceInstance>;
+    async fn logs(&self, name: &str, options: &ServiceLogsOptions) -> Result<ServiceLogs>;
 }
 
 #[derive(Clone)]
@@ -657,28 +658,28 @@ impl RuntimeProvider for DockerRuntimeProvider {
         Ok(map_docker_instance(details))
     }
 
-    async fn start(&self, handle: &str) -> Result<()> {
-        self.docker.start_container(handle).await
+    async fn start(&self, name: &str) -> Result<()> {
+        self.docker.start_container(name).await
     }
 
-    async fn stop(&self, handle: &str) -> Result<()> {
-        self.docker.stop_container(handle).await
+    async fn stop(&self, name: &str) -> Result<()> {
+        self.docker.stop_container(name).await
     }
 
-    async fn remove(&self, handle: &str) -> Result<()> {
-        self.docker.remove_container(handle).await
+    async fn remove(&self, name: &str) -> Result<()> {
+        self.docker.remove_container(name).await
     }
 
-    async fn inspect(&self, handle: &str) -> Result<ServiceInstance> {
-        let details = self.docker.inspect_container(handle).await?;
+    async fn inspect(&self, name: &str) -> Result<ServiceInstance> {
+        let details = self.docker.inspect_container(name).await?;
         Ok(map_docker_instance(details))
     }
 
-    async fn logs(&self, handle: &str, options: &ServiceLogsOptions) -> Result<ServiceLogs> {
+    async fn logs(&self, name: &str, options: &ServiceLogsOptions) -> Result<ServiceLogs> {
         let logs = self
             .docker
             .container_logs(
-                handle,
+                name,
                 &LogsOptions {
                     stdout: true,
                     stderr: true,
@@ -1006,67 +1007,67 @@ impl RuntimeControl {
         )
     }
 
-    pub async fn start(&self, runtime: RuntimeKind, handle: &str) -> Result<()> {
+    pub async fn start(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
         self.ensure_runtime_enabled(runtime)?;
-        self.ensure_runtime_service(runtime, handle).await?;
+        self.ensure_runtime_service(runtime, name).await?;
         match runtime {
-            RuntimeKind::Docker => self.docker_provider()?.start(handle).await,
-            RuntimeKind::Wasmtime => self.wasmtime.start(handle).await,
+            RuntimeKind::Docker => self.docker_provider()?.start(name).await,
+            RuntimeKind::Wasmtime => self.wasmtime.start(name).await,
         }?;
-        self.set_desired_state(handle, DesiredServiceState::Running)
+        self.set_desired_state(name, DesiredServiceState::Running)
     }
 
-    pub async fn stop(&self, runtime: RuntimeKind, handle: &str) -> Result<()> {
-        let _ = self.ensure_runtime_service(runtime, handle).await;
+    pub async fn stop(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
+        let _ = self.ensure_runtime_service(runtime, name).await;
         match runtime {
-            RuntimeKind::Docker => self.docker_provider()?.stop(handle).await,
-            RuntimeKind::Wasmtime => self.wasmtime.stop(handle).await,
+            RuntimeKind::Docker => self.docker_provider()?.stop(name).await,
+            RuntimeKind::Wasmtime => self.wasmtime.stop(name).await,
         }?;
-        self.set_desired_state(handle, DesiredServiceState::Stopped)
+        self.set_desired_state(name, DesiredServiceState::Stopped)
     }
 
-    pub async fn remove(&self, runtime: RuntimeKind, handle: &str) -> Result<()> {
+    pub async fn remove(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
         match runtime {
-            RuntimeKind::Docker => self.docker_provider()?.remove(handle).await,
-            RuntimeKind::Wasmtime => self.wasmtime.remove(handle).await,
+            RuntimeKind::Docker => self.docker_provider()?.remove(name).await,
+            RuntimeKind::Wasmtime => self.wasmtime.remove(name).await,
         }?;
-        self.service_index.lock().remove(handle);
-        self.service_manifests.lock().remove(handle);
-        self.service_state.lock().remove_service(handle)?;
+        self.service_index.lock().remove(name);
+        self.service_manifests.lock().remove(name);
+        self.service_state.lock().remove_service(name)?;
         Ok(())
     }
 
-    pub async fn start_by_handle(&self, handle: &str) -> Result<()> {
-        let runtime = self.resolve_runtime(handle)?;
-        self.start(runtime, handle).await
+    pub async fn start_by_name(&self, name: &str) -> Result<()> {
+        let runtime = self.resolve_runtime(name)?;
+        self.start(runtime, name).await
     }
 
-    pub fn get_service_manifest(&self, handle: &str) -> Option<ServiceManifest> {
-        self.service_manifests.lock().get(handle).cloned()
+    pub fn get_service_manifest(&self, name: &str) -> Option<ServiceManifest> {
+        self.service_manifests.lock().get(name).cloned()
     }
 
-    pub async fn stop_by_handle(&self, handle: &str) -> Result<()> {
-        let runtime = self.resolve_runtime(handle)?;
-        self.stop(runtime, handle).await
+    pub async fn stop_by_name(&self, name: &str) -> Result<()> {
+        let runtime = self.resolve_runtime(name)?;
+        self.stop(runtime, name).await
     }
 
-    pub async fn remove_by_handle(&self, handle: &str) -> Result<()> {
-        let runtime = self.resolve_runtime(handle)?;
-        self.remove(runtime, handle).await
+    pub async fn remove_by_name(&self, name: &str) -> Result<()> {
+        let runtime = self.resolve_runtime(name)?;
+        self.remove(runtime, name).await
     }
 
-    pub async fn inspect_by_handle(&self, handle: &str) -> Result<ServiceInstance> {
-        let runtime = self.resolve_runtime(handle)?;
-        self.inspect(runtime, handle).await
+    pub async fn inspect_by_name(&self, name: &str) -> Result<ServiceInstance> {
+        let runtime = self.resolve_runtime(name)?;
+        self.inspect(runtime, name).await
     }
 
-    pub async fn logs_by_handle(
+    pub async fn logs_by_name(
         &self,
-        handle: &str,
+        name: &str,
         options: &ServiceLogsOptions,
     ) -> Result<ServiceLogs> {
-        let runtime = self.resolve_runtime(handle)?;
-        self.logs(runtime, handle, options).await
+        let runtime = self.resolve_runtime(name)?;
+        self.logs(runtime, name, options).await
     }
 
     pub async fn list_exposed_services(&self) -> Result<Vec<DiscoveredService>> {
@@ -1152,12 +1153,12 @@ impl RuntimeControl {
         Ok(services)
     }
 
-    pub async fn inspect(&self, runtime: RuntimeKind, handle: &str) -> Result<ServiceInstance> {
-        if let Err(error) = self.ensure_runtime_service(runtime, handle).await {
-            if let Some(manifest) = self.get_service_manifest(handle) {
+    pub async fn inspect(&self, runtime: RuntimeKind, name: &str) -> Result<ServiceInstance> {
+        if let Err(error) = self.ensure_runtime_service(runtime, name).await {
+            if let Some(manifest) = self.get_service_manifest(name) {
                 log::warn!(
                     "Failed to restore service '{}' for inspect: {}",
-                    handle,
+                    name,
                     error
                 );
                 return Ok(missing_instance_from_manifest(&manifest));
@@ -1166,11 +1167,11 @@ impl RuntimeControl {
         }
 
         let instance = match runtime {
-            RuntimeKind::Docker => self.docker_provider()?.inspect(handle).await,
-            RuntimeKind::Wasmtime => self.wasmtime.inspect(handle).await,
+            RuntimeKind::Docker => self.docker_provider()?.inspect(name).await,
+            RuntimeKind::Wasmtime => self.wasmtime.inspect(name).await,
         }?;
 
-        if let Some(manifest) = self.get_service_manifest(handle) {
+        if let Some(manifest) = self.get_service_manifest(name) {
             Ok(enrich_instance_from_manifest(instance, &manifest))
         } else {
             Ok(instance)
@@ -1180,14 +1181,14 @@ impl RuntimeControl {
     pub async fn logs(
         &self,
         runtime: RuntimeKind,
-        handle: &str,
+        name: &str,
         options: &ServiceLogsOptions,
     ) -> Result<ServiceLogs> {
         self.ensure_runtime_enabled(runtime)?;
-        self.ensure_runtime_service(runtime, handle).await?;
+        self.ensure_runtime_service(runtime, name).await?;
         match runtime {
-            RuntimeKind::Docker => self.docker_provider()?.logs(handle, options).await,
-            RuntimeKind::Wasmtime => self.wasmtime.logs(handle, options).await,
+            RuntimeKind::Docker => self.docker_provider()?.logs(name, options).await,
+            RuntimeKind::Wasmtime => self.wasmtime.logs(name, options).await,
         }
     }
 
@@ -1253,17 +1254,17 @@ impl RuntimeControl {
         Ok(())
     }
 
-    async fn ensure_runtime_service(&self, runtime: RuntimeKind, handle: &str) -> Result<()> {
-        if runtime != RuntimeKind::Wasmtime || self.wasmtime.has_service(handle) {
+    async fn ensure_runtime_service(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
+        if runtime != RuntimeKind::Wasmtime || self.wasmtime.has_service(name) {
             return Ok(());
         }
 
         let manifest = self
             .service_manifests
             .lock()
-            .get(handle)
+            .get(name)
             .cloned()
-            .ok_or_else(|| anyhow::anyhow!("service not found: {handle}"))?;
+            .ok_or_else(|| anyhow::anyhow!("service not found: {name}"))?;
         self.wasmtime.restore(&manifest).await
     }
 
@@ -1277,18 +1278,18 @@ impl RuntimeControl {
             .upsert_service(manifest, desired_state)
     }
 
-    fn set_desired_state(&self, handle: &str, desired_state: DesiredServiceState) -> Result<()> {
+    fn set_desired_state(&self, name: &str, desired_state: DesiredServiceState) -> Result<()> {
         self.service_state
             .lock()
-            .set_desired_state(handle, desired_state)
+            .set_desired_state(name, desired_state)
     }
 
-    fn resolve_runtime(&self, handle: &str) -> Result<RuntimeKind> {
+    fn resolve_runtime(&self, name: &str) -> Result<RuntimeKind> {
         self.service_index
             .lock()
-            .get(handle)
+            .get(name)
             .copied()
-            .ok_or_else(|| anyhow::anyhow!("service not found: {handle}"))
+            .ok_or_else(|| anyhow::anyhow!("service not found: {name}"))
     }
 
     fn reserved_host_ports(&self) -> BTreeSet<u16> {
@@ -1529,8 +1530,8 @@ fn refresh_child_state(state: &mut WasmtimeServiceState) -> Result<()> {
 
 fn map_docker_instance(details: fungi_docker_agent::ContainerDetails) -> ServiceInstance {
     ServiceInstance {
+        id: details.id.clone(),
         runtime: RuntimeKind::Docker,
-        handle: details.id.clone(),
         name: details.name,
         source: details.image,
         labels: details.labels,
@@ -1558,8 +1559,8 @@ fn map_wasmtime_instance(handle: &str, state: &WasmtimeServiceState) -> ServiceI
     };
 
     ServiceInstance {
+        id: format!("wasmtime:{handle}"),
         runtime: RuntimeKind::Wasmtime,
-        handle: handle.to_string(),
         name: state.manifest.name.clone(),
         source: state.source_display.clone(),
         labels: state.manifest.labels.clone(),
@@ -1574,8 +1575,8 @@ fn map_wasmtime_instance(handle: &str, state: &WasmtimeServiceState) -> ServiceI
 
 fn missing_instance_from_manifest(manifest: &ServiceManifest) -> ServiceInstance {
     ServiceInstance {
+        id: service_instance_id(manifest.runtime, &manifest.name),
         runtime: manifest.runtime,
-        handle: manifest.name.clone(),
         name: manifest.name.clone(),
         source: source_display(&manifest.source),
         labels: manifest.labels.clone(),
@@ -1592,9 +1593,21 @@ fn enrich_instance_from_manifest(
     mut instance: ServiceInstance,
     manifest: &ServiceManifest,
 ) -> ServiceInstance {
+    if instance.id.is_empty() {
+        instance.id = service_instance_id(manifest.runtime, &manifest.name);
+    }
+    instance.name = manifest.name.clone();
     instance.ports = manifest.ports.clone();
     instance.exposed_endpoints = service_expose_endpoint_bindings(manifest);
     instance
+}
+
+fn service_instance_id(runtime: RuntimeKind, name: &str) -> String {
+    let runtime_name = match runtime {
+        RuntimeKind::Docker => "docker",
+        RuntimeKind::Wasmtime => "wasmtime",
+    };
+    format!("{runtime_name}:{name}")
 }
 
 fn source_display(source: &ServiceSource) -> String {

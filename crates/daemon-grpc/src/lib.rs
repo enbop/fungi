@@ -941,19 +941,19 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
     async fn start_service(
         &self,
-        request: Request<ServiceHandleRequest>,
+        request: Request<ServiceNameRequest>,
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
         let runtime = proto_runtime_kind(req.runtime)?;
         match runtime {
             Some(runtime) => self
                 .inner
-                .start_service(runtime, req.handle)
+                .start_service(runtime, req.name)
                 .await
                 .map_err(|e| Status::internal(format!("Failed to start service: {e}")))?,
             None => self
                 .inner
-                .start_service_by_handle(req.handle)
+                .start_service_by_name(req.name)
                 .await
                 .map_err(|e| Status::internal(format!("Failed to start service: {e}")))?,
         }
@@ -962,19 +962,19 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
     async fn stop_service(
         &self,
-        request: Request<ServiceHandleRequest>,
+        request: Request<ServiceNameRequest>,
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
         let runtime = proto_runtime_kind(req.runtime)?;
         match runtime {
             Some(runtime) => self
                 .inner
-                .stop_service(runtime, req.handle)
+                .stop_service(runtime, req.name)
                 .await
                 .map_err(|e| Status::internal(format!("Failed to stop service: {e}")))?,
             None => self
                 .inner
-                .stop_service_by_handle(req.handle)
+                .stop_service_by_name(req.name)
                 .await
                 .map_err(|e| Status::internal(format!("Failed to stop service: {e}")))?,
         }
@@ -983,19 +983,19 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
     async fn remove_service(
         &self,
-        request: Request<ServiceHandleRequest>,
+        request: Request<ServiceNameRequest>,
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
         let runtime = proto_runtime_kind(req.runtime)?;
         match runtime {
             Some(runtime) => self
                 .inner
-                .remove_service(runtime, req.handle)
+                .remove_service(runtime, req.name)
                 .await
                 .map_err(|e| Status::internal(format!("Failed to remove service: {e}")))?,
             None => self
                 .inner
-                .remove_service_by_handle(req.handle)
+                .remove_service_by_name(req.name)
                 .await
                 .map_err(|e| Status::internal(format!("Failed to remove service: {e}")))?,
         }
@@ -1004,19 +1004,19 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
     async fn inspect_service(
         &self,
-        request: Request<ServiceHandleRequest>,
+        request: Request<ServiceNameRequest>,
     ) -> Result<Response<ServiceInstanceResponse>, Status> {
         let req = request.into_inner();
         let runtime = proto_runtime_kind(req.runtime)?;
         let instance = match runtime {
             Some(runtime) => self
                 .inner
-                .inspect_service(runtime, req.handle)
+                .inspect_service(runtime, req.name)
                 .await
                 .map_err(|e| Status::internal(format!("Failed to inspect service: {e}")))?,
             None => self
                 .inner
-                .inspect_service_by_handle(req.handle)
+                .inspect_service_by_name(req.name)
                 .await
                 .map_err(|e| Status::internal(format!("Failed to inspect service: {e}")))?,
         };
@@ -1039,12 +1039,12 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         let logs = match runtime {
             Some(runtime) => self
                 .inner
-                .get_service_logs(runtime, req.handle, tail)
+                .get_service_logs(runtime, req.name, tail)
                 .await
                 .map_err(|e| Status::internal(format!("Failed to get service logs: {e}")))?,
             None => self
                 .inner
-                .get_service_logs_by_handle(req.handle, tail)
+                .get_service_logs_by_name(req.name, tail)
                 .await
                 .map_err(|e| Status::internal(format!("Failed to get service logs: {e}")))?,
         };
@@ -1131,7 +1131,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
     async fn remote_start_service(
         &self,
-        request: Request<RemoteServiceHandleRequest>,
+        request: Request<RemoteServiceNameRequest>,
     ) -> Result<Response<RemoteServiceControlResponse>, Status> {
         let req = request.into_inner();
         let peer_id = PeerId::from_str(&req.peer_id)
@@ -1139,7 +1139,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
         let response = self
             .inner
-            .remote_start_service(peer_id, req.handle)
+            .remote_start_service(peer_id, req.name)
             .await
             .map_err(|e| Status::internal(format!("Failed to start remote service: {e}")))?;
 
@@ -1153,7 +1153,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
     async fn remote_stop_service(
         &self,
-        request: Request<RemoteServiceHandleRequest>,
+        request: Request<RemoteServiceNameRequest>,
     ) -> Result<Response<RemoteServiceControlResponse>, Status> {
         let req = request.into_inner();
         let peer_id = PeerId::from_str(&req.peer_id)
@@ -1161,7 +1161,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
         let response = self
             .inner
-            .remote_stop_service(peer_id, req.handle)
+            .remote_stop_service(peer_id, req.name)
             .await
             .map_err(|e| Status::internal(format!("Failed to stop remote service: {e}")))?;
 
@@ -1175,7 +1175,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
     async fn remote_remove_service(
         &self,
-        request: Request<RemoteServiceHandleRequest>,
+        request: Request<RemoteServiceNameRequest>,
     ) -> Result<Response<RemoteServiceControlResponse>, Status> {
         let req = request.into_inner();
         let peer_id = PeerId::from_str(&req.peer_id)
@@ -1183,7 +1183,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
         let response = self
             .inner
-            .remote_remove_service(peer_id, req.handle)
+            .remote_remove_service(peer_id, req.name)
             .await
             .map_err(|e| Status::internal(format!("Failed to remove remote service: {e}")))?;
 

@@ -807,12 +807,12 @@ impl FungiDaemon {
         self.apply_runtime_config_update(updated_config)
     }
 
-    async fn sync_service_endpoint_listeners_by_handle(
+    async fn sync_service_endpoint_listeners_by_name(
         &self,
-        handle: &str,
+        name: &str,
         enabled: bool,
     ) -> Result<()> {
-        let manifest = self.runtime_control().get_service_manifest(handle);
+        let manifest = self.runtime_control().get_service_manifest(name);
         self.sync_service_endpoint_listeners_for_manifest(manifest.as_ref(), enabled)
             .await
     }
@@ -906,40 +906,40 @@ impl FungiDaemon {
             .await
     }
 
-    pub async fn start_service(&self, runtime: RuntimeKind, handle: String) -> Result<()> {
-        self.runtime_control().start(runtime, &handle).await?;
-        self.sync_service_endpoint_listeners_by_handle(&handle, true)
+    pub async fn start_service(&self, runtime: RuntimeKind, name: String) -> Result<()> {
+        self.runtime_control().start(runtime, &name).await?;
+        self.sync_service_endpoint_listeners_by_name(&name, true)
             .await
     }
 
-    pub async fn start_service_by_handle(&self, handle: String) -> Result<()> {
-        self.runtime_control().start_by_handle(&handle).await?;
-        self.sync_service_endpoint_listeners_by_handle(&handle, true)
+    pub async fn start_service_by_name(&self, name: String) -> Result<()> {
+        self.runtime_control().start_by_name(&name).await?;
+        self.sync_service_endpoint_listeners_by_name(&name, true)
             .await
     }
 
-    pub async fn stop_service(&self, runtime: RuntimeKind, handle: String) -> Result<()> {
-        self.runtime_control().stop(runtime, &handle).await?;
-        self.sync_service_endpoint_listeners_by_handle(&handle, false)
+    pub async fn stop_service(&self, runtime: RuntimeKind, name: String) -> Result<()> {
+        self.runtime_control().stop(runtime, &name).await?;
+        self.sync_service_endpoint_listeners_by_name(&name, false)
             .await
     }
 
-    pub async fn stop_service_by_handle(&self, handle: String) -> Result<()> {
-        self.runtime_control().stop_by_handle(&handle).await?;
-        self.sync_service_endpoint_listeners_by_handle(&handle, false)
+    pub async fn stop_service_by_name(&self, name: String) -> Result<()> {
+        self.runtime_control().stop_by_name(&name).await?;
+        self.sync_service_endpoint_listeners_by_name(&name, false)
             .await
     }
 
-    pub async fn remove_service(&self, runtime: RuntimeKind, handle: String) -> Result<()> {
-        let manifest = self.runtime_control().get_service_manifest(&handle);
-        self.runtime_control().remove(runtime, &handle).await?;
+    pub async fn remove_service(&self, runtime: RuntimeKind, name: String) -> Result<()> {
+        let manifest = self.runtime_control().get_service_manifest(&name);
+        self.runtime_control().remove(runtime, &name).await?;
         self.sync_service_endpoint_listeners_for_manifest(manifest.as_ref(), false)
             .await
     }
 
-    pub async fn remove_service_by_handle(&self, handle: String) -> Result<()> {
-        let manifest = self.runtime_control().get_service_manifest(&handle);
-        self.runtime_control().remove_by_handle(&handle).await?;
+    pub async fn remove_service_by_name(&self, name: String) -> Result<()> {
+        let manifest = self.runtime_control().get_service_manifest(&name);
+        self.runtime_control().remove_by_name(&name).await?;
         self.sync_service_endpoint_listeners_for_manifest(manifest.as_ref(), false)
             .await
     }
@@ -947,33 +947,33 @@ impl FungiDaemon {
     pub async fn inspect_service(
         &self,
         runtime: RuntimeKind,
-        handle: String,
+        name: String,
     ) -> Result<ServiceInstance> {
-        self.runtime_control().inspect(runtime, &handle).await
+        self.runtime_control().inspect(runtime, &name).await
     }
 
-    pub async fn inspect_service_by_handle(&self, handle: String) -> Result<ServiceInstance> {
-        self.runtime_control().inspect_by_handle(&handle).await
+    pub async fn inspect_service_by_name(&self, name: String) -> Result<ServiceInstance> {
+        self.runtime_control().inspect_by_name(&name).await
     }
 
     pub async fn get_service_logs(
         &self,
         runtime: RuntimeKind,
-        handle: String,
+        name: String,
         tail: Option<String>,
     ) -> Result<ServiceLogs> {
         self.runtime_control()
-            .logs(runtime, &handle, &ServiceLogsOptions { tail })
+            .logs(runtime, &name, &ServiceLogsOptions { tail })
             .await
     }
 
-    pub async fn get_service_logs_by_handle(
+    pub async fn get_service_logs_by_name(
         &self,
-        handle: String,
+        name: String,
         tail: Option<String>,
     ) -> Result<ServiceLogs> {
         self.runtime_control()
-            .logs_by_handle(&handle, &ServiceLogsOptions { tail })
+            .logs_by_name(&name, &ServiceLogsOptions { tail })
             .await
     }
 
@@ -1015,10 +1015,10 @@ impl FungiDaemon {
     pub async fn remote_start_service(
         &self,
         peer_id: PeerId,
-        handle: String,
+        name: String,
     ) -> Result<ServiceControlResponse> {
         self.service_control_protocol_control()
-            .start_peer_service(peer_id, handle)
+            .start_peer_service(peer_id, name)
             .await
     }
 
@@ -1031,11 +1031,11 @@ impl FungiDaemon {
     pub async fn remote_stop_service(
         &self,
         peer_id: PeerId,
-        handle: String,
+        name: String,
     ) -> Result<ServiceControlResponse> {
         let response = self
             .service_control_protocol_control()
-            .stop_peer_service(peer_id, handle)
+            .stop_peer_service(peer_id, name)
             .await?;
         let service_key = response
             .service
@@ -1052,11 +1052,11 @@ impl FungiDaemon {
     pub async fn remote_remove_service(
         &self,
         peer_id: PeerId,
-        handle: String,
+        name: String,
     ) -> Result<ServiceControlResponse> {
         let response = self
             .service_control_protocol_control()
-            .remove_peer_service(peer_id, handle)
+            .remove_peer_service(peer_id, name)
             .await?;
         let service_key = response
             .service

@@ -4,7 +4,7 @@ use fungi_daemon_grpc::{
     fungi_daemon_grpc::{
         DisableRemoteServiceRequest, DiscoverPeerCapabilitiesRequest, DiscoverPeerServicesRequest,
         EnableRemoteServiceRequest, ListEnabledRemoteServicesRequest, RemoteDeployServiceRequest,
-        RemotePeerRequest, RemoteServiceControlResponse, RemoteServiceHandleRequest,
+        RemotePeerRequest, RemoteServiceControlResponse, RemoteServiceNameRequest,
     },
 };
 
@@ -74,21 +74,21 @@ pub enum RemoteServiceCommands {
         /// Peer ID to control
         peer_id: String,
         /// Service name
-        handle: String,
+        name: String,
     },
     /// Stop a deployed service on a remote peer by name
     Stop {
         /// Peer ID to control
         peer_id: String,
         /// Service name
-        handle: String,
+        name: String,
     },
     /// Remove a deployed service on a remote peer by name
     Remove {
         /// Peer ID to control
         peer_id: String,
         /// Service name
-        handle: String,
+        name: String,
     },
 }
 
@@ -199,22 +199,22 @@ pub async fn execute_remote(args: CommonArgs, cmd: RemoteCommands) {
                     Err(e) => fatal_grpc(e),
                 }
             }
-            RemoteServiceCommands::Start { peer_id, handle } => {
-                let req = RemoteServiceHandleRequest { peer_id, handle };
+            RemoteServiceCommands::Start { peer_id, name } => {
+                let req = RemoteServiceNameRequest { peer_id, name };
                 match client.remote_start_service(Request::new(req)).await {
                     Ok(resp) => print_remote_service_result("started", resp.into_inner()),
                     Err(e) => fatal_grpc(e),
                 }
             }
-            RemoteServiceCommands::Stop { peer_id, handle } => {
-                let req = RemoteServiceHandleRequest { peer_id, handle };
+            RemoteServiceCommands::Stop { peer_id, name } => {
+                let req = RemoteServiceNameRequest { peer_id, name };
                 match client.remote_stop_service(Request::new(req)).await {
                     Ok(resp) => print_remote_service_result("stopped", resp.into_inner()),
                     Err(e) => fatal_grpc(e),
                 }
             }
-            RemoteServiceCommands::Remove { peer_id, handle } => {
-                let req = RemoteServiceHandleRequest { peer_id, handle };
+            RemoteServiceCommands::Remove { peer_id, name } => {
+                let req = RemoteServiceNameRequest { peer_id, name };
                 match client.remote_remove_service(Request::new(req)).await {
                     Ok(resp) => print_remote_service_result("removed", resp.into_inner()),
                     Err(e) => fatal_grpc(e),

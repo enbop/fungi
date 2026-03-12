@@ -240,9 +240,9 @@ impl ServiceControlProtocolControl {
                 }
             }
             ServiceControlRequest::StartService { service, .. } => {
-                match self.runtime_control.start_by_handle(&service).await {
+                match self.runtime_control.start_by_name(&service).await {
                     Ok(()) => match self
-                        .sync_service_endpoint_listeners_by_handle(&service, true)
+                        .sync_service_endpoint_listeners_by_name(&service, true)
                         .await
                     {
                         Ok(()) => Ok(service),
@@ -252,9 +252,9 @@ impl ServiceControlProtocolControl {
                 }
             }
             ServiceControlRequest::StopService { service, .. } => {
-                match self.runtime_control.stop_by_handle(&service).await {
+                match self.runtime_control.stop_by_name(&service).await {
                     Ok(()) => match self
-                        .sync_service_endpoint_listeners_by_handle(&service, false)
+                        .sync_service_endpoint_listeners_by_name(&service, false)
                         .await
                     {
                         Ok(()) => Ok(service),
@@ -265,7 +265,7 @@ impl ServiceControlProtocolControl {
             }
             ServiceControlRequest::RemoveService { service, .. } => {
                 let manifest = self.runtime_control.get_service_manifest(&service);
-                match self.runtime_control.remove_by_handle(&service).await {
+                match self.runtime_control.remove_by_name(&service).await {
                     Ok(()) => match self
                         .sync_service_endpoint_listeners_for_manifest(manifest.as_ref(), false)
                         .await
@@ -294,12 +294,12 @@ impl ServiceControlProtocolControl {
         }
     }
 
-    async fn sync_service_endpoint_listeners_by_handle(
+    async fn sync_service_endpoint_listeners_by_name(
         &self,
-        handle: &str,
+        name: &str,
         enabled: bool,
     ) -> Result<()> {
-        let manifest = self.runtime_control.get_service_manifest(handle);
+        let manifest = self.runtime_control.get_service_manifest(name);
         self.sync_service_endpoint_listeners_for_manifest(manifest.as_ref(), enabled)
             .await
     }
