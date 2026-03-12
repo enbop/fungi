@@ -56,7 +56,7 @@ jobs:
 
       - name: Build Rust CLI for Android
         # Use --no-default-features to disable wasi feature
-        run: cargo ndk -P 24 -t arm64-v8a build --bin fungi -r --no-default-features
+        run: cargo ndk -P 24 -t arm64-v8a build --bin fungi -r
 
       - name: Prepare Artifacts (Android)
         shell: bash
