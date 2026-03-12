@@ -81,10 +81,11 @@ impl TcpTunnelingControl {
             .parse()
             .map_err(|e| anyhow::anyhow!("Invalid peer ID: {}", e))?;
 
-        let target_protocol = StreamProtocol::try_from_owned(format!(
-            "{}/{}",
-            FUNGI_TUNNEL_PROTOCOL, rule.remote_port
-        ))
+        let target_protocol = StreamProtocol::try_from_owned(
+            rule.remote_protocol
+                .clone()
+                .unwrap_or_else(|| format!("{}/{}", FUNGI_TUNNEL_PROTOCOL, rule.remote_port)),
+        )
         .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
 
         let swarm_control = self.swarm_control.clone();
@@ -142,9 +143,12 @@ impl TcpTunnelingControl {
             .try_into()
             .map_err(|e| anyhow::anyhow!("Invalid local socket address: {}", e))?;
 
-        let listening_protocol =
-            StreamProtocol::try_from_owned(format!("{}/{}", FUNGI_TUNNEL_PROTOCOL, rule.port))
-                .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
+        let listening_protocol = StreamProtocol::try_from_owned(
+            rule.protocol
+                .clone()
+                .unwrap_or_else(|| format!("{}/{}", FUNGI_TUNNEL_PROTOCOL, rule.port)),
+        )
+        .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
 
         log::info!("Adding listening rule: {local_addr} for {listening_protocol}");
 
@@ -225,14 +229,44 @@ impl TcpTunnelingControl {
 
     /// Generate unique ID for forwarding rule
     fn generate_forwarding_rule_id(&self, rule: &ForwardingRule) -> String {
-        format!(
-            "forward_{}:{}_to_{}",
-            rule.local_host, rule.local_port, rule.remote_peer_id
-        )
+        match &rule.remote_protocol {
+            Some(remote_protocol) => format!(
+                "forward_{}:{}_to_{}_{}",
+                rule.local_host,
+                rule.local_port,
+                rule.remote_peer_id,
+                sanitize_rule_component(remote_protocol),
+            ),
+            None => format!(
+                "forward_{}:{}_to_{}_{}",
+                rule.local_host, rule.local_port, rule.remote_peer_id, rule.remote_port
+            ),
+        }
     }
 
     /// Generate unique ID for listening rule
     fn generate_listening_rule_id(&self, rule: &ListeningRule) -> String {
-        format!("listen_{}:{}", rule.host, rule.port)
+        match &rule.protocol {
+            Some(protocol) => format!(
+                "listen_{}:{}_{}",
+                rule.host,
+                rule.port,
+                sanitize_rule_component(protocol),
+            ),
+            None => format!("listen_{}:{}", rule.host, rule.port),
+        }
     }
+}
+
+fn sanitize_rule_component(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }

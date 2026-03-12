@@ -68,6 +68,9 @@ pub enum Commands {
     /// Manage incoming allowed peers
     #[command(subcommand, visible_alias = "ap")]
     AllowedPeers(fungi_control::AllowedPeerCommands),
+    /// Manage runtime safety boundary settings
+    #[command(subcommand, visible_alias = "sec")]
+    Security(fungi_control::SecurityCommands),
     /// Manage file transfer service
     #[command(subcommand, visible_alias = "fs")]
     FtService(fungi_control::FtServiceCommands),
@@ -77,6 +80,12 @@ pub enum Commands {
     /// Manage TCP tunneling
     #[command(subcommand, visible_alias = "tn")]
     Tunnel(fungi_control::TunnelCommands),
+    /// Manage runtime services from manifests or service handles
+    #[command(subcommand, visible_alias = "svc")]
+    Service(fungi_control::ServiceCommands),
+    /// Manage remote peer queries and service control
+    #[command(subcommand)]
+    Remote(fungi_control::RemoteCommands),
     /// Device discovery and address book
     #[command(subcommand)]
     Device(fungi_control::DeviceCommands),

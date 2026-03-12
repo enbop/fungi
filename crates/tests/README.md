@@ -28,6 +28,33 @@ cargo build --package fungi-tests --bin test-tunnel-cli
   cargo build --bin fungi
   ```
 
+### WASM Service + Remote CLI Smoke
+
+Starts two temporary daemon nodes, uses one as a WASI service provider, and validates:
+
+- local `service` deploy/list/inspect/start/logs/stop/remove`
+- remote `capabilities`, `service deploy/list/start/discover/forward/forwarded/unforward/stop/remove`
+- HTTP reachability for both direct local service access and remote-forwarded access
+
+**Run:**
+```bash
+cargo run --package fungi-tests --bin test-service-remote-wasm-cli
+```
+
+**Optional environment variables:**
+```bash
+FUNGI_WASM_URL=https://github.com/enbop/filebrowser-lite/releases/latest/download/filebrowser-lite-wasi.wasm \
+FUNGI_WASM_EXPECT_TEXT=filebrowser \
+cargo run --package fungi-tests --bin test-service-remote-wasm-cli
+```
+
+**Prerequisites:**
+- Ensure the `fungi` binary is compiled first:
+  ```bash
+  cargo build --bin fungi
+  ```
+- Network access to download the wasm asset, unless `FUNGI_WASM_URL` points to a local/internal URL
+
 ## Adding New Tests
 
 1. Create a new binary in `src/bin/`

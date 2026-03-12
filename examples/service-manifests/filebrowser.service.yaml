@@ -1,0 +1,53 @@
+apiVersion: fungi.dev/v1alpha1
+kind: ServiceManifest
+
+metadata:
+  name: filebrowser
+  labels:
+    app: filebrowser
+    managedBy: fungi
+
+spec:
+  runtime: docker
+
+  expose:
+    enabled: true
+    serviceId: filebrowser
+    displayName: File Browser
+    transport:
+      kind: tcp
+    usage:
+      kind: web
+      path: /
+    iconUrl: https://raw.githubusercontent.com/filebrowser/logo/master/icon.svg
+    catalogId: io.filebrowser
+
+  source:
+    image: filebrowser/filebrowser:latest
+
+  ports:
+    - hostPort: auto
+      name: http
+      servicePort: 80
+      protocol: tcp
+
+  mounts:
+    - hostPath: ${APP_HOME}/data
+      runtimePath: /srv
+
+  env:
+    FB_NOAUTH: "true"
+
+  command: []
+  entrypoint: []
+
+  workingDir: null
+
+notes:
+  - "This manifest can be deployed directly with fungi service deploy."
+  - "${APP_HOME} resolves on the target node to fungi_home/services/<service-name>."
+  - "hostPort: auto asks the target node to choose an available port from its allowed port policy."
+  - "For exposed TCP services, each forwarded port should have a stable spec.ports[].name so peers can enable it locally."
+  - The Docker runtime now pulls the image automatically if it is missing locally.
+  - start/inspect/logs/stop/remove now accept just the service name.
+  - "spec.expose describes how the service should appear in discovery and what client UX is recommended."

@@ -21,15 +21,18 @@ fn main() -> Result<()> {
 
         // fungi commands
         Commands::Daemon(args) => block_on(fungi_daemon::run(fungi_args.common.clone(), args))?,
-        Commands::Init(_args) => block_on(fungi_init::run(fungi_args.common))?,
+        Commands::Init(args) => block_on(fungi_init::run(fungi_args.common, args))?,
         Commands::Relay(args) => block_on(fungi_relay::run(args))?,
 
         // control commands
         Commands::Info(cmd) => block_on(execute_info(fungi_args.common, cmd)),
         Commands::AllowedPeers(cmd) => block_on(execute_allowed_peer(fungi_args.common, cmd)),
+        Commands::Security(cmd) => block_on(execute_security(fungi_args.common, cmd)),
         Commands::FtService(cmd) => block_on(execute_ft_service(fungi_args.common, cmd)),
         Commands::FtClient(cmd) => block_on(execute_ft_client(fungi_args.common, cmd)),
         Commands::Tunnel(cmd) => block_on(execute_tunnel(fungi_args.common, cmd)),
+        Commands::Service(cmd) => block_on(execute_service(fungi_args.common, cmd)),
+        Commands::Remote(cmd) => block_on(execute_remote(fungi_args.common, cmd)),
         Commands::Device(cmd) => block_on(execute_device(fungi_args.common, cmd)),
         Commands::Connection(cmd) => block_on(execute_connection(fungi_args.common, cmd)),
         Commands::Ping {

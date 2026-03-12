@@ -6,6 +6,7 @@ pub mod fungi_daemon_grpc {
 
 use std::collections::HashSet;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -15,6 +16,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use fungi_daemon_grpc::fungi_daemon_server::FungiDaemon;
 use fungi_daemon_grpc::*;
 use libp2p_identity::PeerId;
+use serde_json;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tokio_stream::wrappers::ReceiverStream;
@@ -50,6 +52,15 @@ fn ping_event(
         tick_seq,
         ts_unix_ms,
         event: Some(event),
+    }
+}
+
+fn proto_runtime_kind(kind: i32) -> Result<Option<fungi_daemon::RuntimeKind>, Status> {
+    match ServiceRuntimeKind::try_from(kind) {
+        Ok(ServiceRuntimeKind::Unspecified) => Ok(None),
+        Ok(ServiceRuntimeKind::Docker) => Ok(Some(fungi_daemon::RuntimeKind::Docker)),
+        Ok(ServiceRuntimeKind::Wasmtime) => Ok(Some(fungi_daemon::RuntimeKind::Wasmtime)),
+        _ => Err(Status::invalid_argument("Invalid runtime kind")),
     }
 }
 
@@ -187,6 +198,118 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .remove_incoming_allowed_peer(peer_id)
             .map_err(|e| Status::internal(format!("Failed to remove peer: {}", e)))?;
 
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn get_runtime_config(
+        &self,
+        _request: Request<Empty>,
+    ) -> Result<Response<RuntimeConfigResponse>, Status> {
+        let config = self.inner.get_runtime_config();
+        Ok(Response::new(RuntimeConfigResponse {
+            disable_docker: config.disable_docker,
+            disable_wasmtime: config.disable_wasmtime,
+            allowed_host_paths: config
+                .allowed_host_paths
+                .into_iter()
+                .map(|path| path.to_string_lossy().to_string())
+                .collect(),
+            allowed_ports: config.allowed_ports.into_iter().map(i32::from).collect(),
+            allowed_port_ranges: config
+                .allowed_port_ranges
+                .into_iter()
+                .map(|range| RuntimeAllowedPortRange {
+                    start: i32::from(range.start),
+                    end: i32::from(range.end),
+                })
+                .collect(),
+        }))
+    }
+
+    async fn add_runtime_allowed_host_path(
+        &self,
+        request: Request<RuntimeAllowedHostPathRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let path = PathBuf::from(request.into_inner().path);
+        self.inner
+            .add_runtime_allowed_host_path(path)
+            .map_err(|e| {
+                Status::internal(format!("Failed to add runtime allowed host path: {}", e))
+            })?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn remove_runtime_allowed_host_path(
+        &self,
+        request: Request<RuntimeAllowedHostPathRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let path = PathBuf::from(request.into_inner().path);
+        self.inner
+            .remove_runtime_allowed_host_path(&path)
+            .map_err(|e| {
+                Status::internal(format!("Failed to remove runtime allowed host path: {}", e))
+            })?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn add_runtime_allowed_port(
+        &self,
+        request: Request<RuntimeAllowedPortRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let port = u16::try_from(request.into_inner().port)
+            .map_err(|_| Status::invalid_argument("Invalid port"))?;
+        self.inner
+            .add_runtime_allowed_port(port)
+            .map_err(|e| Status::internal(format!("Failed to add runtime allowed port: {}", e)))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn remove_runtime_allowed_port(
+        &self,
+        request: Request<RuntimeAllowedPortRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let port = u16::try_from(request.into_inner().port)
+            .map_err(|_| Status::invalid_argument("Invalid port"))?;
+        self.inner.remove_runtime_allowed_port(port).map_err(|e| {
+            Status::internal(format!("Failed to remove runtime allowed port: {}", e))
+        })?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn add_runtime_allowed_port_range(
+        &self,
+        request: Request<RuntimeAllowedPortRangeRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let start = u16::try_from(req.start)
+            .map_err(|_| Status::invalid_argument("Invalid range start"))?;
+        let end =
+            u16::try_from(req.end).map_err(|_| Status::invalid_argument("Invalid range end"))?;
+        self.inner
+            .add_runtime_allowed_port_range(start, end)
+            .map_err(|e| {
+                Status::internal(format!("Failed to add runtime allowed port range: {}", e))
+            })?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn remove_runtime_allowed_port_range(
+        &self,
+        request: Request<RuntimeAllowedPortRangeRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let start = u16::try_from(req.start)
+            .map_err(|_| Status::invalid_argument("Invalid range start"))?;
+        let end =
+            u16::try_from(req.end).map_err(|_| Status::invalid_argument("Invalid range end"))?;
+        self.inner
+            .remove_runtime_allowed_port_range(start, end)
+            .map_err(|e| {
+                Status::internal(format!(
+                    "Failed to remove runtime allowed port range: {}",
+                    e
+                ))
+            })?;
         Ok(Response::new(Empty {}))
     }
 
@@ -386,6 +509,10 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 local_port: rule.local_port as i32,
                 remote_peer_id: rule.remote_peer_id,
                 remote_port: rule.remote_port as i32,
+                remote_protocol: rule.remote_protocol.unwrap_or_default(),
+                remote_service_id: rule.remote_service_id.unwrap_or_default(),
+                remote_service_name: rule.remote_service_name.unwrap_or_default(),
+                remote_service_port_name: rule.remote_service_port_name.unwrap_or_default(),
             })
             .collect();
 
@@ -397,6 +524,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 host: rule.host,
                 port: rule.port as i32,
                 allowed_peers: vec![], // TODO: add allowed_peers to config
+                protocol: rule.protocol.unwrap_or_default(),
             })
             .collect();
 
@@ -416,11 +544,15 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
         let rule_id = self
             .inner
-            .add_tcp_forwarding_rule(
+            .add_tcp_forwarding_rule_with_details(
                 req.local_host,
                 req.local_port as u16,
                 req.peer_id,
                 req.remote_port as u16,
+                empty_to_none(req.remote_protocol),
+                empty_to_none(req.remote_service_id),
+                empty_to_none(req.remote_service_name),
+                empty_to_none(req.remote_service_port_name),
             )
             .await
             .map_err(|e| Status::internal(format!("Failed to add forwarding rule: {}", e)))?;
@@ -435,11 +567,12 @@ impl FungiDaemon for FungiDaemonRpcImpl {
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
         self.inner
-            .remove_tcp_forwarding_rule(
+            .remove_tcp_forwarding_rule_with_protocol(
                 req.local_host,
                 req.local_port as u16,
                 req.peer_id,
                 req.remote_port as u16,
+                empty_to_none(req.remote_protocol),
             )
             .map_err(|e| Status::internal(format!("Failed to remove forwarding rule: {}", e)))?;
 
@@ -454,7 +587,11 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
         let rule_id = self
             .inner
-            .add_tcp_listening_rule(req.local_host, req.local_port as u16, req.allowed_peers)
+            .add_tcp_listening_rule_with_protocol(
+                req.local_host,
+                req.local_port as u16,
+                empty_to_none(req.protocol),
+            )
             .await
             .map_err(|e| Status::internal(format!("Failed to add listening rule: {}", e)))?;
 
@@ -468,7 +605,11 @@ impl FungiDaemon for FungiDaemonRpcImpl {
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
         self.inner
-            .remove_tcp_listening_rule(req.local_host, req.local_port as u16)
+            .remove_tcp_listening_rule_with_protocol(
+                req.local_host,
+                req.local_port as u16,
+                empty_to_none(req.protocol),
+            )
             .map_err(|e| Status::internal(format!("Failed to remove listening rule: {}", e)))?;
 
         Ok(Response::new(Empty {}))
@@ -773,6 +914,373 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .collect();
 
         Ok(Response::new(ListActiveStreamsResponse { streams }))
+    }
+
+    async fn deploy_service(
+        &self,
+        request: Request<DeployServiceRequest>,
+    ) -> Result<Response<ServiceInstanceResponse>, Status> {
+        let req = request.into_inner();
+        let instance = self
+            .inner
+            .deploy_service_from_manifest_yaml(
+                req.manifest_yaml,
+                if req.manifest_base_dir.trim().is_empty() {
+                    None
+                } else {
+                    Some(std::path::PathBuf::from(req.manifest_base_dir))
+                },
+            )
+            .await
+            .map_err(|e| Status::internal(format!("Failed to deploy service: {e}")))?;
+
+        let instance_json = serde_json::to_string(&instance)
+            .map_err(|e| Status::internal(format!("Failed to serialize service instance: {e}")))?;
+        Ok(Response::new(ServiceInstanceResponse { instance_json }))
+    }
+
+    async fn start_service(
+        &self,
+        request: Request<ServiceNameRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let runtime = proto_runtime_kind(req.runtime)?;
+        match runtime {
+            Some(runtime) => self
+                .inner
+                .start_service(runtime, req.name)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to start service: {e}")))?,
+            None => self
+                .inner
+                .start_service_by_name(req.name)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to start service: {e}")))?,
+        }
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn stop_service(
+        &self,
+        request: Request<ServiceNameRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let runtime = proto_runtime_kind(req.runtime)?;
+        match runtime {
+            Some(runtime) => self
+                .inner
+                .stop_service(runtime, req.name)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to stop service: {e}")))?,
+            None => self
+                .inner
+                .stop_service_by_name(req.name)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to stop service: {e}")))?,
+        }
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn remove_service(
+        &self,
+        request: Request<ServiceNameRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let runtime = proto_runtime_kind(req.runtime)?;
+        match runtime {
+            Some(runtime) => self
+                .inner
+                .remove_service(runtime, req.name)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to remove service: {e}")))?,
+            None => self
+                .inner
+                .remove_service_by_name(req.name)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to remove service: {e}")))?,
+        }
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn inspect_service(
+        &self,
+        request: Request<ServiceNameRequest>,
+    ) -> Result<Response<ServiceInstanceResponse>, Status> {
+        let req = request.into_inner();
+        let runtime = proto_runtime_kind(req.runtime)?;
+        let instance = match runtime {
+            Some(runtime) => self
+                .inner
+                .inspect_service(runtime, req.name)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to inspect service: {e}")))?,
+            None => self
+                .inner
+                .inspect_service_by_name(req.name)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to inspect service: {e}")))?,
+        };
+        let instance_json = serde_json::to_string(&instance)
+            .map_err(|e| Status::internal(format!("Failed to serialize service instance: {e}")))?;
+        Ok(Response::new(ServiceInstanceResponse { instance_json }))
+    }
+
+    async fn get_service_logs(
+        &self,
+        request: Request<GetServiceLogsRequest>,
+    ) -> Result<Response<ServiceLogsResponse>, Status> {
+        let req = request.into_inner();
+        let runtime = proto_runtime_kind(req.runtime)?;
+        let tail = if req.tail.trim().is_empty() {
+            None
+        } else {
+            Some(req.tail)
+        };
+        let logs = match runtime {
+            Some(runtime) => self
+                .inner
+                .get_service_logs(runtime, req.name, tail)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to get service logs: {e}")))?,
+            None => self
+                .inner
+                .get_service_logs_by_name(req.name, tail)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to get service logs: {e}")))?,
+        };
+
+        Ok(Response::new(ServiceLogsResponse {
+            raw: logs.raw,
+            text: logs.text,
+        }))
+    }
+
+    async fn list_services(
+        &self,
+        _request: Request<Empty>,
+    ) -> Result<Response<ListServicesResponse>, Status> {
+        let services = self
+            .inner
+            .list_services()
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list services: {e}")))?;
+        let services_json = serde_json::to_string(&services)
+            .map_err(|e| Status::internal(format!("Failed to serialize services: {e}")))?;
+        Ok(Response::new(ListServicesResponse { services_json }))
+    }
+
+    async fn discover_peer_services(
+        &self,
+        request: Request<DiscoverPeerServicesRequest>,
+    ) -> Result<Response<DiscoverPeerServicesResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+        let services = self
+            .inner
+            .discover_peer_services(peer_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to discover peer services: {e}")))?;
+        let services_json = serde_json::to_string(&services)
+            .map_err(|e| Status::internal(format!("Failed to serialize peer services: {e}")))?;
+        Ok(Response::new(DiscoverPeerServicesResponse {
+            services_json,
+        }))
+    }
+
+    async fn discover_peer_capabilities(
+        &self,
+        request: Request<DiscoverPeerCapabilitiesRequest>,
+    ) -> Result<Response<DiscoverPeerCapabilitiesResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+        let capabilities = self
+            .inner
+            .discover_peer_capabilities(peer_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to discover peer capabilities: {e}")))?;
+        let capabilities_json = serde_json::to_string(&capabilities)
+            .map_err(|e| Status::internal(format!("Failed to serialize peer capabilities: {e}")))?;
+        Ok(Response::new(DiscoverPeerCapabilitiesResponse {
+            capabilities_json,
+        }))
+    }
+
+    async fn remote_deploy_service(
+        &self,
+        request: Request<RemoteDeployServiceRequest>,
+    ) -> Result<Response<RemoteServiceControlResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        let response = self
+            .inner
+            .remote_deploy_service(peer_id, req.manifest_yaml)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to deploy remote service: {e}")))?;
+
+        Ok(Response::new(RemoteServiceControlResponse {
+            service_name: response
+                .service
+                .map(|service| service.name)
+                .unwrap_or_default(),
+        }))
+    }
+
+    async fn remote_start_service(
+        &self,
+        request: Request<RemoteServiceNameRequest>,
+    ) -> Result<Response<RemoteServiceControlResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        let response = self
+            .inner
+            .remote_start_service(peer_id, req.name)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to start remote service: {e}")))?;
+
+        Ok(Response::new(RemoteServiceControlResponse {
+            service_name: response
+                .service
+                .map(|service| service.name)
+                .unwrap_or_default(),
+        }))
+    }
+
+    async fn remote_stop_service(
+        &self,
+        request: Request<RemoteServiceNameRequest>,
+    ) -> Result<Response<RemoteServiceControlResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        let response = self
+            .inner
+            .remote_stop_service(peer_id, req.name)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to stop remote service: {e}")))?;
+
+        Ok(Response::new(RemoteServiceControlResponse {
+            service_name: response
+                .service
+                .map(|service| service.name)
+                .unwrap_or_default(),
+        }))
+    }
+
+    async fn remote_remove_service(
+        &self,
+        request: Request<RemoteServiceNameRequest>,
+    ) -> Result<Response<RemoteServiceControlResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        let response = self
+            .inner
+            .remote_remove_service(peer_id, req.name)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove remote service: {e}")))?;
+
+        Ok(Response::new(RemoteServiceControlResponse {
+            service_name: response
+                .service
+                .map(|service| service.name)
+                .unwrap_or_default(),
+        }))
+    }
+
+    async fn remote_list_services(
+        &self,
+        request: Request<RemotePeerRequest>,
+    ) -> Result<Response<ListServicesResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        let response = self
+            .inner
+            .remote_list_services(peer_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list remote services: {e}")))?;
+
+        Ok(Response::new(ListServicesResponse {
+            services_json: response.services_json.unwrap_or_default(),
+        }))
+    }
+
+    async fn enable_remote_service(
+        &self,
+        request: Request<EnableRemoteServiceRequest>,
+    ) -> Result<Response<EnabledRemoteServiceResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        let enabled_service = self
+            .inner
+            .enable_remote_service(peer_id, req.service_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to enable remote service: {e}")))?;
+
+        let enabled_service_json = serde_json::to_string(&enabled_service)
+            .map_err(|e| Status::internal(format!("Failed to serialize enabled service: {e}")))?;
+
+        Ok(Response::new(EnabledRemoteServiceResponse {
+            enabled_service_json,
+        }))
+    }
+
+    async fn disable_remote_service(
+        &self,
+        request: Request<DisableRemoteServiceRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        self.inner
+            .disable_remote_service(peer_id, req.service_id)
+            .map_err(|e| Status::internal(format!("Failed to disable remote service: {e}")))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn list_enabled_remote_services(
+        &self,
+        request: Request<ListEnabledRemoteServicesRequest>,
+    ) -> Result<Response<EnabledRemoteServicesResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = if req.peer_id.trim().is_empty() {
+            None
+        } else {
+            Some(
+                PeerId::from_str(&req.peer_id)
+                    .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?,
+            )
+        };
+
+        let enabled_services = self.inner.list_enabled_remote_services(peer_id);
+        let enabled_services_json = serde_json::to_string(&enabled_services).map_err(|e| {
+            Status::internal(format!("Failed to serialize enabled remote services: {e}"))
+        })?;
+
+        Ok(Response::new(EnabledRemoteServicesResponse {
+            enabled_services_json,
+        }))
+    }
+}
+
+fn empty_to_none(value: String) -> Option<String> {
+    if value.trim().is_empty() {
+        None
+    } else {
+        Some(value)
     }
 }
 
