@@ -27,7 +27,7 @@ This repository contains the **Core Daemon** and **CLI** tools.
 *   **Modular architecture:**
     *   **`fungi-daemon`**: The background service that handles P2P networking and manage services.
     *   **`fungi-cli`**: A command-line tool to interact with the daemon via gRPC.
-*   **WASI Runtime**: (Experimental) WASI sandbox for cross-platform app deployment. [Learn more](https://fungi.rs/docs/wasi)
+*   **WASI Runtime**: (Experimental) Wasmtime-backed service runtime for WebAssembly components. Android support is not available yet and is coming soon. [Learn more](https://fungi.rs/docs/wasi)
 
 ## Documentation
 

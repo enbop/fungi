@@ -4,8 +4,7 @@ use fungi_docker_agent::{
 };
 use std::{
     collections::BTreeMap,
-    env,
-    fs,
+    env, fs,
     io::{Read, Write},
     net::TcpStream,
     path::{Path, PathBuf},
@@ -78,7 +77,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("start: ok");
         }
         Command::Logs => {
-            let logs = agent.container_logs(&args.name, &LogsOptions::default()).await?;
+            let logs = agent
+                .container_logs(&args.name, &LogsOptions::default())
+                .await?;
             println!("logs.text:\n{}", logs.text);
         }
         Command::Stop => {
@@ -119,7 +120,9 @@ async fn run_all(agent: &DockerAgent, args: &Args) -> Result<(), Box<dyn std::er
     let http_response = http_get(args.host_port)?;
     println!("http.get:\n{http_response}");
 
-    let logs = agent.container_logs(&args.name, &LogsOptions::default()).await?;
+    let logs = agent
+        .container_logs(&args.name, &LogsOptions::default())
+        .await?;
     println!("logs.text:\n{}", logs.text);
 
     agent.stop_container(&args.name).await?;
@@ -163,7 +166,10 @@ fn prepare_mount_dir(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn print_json<T: serde::Serialize>(label: &str, value: &T) -> Result<(), Box<dyn std::error::Error>> {
+fn print_json<T: serde::Serialize>(
+    label: &str,
+    value: &T,
+) -> Result<(), Box<dyn std::error::Error>> {
     println!("{label}:\n{}", serde_json::to_string_pretty(value)?);
     Ok(())
 }
@@ -186,22 +192,45 @@ fn resolve_socket_path(explicit: Option<&Path>) -> Result<PathBuf, Box<dyn std::
         if let Some(path) = host.strip_prefix("unix://") {
             return Ok(PathBuf::from(path));
         }
-    }
 
-    let home_socket = env::var("HOME")
-        .ok()
-        .map(PathBuf::from)
-        .map(|home| home.join(".docker/run/docker.sock"));
-    let candidates = [
-        home_socket,
-        Some(PathBuf::from("/var/run/docker.sock")),
-    ];
-
-    for candidate in candidates.into_iter().flatten() {
-        if candidate.exists() {
-            return Ok(candidate);
+        #[cfg(windows)]
+        if let Some(path) = docker_host_named_pipe_path(&host) {
+            return Ok(path);
         }
     }
 
-    Err("could not detect docker socket; pass --socket explicitly".into())
+    #[cfg(unix)]
+    {
+        let home_socket = env::var("HOME")
+            .ok()
+            .map(PathBuf::from)
+            .map(|home| home.join(".docker/run/docker.sock"));
+        let candidates = [home_socket, Some(PathBuf::from("/var/run/docker.sock"))];
+
+        for candidate in candidates.into_iter().flatten() {
+            if candidate.exists() {
+                return Ok(candidate);
+            }
+        }
+
+        Err("could not detect docker socket; pass --socket explicitly".into())
+    }
+
+    #[cfg(windows)]
+    {
+        Ok(PathBuf::from(r"\\.\pipe\docker_engine"))
+    }
+}
+
+#[cfg(windows)]
+fn docker_host_named_pipe_path(host: &str) -> Option<PathBuf> {
+    let raw = host.strip_prefix("npipe://")?;
+    let normalized = raw.trim_start_matches('/').replace('/', "\\");
+    if normalized.starts_with(r"\\.\pipe\") {
+        return Some(PathBuf::from(normalized));
+    }
+    if normalized.starts_with(r".\pipe\") {
+        return Some(PathBuf::from(format!(r"\\{}", normalized)));
+    }
+    Some(PathBuf::from(normalized))
 }

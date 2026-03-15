@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 use fungi_docker_agent::{
     AgentPolicy, BindMount, ContainerSpec, DockerAgent, LogsOptions, PortBinding, PortRule,
 };

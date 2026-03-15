@@ -6,7 +6,10 @@ use hyper_util::rt::TokioIo;
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{collections::BTreeMap, path::Path};
+#[cfg(unix)]
 use tokio::net::UnixStream;
+#[cfg(windows)]
+use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
 
 const QUERY_ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b' ')
@@ -139,8 +142,10 @@ impl DockerClient {
         body: Vec<u8>,
         content_type: Option<&str>,
     ) -> Result<HttpResponse> {
-        let stream = UnixStream::connect(&self.socket_path).await?;
-        let io = TokioIo::new(stream);
+        #[cfg(unix)]
+        let io = TokioIo::new(UnixStream::connect(&self.socket_path).await?);
+        #[cfg(windows)]
+        let io = TokioIo::new(connect_named_pipe(&self.socket_path)?);
         let (mut sender, connection) = http1::handshake(io).await?;
         tokio::spawn(async move {
             let _ = connection.await;
@@ -162,6 +167,11 @@ impl DockerClient {
         let body = response.into_body().collect().await?.to_bytes().to_vec();
         Ok(HttpResponse { status, body })
     }
+}
+
+#[cfg(windows)]
+fn connect_named_pipe(path: &Path) -> Result<NamedPipeClient> {
+    Ok(ClientOptions::new().open(path)?)
 }
 
 fn api_error(status: StatusCode, body: &[u8]) -> Result<DockerAgentError> {

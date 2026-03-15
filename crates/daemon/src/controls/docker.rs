@@ -104,27 +104,90 @@ fn build_agent_policy(config: &RuntimeConfig, socket_path: PathBuf) -> AgentPoli
 
 fn resolve_socket_path(explicit: Option<&Path>) -> Option<PathBuf> {
     if let Some(path) = explicit {
-        return path.exists().then(|| path.to_path_buf());
+        return docker_endpoint_available(path).then(|| path.to_path_buf());
     }
 
-    if let Ok(host) = env::var("DOCKER_HOST")
-        && let Some(path) = host.strip_prefix("unix://")
-    {
-        let candidate = PathBuf::from(path);
-        if candidate.exists() {
+    if let Ok(host) = env::var("DOCKER_HOST") {
+        if let Some(path) = host.strip_prefix("unix://") {
+            let candidate = PathBuf::from(path);
+            if docker_endpoint_available(&candidate) {
+                return Some(candidate);
+            }
+        }
+
+        #[cfg(windows)]
+        if let Some(candidate) = docker_host_named_pipe_path(&host)
+            && docker_endpoint_available(&candidate)
+        {
             return Some(candidate);
         }
     }
 
-    let home_socket = env::var("HOME")
-        .ok()
-        .map(PathBuf::from)
-        .map(|home| home.join(".docker/run/docker.sock"));
+    #[cfg(unix)]
+    {
+        let home_socket = env::var("HOME")
+            .ok()
+            .map(PathBuf::from)
+            .map(|home| home.join(".docker/run/docker.sock"));
 
-    [home_socket, Some(PathBuf::from("/var/run/docker.sock"))]
-        .into_iter()
-        .flatten()
-        .find(|candidate| candidate.exists())
+        [home_socket, Some(PathBuf::from("/var/run/docker.sock"))]
+            .into_iter()
+            .flatten()
+            .find(|candidate| docker_endpoint_available(candidate))
+    }
+
+    #[cfg(windows)]
+    {
+        let candidate = PathBuf::from(r"\\.\pipe\docker_engine");
+        docker_endpoint_available(&candidate).then_some(candidate)
+    }
+}
+
+#[cfg(unix)]
+fn docker_endpoint_available(path: &Path) -> bool {
+    path.exists()
+}
+
+#[cfg(windows)]
+fn docker_endpoint_available(path: &Path) -> bool {
+    if path.exists() {
+        return true;
+    }
+
+    if !is_named_pipe_path(path) {
+        return false;
+    }
+
+    tokio::net::windows::named_pipe::ClientOptions::new()
+        .open(path)
+        .is_ok()
+}
+
+#[cfg(windows)]
+fn docker_host_named_pipe_path(host: &str) -> Option<PathBuf> {
+    let raw = host.strip_prefix("npipe://")?;
+    Some(normalize_named_pipe_path(raw))
+}
+
+#[cfg(windows)]
+fn normalize_named_pipe_path(raw: &str) -> PathBuf {
+    let normalized = raw.trim_start_matches('/').replace('/', "\\");
+    if normalized.starts_with(r"\\.\pipe\") {
+        return PathBuf::from(normalized);
+    }
+    if normalized.starts_with(r".\pipe\") {
+        return PathBuf::from(format!(r"\\{}", normalized));
+    }
+    PathBuf::from(normalized)
+}
+
+#[cfg(windows)]
+fn is_named_pipe_path(path: &Path) -> bool {
+    let value = path.as_os_str().to_string_lossy();
+    value.starts_with(r"\\.\pipe\")
+        || value.starts_with(r".\pipe\")
+        || value.starts_with("//./pipe/")
+        || value.starts_with("npipe://")
 }
 
 #[cfg(test)]
