@@ -441,7 +441,7 @@ pub struct ListActiveStreamsResponse {
     pub streams: ::prost::alloc::vec::Vec<ActiveStreamSnapshot>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct DeployServiceRequest {
+pub struct PullServiceRequest {
     #[prost(string, tag = "1")]
     pub manifest_yaml: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
@@ -501,7 +501,7 @@ pub struct DiscoverPeerCapabilitiesResponse {
     pub capabilities_json: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RemoteDeployServiceRequest {
+pub struct RemotePullServiceRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
@@ -1697,10 +1697,10 @@ pub mod fungi_daemon_client {
                 );
             self.inner.unary(req, path, codec).await
         }
-        /// Deploys a service from a serialized manifest payload.
-        pub async fn deploy_service(
+        /// Pulls a service from a serialized manifest payload.
+        pub async fn pull_service(
             &mut self,
-            request: impl tonic::IntoRequest<super::DeployServiceRequest>,
+            request: impl tonic::IntoRequest<super::PullServiceRequest>,
         ) -> std::result::Result<
             tonic::Response<super::ServiceInstanceResponse>,
             tonic::Status,
@@ -1715,14 +1715,14 @@ pub mod fungi_daemon_client {
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/DeployService",
+                "/fungi_daemon.FungiDaemon/PullService",
             );
             let mut req = request.into_request();
             req.extensions_mut()
-                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "DeployService"));
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "PullService"));
             self.inner.unary(req, path, codec).await
         }
-        /// Starts a deployed service.
+        /// Starts a pulled service.
         pub async fn start_service(
             &mut self,
             request: impl tonic::IntoRequest<super::ServiceNameRequest>,
@@ -1744,7 +1744,7 @@ pub mod fungi_daemon_client {
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "StartService"));
             self.inner.unary(req, path, codec).await
         }
-        /// Stops a deployed service.
+        /// Stops a pulled service.
         pub async fn stop_service(
             &mut self,
             request: impl tonic::IntoRequest<super::ServiceNameRequest>,
@@ -1766,7 +1766,7 @@ pub mod fungi_daemon_client {
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "StopService"));
             self.inner.unary(req, path, codec).await
         }
-        /// Removes a deployed service.
+        /// Removes a pulled service.
         pub async fn remove_service(
             &mut self,
             request: impl tonic::IntoRequest<super::ServiceNameRequest>,
@@ -1788,7 +1788,7 @@ pub mod fungi_daemon_client {
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "RemoveService"));
             self.inner.unary(req, path, codec).await
         }
-        /// Inspects a deployed service.
+        /// Inspects a pulled service.
         pub async fn inspect_service(
             &mut self,
             request: impl tonic::IntoRequest<super::ServiceNameRequest>,
@@ -1813,7 +1813,7 @@ pub mod fungi_daemon_client {
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "InspectService"));
             self.inner.unary(req, path, codec).await
         }
-        /// Gets logs for a deployed service.
+        /// Gets logs for a pulled service.
         pub async fn get_service_logs(
             &mut self,
             request: impl tonic::IntoRequest<super::GetServiceLogsRequest>,
@@ -1838,7 +1838,7 @@ pub mod fungi_daemon_client {
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "GetServiceLogs"));
             self.inner.unary(req, path, codec).await
         }
-        /// Lists all deployed services on the local node, including stopped ones.
+        /// Lists all pulled services on the local node, including stopped ones.
         pub async fn list_services(
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
@@ -1890,7 +1890,7 @@ pub mod fungi_daemon_client {
                 );
             self.inner.unary(req, path, codec).await
         }
-        /// Queries a remote peer for minimal node deployment capabilities.
+        /// Queries a remote peer for minimal node runtime capabilities.
         pub async fn discover_peer_capabilities(
             &mut self,
             request: impl tonic::IntoRequest<super::DiscoverPeerCapabilitiesRequest>,
@@ -1920,10 +1920,10 @@ pub mod fungi_daemon_client {
                 );
             self.inner.unary(req, path, codec).await
         }
-        /// Controls a service on a remote peer by sending a manifest to the local daemon.
-        pub async fn remote_deploy_service(
+        /// Pulls a service on a remote peer by sending a manifest to the local daemon.
+        pub async fn remote_pull_service(
             &mut self,
-            request: impl tonic::IntoRequest<super::RemoteDeployServiceRequest>,
+            request: impl tonic::IntoRequest<super::RemotePullServiceRequest>,
         ) -> std::result::Result<
             tonic::Response<super::RemoteServiceControlResponse>,
             tonic::Status,
@@ -1938,12 +1938,12 @@ pub mod fungi_daemon_client {
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/RemoteDeployService",
+                "/fungi_daemon.FungiDaemon/RemotePullService",
             );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "RemoteDeployService"),
+                    GrpcMethod::new("fungi_daemon.FungiDaemon", "RemotePullService"),
                 );
             self.inner.unary(req, path, codec).await
         }
@@ -2028,7 +2028,7 @@ pub mod fungi_daemon_client {
                 );
             self.inner.unary(req, path, codec).await
         }
-        /// Lists deployed services on a remote peer, including stopped ones.
+        /// Lists pulled services on a remote peer, including stopped ones.
         pub async fn remote_list_services(
             &mut self,
             request: impl tonic::IntoRequest<super::RemotePeerRequest>,
@@ -2406,30 +2406,30 @@ pub mod fungi_daemon_server {
             tonic::Response<super::ListActiveStreamsResponse>,
             tonic::Status,
         >;
-        /// Deploys a service from a serialized manifest payload.
-        async fn deploy_service(
+        /// Pulls a service from a serialized manifest payload.
+        async fn pull_service(
             &self,
-            request: tonic::Request<super::DeployServiceRequest>,
+            request: tonic::Request<super::PullServiceRequest>,
         ) -> std::result::Result<
             tonic::Response<super::ServiceInstanceResponse>,
             tonic::Status,
         >;
-        /// Starts a deployed service.
+        /// Starts a pulled service.
         async fn start_service(
             &self,
             request: tonic::Request<super::ServiceNameRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Stops a deployed service.
+        /// Stops a pulled service.
         async fn stop_service(
             &self,
             request: tonic::Request<super::ServiceNameRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Removes a deployed service.
+        /// Removes a pulled service.
         async fn remove_service(
             &self,
             request: tonic::Request<super::ServiceNameRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Inspects a deployed service.
+        /// Inspects a pulled service.
         async fn inspect_service(
             &self,
             request: tonic::Request<super::ServiceNameRequest>,
@@ -2437,7 +2437,7 @@ pub mod fungi_daemon_server {
             tonic::Response<super::ServiceInstanceResponse>,
             tonic::Status,
         >;
-        /// Gets logs for a deployed service.
+        /// Gets logs for a pulled service.
         async fn get_service_logs(
             &self,
             request: tonic::Request<super::GetServiceLogsRequest>,
@@ -2445,7 +2445,7 @@ pub mod fungi_daemon_server {
             tonic::Response<super::ServiceLogsResponse>,
             tonic::Status,
         >;
-        /// Lists all deployed services on the local node, including stopped ones.
+        /// Lists all pulled services on the local node, including stopped ones.
         async fn list_services(
             &self,
             request: tonic::Request<super::Empty>,
@@ -2461,7 +2461,7 @@ pub mod fungi_daemon_server {
             tonic::Response<super::DiscoverPeerServicesResponse>,
             tonic::Status,
         >;
-        /// Queries a remote peer for minimal node deployment capabilities.
+        /// Queries a remote peer for minimal node runtime capabilities.
         async fn discover_peer_capabilities(
             &self,
             request: tonic::Request<super::DiscoverPeerCapabilitiesRequest>,
@@ -2469,10 +2469,10 @@ pub mod fungi_daemon_server {
             tonic::Response<super::DiscoverPeerCapabilitiesResponse>,
             tonic::Status,
         >;
-        /// Controls a service on a remote peer by sending a manifest to the local daemon.
-        async fn remote_deploy_service(
+        /// Pulls a service on a remote peer by sending a manifest to the local daemon.
+        async fn remote_pull_service(
             &self,
-            request: tonic::Request<super::RemoteDeployServiceRequest>,
+            request: tonic::Request<super::RemotePullServiceRequest>,
         ) -> std::result::Result<
             tonic::Response<super::RemoteServiceControlResponse>,
             tonic::Status,
@@ -2501,7 +2501,7 @@ pub mod fungi_daemon_server {
             tonic::Response<super::RemoteServiceControlResponse>,
             tonic::Status,
         >;
-        /// Lists deployed services on a remote peer, including stopped ones.
+        /// Lists pulled services on a remote peer, including stopped ones.
         async fn remote_list_services(
             &self,
             request: tonic::Request<super::RemotePeerRequest>,
@@ -4448,13 +4448,13 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/DeployService" => {
+                "/fungi_daemon.FungiDaemon/PullService" => {
                     #[allow(non_camel_case_types)]
-                    struct DeployServiceSvc<T: FungiDaemon>(pub Arc<T>);
+                    struct PullServiceSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<
                         T: FungiDaemon,
-                    > tonic::server::UnaryService<super::DeployServiceRequest>
-                    for DeployServiceSvc<T> {
+                    > tonic::server::UnaryService<super::PullServiceRequest>
+                    for PullServiceSvc<T> {
                         type Response = super::ServiceInstanceResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
@@ -4462,11 +4462,11 @@ pub mod fungi_daemon_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::DeployServiceRequest>,
+                            request: tonic::Request<super::PullServiceRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::deploy_service(&inner, request).await
+                                <T as FungiDaemon>::pull_service(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -4477,7 +4477,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = DeployServiceSvc(inner);
+                        let method = PullServiceSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -4858,13 +4858,13 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/RemoteDeployService" => {
+                "/fungi_daemon.FungiDaemon/RemotePullService" => {
                     #[allow(non_camel_case_types)]
-                    struct RemoteDeployServiceSvc<T: FungiDaemon>(pub Arc<T>);
+                    struct RemotePullServiceSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<
                         T: FungiDaemon,
-                    > tonic::server::UnaryService<super::RemoteDeployServiceRequest>
-                    for RemoteDeployServiceSvc<T> {
+                    > tonic::server::UnaryService<super::RemotePullServiceRequest>
+                    for RemotePullServiceSvc<T> {
                         type Response = super::RemoteServiceControlResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
@@ -4872,11 +4872,11 @@ pub mod fungi_daemon_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::RemoteDeployServiceRequest>,
+                            request: tonic::Request<super::RemotePullServiceRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::remote_deploy_service(&inner, request)
+                                <T as FungiDaemon>::remote_pull_service(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -4888,7 +4888,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = RemoteDeployServiceSvc(inner);
+                        let method = RemotePullServiceSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

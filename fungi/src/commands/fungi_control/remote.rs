@@ -3,7 +3,7 @@ use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
         DisableRemoteServiceRequest, DiscoverPeerCapabilitiesRequest, DiscoverPeerServicesRequest,
-        EnableRemoteServiceRequest, ListEnabledRemoteServicesRequest, RemoteDeployServiceRequest,
+        EnableRemoteServiceRequest, ListEnabledRemoteServicesRequest, RemotePullServiceRequest,
         RemotePeerRequest, RemoteServiceControlResponse, RemoteServiceNameRequest,
     },
 };
@@ -62,28 +62,28 @@ pub enum RemoteServiceCommands {
         /// Optional peer ID filter
         peer_id: Option<String>,
     },
-    /// Deploy a service manifest to a remote peer
-    Deploy {
+    /// Pull a service manifest to a remote peer
+    Pull {
         /// Peer ID to control
         peer_id: String,
         /// Path to a service manifest YAML file
         manifest: String,
     },
-    /// Start a deployed service on a remote peer by name
+    /// Start a pulled service on a remote peer by name
     Start {
         /// Peer ID to control
         peer_id: String,
         /// Service name
         name: String,
     },
-    /// Stop a deployed service on a remote peer by name
+    /// Stop a pulled service on a remote peer by name
     Stop {
         /// Peer ID to control
         peer_id: String,
         /// Service name
         name: String,
     },
-    /// Remove a deployed service on a remote peer by name
+    /// Remove a pulled service on a remote peer by name
     Remove {
         /// Peer ID to control
         peer_id: String,
@@ -187,15 +187,15 @@ pub async fn execute_remote(args: CommonArgs, cmd: RemoteCommands) {
                     Err(e) => fatal_grpc(e),
                 }
             }
-            RemoteServiceCommands::Deploy { peer_id, manifest } => {
+            RemoteServiceCommands::Pull { peer_id, manifest } => {
                 let (manifest_yaml, _manifest_base_dir) = read_manifest_yaml_file(&manifest);
 
-                let req = RemoteDeployServiceRequest {
+                let req = RemotePullServiceRequest {
                     peer_id,
                     manifest_yaml,
                 };
-                match client.remote_deploy_service(Request::new(req)).await {
-                    Ok(resp) => print_remote_service_result("deployed", resp.into_inner()),
+                match client.remote_pull_service(Request::new(req)).await {
+                    Ok(resp) => print_remote_service_result("pulled", resp.into_inner()),
                     Err(e) => fatal_grpc(e),
                 }
             }

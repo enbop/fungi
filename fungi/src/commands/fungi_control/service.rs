@@ -6,7 +6,7 @@ use fungi_daemon::{
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
-        DeployServiceRequest, Empty, GetServiceLogsRequest, ListServicesResponse,
+        Empty, GetServiceLogsRequest, ListServicesResponse, PullServiceRequest,
         ServiceInstanceResponse, ServiceNameRequest,
     },
 };
@@ -21,16 +21,16 @@ use super::{
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum ServiceCommands {
-    /// List deployed services on the local node, including stopped ones
+    /// List pulled services on the local node, including stopped ones
     List,
-    /// Deploy a service from a YAML manifest file
-    Deploy {
+    /// Pull a service from a YAML manifest file
+    Pull {
         /// Path to a service manifest YAML file
         manifest: String,
     },
-    /// Start a deployed service by name
+    /// Start a pulled service by name
     Start { name: String },
-    /// Inspect a deployed service by name
+    /// Inspect a pulled service by name
     Inspect { name: String },
     /// Get service logs by name
     Logs {
@@ -38,9 +38,9 @@ pub enum ServiceCommands {
         #[arg(long)]
         tail: Option<String>,
     },
-    /// Stop a deployed service by name
+    /// Stop a pulled service by name
     Stop { name: String },
-    /// Remove a deployed service by name
+    /// Remove a pulled service by name
     Remove { name: String },
 }
 
@@ -55,13 +55,13 @@ pub async fn execute_service(args: CommonArgs, cmd: ServiceCommands) {
             Ok(resp) => print_service_instances(resp.into_inner()),
             Err(e) => fatal_grpc(e),
         },
-        ServiceCommands::Deploy { manifest } => {
+        ServiceCommands::Pull { manifest } => {
             let (manifest_yaml, manifest_base_dir) = read_manifest_yaml_file(&manifest);
-            let req = DeployServiceRequest {
+            let req = PullServiceRequest {
                 manifest_yaml,
                 manifest_base_dir,
             };
-            match client.deploy_service(Request::new(req)).await {
+            match client.pull_service(Request::new(req)).await {
                 Ok(resp) => print_service_instance(resp.into_inner()),
                 Err(e) => fatal_grpc(e),
             }

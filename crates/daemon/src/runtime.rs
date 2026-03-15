@@ -627,7 +627,7 @@ fn resolve_manifest_path_string(
 #[async_trait]
 pub trait RuntimeProvider: Send + Sync {
     fn runtime_kind(&self) -> RuntimeKind;
-    async fn deploy(&self, manifest: &ServiceManifest) -> Result<ServiceInstance>;
+    async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance>;
     async fn start(&self, name: &str) -> Result<()>;
     async fn stop(&self, name: &str) -> Result<()>;
     async fn remove(&self, name: &str) -> Result<()>;
@@ -652,7 +652,7 @@ impl RuntimeProvider for DockerRuntimeProvider {
         RuntimeKind::Docker
     }
 
-    async fn deploy(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
+    async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
         let spec = docker_spec_from_manifest(manifest)?;
         let details = self.docker.create_container(&spec).await?;
         Ok(map_docker_instance(details))
@@ -753,7 +753,7 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
         RuntimeKind::Wasmtime
     }
 
-    async fn deploy(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
+    async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
         let allowed_host_paths = self.allowed_host_paths.lock().clone();
         let state =
             build_wasmtime_state(&self.runtime_root, &allowed_host_paths, manifest, true).await?;
@@ -964,7 +964,7 @@ impl RuntimeControl {
         self.wasmtime.update_allowed_host_paths(allowed_host_paths);
     }
 
-    pub async fn deploy(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
+    pub async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
         self.ensure_runtime_enabled(manifest.runtime)?;
         {
             let services = self.service_index.lock();
@@ -974,8 +974,8 @@ impl RuntimeControl {
         }
 
         let instance = match manifest.runtime {
-            RuntimeKind::Docker => self.docker_provider()?.deploy(manifest).await,
-            RuntimeKind::Wasmtime => self.wasmtime.deploy(manifest).await,
+            RuntimeKind::Docker => self.docker_provider()?.pull(manifest).await,
+            RuntimeKind::Wasmtime => self.wasmtime.pull(manifest).await,
         }?;
 
         self.service_index
@@ -988,7 +988,7 @@ impl RuntimeControl {
         Ok(enrich_instance_from_manifest(instance, manifest))
     }
 
-    pub async fn deploy_manifest_yaml(
+    pub async fn pull_manifest_yaml(
         &self,
         content: &str,
         base_dir: &Path,
@@ -996,7 +996,7 @@ impl RuntimeControl {
         policy: &ManifestResolutionPolicy,
     ) -> Result<ServiceInstance> {
         let manifest = self.resolve_manifest_yaml(content, base_dir, fungi_home, policy)?;
-        self.deploy(&manifest).await
+        self.pull(&manifest).await
     }
 
     pub fn resolve_manifest_yaml(
@@ -1797,7 +1797,7 @@ mod tests {
             labels: BTreeMap::new(),
         };
 
-        provider.deploy(&manifest).await.unwrap();
+        provider.pull(&manifest).await.unwrap();
         let created = provider.inspect("demo-service").await.unwrap();
         assert_eq!(created.status.state, "created");
 
@@ -1905,8 +1905,8 @@ spec:
             labels: BTreeMap::new(),
         };
 
-        let deployed = provider.deploy(&manifest).await.unwrap();
-        assert_eq!(deployed.status.state, "created");
+        let pulled = provider.pull(&manifest).await.unwrap();
+        assert_eq!(pulled.status.state, "created");
         assert!(
             temp_dir
                 .path()

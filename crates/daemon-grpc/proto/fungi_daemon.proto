@@ -142,37 +142,37 @@ service FungiDaemon {
   rpc ListActiveStreams(ListActiveStreamsRequest)
       returns (ListActiveStreamsResponse) {}
 
-  // Deploys a service from a serialized manifest payload.
-  rpc DeployService(DeployServiceRequest) returns (ServiceInstanceResponse) {}
+  // Pulls a service from a serialized manifest payload.
+  rpc PullService(PullServiceRequest) returns (ServiceInstanceResponse) {}
 
-  // Starts a deployed service.
+  // Starts a pulled service.
   rpc StartService(ServiceNameRequest) returns (Empty) {}
 
-  // Stops a deployed service.
+  // Stops a pulled service.
   rpc StopService(ServiceNameRequest) returns (Empty) {}
 
-  // Removes a deployed service.
+  // Removes a pulled service.
   rpc RemoveService(ServiceNameRequest) returns (Empty) {}
 
-  // Inspects a deployed service.
+  // Inspects a pulled service.
   rpc InspectService(ServiceNameRequest) returns (ServiceInstanceResponse) {}
 
-  // Gets logs for a deployed service.
+  // Gets logs for a pulled service.
   rpc GetServiceLogs(GetServiceLogsRequest) returns (ServiceLogsResponse) {}
 
-  // Lists all deployed services on the local node, including stopped ones.
+  // Lists all pulled services on the local node, including stopped ones.
   rpc ListServices(Empty) returns (ListServicesResponse) {}
 
   // Queries a remote peer for currently discoverable services.
   rpc DiscoverPeerServices(DiscoverPeerServicesRequest)
       returns (DiscoverPeerServicesResponse) {}
 
-    // Queries a remote peer for minimal node deployment capabilities.
+    // Queries a remote peer for minimal node runtime capabilities.
     rpc DiscoverPeerCapabilities(DiscoverPeerCapabilitiesRequest)
       returns (DiscoverPeerCapabilitiesResponse) {}
 
-    // Controls a service on a remote peer by sending a manifest to the local daemon.
-    rpc RemoteDeployService(RemoteDeployServiceRequest)
+    // Pulls a service on a remote peer by sending a manifest to the local daemon.
+    rpc RemotePullService(RemotePullServiceRequest)
       returns (RemoteServiceControlResponse) {}
 
     // Starts a service on a remote peer by service name.
@@ -187,7 +187,7 @@ service FungiDaemon {
     rpc RemoteRemoveService(RemoteServiceNameRequest)
       returns (RemoteServiceControlResponse) {}
 
-    // Lists deployed services on a remote peer, including stopped ones.
+    // Lists pulled services on a remote peer, including stopped ones.
     rpc RemoteListServices(RemotePeerRequest)
       returns (ListServicesResponse) {}
 
@@ -466,7 +466,7 @@ enum ServiceRuntimeKind {
   SERVICE_RUNTIME_KIND_WASMTIME = 2;
 }
 
-message DeployServiceRequest {
+message PullServiceRequest {
   string manifest_yaml = 1;
   string manifest_base_dir = 2;
 }
@@ -499,7 +499,7 @@ message DiscoverPeerCapabilitiesRequest { string peer_id = 1; }
 
 message DiscoverPeerCapabilitiesResponse { string capabilities_json = 1; }
 
-message RemoteDeployServiceRequest {
+message RemotePullServiceRequest {
   string peer_id = 1;
   string manifest_yaml = 2;
 }

@@ -93,8 +93,8 @@ if [[ "$daemon_ready" != "true" ]]; then
   exit 1
 fi
 
-echo "== deploy filebrowser manifest =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service deploy "$EXAMPLE_DIR/filebrowser.service.yaml"
+echo "== pull filebrowser manifest =="
+"$BIN" --fungi-dir "$FUNGI_DIR" service pull "$EXAMPLE_DIR/filebrowser.service.yaml"
 
 echo "== start filebrowser service =="
 "$BIN" --fungi-dir "$FUNGI_DIR" service start filebrowser

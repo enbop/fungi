@@ -90,8 +90,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let _ = runtime.remove(RuntimeKind::Wasmtime, &args.name).await;
 
-    let deployed = runtime.deploy(&manifest).await?;
-    println!("deploy:\n{:#?}", deployed);
+    let pulled = runtime.pull(&manifest).await?;
+    println!("pull:\n{:#?}", pulled);
 
     let inspected = runtime.inspect(RuntimeKind::Wasmtime, &args.name).await?;
     println!("inspect.before_start:\n{:#?}", inspected);

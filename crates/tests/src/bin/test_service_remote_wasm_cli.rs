@@ -218,14 +218,14 @@ fn run_local_service_checks(
 ) -> Result<()> {
     println!("\n=== Local service smoke ===");
 
-    let deploy_output = provider.run_cli([
+    let pull_output = provider.run_cli([
         "service",
-        "deploy",
+        "pull",
         manifest_path
             .to_str()
             .context("manifest path is not valid utf-8")?,
     ])?;
-    assert_contains(&deploy_output, SERVICE_NAME, "local deploy output")?;
+    assert_contains(&pull_output, SERVICE_NAME, "local pull output")?;
 
     let list_output = provider.run_cli(["service", "list"])?;
     assert_contains(&list_output, SERVICE_NAME, "local service list")?;
@@ -301,16 +301,16 @@ fn run_remote_service_checks(
         "remote capabilities",
     )?;
 
-    let remote_deploy_output = controller.run_cli([
+    let remote_pull_output = controller.run_cli([
         "remote",
         "service",
-        "deploy",
+        "pull",
         provider_peer_id,
         manifest_path
             .to_str()
             .context("manifest path is not valid utf-8")?,
     ])?;
-    assert_contains(&remote_deploy_output, SERVICE_NAME, "remote deploy output")?;
+    assert_contains(&remote_pull_output, SERVICE_NAME, "remote pull output")?;
 
     let remote_list_output = controller.run_cli(["remote", "service", "list", provider_peer_id])?;
     assert_contains(&remote_list_output, SERVICE_NAME, "remote list output")?;

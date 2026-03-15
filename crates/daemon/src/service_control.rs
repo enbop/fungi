@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum ServiceControlRequest {
-    DeployService {
+    PullService {
         request_id: Option<String>,
         manifest_yaml: String,
     },
@@ -27,7 +27,7 @@ pub enum ServiceControlRequest {
 impl ServiceControlRequest {
     pub fn request_id(&self) -> Option<&str> {
         match self {
-            Self::DeployService { request_id, .. }
+            Self::PullService { request_id, .. }
             | Self::ListServices { request_id, .. }
             | Self::StartService { request_id, .. }
             | Self::StopService { request_id, .. }
@@ -37,7 +37,7 @@ impl ServiceControlRequest {
 
     pub fn service_name(&self) -> Option<String> {
         match self {
-            Self::DeployService { .. } => None,
+            Self::PullService { .. } => None,
             Self::ListServices { .. } => None,
             Self::StartService { service, .. }
             | Self::StopService { service, .. }

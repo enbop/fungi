@@ -65,14 +65,14 @@ impl ServiceControlProtocolControl {
         Ok(())
     }
 
-    pub async fn deploy_peer_service(
+    pub async fn pull_peer_service(
         &self,
         peer_id: PeerId,
         manifest_yaml: String,
     ) -> Result<ServiceControlResponse> {
         self.send_request(
             peer_id,
-            ServiceControlRequest::DeployService {
+            ServiceControlRequest::PullService {
                 request_id: None,
                 manifest_yaml,
             },
@@ -210,15 +210,10 @@ impl ServiceControlProtocolControl {
         let request_id = request.request_id().map(str::to_string);
 
         let result = match request {
-            ServiceControlRequest::DeployService { manifest_yaml, .. } => {
+            ServiceControlRequest::PullService { manifest_yaml, .. } => {
                 let policy = self.manifest_resolution_policy();
                 self.runtime_control
-                    .deploy_manifest_yaml(
-                        &manifest_yaml,
-                        &self.fungi_home,
-                        &self.fungi_home,
-                        &policy,
-                    )
+                    .pull_manifest_yaml(&manifest_yaml, &self.fungi_home, &self.fungi_home, &policy)
                     .await
                     .map(|instance| instance.name)
             }

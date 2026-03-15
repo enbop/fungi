@@ -916,14 +916,14 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         Ok(Response::new(ListActiveStreamsResponse { streams }))
     }
 
-    async fn deploy_service(
+    async fn pull_service(
         &self,
-        request: Request<DeployServiceRequest>,
+        request: Request<PullServiceRequest>,
     ) -> Result<Response<ServiceInstanceResponse>, Status> {
         let req = request.into_inner();
         let instance = self
             .inner
-            .deploy_service_from_manifest_yaml(
+            .pull_service_from_manifest_yaml(
                 req.manifest_yaml,
                 if req.manifest_base_dir.trim().is_empty() {
                     None
@@ -932,7 +932,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 },
             )
             .await
-            .map_err(|e| Status::internal(format!("Failed to deploy service: {e}")))?;
+            .map_err(|e| Status::internal(format!("Failed to pull service: {e}")))?;
 
         let instance_json = serde_json::to_string(&instance)
             .map_err(|e| Status::internal(format!("Failed to serialize service instance: {e}")))?;
@@ -1107,9 +1107,9 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         }))
     }
 
-    async fn remote_deploy_service(
+    async fn remote_pull_service(
         &self,
-        request: Request<RemoteDeployServiceRequest>,
+        request: Request<RemotePullServiceRequest>,
     ) -> Result<Response<RemoteServiceControlResponse>, Status> {
         let req = request.into_inner();
         let peer_id = PeerId::from_str(&req.peer_id)
@@ -1117,9 +1117,9 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
         let response = self
             .inner
-            .remote_deploy_service(peer_id, req.manifest_yaml)
+            .remote_pull_service(peer_id, req.manifest_yaml)
             .await
-            .map_err(|e| Status::internal(format!("Failed to deploy remote service: {e}")))?;
+            .map_err(|e| Status::internal(format!("Failed to pull remote service: {e}")))?;
 
         Ok(Response::new(RemoteServiceControlResponse {
             service_name: response

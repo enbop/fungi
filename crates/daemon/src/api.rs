@@ -889,11 +889,11 @@ impl FungiDaemon {
         Ok(())
     }
 
-    pub async fn deploy_service(&self, manifest: ServiceManifest) -> Result<ServiceInstance> {
-        self.runtime_control().deploy(&manifest).await
+    pub async fn pull_service(&self, manifest: ServiceManifest) -> Result<ServiceInstance> {
+        self.runtime_control().pull(&manifest).await
     }
 
-    pub async fn deploy_service_from_manifest_yaml(
+    pub async fn pull_service_from_manifest_yaml(
         &self,
         manifest_yaml: String,
         manifest_base_dir: Option<PathBuf>,
@@ -902,7 +902,7 @@ impl FungiDaemon {
         let base_dir = manifest_base_dir.unwrap_or_else(|| fungi_home.clone());
         let policy = self.manifest_resolution_policy();
         self.runtime_control()
-            .deploy_manifest_yaml(&manifest_yaml, &base_dir, &fungi_home, &policy)
+            .pull_manifest_yaml(&manifest_yaml, &base_dir, &fungi_home, &policy)
             .await
     }
 
@@ -1002,13 +1002,13 @@ impl FungiDaemon {
             .await
     }
 
-    pub async fn remote_deploy_service(
+    pub async fn remote_pull_service(
         &self,
         peer_id: PeerId,
         manifest_yaml: String,
     ) -> Result<ServiceControlResponse> {
         self.service_control_protocol_control()
-            .deploy_peer_service(peer_id, manifest_yaml)
+            .pull_peer_service(peer_id, manifest_yaml)
             .await
     }
 

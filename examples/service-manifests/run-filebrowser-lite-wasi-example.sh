@@ -70,8 +70,8 @@ if [[ "$daemon_ready" != "true" ]]; then
   exit 1
 fi
 
-echo "== deploy filebrowser-lite-wasi manifest =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service deploy "$EXAMPLE_DIR/filebrowser-lite-wasi.service.yaml"
+echo "== pull filebrowser-lite-wasi manifest =="
+"$BIN" --fungi-dir "$FUNGI_DIR" service pull "$EXAMPLE_DIR/filebrowser-lite-wasi.service.yaml"
 
 echo "== start filebrowser-lite-wasi service =="
 "$BIN" --fungi-dir "$FUNGI_DIR" service start filebrowser-lite-wasi
