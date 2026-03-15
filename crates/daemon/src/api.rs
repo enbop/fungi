@@ -20,8 +20,8 @@ use crate::runtime::{
     ServiceManifest, service_expose_endpoint_bindings,
 };
 use crate::{
-    FungiDaemon, ManifestResolutionPolicy, NodeCapabilities, ServiceControlResponse,
-    build_local_node_capabilities,
+    FungiDaemon, LocalRuntimeStatus, ManifestResolutionPolicy, NodeCapabilities,
+    ServiceControlResponse, build_local_node_capabilities, build_local_runtime_status,
 };
 
 #[derive(Debug, Clone)]
@@ -994,6 +994,11 @@ impl FungiDaemon {
     pub fn local_node_capabilities(&self) -> NodeCapabilities {
         let config = self.config().lock().clone();
         build_local_node_capabilities(&config, self.runtime_control())
+    }
+
+    pub fn local_runtime_status(&self) -> LocalRuntimeStatus {
+        let config = self.config().lock().clone();
+        build_local_runtime_status(&config, self.runtime_control())
     }
 
     pub async fn discover_peer_capabilities(&self, peer_id: PeerId) -> Result<NodeCapabilities> {

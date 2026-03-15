@@ -25,7 +25,7 @@ impl DockerControl {
             return Ok(None);
         }
 
-        let Some(socket_path) = resolve_socket_path(config.docker_socket_path.as_deref()) else {
+        let Some(socket_path) = detect_socket_path(config) else {
             log::info!(
                 "Docker runtime unavailable on this host; continuing without Docker support"
             );
@@ -76,6 +76,10 @@ impl DockerControl {
     }
 }
 
+pub fn detect_socket_path(config: &RuntimeConfig) -> Option<PathBuf> {
+    resolve_socket_path(config.docker_socket_path.as_deref())
+}
+
 fn build_agent_policy(config: &RuntimeConfig, socket_path: PathBuf) -> AgentPolicy {
     let allowed_ports = config
         .allowed_ports
@@ -107,20 +111,20 @@ fn resolve_socket_path(explicit: Option<&Path>) -> Option<PathBuf> {
         return docker_endpoint_available(path).then(|| path.to_path_buf());
     }
 
-    if let Ok(host) = env::var("DOCKER_HOST")
-        && let Some(path) = host.strip_prefix("unix://")
-    {
-        let candidate = PathBuf::from(path);
-        if docker_endpoint_available(&candidate) {
+    if let Ok(host) = env::var("DOCKER_HOST") {
+        if let Some(path) = host.strip_prefix("unix://") {
+            let candidate = PathBuf::from(path);
+            if docker_endpoint_available(&candidate) {
+                return Some(candidate);
+            }
+        }
+
+        #[cfg(windows)]
+        if let Some(candidate) = docker_host_named_pipe_path(&host)
+            && docker_endpoint_available(&candidate)
+        {
             return Some(candidate);
         }
-    }
-
-    #[cfg(windows)]
-    if let Some(candidate) = docker_host_named_pipe_path(&host)
-        && docker_endpoint_available(&candidate)
-    {
-        return Some(candidate);
     }
 
     #[cfg(unix)]
@@ -172,11 +176,11 @@ fn docker_host_named_pipe_path(host: &str) -> Option<PathBuf> {
 #[cfg(windows)]
 fn normalize_named_pipe_path(raw: &str) -> PathBuf {
     let normalized = raw.trim_start_matches('/').replace('/', "\\");
-    if normalized.starts_with(r"\\.\pipe\") {
+    if normalized.starts_with("\\\\.\\pipe\\") {
         return PathBuf::from(normalized);
     }
-    if normalized.starts_with(r".\pipe\") {
-        return PathBuf::from(format!(r"\\{}", normalized));
+    if normalized.starts_with(".\\pipe\\") {
+        return PathBuf::from(format!("\\\\{}", normalized));
     }
     PathBuf::from(normalized)
 }
@@ -184,8 +188,8 @@ fn normalize_named_pipe_path(raw: &str) -> PathBuf {
 #[cfg(windows)]
 fn is_named_pipe_path(path: &Path) -> bool {
     let value = path.as_os_str().to_string_lossy();
-    value.starts_with(r"\\.\pipe\")
-        || value.starts_with(r".\pipe\")
+    value.starts_with("\\\\.\\pipe\\")
+        || value.starts_with(".\\pipe\\")
         || value.starts_with("//./pipe/")
         || value.starts_with("npipe://")
 }

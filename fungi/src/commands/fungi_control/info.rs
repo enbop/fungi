@@ -21,6 +21,8 @@ pub enum InfoCommands {
     ConfigPath,
     /// Show RPC address
     RpcAddress,
+    /// Show local runtime status observed by the daemon
+    Runtime,
 }
 
 pub async fn execute_info(args: CommonArgs, cmd: InfoCommands) {
@@ -63,6 +65,36 @@ pub async fn execute_info(args: CommonArgs, cmd: InfoCommands) {
             Ok(resp) => println!("{}", resp.into_inner().hostname),
             Err(e) => fatal_grpc(e),
         },
+        InfoCommands::Runtime => match client
+            .get_local_runtime_status(Request::new(Empty {}))
+            .await
+        {
+            Ok(resp) => print_runtime_status(&resp.into_inner()),
+            Err(e) => fatal_grpc(e),
+        },
         InfoCommands::ConfigPath | InfoCommands::RpcAddress => {}
+    }
+}
+
+fn print_runtime_status(status: &fungi_daemon_grpc::fungi_daemon_grpc::LocalRuntimeStatusResponse) {
+    print_runtime_entry("docker", status.docker.as_ref());
+    print_runtime_entry("wasmtime", status.wasmtime.as_ref());
+}
+
+fn print_runtime_entry(
+    name: &str,
+    status: Option<&fungi_daemon_grpc::fungi_daemon_grpc::RuntimeAvailabilityStatus>,
+) {
+    println!("{name}:");
+    let Some(status) = status else {
+        println!("  <unavailable>");
+        return;
+    };
+
+    println!("  config_enabled: {}", status.config_enabled);
+    println!("  detected: {}", status.detected);
+    println!("  active: {}", status.active);
+    if !status.endpoint.is_empty() {
+        println!("  endpoint: {}", status.endpoint);
     }
 }

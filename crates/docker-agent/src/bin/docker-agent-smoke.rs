@@ -188,15 +188,15 @@ fn resolve_socket_path(explicit: Option<&Path>) -> Result<PathBuf, Box<dyn std::
         return Ok(path.to_path_buf());
     }
 
-    if let Ok(host) = env::var("DOCKER_HOST")
-        && let Some(path) = host.strip_prefix("unix://")
-    {
-        return Ok(PathBuf::from(path));
-    }
+    if let Ok(host) = env::var("DOCKER_HOST") {
+        if let Some(path) = host.strip_prefix("unix://") {
+            return Ok(PathBuf::from(path));
+        }
 
-    #[cfg(windows)]
-    if let Some(path) = docker_host_named_pipe_path(&host) {
-        return Ok(path);
+        #[cfg(windows)]
+        if let Some(path) = docker_host_named_pipe_path(&host) {
+            return Ok(path);
+        }
     }
 
     #[cfg(unix)]
@@ -226,11 +226,11 @@ fn resolve_socket_path(explicit: Option<&Path>) -> Result<PathBuf, Box<dyn std::
 fn docker_host_named_pipe_path(host: &str) -> Option<PathBuf> {
     let raw = host.strip_prefix("npipe://")?;
     let normalized = raw.trim_start_matches('/').replace('/', "\\");
-    if normalized.starts_with(r"\\.\pipe\") {
+    if normalized.starts_with("\\\\.\\pipe\\") {
         return Some(PathBuf::from(normalized));
     }
-    if normalized.starts_with(r".\pipe\") {
-        return Some(PathBuf::from(format!(r"\\{}", normalized)));
+    if normalized.starts_with(".\\pipe\\") {
+        return Some(PathBuf::from(format!("\\\\{}", normalized)));
     }
     Some(PathBuf::from(normalized))
 }

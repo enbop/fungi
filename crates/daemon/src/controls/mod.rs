@@ -6,7 +6,7 @@ mod service_control;
 mod service_discovery;
 mod tcp_tunneling;
 
-pub use docker::DockerControl;
+pub use docker::{DockerControl, detect_socket_path};
 pub use file_transfer::FileTransferServiceControl;
 pub use file_transfer::{
     FileTransferClientsControl, start_ftp_proxy_service, start_webdav_proxy_service,

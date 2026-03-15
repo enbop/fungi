@@ -1,7 +1,8 @@
 use fungi_config::FungiConfig;
 use serde::{Deserialize, Serialize};
 
-use crate::RuntimeControl;
+use crate::controls::detect_socket_path;
+use crate::{RuntimeControl, RuntimeKind};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeCapabilities {
@@ -26,6 +27,20 @@ pub struct NodeAllowedTcpPorts {
 pub struct NodePortRange {
     pub start: u16,
     pub end: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalRuntimeStatus {
+    pub docker: LocalRuntimeAvailability,
+    pub wasmtime: LocalRuntimeAvailability,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalRuntimeAvailability {
+    pub config_enabled: bool,
+    pub detected: bool,
+    pub active: bool,
+    pub endpoint: Option<String>,
 }
 
 pub fn build_local_node_capabilities(
@@ -57,5 +72,28 @@ pub fn build_local_node_capabilities(
             ranges,
         },
         storage_roots: vec!["fungi_home".to_string()],
+    }
+}
+
+pub fn build_local_runtime_status(
+    config: &FungiConfig,
+    runtime_control: &RuntimeControl,
+) -> LocalRuntimeStatus {
+    let docker_endpoint =
+        detect_socket_path(&config.runtime).map(|path| path.to_string_lossy().to_string());
+
+    LocalRuntimeStatus {
+        docker: LocalRuntimeAvailability {
+            config_enabled: !config.runtime.disable_docker,
+            detected: docker_endpoint.is_some(),
+            active: runtime_control.supports(RuntimeKind::Docker),
+            endpoint: docker_endpoint,
+        },
+        wasmtime: LocalRuntimeAvailability {
+            config_enabled: !config.runtime.disable_wasmtime,
+            detected: true,
+            active: runtime_control.supports(RuntimeKind::Wasmtime),
+            endpoint: None,
+        },
     }
 }

@@ -225,6 +225,27 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         }))
     }
 
+    async fn get_local_runtime_status(
+        &self,
+        _request: Request<Empty>,
+    ) -> Result<Response<LocalRuntimeStatusResponse>, Status> {
+        let status = self.inner.local_runtime_status();
+        Ok(Response::new(LocalRuntimeStatusResponse {
+            docker: Some(RuntimeAvailabilityStatus {
+                config_enabled: status.docker.config_enabled,
+                detected: status.docker.detected,
+                active: status.docker.active,
+                endpoint: status.docker.endpoint.unwrap_or_default(),
+            }),
+            wasmtime: Some(RuntimeAvailabilityStatus {
+                config_enabled: status.wasmtime.config_enabled,
+                detected: status.wasmtime.detected,
+                active: status.wasmtime.active,
+                endpoint: status.wasmtime.endpoint.unwrap_or_default(),
+            }),
+        }))
+    }
+
     async fn add_runtime_allowed_host_path(
         &self,
         request: Request<RuntimeAllowedHostPathRequest>,

@@ -31,28 +31,31 @@ service FungiDaemon {
   rpc RemoveIncomingAllowedPeer(RemoveIncomingAllowedPeerRequest)
       returns (Empty) {}
 
-    // Returns runtime enablement flags and the current shared safety boundary.
-    rpc GetRuntimeConfig(Empty) returns (RuntimeConfigResponse) {}
+  // Returns runtime enablement flags and the current shared safety boundary.
+  rpc GetRuntimeConfig(Empty) returns (RuntimeConfigResponse) {}
 
-    // Adds a host path root to the shared runtime safety boundary.
-    rpc AddRuntimeAllowedHostPath(RuntimeAllowedHostPathRequest) returns (Empty) {}
+  // Returns the local runtime status currently observed by the daemon.
+  rpc GetLocalRuntimeStatus(Empty) returns (LocalRuntimeStatusResponse) {}
 
-    // Removes a host path root from the shared runtime safety boundary.
-    rpc RemoveRuntimeAllowedHostPath(RuntimeAllowedHostPathRequest)
+  // Adds a host path root to the shared runtime safety boundary.
+  rpc AddRuntimeAllowedHostPath(RuntimeAllowedHostPathRequest) returns (Empty) {}
+
+  // Removes a host path root from the shared runtime safety boundary.
+  rpc RemoveRuntimeAllowedHostPath(RuntimeAllowedHostPathRequest)
       returns (Empty) {}
 
-    // Adds a single TCP port to the shared runtime safety boundary.
-    rpc AddRuntimeAllowedPort(RuntimeAllowedPortRequest) returns (Empty) {}
+  // Adds a single TCP port to the shared runtime safety boundary.
+  rpc AddRuntimeAllowedPort(RuntimeAllowedPortRequest) returns (Empty) {}
 
-    // Removes a single TCP port from the shared runtime safety boundary.
-    rpc RemoveRuntimeAllowedPort(RuntimeAllowedPortRequest) returns (Empty) {}
+  // Removes a single TCP port from the shared runtime safety boundary.
+  rpc RemoveRuntimeAllowedPort(RuntimeAllowedPortRequest) returns (Empty) {}
 
-    // Adds a TCP port range to the shared runtime safety boundary.
-    rpc AddRuntimeAllowedPortRange(RuntimeAllowedPortRangeRequest)
+  // Adds a TCP port range to the shared runtime safety boundary.
+  rpc AddRuntimeAllowedPortRange(RuntimeAllowedPortRangeRequest)
       returns (Empty) {}
 
-    // Removes a TCP port range from the shared runtime safety boundary.
-    rpc RemoveRuntimeAllowedPortRange(RuntimeAllowedPortRangeRequest)
+  // Removes a TCP port range from the shared runtime safety boundary.
+  rpc RemoveRuntimeAllowedPortRange(RuntimeAllowedPortRangeRequest)
       returns (Empty) {}
 
   // Indicates whether the embedded file transfer service is running.
@@ -240,6 +243,18 @@ message RuntimeConfigResponse {
   repeated string allowed_host_paths = 3;
   repeated int32 allowed_ports = 4;
   repeated RuntimeAllowedPortRange allowed_port_ranges = 5;
+}
+
+message RuntimeAvailabilityStatus {
+  bool config_enabled = 1;
+  bool detected = 2;
+  bool active = 3;
+  string endpoint = 4;
+}
+
+message LocalRuntimeStatusResponse {
+  RuntimeAvailabilityStatus docker = 1;
+  RuntimeAvailabilityStatus wasmtime = 2;
 }
 
 message FileTransferServiceEnabledResponse { bool enabled = 1; }

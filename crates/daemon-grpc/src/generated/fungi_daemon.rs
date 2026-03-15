@@ -73,6 +73,24 @@ pub struct RuntimeConfigResponse {
     #[prost(message, repeated, tag = "5")]
     pub allowed_port_ranges: ::prost::alloc::vec::Vec<RuntimeAllowedPortRange>,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RuntimeAvailabilityStatus {
+    #[prost(bool, tag = "1")]
+    pub config_enabled: bool,
+    #[prost(bool, tag = "2")]
+    pub detected: bool,
+    #[prost(bool, tag = "3")]
+    pub active: bool,
+    #[prost(string, tag = "4")]
+    pub endpoint: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct LocalRuntimeStatusResponse {
+    #[prost(message, optional, tag = "1")]
+    pub docker: ::core::option::Option<RuntimeAvailabilityStatus>,
+    #[prost(message, optional, tag = "2")]
+    pub wasmtime: ::core::option::Option<RuntimeAvailabilityStatus>,
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FileTransferServiceEnabledResponse {
     #[prost(bool, tag = "1")]
@@ -879,6 +897,33 @@ pub mod fungi_daemon_client {
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "GetRuntimeConfig"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Returns the local runtime status currently observed by the daemon.
+        pub async fn get_local_runtime_status(
+            &mut self,
+            request: impl tonic::IntoRequest<super::Empty>,
+        ) -> std::result::Result<
+            tonic::Response<super::LocalRuntimeStatusResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/GetLocalRuntimeStatus",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("fungi_daemon.FungiDaemon", "GetLocalRuntimeStatus"),
+                );
             self.inner.unary(req, path, codec).await
         }
         /// Adds a host path root to the shared runtime safety boundary.
@@ -2203,6 +2248,14 @@ pub mod fungi_daemon_server {
             tonic::Response<super::RuntimeConfigResponse>,
             tonic::Status,
         >;
+        /// Returns the local runtime status currently observed by the daemon.
+        async fn get_local_runtime_status(
+            &self,
+            request: tonic::Request<super::Empty>,
+        ) -> std::result::Result<
+            tonic::Response<super::LocalRuntimeStatusResponse>,
+            tonic::Status,
+        >;
         /// Adds a host path root to the shared runtime safety boundary.
         async fn add_runtime_allowed_host_path(
             &self,
@@ -2961,6 +3014,53 @@ pub mod fungi_daemon_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = GetRuntimeConfigSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/GetLocalRuntimeStatus" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetLocalRuntimeStatusSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
+                    for GetLocalRuntimeStatusSvc<T> {
+                        type Response = super::LocalRuntimeStatusResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::Empty>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::get_local_runtime_status(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetLocalRuntimeStatusSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

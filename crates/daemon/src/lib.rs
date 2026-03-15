@@ -10,8 +10,9 @@ pub use api::{EnabledRemoteService, EnabledRemoteServiceEndpoint};
 use clap::Parser;
 pub use daemon::FungiDaemon;
 pub use node_capabilities::{
-    NodeAllowedTcpPorts, NodeCapabilities, NodePortRange, NodeRuntimeCapabilities,
-    build_local_node_capabilities,
+    LocalRuntimeAvailability, LocalRuntimeStatus, NodeAllowedTcpPorts, NodeCapabilities,
+    NodePortRange, NodeRuntimeCapabilities, build_local_node_capabilities,
+    build_local_runtime_status,
 };
 pub use runtime::{
     DiscoveredService, DiscoveredServiceEndpoint, ManifestResolutionPolicy, RuntimeControl,
