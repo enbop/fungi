@@ -35,6 +35,7 @@ use std::time::Duration;
 use tempfile::TempDir;
 
 struct DaemonProcess {
+    _temp_dir: TempDir,
     child: Child,
     fungi_dir: PathBuf,
 }
@@ -50,10 +51,22 @@ impl DaemonProcess {
         let fungi_bin = get_fungi_binary_path()?;
         println!("Using fungi binary: {}", fungi_bin.display());
 
-        let mut child = Command::new(&fungi_bin)
-            .arg("daemon")
-            .arg("-f")
+        let init_status = Command::new(&fungi_bin)
+            .arg("--fungi-dir")
             .arg(&fungi_dir)
+            .arg("init")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .context("Failed to initialize fungi directory")?;
+        if !init_status.success() {
+            bail!("Failed to initialize fungi directory: {}", init_status);
+        }
+
+        let mut child = Command::new(&fungi_bin)
+            .arg("--fungi-dir")
+            .arg(&fungi_dir)
+            .arg("daemon")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -74,7 +87,11 @@ impl DaemonProcess {
             }
         }
 
-        Ok(Self { child, fungi_dir })
+        Ok(Self {
+            _temp_dir: temp_dir,
+            child,
+            fungi_dir,
+        })
     }
 
     fn fungi_dir(&self) -> &PathBuf {
@@ -111,7 +128,7 @@ impl TestContext {
         let fungi_bin = get_fungi_binary_path()?;
 
         let output = Command::new(&fungi_bin)
-            .arg("-f")
+            .arg("--fungi-dir")
             .arg(self.daemon.fungi_dir())
             .args(args)
             .output()
@@ -148,7 +165,7 @@ fn get_fungi_binary_path() -> Result<PathBuf> {
 
 fn test_tunnel_config(ctx: &TestContext) -> Result<()> {
     println!("\n=== Test: Get tunnel config ===");
-    let output = ctx.run_cli(&["tunnel", "config"])?;
+    let output = ctx.run_cli(&["tunnel", "show"])?;
     println!("Output:\n{}", output);
     assert!(output.contains("Forwarding:"));
     assert!(output.contains("Listening:"));
@@ -173,7 +190,7 @@ fn test_add_forwarding_rule(ctx: &TestContext) -> Result<()> {
 
 fn test_list_forwarding_rules(ctx: &TestContext) -> Result<()> {
     println!("\n=== Test: List forwarding rules ===");
-    let output = ctx.run_cli(&["tunnel", "config"])?;
+    let output = ctx.run_cli(&["tunnel", "show"])?;
     println!("Output:\n{}", output);
     assert!(output.contains("127.0.0.1:8080"));
     assert!(output.contains(&ctx.test_peer_id));
@@ -199,7 +216,7 @@ fn test_remove_forwarding_rule(ctx: &TestContext) -> Result<()> {
 
 fn test_verify_forwarding_rule_removed(ctx: &TestContext) -> Result<()> {
     println!("\n=== Test: Verify forwarding rule removed ===");
-    let output = ctx.run_cli(&["tunnel", "config"])?;
+    let output = ctx.run_cli(&["tunnel", "show"])?;
     println!("Output:\n{}", output);
     assert!(!output.contains("127.0.0.1:8080"));
     println!("✓ Test passed");
@@ -217,7 +234,7 @@ fn test_add_listening_rule(ctx: &TestContext) -> Result<()> {
 
 fn test_list_listening_rules(ctx: &TestContext) -> Result<()> {
     println!("\n=== Test: List listening rules ===");
-    let output = ctx.run_cli(&["tunnel", "config"])?;
+    let output = ctx.run_cli(&["tunnel", "show"])?;
     println!("Output:\n{}", output);
     assert!(output.contains("127.0.0.1:7070"));
     println!("✓ Test passed");
@@ -235,7 +252,7 @@ fn test_remove_listening_rule(ctx: &TestContext) -> Result<()> {
 
 fn test_verify_listening_rule_removed(ctx: &TestContext) -> Result<()> {
     println!("\n=== Test: Verify listening rule removed ===");
-    let output = ctx.run_cli(&["tunnel", "config"])?;
+    let output = ctx.run_cli(&["tunnel", "show"])?;
     println!("Output:\n{}", output);
     assert!(!output.contains("127.0.0.1:7070"));
     println!("✓ Test passed");
@@ -261,7 +278,7 @@ fn test_multiple_forwarding_rules(ctx: &TestContext) -> Result<()> {
         "9092",
     ])?;
 
-    let output = ctx.run_cli(&["tunnel", "config"])?;
+    let output = ctx.run_cli(&["tunnel", "show"])?;
     println!("Output:\n{}", output);
     assert!(output.contains("127.0.0.1:8081"));
     assert!(output.contains("127.0.0.1:8082"));
@@ -274,7 +291,7 @@ fn test_multiple_forwarding_rules(ctx: &TestContext) -> Result<()> {
         "9091",
     ])?;
 
-    let output = ctx.run_cli(&["tunnel", "config"])?;
+    let output = ctx.run_cli(&["tunnel", "show"])?;
     assert!(!output.contains("127.0.0.1:8081"));
     assert!(output.contains("127.0.0.1:8082"));
 

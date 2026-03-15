@@ -1850,11 +1850,11 @@ spec:
         image: filebrowser/filebrowser:latest
     mounts:
         - hostPath: ${APP_HOME}/data
-            runtimePath: /srv
+          runtimePath: /srv
     ports:
         - hostPort: auto
-            servicePort: 80
-            protocol: tcp
+          servicePort: 80
+          protocol: tcp
 "#;
 
         let fungi_home = PathBuf::from("/tmp/fungi-home");
@@ -1934,6 +1934,11 @@ spec:
             path: /
     source:
         image: filebrowser/filebrowser:latest
+    ports:
+        - name: http
+          hostPort: 8080
+          servicePort: 80
+          protocol: tcp
 "#;
 
         let manifest =

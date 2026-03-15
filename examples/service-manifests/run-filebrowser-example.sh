@@ -7,6 +7,8 @@ TMP_ROOT="$(mktemp -d /tmp/fungi-filebrowser-example.XXXXXX)"
 FUNGI_DIR="$TMP_ROOT/fungi-home"
 RPC_ADDR="127.0.0.1:55405"
 SERVICE_PORT="${SERVICE_PORT:-28080}"
+SERVICE_NAME="filebrowser-example-$$"
+MANIFEST_PATH="$TMP_ROOT/${SERVICE_NAME}.service.yaml"
 BIN="$ROOT_DIR/target/debug/fungi"
 DAEMON_PID=""
 
@@ -15,7 +17,7 @@ cleanup() {
     kill "$DAEMON_PID" >/dev/null 2>&1 || true
     wait "$DAEMON_PID" >/dev/null 2>&1 || true
   fi
-  docker rm -f filebrowser >/dev/null 2>&1 || true
+  docker rm -f "$SERVICE_NAME" >/dev/null 2>&1 || true
   rm -rf "$TMP_ROOT"
 }
 trap cleanup EXIT
@@ -63,11 +65,18 @@ enabled = false
 host = "127.0.0.1"
 port = 8181
 
-[docker]
-enabled = true
+[runtime]
+disable_docker = false
 allowed_host_paths = ["$FUNGI_DIR/services"]
 allowed_ports = [$SERVICE_PORT]
+allowed_port_ranges = []
 EOF
+
+sed \
+  -e "s/^  name: filebrowser$/  name: ${SERVICE_NAME}/" \
+  -e "s/^    serviceId: filebrowser$/    serviceId: ${SERVICE_NAME}/" \
+  -e "s/^    displayName: File Browser$/    displayName: ${SERVICE_NAME}/" \
+  "$EXAMPLE_DIR/filebrowser.service.yaml" > "$MANIFEST_PATH"
 
 echo "== starting daemon =="
 "$BIN" --fungi-dir "$FUNGI_DIR" daemon >"$TMP_ROOT/daemon.log" 2>&1 &
@@ -94,10 +103,10 @@ if [[ "$daemon_ready" != "true" ]]; then
 fi
 
 echo "== pull filebrowser manifest =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service pull "$EXAMPLE_DIR/filebrowser.service.yaml"
+"$BIN" --fungi-dir "$FUNGI_DIR" service pull "$MANIFEST_PATH"
 
 echo "== start filebrowser service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service start filebrowser
+"$BIN" --fungi-dir "$FUNGI_DIR" service start "$SERVICE_NAME"
 
 echo "== waiting for filebrowser http endpoint =="
 ready="false"
@@ -113,30 +122,30 @@ done
 if [[ "$ready" != "true" ]]; then
   echo "filebrowser endpoint did not become ready" >&2
   echo "== inspect filebrowser service ==" >&2
-  "$BIN" --fungi-dir "$FUNGI_DIR" service inspect filebrowser >&2 || true
+  "$BIN" --fungi-dir "$FUNGI_DIR" service inspect "$SERVICE_NAME" >&2 || true
   echo "== filebrowser logs ==" >&2
-  "$BIN" --fungi-dir "$FUNGI_DIR" service logs filebrowser --tail 100 >&2 || true
+  "$BIN" --fungi-dir "$FUNGI_DIR" service logs "$SERVICE_NAME" --tail 100 >&2 || true
   echo "== daemon log ==" >&2
   tail -n 100 "$TMP_ROOT/daemon.log" >&2 || true
   exit 1
 fi
 
 echo "== inspect filebrowser service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service inspect filebrowser
+"$BIN" --fungi-dir "$FUNGI_DIR" service inspect "$SERVICE_NAME"
 
 echo "== curl filebrowser =="
 curl -fsS "http://127.0.0.1:$SERVICE_PORT/" | head -n 5
 echo
 
 echo "== filebrowser logs =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service logs filebrowser --tail 50
+"$BIN" --fungi-dir "$FUNGI_DIR" service logs "$SERVICE_NAME" --tail 50
 
 echo
 echo "== stopping filebrowser service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service stop filebrowser
+"$BIN" --fungi-dir "$FUNGI_DIR" service stop "$SERVICE_NAME"
 
 echo "== removing filebrowser service =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service remove filebrowser
+"$BIN" --fungi-dir "$FUNGI_DIR" service remove "$SERVICE_NAME"
 
 echo "== example completed =="
 echo "fungi dir: $FUNGI_DIR"
