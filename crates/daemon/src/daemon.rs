@@ -187,6 +187,7 @@ impl FungiDaemon {
             runtime_root,
             env::current_exe()
                 .map_err(|e| anyhow::anyhow!("Failed to resolve current executable: {e}"))?,
+            fungi_home.clone(),
             docker_control.clone(),
             fungi_home.join("services-state.json"),
             config.runtime.allowed_host_paths.clone(),

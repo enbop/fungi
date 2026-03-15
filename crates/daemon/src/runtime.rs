@@ -698,6 +698,7 @@ impl RuntimeProvider for DockerRuntimeProvider {
 pub struct WasmtimeRuntimeProvider {
     runtime_root: PathBuf,
     launcher_path: PathBuf,
+    fungi_home: PathBuf,
     allowed_host_paths: Arc<Mutex<Vec<PathBuf>>>,
     services: Arc<Mutex<HashMap<String, WasmtimeServiceState>>>,
 }
@@ -716,11 +717,13 @@ impl WasmtimeRuntimeProvider {
     pub fn new(
         runtime_root: PathBuf,
         launcher_path: PathBuf,
+        fungi_home: PathBuf,
         allowed_host_paths: Vec<PathBuf>,
     ) -> Self {
         Self {
             runtime_root,
             launcher_path,
+            fungi_home,
             allowed_host_paths: Arc::new(Mutex::new(allowed_host_paths)),
             services: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -777,7 +780,7 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
             bail!("wasmtime service is already running: {handle}");
         }
 
-        let mut command = build_wasmtime_command(&self.launcher_path, state)?;
+        let mut command = build_wasmtime_command(&self.launcher_path, &self.fungi_home, state)?;
         let stdout = OpenOptions::new()
             .create(true)
             .append(true)
@@ -913,6 +916,7 @@ impl RuntimeControl {
     pub fn new(
         runtime_root: PathBuf,
         launcher_path: PathBuf,
+        fungi_home: PathBuf,
         docker: Option<DockerControl>,
         service_state_file: PathBuf,
         allowed_host_paths: Vec<PathBuf>,
@@ -920,7 +924,12 @@ impl RuntimeControl {
     ) -> Result<Self> {
         Ok(Self {
             docker: docker.map(DockerRuntimeProvider::new),
-            wasmtime: WasmtimeRuntimeProvider::new(runtime_root, launcher_path, allowed_host_paths),
+            wasmtime: WasmtimeRuntimeProvider::new(
+                runtime_root,
+                launcher_path,
+                fungi_home,
+                allowed_host_paths,
+            ),
             wasmtime_enabled,
             service_index: Arc::new(Mutex::new(HashMap::new())),
             service_manifests: Arc::new(Mutex::new(HashMap::new())),
@@ -1479,9 +1488,15 @@ async fn build_wasmtime_state(
     })
 }
 
-fn build_wasmtime_command(launcher_path: &Path, state: &WasmtimeServiceState) -> Result<Command> {
+fn build_wasmtime_command(
+    launcher_path: &Path,
+    fungi_home: &Path,
+    state: &WasmtimeServiceState,
+) -> Result<Command> {
     let mut command = Command::new(launcher_path);
     command.kill_on_drop(true);
+    command.arg("--fungi-dir");
+    command.arg(fungi_home.as_os_str());
 
     let is_http_service = !state.manifest.ports.is_empty();
     if is_http_service {
@@ -1755,6 +1770,7 @@ mod tests {
         let provider = WasmtimeRuntimeProvider::new(
             temp_dir.path().join("runtime"),
             launcher,
+            temp_dir.path().to_path_buf(),
             vec![temp_dir.path().to_path_buf()],
         );
         let manifest = ServiceManifest {
@@ -1870,6 +1886,7 @@ spec:
         let provider = WasmtimeRuntimeProvider::new(
             temp_dir.path().join("runtime"),
             launcher,
+            temp_dir.path().to_path_buf(),
             vec![temp_dir.path().to_path_buf()],
         );
         let manifest = ServiceManifest {

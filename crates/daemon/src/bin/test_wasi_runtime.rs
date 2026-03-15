@@ -48,6 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let provider = fungi_daemon::runtime::WasmtimeRuntimeProvider::new(
         runtime_root,
         args.launcher,
+        args.mount_dir.clone(),
         vec![args.mount_dir.clone()],
     );
     let runtime = RuntimeControl::with_wasmtime_provider(

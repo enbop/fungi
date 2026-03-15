@@ -30,6 +30,7 @@ pub struct CommonArgs {
     #[cfg(target_os = "android")]
     #[clap(
         long,
+        default_value = "",
         help = "Set default device info string for this device, only used in Android"
     )]
     pub default_device_name: String,
