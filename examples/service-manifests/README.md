@@ -1,9 +1,8 @@
 # Service Manifest Examples
 
-This directory contains runnable service manifest examples for the Fungi runtime-provider flow.
-The manifests now also include a `spec.expose` block for future service discovery metadata.
-The examples use `${APP_HOME}` for per-service storage and `hostPort: auto` so the target node
-resolves paths and port assignments locally.
+This directory contains runnable examples for the Fungi `RuntimeProvider` flow.
+The manifests use `spec.expose` so services can participate in discovery, remote control, and local forwarding.
+The examples use `${APP_HOME}` for per-service storage and `hostPort: auto` so the target node resolves paths and ports locally.
 
 Documentation:
 
@@ -11,9 +10,9 @@ Documentation:
 
 Included examples:
 
-- `filebrowser.service.yaml` for the Docker runtime
+- `filebrowser.service.yaml` for the Docker-compatible container runtime path
 - `filebrowser-lite-wasi.service.yaml` for the Wasmtime runtime
-- `run-filebrowser-example.sh` to run the Docker example end to end
+- `run-filebrowser-example.sh` to run the container example end to end
 - `run-filebrowser-lite-wasi-example.sh` to run the Wasmtime example end to end
 
 The WASI example now tracks `github.com/enbop/filebrowser-lite` and downloads:

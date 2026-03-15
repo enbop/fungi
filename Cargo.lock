@@ -1649,7 +1649,7 @@ checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
 name = "fungi"
-version = "0.5.1"
+version = "0.6.0-preview"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1680,7 +1680,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-config"
-version = "0.5.1"
+version = "0.6.0-preview"
 dependencies = [
  "anyhow",
  "fungi-util",
@@ -1695,7 +1695,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-daemon"
-version = "0.5.1"
+version = "0.6.0-preview"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1738,7 +1738,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-daemon-grpc"
-version = "0.5.1"
+version = "0.6.0-preview"
 dependencies = [
  "anyhow",
  "fungi-config",
@@ -1755,7 +1755,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-docker-agent"
-version = "0.5.1"
+version = "0.6.0-preview"
 dependencies = [
  "bytes",
  "clap",
@@ -1772,7 +1772,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-fs"
-version = "0.5.1"
+version = "0.6.0-preview"
 dependencies = [
  "cap-std",
  "libunftp",
@@ -1784,7 +1784,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-swarm"
-version = "0.5.1"
+version = "0.6.0-preview"
 dependencies = [
  "anyhow",
  "async-result",
@@ -1803,7 +1803,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-tests"
-version = "0.5.1"
+version = "0.6.0-preview"
 dependencies = [
  "anyhow",
  "env_logger 0.11.8",
@@ -1814,7 +1814,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-util"
-version = "0.5.1"
+version = "0.6.0-preview"
 dependencies = [
  "anyhow",
  "futures",

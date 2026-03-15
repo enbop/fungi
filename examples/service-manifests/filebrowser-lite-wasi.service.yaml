@@ -3,9 +3,6 @@ kind: ServiceManifest
 
 metadata:
   name: filebrowser-lite-wasi
-  labels:
-    app: filebrowser-lite-wasi
-    managedBy: fungi
 
 spec:
   runtime: wasmtime
@@ -20,7 +17,6 @@ spec:
       kind: web
       path: /
     iconUrl: https://raw.githubusercontent.com/filebrowser/logo/master/icon.svg
-    catalogId: io.enbop.filebrowser-lite-wasi
 
   source:
     url: https://github.com/enbop/filebrowser-lite/releases/latest/download/filebrowser-lite-wasi.wasm
@@ -37,13 +33,8 @@ spec:
 
   env: {}
 
-  command: []
-  entrypoint: []
-
-  workingDir: null
-
 notes:
-  - "This manifest deploys the minimal WASI build from github.com/enbop/filebrowser-lite."
+  - "This manifest pulls the minimal WASI build from github.com/enbop/filebrowser-lite."
   - "The wasm asset is downloaded from the latest GitHub release at pull time."
   - "${APP_HOME} resolves on the target node to fungi_home/services/<service-name>."
   - "hostPort: auto asks the target node to choose an available port from its allowed port policy."

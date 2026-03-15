@@ -3,9 +3,6 @@ kind: ServiceManifest
 
 metadata:
   name: filebrowser
-  labels:
-    app: filebrowser
-    managedBy: fungi
 
 spec:
   runtime: docker
@@ -20,7 +17,6 @@ spec:
       kind: web
       path: /
     iconUrl: https://raw.githubusercontent.com/filebrowser/logo/master/icon.svg
-    catalogId: io.filebrowser
 
   source:
     image: filebrowser/filebrowser:latest
@@ -37,11 +33,6 @@ spec:
 
   env:
     FB_NOAUTH: "true"
-
-  command: []
-  entrypoint: []
-
-  workingDir: null
 
 notes:
   - "This manifest can be pulled directly with fungi service pull."

@@ -11,7 +11,7 @@
 
 Fungi is a gateway for seamlessly exporting your services within a private P2P network.
 
-With Fungi, you can securely `forward ports`, `transfer files`, `deploy apps`, or simply use it as a lightweight NAS.
+With Fungi, you can securely `forward ports`, `transfer files`, `pull and run services`, or simply use it as a lightweight NAS.
 
 This repository contains the **Core Daemon** and **CLI** tools.
 
