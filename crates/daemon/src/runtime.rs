@@ -713,6 +713,26 @@ struct WasmtimeServiceState {
     last_exit_code: Option<i32>,
 }
 
+fn remove_dir_all_with_retry(path: &Path) -> std::io::Result<()> {
+    let attempts = if cfg!(windows) { 10 } else { 1 };
+    let mut last_error = None;
+
+    for attempt in 1..=attempts {
+        match fs::remove_dir_all(path) {
+            Ok(()) => return Ok(()),
+            Err(error)
+                if attempt < attempts && matches!(error.raw_os_error(), Some(32) | Some(5)) =>
+            {
+                last_error = Some(error);
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| std::io::Error::other("remove_dir_all failed")))
+}
+
 impl WasmtimeRuntimeProvider {
     pub fn new(
         runtime_root: PathBuf,
@@ -858,7 +878,7 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
             .unwrap_or_else(|| self.runtime_root.join("wasmtime").join(handle));
 
         if service_dir.exists() {
-            fs::remove_dir_all(&service_dir).with_context(|| {
+            remove_dir_all_with_retry(&service_dir).with_context(|| {
                 format!(
                     "Failed to remove runtime directory: {}",
                     service_dir.display()
@@ -1672,7 +1692,9 @@ fn tail_lines(text: &str, tail: Option<&str>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{io::Write, net::SocketAddr, os::unix::fs::PermissionsExt};
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+    use std::{io::Write, net::SocketAddr};
     use tempfile::TempDir;
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
@@ -1975,16 +1997,28 @@ spec:
     }
 
     fn create_fake_launcher(dir: &Path) -> Result<PathBuf> {
-        let launcher = dir.join("fake-fungi.sh");
-        let script = r#"#!/bin/sh
+        #[cfg(unix)]
+        let (launcher, script) = (
+            dir.join("fake-fungi.sh"),
+            r#"#!/bin/sh
 echo fake-launcher "$@"
 sleep 30
-"#;
+"#,
+        );
+        #[cfg(windows)]
+        let (launcher, script) = (
+            dir.join("fake-fungi.cmd"),
+            "@echo off\r\necho fake-launcher %*\r\nfor /L %%i in (1,1,100000000) do rem\r\n",
+        );
+
         let mut file = fs::File::create(&launcher)?;
         file.write_all(script.as_bytes())?;
-        let mut permissions = fs::metadata(&launcher)?.permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&launcher, permissions)?;
+        #[cfg(unix)]
+        {
+            let mut permissions = fs::metadata(&launcher)?.permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(&launcher, permissions)?;
+        }
         Ok(launcher)
     }
 
