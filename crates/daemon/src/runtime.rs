@@ -635,6 +635,10 @@ pub trait RuntimeProvider: Send + Sync {
     async fn logs(&self, name: &str, options: &ServiceLogsOptions) -> Result<ServiceLogs>;
 }
 
+pub const fn wasmtime_runtime_supported() -> bool {
+    !cfg!(target_os = "android")
+}
+
 #[derive(Clone)]
 pub struct DockerRuntimeProvider {
     docker: DockerControl,

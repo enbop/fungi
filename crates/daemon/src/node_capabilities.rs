@@ -2,6 +2,7 @@ use fungi_config::FungiConfig;
 use serde::{Deserialize, Serialize};
 
 use crate::controls::detect_socket_path;
+use crate::runtime::wasmtime_runtime_supported;
 use crate::{RuntimeControl, RuntimeKind};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,7 +92,7 @@ pub fn build_local_runtime_status(
         },
         wasmtime: LocalRuntimeAvailability {
             config_enabled: !config.runtime.disable_wasmtime,
-            detected: true,
+            detected: wasmtime_runtime_supported(),
             active: runtime_control.supports(RuntimeKind::Wasmtime),
             endpoint: None,
         },

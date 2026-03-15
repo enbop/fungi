@@ -13,7 +13,7 @@ use crate::{
         NodeCapabilitiesControl, ServiceControlProtocolControl, ServiceDiscoveryControl,
         TcpTunnelingControl, mdns::MdnsControl,
     },
-    runtime::RuntimeControl,
+    runtime::{RuntimeControl, wasmtime_runtime_supported},
 };
 use anyhow::Result;
 use fungi_config::{
@@ -191,7 +191,7 @@ impl FungiDaemon {
             docker_control.clone(),
             fungi_home.join("services-state.json"),
             config.runtime.allowed_host_paths.clone(),
-            config.runtime.wasmtime_enabled(),
+            config.runtime.wasmtime_enabled() && wasmtime_runtime_supported(),
         )?;
         runtime_control.restore_persisted_state().await?;
         let service_discovery_control = ServiceDiscoveryControl::new(
