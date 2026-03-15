@@ -121,14 +121,22 @@ mod tests {
     use crate::{BindMount, ContainerSpec, PortBinding};
     use std::collections::BTreeMap;
 
+    fn allowed_root() -> PathBuf {
+        std::env::temp_dir().join("fungi-policy-allowed")
+    }
+
+    fn disallowed_root() -> PathBuf {
+        std::env::temp_dir().join("fungi-policy-denied")
+    }
+
     fn sample_policy() -> AgentPolicy {
         AgentPolicy {
-            socket_path: PathBuf::from("/var/run/docker.sock"),
+            socket_path: std::env::temp_dir().join("docker.sock"),
             managed_label_key: "managed_by".into(),
             managed_label_value: "fungi".into(),
             allowed_host_paths: vec![
-                PathBuf::from("/tmp/fungi"),
-                PathBuf::from("/Users/jose/data"),
+                allowed_root(),
+                std::env::current_dir().unwrap().join("test-data"),
             ],
             allowed_ports: vec![
                 PortRule::Single(8080),
@@ -146,7 +154,7 @@ mod tests {
         let spec = ContainerSpec {
             image: "filebrowser/filebrowser:latest".into(),
             mounts: vec![BindMount {
-                host_path: PathBuf::from("/tmp/fungi/data"),
+                host_path: allowed_root().join("data"),
                 container_path: "/data".into(),
             }],
             ports: vec![PortBinding {
@@ -167,7 +175,7 @@ mod tests {
         let spec = ContainerSpec {
             image: "img".into(),
             mounts: vec![BindMount {
-                host_path: PathBuf::from("/etc"),
+                host_path: disallowed_root(),
                 container_path: "/data".into(),
             }],
             ..Default::default()

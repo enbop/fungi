@@ -15,7 +15,7 @@ use crate::{
     },
     runtime::RuntimeControl,
 };
-use anyhow::Result;
+use anyhow::{Result, bail};
 use fungi_config::{
     FungiConfig,
     address_book::{AddressBookConfig, PeerInfo},
@@ -154,7 +154,7 @@ impl FungiDaemon {
             relay_addrs,
             idle_connection_timeout,
             |swarm| {
-                apply_listen(swarm, &config);
+                apply_listen(swarm, &config).expect("failed to configure swarm listeners");
             },
         )
         .await?;
@@ -500,35 +500,63 @@ impl FungiDaemon {
     }
 }
 
-fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) {
-    swarm
-        .listen_on(
-            Multiaddr::empty()
-                .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-                .with(Protocol::Tcp(config.network.listen_tcp_port)),
-        )
-        .unwrap();
-    swarm
-        .listen_on(
-            Multiaddr::empty()
-                .with(Protocol::from(Ipv6Addr::UNSPECIFIED))
-                .with(Protocol::Tcp(config.network.listen_tcp_port)),
-        )
-        .unwrap();
-    swarm
-        .listen_on(
-            Multiaddr::empty()
-                .with(Protocol::from(Ipv6Addr::UNSPECIFIED))
-                .with(Protocol::Udp(config.network.listen_udp_port))
-                .with(Protocol::QuicV1),
-        )
-        .unwrap();
-    swarm
-        .listen_on(
-            Multiaddr::empty()
-                .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-                .with(Protocol::Udp(config.network.listen_udp_port))
-                .with(Protocol::QuicV1),
-        )
-        .unwrap();
+fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) -> Result<()> {
+    let tcp_addrs = [
+        Multiaddr::empty()
+            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+            .with(Protocol::Tcp(config.network.listen_tcp_port)),
+        Multiaddr::empty()
+            .with(Protocol::from(Ipv6Addr::UNSPECIFIED))
+            .with(Protocol::Tcp(config.network.listen_tcp_port)),
+    ];
+    let quic_addrs = [
+        Multiaddr::empty()
+            .with(Protocol::from(Ipv6Addr::UNSPECIFIED))
+            .with(Protocol::Udp(config.network.listen_udp_port))
+            .with(Protocol::QuicV1),
+        Multiaddr::empty()
+            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+            .with(Protocol::Udp(config.network.listen_udp_port))
+            .with(Protocol::QuicV1),
+    ];
+
+    let mut tcp_listening = false;
+    let mut tcp_errors = Vec::new();
+    for addr in tcp_addrs {
+        match swarm.listen_on(addr.clone()) {
+            Ok(_) => tcp_listening = true,
+            Err(error) => {
+                log::warn!("Failed to listen on {addr}: {error}");
+                tcp_errors.push(format!("{addr}: {error}"));
+            }
+        }
+    }
+
+    if !tcp_listening {
+        bail!(
+            "Failed to open any TCP listen address: {}",
+            tcp_errors.join("; ")
+        );
+    }
+
+    let mut quic_listening = false;
+    let mut quic_errors = Vec::new();
+    for addr in quic_addrs {
+        match swarm.listen_on(addr.clone()) {
+            Ok(_) => quic_listening = true,
+            Err(error) => {
+                log::warn!("Failed to listen on {addr}: {error}");
+                quic_errors.push(format!("{addr}: {error}"));
+            }
+        }
+    }
+
+    if !quic_listening && !quic_errors.is_empty() {
+        log::warn!(
+            "No QUIC listen address could be opened; continuing with TCP only: {}",
+            quic_errors.join("; ")
+        );
+    }
+
+    Ok(())
 }
