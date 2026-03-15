@@ -198,6 +198,7 @@ fn is_named_pipe_path(path: &Path) -> bool {
 mod tests {
     use super::*;
     use fungi_config::runtime::{AllowedPortRange, Runtime};
+    use tempfile::TempDir;
 
     #[test]
     fn disabled_docker_returns_no_control() {
@@ -210,11 +211,12 @@ mod tests {
 
     #[test]
     fn explicit_socket_path_creates_control() {
-        let socket_path = PathBuf::from("/tmp/fungi-docker-test.sock");
+        let temp_dir = TempDir::new().unwrap();
+        let socket_path = temp_dir.path().join("fungi-docker-test.sock");
         std::fs::File::create(&socket_path).unwrap();
         let config = Runtime {
             docker_socket_path: Some(socket_path.clone()),
-            allowed_host_paths: vec![PathBuf::from("/tmp/fungi")],
+            allowed_host_paths: vec![temp_dir.path().join("fungi")],
             allowed_ports: vec![8080],
             allowed_port_ranges: vec![AllowedPortRange {
                 start: 20000,
@@ -224,6 +226,5 @@ mod tests {
         };
 
         assert!(DockerControl::from_config(&config).unwrap().is_some());
-        std::fs::remove_file(socket_path).unwrap();
     }
 }
