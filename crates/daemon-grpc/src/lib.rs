@@ -16,7 +16,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use fungi_daemon_grpc::fungi_daemon_server::FungiDaemon;
 use fungi_daemon_grpc::*;
 use libp2p_identity::PeerId;
-use serde_json;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tokio_stream::wrappers::ReceiverStream;
@@ -773,7 +772,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                         continue;
                     }
                     let daemon = daemon.clone();
-                    let peer_id = peer_id.clone();
+                    let peer_id = peer_id;
                     ping_set.spawn(async move {
                         let res = daemon
                             .ping_peer_connection(peer_id, connection_id, per_ping_timeout)

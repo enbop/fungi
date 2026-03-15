@@ -9,7 +9,10 @@ use fungi_daemon_grpc::{
 
 use crate::commands::CommonArgs;
 
-use super::{client::get_rpc_client, shared::{fatal, fatal_grpc, parse_address}};
+use super::{
+    client::get_rpc_client,
+    shared::{fatal, fatal_grpc, parse_address},
+};
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum TunnelCommands {

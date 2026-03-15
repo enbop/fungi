@@ -45,11 +45,18 @@ async fn creates_and_starts_managed_container() {
 
     let requests = fixture.requests.lock().await.clone();
     assert_eq!(requests[0].method, "POST");
-    assert!(requests[0].path.starts_with("/containers/create?name=filebrowser"));
+    assert!(
+        requests[0]
+            .path
+            .starts_with("/containers/create?name=filebrowser")
+    );
     let body: serde_json::Value = serde_json::from_slice(&requests[0].body).unwrap();
     assert_eq!(body["Image"], "filebrowser/filebrowser:latest");
     assert_eq!(body["Labels"]["managed_by"], "fungi");
-    assert_eq!(requests.last().unwrap().path, "/containers/container-1/start");
+    assert_eq!(
+        requests.last().unwrap().path,
+        "/containers/container-1/start"
+    );
 }
 
 #[tokio::test]
@@ -66,7 +73,10 @@ async fn fetches_logs() {
     let fixture = ServerFixture::start().await;
     let agent = DockerAgent::new(sample_policy(fixture.socket_path.clone()));
 
-    let logs = agent.container_logs("container-1", &LogsOptions::default()).await.unwrap();
+    let logs = agent
+        .container_logs("container-1", &LogsOptions::default())
+        .await
+        .unwrap();
     assert!(logs.text.contains("hello"));
 }
 
@@ -94,10 +104,22 @@ async fn pulls_missing_image_and_retries_create() {
     assert_eq!(details.name, "filebrowser");
 
     let requests = fixture.requests.lock().await.clone();
-    assert!(requests[0].path.starts_with("/containers/create?name=filebrowser"));
+    assert!(
+        requests[0]
+            .path
+            .starts_with("/containers/create?name=filebrowser")
+    );
     assert_eq!(requests[1].method, "POST");
-    assert!(requests[1].path.starts_with("/images/create?fromImage=filebrowser"));
-    assert!(requests[2].path.starts_with("/containers/create?name=filebrowser"));
+    assert!(
+        requests[1]
+            .path
+            .starts_with("/images/create?fromImage=filebrowser")
+    );
+    assert!(
+        requests[2]
+            .path
+            .starts_with("/containers/create?name=filebrowser")
+    );
 }
 
 fn sample_policy(socket_path: PathBuf) -> AgentPolicy {
@@ -230,7 +252,10 @@ async fn response_for(
                     let mut calls = create_calls.lock().await;
                     *calls += 1;
                     if *calls == 1 {
-                        return http_response(404, r#"{"message":"No such image: filebrowser/filebrowser:latest"}"#);
+                        return http_response(
+                            404,
+                            r#"{"message":"No such image: filebrowser/filebrowser:latest"}"#,
+                        );
                     }
                     201
                 }
@@ -250,10 +275,12 @@ async fn response_for(
             200,
             &[1, 0, 0, 0, 0, 0, 0, 6, b'h', b'e', b'l', b'l', b'o', b'\n'],
         ),
-        ("GET", "/containers/legacy/json") if matches!(mode, ServerMode::Unmanaged) => http_response(
-            200,
-            r#"{"Id":"legacy","Name":"/legacy","Config":{"Image":"busybox","Labels":{"owner":"user"}},"State":{"Status":"running","Running":true}}"#,
-        ),
+        ("GET", "/containers/legacy/json") if matches!(mode, ServerMode::Unmanaged) => {
+            http_response(
+                200,
+                r#"{"Id":"legacy","Name":"/legacy","Config":{"Image":"busybox","Labels":{"owner":"user"}},"State":{"Status":"running","Running":true}}"#,
+            )
+        }
         _ => http_response(404, r#"{"message":"not found"}"#),
     }
 }

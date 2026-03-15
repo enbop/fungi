@@ -9,7 +9,10 @@ use fungi_daemon_grpc::{
 
 use crate::commands::CommonArgs;
 
-use super::{client::get_rpc_client, shared::{fatal, fatal_grpc}};
+use super::{
+    client::get_rpc_client,
+    shared::{fatal, fatal_grpc},
+};
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum SecurityCommands {
@@ -80,14 +83,20 @@ pub async fn execute_security(args: CommonArgs, cmd: SecurityCommands) {
         },
         SecurityCommands::AllowPath { path } => {
             let req = RuntimeAllowedHostPathRequest { path };
-            match client.add_runtime_allowed_host_path(Request::new(req)).await {
+            match client
+                .add_runtime_allowed_host_path(Request::new(req))
+                .await
+            {
                 Ok(_) => println!("Allowed host path added"),
                 Err(e) => fatal_grpc(e),
             }
         }
         SecurityCommands::DenyPath { path } => {
             let req = RuntimeAllowedHostPathRequest { path };
-            match client.remove_runtime_allowed_host_path(Request::new(req)).await {
+            match client
+                .remove_runtime_allowed_host_path(Request::new(req))
+                .await
+            {
                 Ok(_) => println!("Allowed host path removed"),
                 Err(e) => fatal_grpc(e),
             }
@@ -115,7 +124,10 @@ pub async fn execute_security(args: CommonArgs, cmd: SecurityCommands) {
                 start: i32::from(start),
                 end: i32::from(end),
             };
-            match client.add_runtime_allowed_port_range(Request::new(req)).await {
+            match client
+                .add_runtime_allowed_port_range(Request::new(req))
+                .await
+            {
                 Ok(_) => println!("Allowed port range added"),
                 Err(e) => fatal_grpc(e),
             }
@@ -125,7 +137,10 @@ pub async fn execute_security(args: CommonArgs, cmd: SecurityCommands) {
                 start: i32::from(start),
                 end: i32::from(end),
             };
-            match client.remove_runtime_allowed_port_range(Request::new(req)).await {
+            match client
+                .remove_runtime_allowed_port_range(Request::new(req))
+                .await
+            {
                 Ok(_) => println!("Allowed port range removed"),
                 Err(e) => fatal_grpc(e),
             }

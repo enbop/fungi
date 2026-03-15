@@ -42,8 +42,8 @@ pub async fn execute_ping(args: CommonArgs, peer_id: String, interval_ms: u32, v
 
     if !verbose {
         println!(
-            "{:<6} {:<6} {:<8} {:<5} {:<10} {}",
-            "TICK", "CONN", "DIR", "RLY", "RTT", "ADDR/MSG"
+            "{:<6} {:<6} {:<8} {:<5} {:<10} ADDR/MSG",
+            "TICK", "CONN", "DIR", "RLY", "RTT"
         );
     }
 

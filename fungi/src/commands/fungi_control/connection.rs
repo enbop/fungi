@@ -9,8 +9,7 @@ use crate::commands::CommonArgs;
 use super::{
     client::get_rpc_client,
     shared::{
-        connection_id_sort_key, fatal, fatal_grpc, shorten_peer_id,
-        simplify_multiaddr_peer_ids,
+        connection_id_sort_key, fatal, fatal_grpc, shorten_peer_id, simplify_multiaddr_peer_ids,
     },
 };
 
@@ -108,8 +107,8 @@ async fn execute_connections(
                     .unwrap_or_default()
             );
             println!(
-                "{:<22} {:<6} {:<8} {:<5} {:<12} {:<7} {}",
-                "PEER", "CONN", "DIR", "RLY", "LAST_PING", "STREAMS", "ADDR"
+                "{:<22} {:<6} {:<8} {:<5} {:<12} {:<7} ADDR",
+                "PEER", "CONN", "DIR", "RLY", "LAST_PING", "STREAMS"
             );
 
             let mut direct_streams_total = 0u64;
@@ -119,12 +118,10 @@ async fn execute_connections(
             for conn in connections {
                 let ping = if conn.last_ping_unix_ms == 0 {
                     "n/a".to_string()
+                } else if verbose {
+                    format!("{}ms @ {}", conn.last_rtt_ms, conn.last_ping_unix_ms)
                 } else {
-                    if verbose {
-                        format!("{}ms @ {}", conn.last_rtt_ms, conn.last_ping_unix_ms)
-                    } else {
-                        format!("{}ms", conn.last_rtt_ms)
-                    }
+                    format!("{}ms", conn.last_rtt_ms)
                 };
 
                 let stream_count_for_view = match &protocol_name {
@@ -242,8 +239,8 @@ async fn execute_connection_streams(
                     .unwrap_or_default()
             );
             println!(
-                "{:<8} {:<22} {:<6} {:<14} {}",
-                "STREAM", "PEER", "CONN", "OPENED_AT", "PROTOCOL"
+                "{:<8} {:<22} {:<6} {:<14} PROTOCOL",
+                "STREAM", "PEER", "CONN", "OPENED_AT"
             );
 
             for stream in streams {

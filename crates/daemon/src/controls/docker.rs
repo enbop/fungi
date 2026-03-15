@@ -107,20 +107,20 @@ fn resolve_socket_path(explicit: Option<&Path>) -> Option<PathBuf> {
         return docker_endpoint_available(path).then(|| path.to_path_buf());
     }
 
-    if let Ok(host) = env::var("DOCKER_HOST") {
-        if let Some(path) = host.strip_prefix("unix://") {
-            let candidate = PathBuf::from(path);
-            if docker_endpoint_available(&candidate) {
-                return Some(candidate);
-            }
-        }
-
-        #[cfg(windows)]
-        if let Some(candidate) = docker_host_named_pipe_path(&host)
-            && docker_endpoint_available(&candidate)
-        {
+    if let Ok(host) = env::var("DOCKER_HOST")
+        && let Some(path) = host.strip_prefix("unix://")
+    {
+        let candidate = PathBuf::from(path);
+        if docker_endpoint_available(&candidate) {
             return Some(candidate);
         }
+    }
+
+    #[cfg(windows)]
+    if let Some(candidate) = docker_host_named_pipe_path(&host)
+        && docker_endpoint_available(&candidate)
+    {
+        return Some(candidate);
     }
 
     #[cfg(unix)]

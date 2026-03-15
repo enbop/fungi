@@ -28,15 +28,11 @@ pub struct BindMount {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum PortProtocol {
+    #[default]
     Tcp,
     Udp,
-}
-
-impl Default for PortProtocol {
-    fn default() -> Self {
-        Self::Tcp
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -140,7 +140,12 @@ impl FungiConfig {
 
     pub fn add_runtime_allowed_host_path(&self, path: PathBuf) -> Result<Self> {
         self.update_and_save(|config| {
-            if !config.runtime.allowed_host_paths.iter().any(|entry| entry == &path) {
+            if !config
+                .runtime
+                .allowed_host_paths
+                .iter()
+                .any(|entry| entry == &path)
+            {
                 config.runtime.allowed_host_paths.push(path.clone());
                 config.runtime.allowed_host_paths.sort();
             }
@@ -149,7 +154,10 @@ impl FungiConfig {
 
     pub fn remove_runtime_allowed_host_path(&self, path: &Path) -> Result<Self> {
         self.update_and_save(|config| {
-            config.runtime.allowed_host_paths.retain(|entry| entry != path);
+            config
+                .runtime
+                .allowed_host_paths
+                .retain(|entry| entry != path);
         })
     }
 
@@ -174,19 +182,26 @@ impl FungiConfig {
         }
 
         self.update_and_save(|config| {
-            if !config.runtime.allowed_port_ranges.iter().any(|entry| entry == &range) {
+            if !config
+                .runtime
+                .allowed_port_ranges
+                .iter()
+                .any(|entry| entry == &range)
+            {
                 config.runtime.allowed_port_ranges.push(range.clone());
-                config
-                    .runtime
-                    .allowed_port_ranges
-                    .sort_by(|left, right| left.start.cmp(&right.start).then(left.end.cmp(&right.end)));
+                config.runtime.allowed_port_ranges.sort_by(|left, right| {
+                    left.start.cmp(&right.start).then(left.end.cmp(&right.end))
+                });
             }
         })
     }
 
     pub fn remove_runtime_allowed_port_range(&self, range: &AllowedPortRange) -> Result<Self> {
         self.update_and_save(|config| {
-            config.runtime.allowed_port_ranges.retain(|entry| entry != range);
+            config
+                .runtime
+                .allowed_port_ranges
+                .retain(|entry| entry != range);
         })
     }
 
@@ -377,11 +392,9 @@ impl FungiConfig {
         rule: &crate::tcp_tunneling::ListeningRule,
     ) -> Result<Self> {
         self.update_and_save(|config| {
-            config
-                .tcp_tunneling
-                .listening
-                .rules
-                .retain(|r| !(r.host == rule.host && r.port == rule.port && r.protocol == rule.protocol));
+            config.tcp_tunneling.listening.rules.retain(|r| {
+                !(r.host == rule.host && r.port == rule.port && r.protocol == rule.protocol)
+            });
         })
     }
 }

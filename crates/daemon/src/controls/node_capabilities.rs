@@ -66,16 +66,18 @@ impl NodeCapabilitiesControl {
                 Self::CONNECT_SNIFF_WAIT,
             )
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to open node-capabilities stream to peer {peer_id}: {e}"))?;
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to open node-capabilities stream to peer {peer_id}: {e}")
+            })?;
 
         let mut raw = Vec::new();
-        stream
-            .read_to_end(&mut raw)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to read node capabilities from peer {peer_id}: {e}"))?;
+        stream.read_to_end(&mut raw).await.map_err(|e| {
+            anyhow::anyhow!("Failed to read node capabilities from peer {peer_id}: {e}")
+        })?;
 
-        let capabilities = serde_json::from_slice(&raw)
-            .map_err(|e| anyhow::anyhow!("Failed to decode node capabilities from peer {peer_id}: {e}"))?;
+        let capabilities = serde_json::from_slice(&raw).map_err(|e| {
+            anyhow::anyhow!("Failed to decode node capabilities from peer {peer_id}: {e}")
+        })?;
         Ok(capabilities)
     }
 
@@ -97,7 +99,11 @@ impl NodeCapabilitiesControl {
                 };
 
                 if let Err(error) = stream.write_all(&payload).await {
-                    log::warn!("Failed to write node capabilities to peer {}: {}", peer_id, error);
+                    log::warn!(
+                        "Failed to write node capabilities to peer {}: {}",
+                        peer_id,
+                        error
+                    );
                     return;
                 }
 

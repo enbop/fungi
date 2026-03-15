@@ -9,7 +9,10 @@ use fungi_daemon_grpc::{
 
 use crate::commands::CommonArgs;
 
-use super::{client::get_rpc_client, shared::{fatal, fatal_grpc}};
+use super::{
+    client::get_rpc_client,
+    shared::{fatal, fatal_grpc},
+};
 
 #[derive(Args, Debug, Clone)]
 pub struct AddClientArgs {

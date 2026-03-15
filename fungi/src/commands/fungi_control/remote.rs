@@ -3,8 +3,8 @@ use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
         DisableRemoteServiceRequest, DiscoverPeerCapabilitiesRequest, DiscoverPeerServicesRequest,
-        EnableRemoteServiceRequest, ListEnabledRemoteServicesRequest, RemotePullServiceRequest,
-        RemotePeerRequest, RemoteServiceControlResponse, RemoteServiceNameRequest,
+        EnableRemoteServiceRequest, ListEnabledRemoteServicesRequest, RemotePeerRequest,
+        RemotePullServiceRequest, RemoteServiceControlResponse, RemoteServiceNameRequest,
     },
 };
 

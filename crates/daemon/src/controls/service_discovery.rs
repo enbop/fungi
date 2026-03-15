@@ -1,11 +1,14 @@
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
-use anyhow::Result;
 use crate::{DiscoveredService, RuntimeControl};
+use anyhow::Result;
 use fungi_swarm::{ConnectionSelectionStrategy, SwarmControl};
 use fungi_util::protocols::FUNGI_SERVICE_DISCOVERY_PROTOCOL;
 use futures::StreamExt;
-use libp2p::{PeerId, futures::{AsyncReadExt, AsyncWriteExt}};
+use libp2p::{
+    PeerId,
+    futures::{AsyncReadExt, AsyncWriteExt},
+};
 use libp2p_stream::IncomingStreams;
 use parking_lot::RwLock;
 
@@ -53,16 +56,18 @@ impl ServiceDiscoveryControl {
                 Self::CONNECT_SNIFF_WAIT,
             )
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to open discovery stream to peer {peer_id}: {e}"))?;
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to open discovery stream to peer {peer_id}: {e}")
+            })?;
 
         let mut raw = Vec::new();
-        stream
-            .read_to_end(&mut raw)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to read discovery response from peer {peer_id}: {e}"))?;
+        stream.read_to_end(&mut raw).await.map_err(|e| {
+            anyhow::anyhow!("Failed to read discovery response from peer {peer_id}: {e}")
+        })?;
 
-        let services = serde_json::from_slice(&raw)
-            .map_err(|e| anyhow::anyhow!("Failed to decode discovery response from peer {peer_id}: {e}"))?;
+        let services = serde_json::from_slice(&raw).map_err(|e| {
+            anyhow::anyhow!("Failed to decode discovery response from peer {peer_id}: {e}")
+        })?;
         Ok(services)
     }
 
@@ -92,7 +97,11 @@ impl ServiceDiscoveryControl {
                 };
 
                 if let Err(error) = stream.write_all(&payload).await {
-                    log::warn!("Failed to write discovery response to peer {}: {}", peer_id, error);
+                    log::warn!(
+                        "Failed to write discovery response to peer {}: {}",
+                        peer_id,
+                        error
+                    );
                     return;
                 }
                 let _ = stream.close().await;

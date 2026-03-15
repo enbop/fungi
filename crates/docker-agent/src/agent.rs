@@ -31,7 +31,8 @@ impl DockerAgent {
         let created = match self.client.create_container(&request).await {
             Ok(created) => created,
             Err(DockerAgentError::DockerApi { status, message })
-                if status == StatusCode::NOT_FOUND && missing_image_message(&message, &spec.image) =>
+                if status == StatusCode::NOT_FOUND
+                    && missing_image_message(&message, &spec.image) =>
             {
                 self.client.pull_image(&spec.image).await?;
                 self.client.create_container(&request).await?
@@ -137,7 +138,11 @@ fn to_create_body(spec: &ContainerSpec, policy: &AgentPolicy) -> CreateContainer
         policy.managed_label_value.clone(),
     );
 
-    let env = spec.env.iter().map(|(key, value)| format!("{key}={value}")).collect();
+    let env = spec
+        .env
+        .iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect();
     let binds = spec
         .mounts
         .iter()
@@ -165,7 +170,10 @@ fn to_create_body(spec: &ContainerSpec, policy: &AgentPolicy) -> CreateContainer
         working_dir: spec.working_dir.clone(),
         labels,
         exposed_ports,
-        host_config: HostConfig { binds, port_bindings },
+        host_config: HostConfig {
+            binds,
+            port_bindings,
+        },
     }
 }
 
@@ -216,9 +224,7 @@ mod tests {
 
     #[test]
     fn decodes_multiplexed_logs() {
-        let payload = [
-            1, 0, 0, 0, 0, 0, 0, 6, b'h', b'e', b'l', b'l', b'o', b'\n',
-        ];
+        let payload = [1, 0, 0, 0, 0, 0, 0, 6, b'h', b'e', b'l', b'l', b'o', b'\n'];
         assert_eq!(decode_log_frames(&payload), "hello\n");
     }
 }

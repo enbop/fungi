@@ -6,7 +6,10 @@ use fungi_daemon_grpc::{
 
 use crate::commands::CommonArgs;
 
-use super::{client::get_rpc_client, shared::{fatal, fatal_grpc}};
+use super::{
+    client::get_rpc_client,
+    shared::{fatal, fatal_grpc},
+};
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum DeviceCommands {
