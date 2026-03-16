@@ -11,7 +11,7 @@ use std::{
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use fungi_config::runtime::AllowedPortRange;
-use fungi_docker_agent::{ContainerSpec, LogsOptions, PortProtocol};
+use fungi_docker_agent::{ContainerSpec, DockerAgentError, LogsOptions, PortProtocol};
 use fungi_util::protocols::service_port_protocol;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -657,6 +657,7 @@ impl RuntimeProvider for DockerRuntimeProvider {
     }
 
     async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
+        ensure_manifest_mount_dirs(manifest)?;
         let spec = docker_spec_from_manifest(manifest)?;
         let details = self.docker.create_container(&spec).await?;
         Ok(map_docker_instance(details))
@@ -946,6 +947,7 @@ impl RuntimeControl {
         allowed_host_paths: Vec<PathBuf>,
         wasmtime_enabled: bool,
     ) -> Result<Self> {
+        ensure_services_root_exists(&fungi_home)?;
         Ok(Self {
             docker: docker.map(DockerRuntimeProvider::new),
             wasmtime: WasmtimeRuntimeProvider::new(
@@ -1052,18 +1054,46 @@ impl RuntimeControl {
 
     pub async fn stop(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
         let _ = self.ensure_runtime_service(runtime, name).await;
-        match runtime {
+        let stop_result = match runtime {
             RuntimeKind::Docker => self.docker_provider()?.stop(name).await,
             RuntimeKind::Wasmtime => self.wasmtime.stop(name).await,
-        }?;
+        };
+
+        match stop_result {
+            Ok(()) => {}
+            Err(error)
+                if runtime == RuntimeKind::Docker && is_missing_docker_container_error(&error) =>
+            {
+                log::warn!(
+                    "Docker service '{}' is already missing during stop; reconciling local state only",
+                    name
+                );
+            }
+            Err(error) => return Err(error),
+        }
+
         self.set_desired_state(name, DesiredServiceState::Stopped)
     }
 
     pub async fn remove(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
-        match runtime {
+        let remove_result = match runtime {
             RuntimeKind::Docker => self.docker_provider()?.remove(name).await,
             RuntimeKind::Wasmtime => self.wasmtime.remove(name).await,
-        }?;
+        };
+
+        match remove_result {
+            Ok(()) => {}
+            Err(error)
+                if runtime == RuntimeKind::Docker && is_missing_docker_container_error(&error) =>
+            {
+                log::warn!(
+                    "Docker service '{}' is already missing during remove; cleaning up local state only",
+                    name
+                );
+            }
+            Err(error) => return Err(error),
+        }
+
         self.service_index.lock().remove(name);
         self.service_manifests.lock().remove(name);
         self.service_state.lock().remove_service(name)?;
@@ -1199,10 +1229,27 @@ impl RuntimeControl {
             return Err(error);
         }
 
-        let instance = match runtime {
+        let inspect_result = match runtime {
             RuntimeKind::Docker => self.docker_provider()?.inspect(name).await,
             RuntimeKind::Wasmtime => self.wasmtime.inspect(name).await,
-        }?;
+        };
+
+        let instance = match inspect_result {
+            Ok(instance) => instance,
+            Err(error)
+                if runtime == RuntimeKind::Docker && is_missing_docker_container_error(&error) =>
+            {
+                if let Some(manifest) = self.get_service_manifest(name) {
+                    log::warn!(
+                        "Docker service '{}' is missing during inspect; reporting missing instance",
+                        name
+                    );
+                    return Ok(missing_instance_from_manifest(&manifest));
+                }
+                return Err(error);
+            }
+            Err(error) => return Err(error),
+        };
 
         if let Some(manifest) = self.get_service_manifest(name) {
             Ok(enrich_instance_from_manifest(instance, &manifest))
@@ -1396,16 +1443,34 @@ fn ensure_wasmtime_manifest(manifest: &ServiceManifest) -> Result<()> {
     }
 }
 
-fn ensure_wasmtime_mount_dirs(manifest: &ServiceManifest) -> Result<()> {
+fn ensure_manifest_mount_dirs(manifest: &ServiceManifest) -> Result<()> {
     for mount in &manifest.mounts {
         fs::create_dir_all(&mount.host_path).with_context(|| {
             format!(
-                "Failed to create wasmtime host mount directory: {}",
+                "Failed to create service host mount directory: {}",
                 mount.host_path.display()
             )
         })?;
     }
     Ok(())
+}
+
+fn ensure_services_root_exists(fungi_home: &Path) -> Result<()> {
+    let services_root = fungi_home.join("services");
+    fs::create_dir_all(&services_root).with_context(|| {
+        format!(
+            "Failed to create services root directory: {}",
+            services_root.display()
+        )
+    })?;
+    Ok(())
+}
+
+fn is_missing_docker_container_error(error: &anyhow::Error) -> bool {
+    matches!(
+        error.downcast_ref::<DockerAgentError>(),
+        Some(DockerAgentError::DockerApi { status, .. }) if status.as_u16() == 404
+    )
 }
 
 fn validate_allowed_host_paths(
@@ -1486,7 +1551,7 @@ async fn build_wasmtime_state(
             service_dir.display()
         )
     })?;
-    ensure_wasmtime_mount_dirs(manifest)?;
+    ensure_manifest_mount_dirs(manifest)?;
 
     let staged_component_path = service_dir.join("component.wasm");
     let staged_component_path = if restage_component || !staged_component_path.exists() {
@@ -1739,7 +1804,7 @@ mod tests {
     }
 
     #[test]
-    fn ensure_wasmtime_mount_dirs_creates_missing_host_paths() {
+    fn ensure_manifest_mount_dirs_creates_missing_host_paths() {
         let temp_dir = TempDir::new().unwrap();
         let mount_path = temp_dir.path().join("nested/data");
         let manifest = ServiceManifest {
@@ -1761,8 +1826,29 @@ mod tests {
             labels: BTreeMap::new(),
         };
 
-        ensure_wasmtime_mount_dirs(&manifest).unwrap();
+        ensure_manifest_mount_dirs(&manifest).unwrap();
         assert!(mount_path.is_dir());
+    }
+
+    #[test]
+    fn runtime_control_new_creates_services_root() {
+        let temp_dir = TempDir::new().unwrap();
+        let fungi_home = temp_dir.path().join("fungi-home");
+        let runtime_root = fungi_home.join("runtime");
+        let service_state_file = fungi_home.join("services-state.json");
+
+        RuntimeControl::new(
+            runtime_root,
+            PathBuf::from("/bin/echo"),
+            fungi_home.clone(),
+            None,
+            service_state_file,
+            Vec::new(),
+            false,
+        )
+        .unwrap();
+
+        assert!(fungi_home.join("services").is_dir());
     }
 
     #[test]
@@ -1998,6 +2084,26 @@ spec:
         let manifest =
             parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
         assert!(manifest.expose.is_none());
+    }
+
+    #[test]
+    fn missing_docker_container_error_is_detected() {
+        let error = anyhow::Error::new(DockerAgentError::DockerApi {
+            status: "404".parse().unwrap(),
+            message: "No such container: filebrowser".into(),
+        });
+
+        assert!(is_missing_docker_container_error(&error));
+    }
+
+    #[test]
+    fn non_404_docker_error_is_not_detected_as_missing_container() {
+        let error = anyhow::Error::new(DockerAgentError::DockerApi {
+            status: "500".parse().unwrap(),
+            message: "daemon broke".into(),
+        });
+
+        assert!(!is_missing_docker_container_error(&error));
     }
 
     fn create_fake_launcher(dir: &Path) -> Result<PathBuf> {
