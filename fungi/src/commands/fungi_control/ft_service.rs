@@ -6,7 +6,10 @@ use fungi_daemon_grpc::{
 
 use crate::commands::CommonArgs;
 
-use super::client::get_rpc_client;
+use super::{
+    client::get_rpc_client,
+    shared::{fatal, fatal_grpc},
+};
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum FtServiceCommands {
@@ -25,7 +28,7 @@ pub enum FtServiceCommands {
 pub async fn execute_ft_service(args: CommonArgs, cmd: FtServiceCommands) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
-        None => return,
+        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
     };
 
     match cmd {
@@ -49,14 +52,14 @@ pub async fn execute_ft_service(args: CommonArgs, cmd: FtServiceCommands) {
                         println!("Root directory: {}", dir_resp.into_inner().root_dir);
                     }
                 }
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         FtServiceCommands::Start { root_dir } => {
             let req = StartFileTransferServiceRequest { root_dir };
             match client.start_file_transfer_service(Request::new(req)).await {
                 Ok(_) => println!("File transfer service started"),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         FtServiceCommands::Stop => {
@@ -65,7 +68,7 @@ pub async fn execute_ft_service(args: CommonArgs, cmd: FtServiceCommands) {
                 .await
             {
                 Ok(_) => println!("File transfer service stopped"),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
     }

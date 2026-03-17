@@ -31,6 +31,33 @@ service FungiDaemon {
   rpc RemoveIncomingAllowedPeer(RemoveIncomingAllowedPeerRequest)
       returns (Empty) {}
 
+  // Returns runtime enablement flags and the current shared safety boundary.
+  rpc GetRuntimeConfig(Empty) returns (RuntimeConfigResponse) {}
+
+  // Returns the local runtime status currently observed by the daemon.
+  rpc GetLocalRuntimeStatus(Empty) returns (LocalRuntimeStatusResponse) {}
+
+  // Adds a host path root to the shared runtime safety boundary.
+  rpc AddRuntimeAllowedHostPath(RuntimeAllowedHostPathRequest) returns (Empty) {}
+
+  // Removes a host path root from the shared runtime safety boundary.
+  rpc RemoveRuntimeAllowedHostPath(RuntimeAllowedHostPathRequest)
+      returns (Empty) {}
+
+  // Adds a single TCP port to the shared runtime safety boundary.
+  rpc AddRuntimeAllowedPort(RuntimeAllowedPortRequest) returns (Empty) {}
+
+  // Removes a single TCP port from the shared runtime safety boundary.
+  rpc RemoveRuntimeAllowedPort(RuntimeAllowedPortRequest) returns (Empty) {}
+
+  // Adds a TCP port range to the shared runtime safety boundary.
+  rpc AddRuntimeAllowedPortRange(RuntimeAllowedPortRangeRequest)
+      returns (Empty) {}
+
+  // Removes a TCP port range from the shared runtime safety boundary.
+  rpc RemoveRuntimeAllowedPortRange(RuntimeAllowedPortRangeRequest)
+      returns (Empty) {}
+
   // Indicates whether the embedded file transfer service is running.
   rpc GetFileTransferServiceEnabled(Empty)
       returns (FileTransferServiceEnabledResponse) {}
@@ -117,6 +144,67 @@ service FungiDaemon {
   // Lists currently active streams with optional peer/protocol filters.
   rpc ListActiveStreams(ListActiveStreamsRequest)
       returns (ListActiveStreamsResponse) {}
+
+  // Pulls a service from a serialized manifest payload.
+  rpc PullService(PullServiceRequest) returns (ServiceInstanceResponse) {}
+
+  // Starts a pulled service.
+  rpc StartService(ServiceNameRequest) returns (Empty) {}
+
+  // Stops a pulled service.
+  rpc StopService(ServiceNameRequest) returns (Empty) {}
+
+  // Removes a pulled service.
+  rpc RemoveService(ServiceNameRequest) returns (Empty) {}
+
+  // Inspects a pulled service.
+  rpc InspectService(ServiceNameRequest) returns (ServiceInstanceResponse) {}
+
+  // Gets logs for a pulled service.
+  rpc GetServiceLogs(GetServiceLogsRequest) returns (ServiceLogsResponse) {}
+
+  // Lists all pulled services on the local node, including stopped ones.
+  rpc ListServices(Empty) returns (ListServicesResponse) {}
+
+    // Lists services published by a remote peer for consumption.
+    rpc ListPeerCatalog(ListPeerCatalogRequest)
+      returns (ListPeerCatalogResponse) {}
+
+    // Queries a remote peer for a minimal node runtime capability summary.
+    rpc GetPeerCapabilitySummary(GetPeerCapabilitySummaryRequest)
+      returns (GetPeerCapabilitySummaryResponse) {}
+
+    // Pulls a service on a remote peer by sending a manifest to the local daemon.
+    rpc RemotePullService(RemotePullServiceRequest)
+      returns (RemoteServiceControlResponse) {}
+
+    // Starts a service on a remote peer by service name.
+    rpc RemoteStartService(RemoteServiceNameRequest)
+      returns (RemoteServiceControlResponse) {}
+
+    // Stops a service on a remote peer by service name.
+    rpc RemoteStopService(RemoteServiceNameRequest)
+      returns (RemoteServiceControlResponse) {}
+
+    // Removes a service on a remote peer by service name.
+    rpc RemoteRemoveService(RemoteServiceNameRequest)
+      returns (RemoteServiceControlResponse) {}
+
+    // Lists pulled services on a remote peer, including stopped ones.
+    rpc RemoteListServices(RemotePeerRequest)
+      returns (ListServicesResponse) {}
+
+    // Creates local access entries for all named endpoints of a published remote service.
+    rpc AttachServiceAccess(AttachServiceAccessRequest)
+      returns (ServiceAccessResponse) {}
+
+    // Removes local access entries for a previously attached remote service.
+    rpc DetachServiceAccess(DetachServiceAccessRequest)
+      returns (Empty) {}
+
+    // Lists service access entries currently attached on the local node.
+    rpc ListServiceAccesses(ListServiceAccessesRequest)
+      returns (ServiceAccessesResponse) {}
 }
 
 message Empty {}
@@ -134,6 +222,40 @@ message IncomingAllowedPeersListResponse { repeated PeerInfo peers = 1; }
 message AddIncomingAllowedPeerRequest { string peer_id = 1; }
 
 message RemoveIncomingAllowedPeerRequest { string peer_id = 1; }
+
+message RuntimeAllowedHostPathRequest { string path = 1; }
+
+message RuntimeAllowedPortRequest { int32 port = 1; }
+
+message RuntimeAllowedPortRangeRequest {
+  int32 start = 1;
+  int32 end = 2;
+}
+
+message RuntimeAllowedPortRange {
+  int32 start = 1;
+  int32 end = 2;
+}
+
+message RuntimeConfigResponse {
+  bool disable_docker = 1;
+  bool disable_wasmtime = 2;
+  repeated string allowed_host_paths = 3;
+  repeated int32 allowed_ports = 4;
+  repeated RuntimeAllowedPortRange allowed_port_ranges = 5;
+}
+
+message RuntimeAvailabilityStatus {
+  bool config_enabled = 1;
+  bool detected = 2;
+  bool active = 3;
+  string endpoint = 4;
+}
+
+message LocalRuntimeStatusResponse {
+  RuntimeAvailabilityStatus docker = 1;
+  RuntimeAvailabilityStatus wasmtime = 2;
+}
 
 message FileTransferServiceEnabledResponse { bool enabled = 1; }
 
@@ -191,12 +313,17 @@ message ForwardingRule {
   int32 local_port = 2;
   string remote_peer_id = 3;
   int32 remote_port = 4;
+  string remote_protocol = 5;
+  string remote_service_id = 6;
+  string remote_service_name = 7;
+  string remote_service_port_name = 8;
 }
 
 message ListeningRule {
   string host = 1;
   int32 port = 2;
   repeated string allowed_peers = 3;
+  string protocol = 4;
 }
 
 message TcpTunnelingConfigResponse {
@@ -211,6 +338,10 @@ message AddTcpForwardingRuleRequest {
   int32 local_port = 2;
   string peer_id = 3;
   int32 remote_port = 4;
+  string remote_protocol = 5;
+  string remote_service_id = 6;
+  string remote_service_name = 7;
+  string remote_service_port_name = 8;
 }
 
 message TcpForwardingRuleResponse { string rule_id = 1; }
@@ -220,12 +351,14 @@ message RemoveTcpForwardingRuleRequest {
   int32 local_port = 2;
   string peer_id = 3;
   int32 remote_port = 4;
+  string remote_protocol = 5;
 }
 
 message AddTcpListeningRuleRequest {
   string local_host = 1;
   int32 local_port = 2;
   repeated string allowed_peers = 3;
+  string protocol = 4;
 }
 
 message TcpListeningRuleResponse { string rule_id = 1; }
@@ -233,6 +366,7 @@ message TcpListeningRuleResponse { string rule_id = 1; }
 message RemoveTcpListeningRuleRequest {
   string local_host = 1;
   int32 local_port = 2;
+  string protocol = 3;
 }
 
 message PeerInfo {
@@ -340,3 +474,74 @@ message ActiveStreamSnapshot {
 message ListActiveStreamsResponse {
   repeated ActiveStreamSnapshot streams = 1;
 }
+
+enum ServiceRuntimeKind {
+  SERVICE_RUNTIME_KIND_UNSPECIFIED = 0;
+  SERVICE_RUNTIME_KIND_DOCKER = 1;
+  SERVICE_RUNTIME_KIND_WASMTIME = 2;
+}
+
+message PullServiceRequest {
+  string manifest_yaml = 1;
+  string manifest_base_dir = 2;
+}
+
+message ServiceNameRequest {
+  ServiceRuntimeKind runtime = 1;
+  string name = 2;
+}
+
+message GetServiceLogsRequest {
+  ServiceRuntimeKind runtime = 1;
+  string name = 2;
+  string tail = 3;
+}
+
+message ServiceInstanceResponse { string instance_json = 1; }
+
+message ServiceLogsResponse {
+  bytes raw = 1;
+  string text = 2;
+}
+
+message ListServicesResponse { string services_json = 1; }
+
+message ListPeerCatalogRequest { string peer_id = 1; }
+
+message ListPeerCatalogResponse { string services_json = 1; }
+
+message GetPeerCapabilitySummaryRequest { string peer_id = 1; }
+
+message GetPeerCapabilitySummaryResponse { string capability_summary_json = 1; }
+
+message RemotePullServiceRequest {
+  string peer_id = 1;
+  string manifest_yaml = 2;
+}
+
+message RemoteServiceNameRequest {
+  string peer_id = 1;
+  string name = 2;
+}
+
+message RemotePeerRequest { string peer_id = 1; }
+
+message RemoteServiceControlResponse { string service_name = 1; }
+
+message AttachServiceAccessRequest {
+  string peer_id = 1;
+  string service_id = 2;
+}
+
+message DetachServiceAccessRequest {
+  string peer_id = 1;
+  string service_id = 2;
+}
+
+message ListServiceAccessesRequest {
+  string peer_id = 1;
+}
+
+message ServiceAccessResponse { string service_access_json = 1; }
+
+message ServiceAccessesResponse { string service_accesses_json = 1; }

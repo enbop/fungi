@@ -1,6 +1,8 @@
 use fungi_config::FungiConfig;
 use fungi_daemon::FungiDaemon;
+use fungi_util::protocols::service_port_protocol;
 use libp2p::identity::Keypair;
+use std::path::Path;
 use std::sync::atomic::{AtomicU16, Ordering};
 use tempfile::TempDir;
 
@@ -11,24 +13,33 @@ fn get_unique_port() -> u16 {
     PORT_COUNTER.fetch_add(10, Ordering::SeqCst)
 }
 
-async fn create_test_daemon() -> (FungiDaemon, TempDir) {
-    let keypair = Keypair::generate_secp256k1();
-    let temp_dir = TempDir::new().unwrap();
-    let base_port = get_unique_port();
-
-    // Load config from temp directory to set config_file path
-    let mut config = FungiConfig::apply_from_dir(temp_dir.path()).unwrap();
+async fn start_test_daemon_in_dir(
+    fungi_dir: &Path,
+    keypair: Keypair,
+    base_port: u16,
+) -> FungiDaemon {
+    let mut config = FungiConfig::apply_from_dir(fungi_dir).unwrap();
     config.network.listen_tcp_port = base_port;
     config.network.listen_udp_port = base_port + 1000;
 
-    // Disable other services to avoid conflicts
     config.file_transfer.server.enabled = false;
     config.file_transfer.proxy_ftp.enabled = false;
     config.file_transfer.proxy_webdav.enabled = false;
+    config.save_to_file().unwrap();
 
-    let daemon = FungiDaemon::start_with(Default::default(), config, keypair, Default::default())
+    FungiDaemon::start_with(Default::default(), config, keypair, Default::default())
         .await
-        .expect("Failed to start test daemon");
+        .expect("Failed to start test daemon")
+}
+
+async fn create_test_daemon() -> (FungiDaemon, TempDir) {
+    let temp_dir = TempDir::new().unwrap();
+    let daemon = start_test_daemon_in_dir(
+        temp_dir.path(),
+        Keypair::generate_secp256k1(),
+        get_unique_port(),
+    )
+    .await;
 
     (daemon, temp_dir)
 }
@@ -43,32 +54,29 @@ async fn create_daemon_pair() -> (FungiDaemon, FungiDaemon, TempDir, TempDir) {
     let client_temp_dir = TempDir::new().unwrap();
     let server_temp_dir = TempDir::new().unwrap();
 
-    let server_port = get_unique_port();
-    let client_port = get_unique_port();
-
-    // Load server config from temp directory
     let mut server_config = FungiConfig::apply_from_dir(server_temp_dir.path()).unwrap();
     server_config
         .network
         .incoming_allowed_peers
         .push(client_peer_id);
+    let server_port = get_unique_port();
     server_config.network.listen_tcp_port = server_port;
     server_config.network.listen_udp_port = server_port + 1000;
 
-    // Disable other services
     server_config.file_transfer.server.enabled = false;
     server_config.file_transfer.proxy_ftp.enabled = false;
     server_config.file_transfer.proxy_webdav.enabled = false;
+    server_config.save_to_file().unwrap();
 
-    // Load client config from temp directory
     let mut client_config = FungiConfig::apply_from_dir(client_temp_dir.path()).unwrap();
+    let client_port = get_unique_port();
     client_config.network.listen_tcp_port = client_port;
     client_config.network.listen_udp_port = client_port + 1000;
 
-    // Disable other services
     client_config.file_transfer.server.enabled = false;
     client_config.file_transfer.proxy_ftp.enabled = false;
     client_config.file_transfer.proxy_webdav.enabled = false;
+    client_config.save_to_file().unwrap();
 
     let client_daemon = FungiDaemon::start_with(
         Default::default(),
@@ -294,6 +302,65 @@ mod tests {
         // Check config was updated
         let config = daemon.get_tcp_tunneling_config();
         assert_eq!(config.forwarding.rules.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_forwarding_rule_with_details_survives_restart() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let daemon = start_test_daemon_in_dir(
+            temp_dir.path(),
+            Keypair::generate_secp256k1(),
+            get_unique_port(),
+        )
+        .await;
+
+        let remote_peer = Keypair::generate_secp256k1().public().to_peer_id();
+        daemon
+            .add_tcp_forwarding_rule_with_details(
+                "127.0.0.1".to_string(),
+                18080,
+                remote_peer.to_string(),
+                0,
+                Some(service_port_protocol("svc.echo", "http")),
+                Some("svc.echo".to_string()),
+                Some("echo-service".to_string()),
+                Some("http".to_string()),
+            )
+            .await
+            .unwrap();
+
+        let mut restarted_config = FungiConfig::apply_from_dir(temp_dir.path()).unwrap();
+        let restarted_port = get_unique_port();
+        restarted_config.network.listen_tcp_port = restarted_port;
+        restarted_config.network.listen_udp_port = restarted_port + 1000;
+        restarted_config.file_transfer.server.enabled = false;
+        restarted_config.file_transfer.proxy_ftp.enabled = false;
+        restarted_config.file_transfer.proxy_webdav.enabled = false;
+        restarted_config.save_to_file().unwrap();
+
+        let restarted = FungiDaemon::start_with(
+            Default::default(),
+            restarted_config,
+            Keypair::generate_secp256k1(),
+            Default::default(),
+        )
+        .await
+        .expect("Failed to restart test daemon");
+
+        let rules = restarted.get_tcp_forwarding_rules();
+        assert_eq!(rules.len(), 1);
+        let rule = &rules[0].1;
+        assert_eq!(rule.local_host, "127.0.0.1");
+        assert_eq!(rule.local_port, 18080);
+        assert_eq!(rule.remote_peer_id, remote_peer.to_string());
+        assert_eq!(
+            rule.remote_protocol.as_deref(),
+            Some(service_port_protocol("svc.echo", "http").as_str())
+        );
+        assert_eq!(rule.remote_service_id.as_deref(), Some("svc.echo"));
+        assert_eq!(rule.remote_service_name.as_deref(), Some("echo-service"));
+        assert_eq!(rule.remote_service_port_name.as_deref(), Some("http"));
     }
 
     #[tokio::test]

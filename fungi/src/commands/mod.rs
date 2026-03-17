@@ -30,6 +30,7 @@ pub struct CommonArgs {
     #[cfg(target_os = "android")]
     #[clap(
         long,
+        default_value = "",
         help = "Set default device info string for this device, only used in Android"
     )]
     pub default_device_name: String,
@@ -65,9 +66,9 @@ pub enum Commands {
     /// Show daemon information
     #[command(subcommand)]
     Info(fungi_control::InfoCommands),
-    /// Manage incoming allowed peers
-    #[command(subcommand, visible_alias = "ap")]
-    AllowedPeers(fungi_control::AllowedPeerCommands),
+    /// Manage runtime safety boundary settings and incoming peer allowlists
+    #[command(subcommand, visible_alias = "sec")]
+    Security(fungi_control::SecurityCommands),
     /// Manage file transfer service
     #[command(subcommand, visible_alias = "fs")]
     FtService(fungi_control::FtServiceCommands),
@@ -77,6 +78,18 @@ pub enum Commands {
     /// Manage TCP tunneling
     #[command(subcommand, visible_alias = "tn")]
     Tunnel(fungi_control::TunnelCommands),
+    /// Manage local runtime services from manifests or service handles
+    #[command(subcommand, visible_alias = "svc")]
+    Service(fungi_control::ServiceCommands),
+    /// Browse published remote services
+    #[command(subcommand)]
+    Catalog(fungi_control::CatalogCommands),
+    /// Manage local access entries for remote services
+    #[command(subcommand)]
+    Access(fungi_control::AccessCommands),
+    /// Query and administer remote peers
+    #[command(subcommand)]
+    Peer(fungi_control::PeerCommands),
     /// Device discovery and address book
     #[command(subcommand)]
     Device(fungi_control::DeviceCommands),

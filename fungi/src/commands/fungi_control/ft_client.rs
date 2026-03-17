@@ -9,7 +9,10 @@ use fungi_daemon_grpc::{
 
 use crate::commands::CommonArgs;
 
-use super::client::get_rpc_client;
+use super::{
+    client::get_rpc_client,
+    shared::{fatal, fatal_grpc},
+};
 
 #[derive(Args, Debug, Clone)]
 pub struct AddClientArgs {
@@ -75,7 +78,7 @@ pub enum FtClientCommands {
 pub async fn execute_ft_client(args: CommonArgs, cmd: FtClientCommands) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
-        None => return,
+        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
     };
 
     match cmd {
@@ -88,7 +91,7 @@ pub async fn execute_ft_client(args: CommonArgs, cmd: FtClientCommands) {
                 );
                 println!("Binding: {}:{}", proxy.host, proxy.port);
             }
-            Err(e) => eprintln!("Error: {}", e),
+            Err(e) => fatal_grpc(e),
         },
         FtClientCommands::FtpUpdate {
             enabled,
@@ -102,7 +105,7 @@ pub async fn execute_ft_client(args: CommonArgs, cmd: FtClientCommands) {
             };
             match client.update_ftp_proxy(Request::new(req)).await {
                 Ok(_) => println!("FTP proxy updated successfully"),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         FtClientCommands::WebdavStatus => {
@@ -115,7 +118,7 @@ pub async fn execute_ft_client(args: CommonArgs, cmd: FtClientCommands) {
                     );
                     println!("Binding: {}:{}", proxy.host, proxy.port);
                 }
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         FtClientCommands::WebdavUpdate {
@@ -130,7 +133,7 @@ pub async fn execute_ft_client(args: CommonArgs, cmd: FtClientCommands) {
             };
             match client.update_webdav_proxy(Request::new(req)).await {
                 Ok(_) => println!("WebDAV proxy updated successfully"),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         FtClientCommands::List => {
@@ -157,7 +160,7 @@ pub async fn execute_ft_client(args: CommonArgs, cmd: FtClientCommands) {
                         }
                     }
                 }
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         FtClientCommands::Add(add_args) => {
@@ -168,14 +171,14 @@ pub async fn execute_ft_client(args: CommonArgs, cmd: FtClientCommands) {
             };
             match client.add_file_transfer_client(Request::new(req)).await {
                 Ok(_) => println!("Client added successfully"),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         FtClientCommands::Remove { peer_id } => {
             let req = RemoveFileTransferClientRequest { peer_id };
             match client.remove_file_transfer_client(Request::new(req)).await {
                 Ok(_) => println!("Client removed successfully"),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
         FtClientCommands::Enable { peer_id, enabled } => {
@@ -185,7 +188,7 @@ pub async fn execute_ft_client(args: CommonArgs, cmd: FtClientCommands) {
                     "Client {} successfully",
                     if enabled { "enabled" } else { "disabled" }
                 ),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
     }

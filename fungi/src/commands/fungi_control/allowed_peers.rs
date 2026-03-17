@@ -6,7 +6,10 @@ use fungi_daemon_grpc::{
 
 use crate::commands::CommonArgs;
 
-use super::client::get_rpc_client;
+use super::{
+    client::get_rpc_client,
+    shared::{fatal, fatal_grpc, require_named_peer_by_id},
+};
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum AllowedPeerCommands {
@@ -14,20 +17,20 @@ pub enum AllowedPeerCommands {
     List,
     /// Add a peer to the incoming connection allowlist
     Add {
-        /// Peer ID to allow
-        peer_id: String,
+        /// Peer ID or alias of an already named peer
+        peer: String,
     },
     /// Remove a peer from the incoming connection allowlist
     Remove {
-        /// Peer ID to remove
-        peer_id: String,
+        /// Peer ID or alias to remove
+        peer: String,
     },
 }
 
 pub async fn execute_allowed_peer(args: CommonArgs, cmd: AllowedPeerCommands) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
-        None => return,
+        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
     };
 
     match cmd {
@@ -46,21 +49,31 @@ pub async fn execute_allowed_peer(args: CommonArgs, cmd: AllowedPeerCommands) {
                         }
                     }
                 }
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
-        AllowedPeerCommands::Add { peer_id } => {
-            let req = AddIncomingAllowedPeerRequest { peer_id };
+        AllowedPeerCommands::Add { peer } => {
+            let resolved = match require_named_peer_by_id(&args, &peer) {
+                Ok(peer) => peer,
+                Err(error) => fatal(error),
+            };
+            let req = AddIncomingAllowedPeerRequest {
+                peer_id: resolved.peer_id,
+            };
             match client.add_incoming_allowed_peer(Request::new(req)).await {
                 Ok(_) => println!("Peer added successfully"),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
-        AllowedPeerCommands::Remove { peer_id } => {
+        AllowedPeerCommands::Remove { peer } => {
+            let peer_id = match require_named_peer_by_id(&args, &peer) {
+                Ok(peer) => peer.peer_id,
+                Err(_) => peer,
+            };
             let req = RemoveIncomingAllowedPeerRequest { peer_id };
             match client.remove_incoming_allowed_peer(Request::new(req)).await {
                 Ok(_) => println!("Peer removed successfully"),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => fatal_grpc(e),
             }
         }
     }

@@ -4,7 +4,10 @@ use fungi_daemon_grpc::{Request, fungi_daemon_grpc::Empty};
 
 use crate::commands::CommonArgs;
 
-use super::client::get_rpc_client;
+use super::{
+    client::get_rpc_client,
+    shared::{fatal, fatal_grpc},
+};
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum InfoCommands {
@@ -18,52 +21,80 @@ pub enum InfoCommands {
     ConfigPath,
     /// Show RPC address
     RpcAddress,
+    /// Show local runtime status observed by the daemon
+    Runtime,
 }
 
 pub async fn execute_info(args: CommonArgs, cmd: InfoCommands) {
     if matches!(cmd, InfoCommands::RpcAddress) {
-        let Ok(fungi_config) = FungiConfig::try_read_from_dir(&args.fungi_dir()) else {
-            eprintln!("Failed to read configuration");
-            return;
-        };
+        let fungi_config = FungiConfig::try_read_from_dir(&args.fungi_dir())
+            .unwrap_or_else(|error| fatal(format!("Failed to read configuration: {error}")));
         println!("{}", fungi_config.rpc.listen_address);
         return;
     }
 
     if matches!(cmd, InfoCommands::ConfigPath) {
-        let Ok(_fungi_config) = FungiConfig::try_read_from_dir(&args.fungi_dir()) else {
-            eprintln!("Failed to read configuration");
-            return;
-        };
+        let _fungi_config = FungiConfig::try_read_from_dir(&args.fungi_dir())
+            .unwrap_or_else(|error| fatal(format!("Failed to read configuration: {error}")));
         let mut client = match get_rpc_client(&args).await {
             Some(c) => c,
-            None => return,
+            None => fatal("Cannot connect to Fungi daemon. Is it running?"),
         };
         match client.config_file_path(Request::new(Empty {})).await {
             Ok(resp) => println!("{}", resp.into_inner().config_file_path),
-            Err(e) => eprintln!("Error: {}", e),
+            Err(e) => fatal_grpc(e),
         }
         return;
     }
 
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
-        None => return,
+        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
     };
 
     match cmd {
         InfoCommands::Version => match client.version(Request::new(Empty {})).await {
             Ok(resp) => println!("{}", resp.into_inner().version),
-            Err(e) => eprintln!("Error: {}", e),
+            Err(e) => fatal_grpc(e),
         },
         InfoCommands::Id => match client.peer_id(Request::new(Empty {})).await {
             Ok(resp) => println!("{}", resp.into_inner().peer_id),
-            Err(e) => eprintln!("Error: {}", e),
+            Err(e) => fatal_grpc(e),
         },
         InfoCommands::Hostname => match client.hostname(Request::new(Empty {})).await {
             Ok(resp) => println!("{}", resp.into_inner().hostname),
-            Err(e) => eprintln!("Error: {}", e),
+            Err(e) => fatal_grpc(e),
+        },
+        InfoCommands::Runtime => match client
+            .get_local_runtime_status(Request::new(Empty {}))
+            .await
+        {
+            Ok(resp) => print_runtime_status(&resp.into_inner()),
+            Err(e) => fatal_grpc(e),
         },
         InfoCommands::ConfigPath | InfoCommands::RpcAddress => {}
+    }
+}
+
+fn print_runtime_status(status: &fungi_daemon_grpc::fungi_daemon_grpc::LocalRuntimeStatusResponse) {
+    print_runtime_entry("docker", status.docker.as_ref());
+    print_runtime_entry("wasmtime", status.wasmtime.as_ref());
+}
+
+fn print_runtime_entry(
+    name: &str,
+    status: Option<&fungi_daemon_grpc::fungi_daemon_grpc::RuntimeAvailabilityStatus>,
+) {
+    println!("{name}:");
+    let Some(status) = status else {
+        println!("  <unavailable>");
+        return;
+    };
+
+    println!("  config_enabled: {}", status.config_enabled);
+    println!("  detected: {}", status.detected);
+    println!("  active: {}", status.active);
+    if !status.endpoint.is_empty() {
+        println!("  endpoint: {}", status.endpoint);
     }
 }

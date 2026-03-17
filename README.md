@@ -7,11 +7,11 @@
   <br>
 </h1>
 
-<p align="center" style="font-size: 1.2rem;">Turn Multiple Devices Into One Unified System</p>
+<p align="center" style="font-size: 1.2rem;">Build a private P2P device network for capability-first services</p>
 
-Fungi is a gateway for seamlessly exporting your services within a private P2P network.
+Fungi is a private-device networking stack centered on encrypted P2P connectivity and capability-first services.
 
-With Fungi, you can securely `forward ports`, `transfer files`, `deploy apps`, or simply use it as a lightweight NAS.
+With Fungi, you can securely connect your own devices, run container or WASI services under explicit runtime policy, control remote peers from CLI or GUI, and open published services locally.
 
 This repository contains the **Core Daemon** and **CLI** tools.
 
@@ -22,16 +22,30 @@ This repository contains the **Core Daemon** and **CLI** tools.
 
 *   **P2P Connectivity**: Built on [rust-libp2p](https://github.com/libp2p/rust-libp2p), supporting automatic NAT traversal and mDNS discovery.
 *   **Secure**: End-to-end encryption with PeerID-based authentication.
-*   **File Transfer**: Mount remote folders as local drives (FTP/WebDAV).
+*   **Capability-First Services**: Run Docker-compatible container services and WASI services within explicit path and port boundaries.
+*   **Remote Service Workflow**: Use `peer`, `catalog`, and `access` to control remote nodes and open their published web apps locally.
 *   **gRPC Interface**: The daemon exposes a gRPC API, allowing any client (CLI, GUI, scripts) to control it.
 *   **Modular architecture:**
     *   **`fungi-daemon`**: The background service that handles P2P networking and manage services.
     *   **`fungi-cli`**: A command-line tool to interact with the daemon via gRPC.
-*   **WASI Runtime**: (Experimental) WASI sandbox for cross-platform app deployment. [Learn more](https://fungi.rs/docs/wasi)
+*   **WASI Runtime**: Wasmtime-backed service runtime for WebAssembly components. Android support is not available yet. [Learn more](https://fungi.rs/docs/wasi)
+
+> **Note on file transfer**
+> The older FTP/WebDAV-style file transfer path is being gradually deprecated in favor of service-based workflows.
+
+## Download
+Download the latest binaries from [GitHub Releases](https://github.com/enbop/fungi/releases/latest).
+
 
 ## Documentation
 
 📚For full documentation, visit [fungi.rs/docs](https://fungi.rs/docs/intro).
+
+Recommended starting points:
+
+- [CLI Quick Start](https://fungi.rs/docs/cli-service-quick-start)
+- [Remote Service Control](https://fungi.rs/docs/remote-service-control)
+- [Services And Runtimes](https://fungi.rs/docs/service-manifests)
 
 ## Build from Source
 

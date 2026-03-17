@@ -5,6 +5,7 @@ members = [
     "fungi",
     "crates/config",
     "crates/daemon",
+    "crates/docker-agent",
     "crates/swarm",
     "crates/util",
     "crates/fs",
@@ -14,7 +15,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.5.1"
+version = "0.6.0-preview"
 edition = "2024"
 
 [workspace.dependencies]

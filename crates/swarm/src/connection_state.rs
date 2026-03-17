@@ -303,23 +303,14 @@ impl State {
         self.peer_connections
             .lock()
             .get(peer_id)
-            .map_or(false, |peers| peers.total_connections() > 0)
+            .is_some_and(|peers| peers.total_connections() > 0)
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ConnectionPingInfo {
     pub last_rtt: Option<Duration>,
     pub last_rtt_at: Option<SystemTime>,
-}
-
-impl Default for ConnectionPingInfo {
-    fn default() -> Self {
-        Self {
-            last_rtt: None,
-            last_rtt_at: None,
-        }
-    }
 }
 
 pub type StreamId = u64;

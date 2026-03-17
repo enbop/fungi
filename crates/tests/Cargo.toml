@@ -8,11 +8,15 @@ publish = false
 name = "test-tunnel-cli"
 path = "src/bin/test_tunnel_cli.rs"
 
+[[bin]]
+name = "test-service-remote-wasm-cli"
+path = "src/bin/test_service_remote_wasm_cli.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 log = { workspace = true }
 env_logger = "0.11"
 tempfile = "3"
+serde_json = "1"
 
 [dev-dependencies]
-

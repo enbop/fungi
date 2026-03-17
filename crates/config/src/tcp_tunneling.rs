@@ -24,13 +24,23 @@ pub struct ForwardingRule {
     pub local_port: u16,
 
     pub remote_peer_id: String,
+    #[serde(default)]
+    pub remote_protocol: Option<String>,
     pub remote_port: u16,
+    #[serde(default)]
+    pub remote_service_id: Option<String>,
+    #[serde(default)]
+    pub remote_service_name: Option<String>,
+    #[serde(default)]
+    pub remote_service_port_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ListeningRule {
     pub host: String,
     pub port: u16,
+    #[serde(default)]
+    pub protocol: Option<String>,
     // #[serde(default)]
     // pub allowed_peers: Vec<String>,
 }

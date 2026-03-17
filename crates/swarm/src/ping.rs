@@ -55,12 +55,12 @@ impl PingState {
             "PingState not initialized with stream control"
         );
         let mut lock = self.outbound.lock();
-        if let Some(state) = lock.get(&connection_id) {
-            if !state.is_finished() {
-                // previous ping task is still running
-                log::debug!("Outbound ping to {} is already running", peer_id);
-                return;
-            }
+        if let Some(state) = lock.get(&connection_id)
+            && !state.is_finished()
+        {
+            // previous ping task is still running
+            log::debug!("Outbound ping to {} is already running", peer_id);
+            return;
         }
         lock.insert(
             connection_id,
@@ -226,10 +226,10 @@ fn start_pong_loop(mut incoming: libp2p_stream::IncomingStreams) {
                     // The listening peer echoes the same 32-byte payload back to the dialing peer.
                     // The dialing peer then measures the RTT from when it wrote the bytes to when it received them.
                     let mut buf = [0u8; 32];
-                    if let Err(_) = stream.read_exact(&mut buf).await {
+                    if (stream.read_exact(&mut buf).await).is_err() {
                         break;
                     }
-                    if let Err(_) = stream.write_all(&buf).await {
+                    if (stream.write_all(&buf).await).is_err() {
                         break;
                     }
                     log::trace!("Ponged ping from {}", peer_id);

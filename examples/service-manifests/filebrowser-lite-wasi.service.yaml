@@ -1,0 +1,42 @@
+apiVersion: fungi.dev/v1alpha1
+kind: ServiceManifest
+
+metadata:
+  name: filebrowser-lite-wasi
+
+spec:
+  runtime: wasmtime
+
+  expose:
+    enabled: true
+    serviceId: filebrowser-lite-wasi
+    displayName: File Browser Lite
+    transport:
+      kind: tcp
+    usage:
+      kind: web
+      path: /
+    iconUrl: https://raw.githubusercontent.com/filebrowser/logo/master/icon.svg
+
+  source:
+    url: https://github.com/enbop/filebrowser-lite/releases/latest/download/filebrowser-lite-wasi.wasm
+
+  ports:
+    - hostPort: auto
+      name: http
+      servicePort: 8082
+      protocol: tcp
+
+  mounts:
+    - hostPath: ${APP_HOME}/data
+      runtimePath: data
+
+  env: {}
+
+notes:
+  - "This manifest pulls the minimal WASI build from github.com/enbop/filebrowser-lite."
+  - "The wasm asset is downloaded from the latest GitHub release at pull time."
+  - "${APP_HOME} resolves on the target node to fungi_home/services/<service-name>."
+  - "hostPort: auto asks the target node to choose an available port from its allowed port policy."
+  - "The service is expected to run with wasmtime serve semantics and serves HTTP on service port 8082."
+  - "The mounted data directory is exposed to the guest as 'data'."

@@ -60,4 +60,5 @@ jobs:
       run: cargo build
 
     - name: Run all tests
-      run: cargo test --all --verbose
+      run: |
+        cargo test --all

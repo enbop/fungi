@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0-preview] - 2026-03-15
+
+### Changed
+
+- Major preview release for the new service runtime flow, centered on a capability-first `RuntimeProvider` framework.
+- Service manifests are now the primary packaging format for runnable services across the Docker-compatible container runtime path and the Wasmtime path.
+
+### Added
+
+- Two runtime-provider implementations: a Docker-compatible container runtime path and a Wasmtime path.
+- `fungi service`, `fungi catalog`, `fungi access`, and `fungi peer` command groups for local service management, remote catalog browsing, local access creation, and remote peer administration.
+- A `crates/docker-agent` safety layer so container-backed services run through a constrained Docker agent instead of broad direct Docker access from the daemon.
+- Local and remote service management built around YAML service manifests, including pull/list/start control paths over CLI and gRPC.
+- Service discovery metadata through `spec.expose`, plus peer capability summary for service-aware remote workflows.
+- Runtime service state management and persistence for pulled services.
+- Docker-compatible container runtime and Wasmtime service-manifest examples.
+- Docker-based Android cross-compilation.
+- A clearer path to build your own private network system with fungi plus capabilities-first services.
+- Peer context support through `--peer`/`-p`, alias resolution, and `peer current/use/clear`.
+
 ## [0.5.1] - 2026-03-04
 
 ### Changed

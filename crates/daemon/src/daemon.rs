@@ -1,4 +1,5 @@
 use std::{
+    env,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::PathBuf,
     sync::Arc,
@@ -8,11 +9,13 @@ use std::{
 use crate::{
     DaemonArgs,
     controls::{
-        FileTransferClientsControl, FileTransferServiceControl, TcpTunnelingControl,
-        mdns::MdnsControl,
+        DockerControl, FileTransferClientsControl, FileTransferServiceControl,
+        NodeCapabilitiesControl, ServiceControlProtocolControl, ServiceDiscoveryControl,
+        TcpTunnelingControl, mdns::MdnsControl,
     },
+    runtime::{RuntimeControl, wasmtime_runtime_supported},
 };
-use anyhow::Result;
+use anyhow::{Result, bail};
 use fungi_config::{
     FungiConfig,
     address_book::{AddressBookConfig, PeerInfo},
@@ -41,7 +44,12 @@ pub struct FungiDaemon {
     mdns_control: MdnsControl,
     fts_control: FileTransferServiceControl,
     ftc_control: FileTransferClientsControl,
+    docker_control: Option<DockerControl>,
     tcp_tunneling_control: TcpTunnelingControl,
+    runtime_control: RuntimeControl,
+    service_discovery_control: ServiceDiscoveryControl,
+    node_capabilities_control: NodeCapabilitiesControl,
+    service_control_protocol_control: ServiceControlProtocolControl,
 
     task_handles: TaskHandles,
 }
@@ -67,8 +75,28 @@ impl FungiDaemon {
         &self.ftc_control
     }
 
+    pub fn docker_control(&self) -> Option<&DockerControl> {
+        self.docker_control.as_ref()
+    }
+
     pub fn tcp_tunneling_control(&self) -> &TcpTunnelingControl {
         &self.tcp_tunneling_control
+    }
+
+    pub fn runtime_control(&self) -> &RuntimeControl {
+        &self.runtime_control
+    }
+
+    pub fn service_discovery_control(&self) -> &ServiceDiscoveryControl {
+        &self.service_discovery_control
+    }
+
+    pub fn node_capabilities_control(&self) -> &NodeCapabilitiesControl {
+        &self.node_capabilities_control
+    }
+
+    pub fn service_control_protocol_control(&self) -> &ServiceControlProtocolControl {
+        &self.service_control_protocol_control
     }
 
     pub fn mdns_control(&self) -> &MdnsControl {
@@ -126,7 +154,7 @@ impl FungiDaemon {
             relay_addrs,
             idle_connection_timeout,
             |swarm| {
-                apply_listen(swarm, &config);
+                apply_listen(swarm, &config).expect("failed to configure swarm listeners");
             },
         )
         .await?;
@@ -143,10 +171,57 @@ impl FungiDaemon {
         let ftc_control = FileTransferClientsControl::new(swarm_control.clone());
         Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
 
+        let docker_control = DockerControl::from_config(&config.runtime)?;
+        let shared_config = Arc::new(Mutex::new(config.clone()));
+        let fungi_home = config
+            .config_file_path()
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .to_path_buf();
+        let runtime_root = config
+            .config_file_path()
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("runtime");
+        let runtime_control = RuntimeControl::new(
+            runtime_root,
+            env::current_exe()
+                .map_err(|e| anyhow::anyhow!("Failed to resolve current executable: {e}"))?,
+            fungi_home.clone(),
+            docker_control.clone(),
+            fungi_home.join("services-state.json"),
+            config.runtime.allowed_host_paths.clone(),
+            config.runtime.wasmtime_enabled() && wasmtime_runtime_supported(),
+        )?;
+        runtime_control.restore_persisted_state().await?;
+        let service_discovery_control = ServiceDiscoveryControl::new(
+            swarm_control.clone(),
+            runtime_control.clone(),
+            state.incoming_allowed_peers().clone(),
+        );
+        service_discovery_control.start()?;
+        let node_capabilities_control = NodeCapabilitiesControl::new(
+            swarm_control.clone(),
+            shared_config.clone(),
+            runtime_control.clone(),
+            state.incoming_allowed_peers().clone(),
+        );
+        node_capabilities_control.start()?;
+
         let tcp_tunneling_control = TcpTunnelingControl::new(swarm_control.clone());
         tcp_tunneling_control
             .init_from_config(&config.tcp_tunneling)
             .await;
+
+        let service_control_protocol_control = ServiceControlProtocolControl::new(
+            swarm_control.clone(),
+            shared_config.clone(),
+            fungi_home,
+            runtime_control.clone(),
+            tcp_tunneling_control.clone(),
+            state.incoming_allowed_peers().clone(),
+        );
+        service_control_protocol_control.start()?;
 
         let proxy_ftp_task = if config.file_transfer.proxy_ftp.enabled {
             Some(tokio::spawn(crate::controls::start_ftp_proxy_service(
@@ -173,17 +248,26 @@ impl FungiDaemon {
             proxy_ftp_task: Arc::new(Mutex::new(proxy_ftp_task)),
             proxy_webdav_task: Arc::new(Mutex::new(proxy_webdav_task)),
         };
-        Ok(Self {
-            config: Arc::new(Mutex::new(config)),
+        let daemon = Self {
+            config: shared_config,
             address_book_config: Arc::new(Mutex::new(address_book_config)),
             args,
             swarm_control,
             mdns_control,
             fts_control,
             ftc_control,
+            docker_control,
             tcp_tunneling_control,
+            runtime_control,
+            service_discovery_control,
+            node_capabilities_control,
+            service_control_protocol_control,
             task_handles,
-        })
+        };
+
+        daemon.restore_service_endpoint_listeners().await?;
+
+        Ok(daemon)
     }
 
     pub async fn wait_all(self) {
@@ -203,6 +287,50 @@ impl FungiDaemon {
         {
             log::warn!("Failed to add file transfer service: {e}");
         }
+    }
+
+    async fn restore_service_endpoint_listeners(&self) -> Result<()> {
+        let mut listening_rules = self.tcp_tunneling_control.get_listening_rules();
+
+        for service in self.runtime_control.list_services().await? {
+            if !service.status.running {
+                continue;
+            }
+
+            for endpoint in service.exposed_endpoints {
+                let already_present = listening_rules.iter().any(|(_, rule)| {
+                    rule.host == "127.0.0.1"
+                        && rule.port == endpoint.host_port
+                        && rule.protocol.as_deref() == Some(endpoint.protocol.as_str())
+                });
+                if already_present {
+                    continue;
+                }
+
+                let rule = fungi_config::tcp_tunneling::ListeningRule {
+                    host: "127.0.0.1".to_string(),
+                    port: endpoint.host_port,
+                    protocol: Some(endpoint.protocol),
+                };
+
+                match self
+                    .tcp_tunneling_control
+                    .add_listening_rule(rule.clone())
+                    .await
+                {
+                    Ok(rule_id) => listening_rules.push((rule_id, rule)),
+                    Err(error) => {
+                        log::warn!(
+                            "Failed to restore service endpoint listener on 127.0.0.1:{}: {}",
+                            endpoint.host_port,
+                            error
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn init_ftc(clients: Vec<FTCConfig>, ftc_control: FileTransferClientsControl) {
@@ -372,35 +500,63 @@ impl FungiDaemon {
     }
 }
 
-fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) {
-    swarm
-        .listen_on(
-            Multiaddr::empty()
-                .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-                .with(Protocol::Tcp(config.network.listen_tcp_port)),
-        )
-        .unwrap();
-    swarm
-        .listen_on(
-            Multiaddr::empty()
-                .with(Protocol::from(Ipv6Addr::UNSPECIFIED))
-                .with(Protocol::Tcp(config.network.listen_tcp_port)),
-        )
-        .unwrap();
-    swarm
-        .listen_on(
-            Multiaddr::empty()
-                .with(Protocol::from(Ipv6Addr::UNSPECIFIED))
-                .with(Protocol::Udp(config.network.listen_udp_port))
-                .with(Protocol::QuicV1),
-        )
-        .unwrap();
-    swarm
-        .listen_on(
-            Multiaddr::empty()
-                .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-                .with(Protocol::Udp(config.network.listen_udp_port))
-                .with(Protocol::QuicV1),
-        )
-        .unwrap();
+fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) -> Result<()> {
+    let tcp_addrs = [
+        Multiaddr::empty()
+            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+            .with(Protocol::Tcp(config.network.listen_tcp_port)),
+        Multiaddr::empty()
+            .with(Protocol::from(Ipv6Addr::UNSPECIFIED))
+            .with(Protocol::Tcp(config.network.listen_tcp_port)),
+    ];
+    let quic_addrs = [
+        Multiaddr::empty()
+            .with(Protocol::from(Ipv6Addr::UNSPECIFIED))
+            .with(Protocol::Udp(config.network.listen_udp_port))
+            .with(Protocol::QuicV1),
+        Multiaddr::empty()
+            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+            .with(Protocol::Udp(config.network.listen_udp_port))
+            .with(Protocol::QuicV1),
+    ];
+
+    let mut tcp_listening = false;
+    let mut tcp_errors = Vec::new();
+    for addr in tcp_addrs {
+        match swarm.listen_on(addr.clone()) {
+            Ok(_) => tcp_listening = true,
+            Err(error) => {
+                log::warn!("Failed to listen on {addr}: {error}");
+                tcp_errors.push(format!("{addr}: {error}"));
+            }
+        }
+    }
+
+    if !tcp_listening {
+        bail!(
+            "Failed to open any TCP listen address: {}",
+            tcp_errors.join("; ")
+        );
+    }
+
+    let mut quic_listening = false;
+    let mut quic_errors = Vec::new();
+    for addr in quic_addrs {
+        match swarm.listen_on(addr.clone()) {
+            Ok(_) => quic_listening = true,
+            Err(error) => {
+                log::warn!("Failed to listen on {addr}: {error}");
+                quic_errors.push(format!("{addr}: {error}"));
+            }
+        }
+    }
+
+    if !quic_listening && !quic_errors.is_empty() {
+        log::warn!(
+            "No QUIC listen address could be opened; continuing with TCP only: {}",
+            quic_errors.join("; ")
+        );
+    }
+
+    Ok(())
 }
