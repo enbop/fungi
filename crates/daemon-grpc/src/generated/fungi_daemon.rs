@@ -499,24 +499,24 @@ pub struct ListServicesResponse {
     pub services_json: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct DiscoverPeerServicesRequest {
+pub struct ListPeerCatalogRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct DiscoverPeerServicesResponse {
+pub struct ListPeerCatalogResponse {
     #[prost(string, tag = "1")]
     pub services_json: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct DiscoverPeerCapabilitiesRequest {
+pub struct GetPeerCapabilitySummaryRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct DiscoverPeerCapabilitiesResponse {
+pub struct GetPeerCapabilitySummaryResponse {
     #[prost(string, tag = "1")]
-    pub capabilities_json: ::prost::alloc::string::String,
+    pub capability_summary_json: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RemotePullServiceRequest {
@@ -543,33 +543,33 @@ pub struct RemoteServiceControlResponse {
     pub service_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct EnableRemoteServiceRequest {
+pub struct AttachServiceAccessRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub service_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct DisableRemoteServiceRequest {
+pub struct DetachServiceAccessRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub service_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListEnabledRemoteServicesRequest {
+pub struct ListServiceAccessesRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct EnabledRemoteServiceResponse {
+pub struct ServiceAccessResponse {
     #[prost(string, tag = "1")]
-    pub enabled_service_json: ::prost::alloc::string::String,
+    pub service_access_json: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct EnabledRemoteServicesResponse {
+pub struct ServiceAccessesResponse {
     #[prost(string, tag = "1")]
-    pub enabled_services_json: ::prost::alloc::string::String,
+    pub service_accesses_json: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -1908,12 +1908,12 @@ pub mod fungi_daemon_client {
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "ListServices"));
             self.inner.unary(req, path, codec).await
         }
-        /// Queries a remote peer for currently discoverable services.
-        pub async fn discover_peer_services(
+        /// Lists services published by a remote peer for consumption.
+        pub async fn list_peer_catalog(
             &mut self,
-            request: impl tonic::IntoRequest<super::DiscoverPeerServicesRequest>,
+            request: impl tonic::IntoRequest<super::ListPeerCatalogRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::DiscoverPeerServicesResponse>,
+            tonic::Response<super::ListPeerCatalogResponse>,
             tonic::Status,
         > {
             self.inner
@@ -1926,21 +1926,19 @@ pub mod fungi_daemon_client {
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/DiscoverPeerServices",
+                "/fungi_daemon.FungiDaemon/ListPeerCatalog",
             );
             let mut req = request.into_request();
             req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "DiscoverPeerServices"),
-                );
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "ListPeerCatalog"));
             self.inner.unary(req, path, codec).await
         }
-        /// Queries a remote peer for minimal node runtime capabilities.
-        pub async fn discover_peer_capabilities(
+        /// Queries a remote peer for a minimal node runtime capability summary.
+        pub async fn get_peer_capability_summary(
             &mut self,
-            request: impl tonic::IntoRequest<super::DiscoverPeerCapabilitiesRequest>,
+            request: impl tonic::IntoRequest<super::GetPeerCapabilitySummaryRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::DiscoverPeerCapabilitiesResponse>,
+            tonic::Response<super::GetPeerCapabilitySummaryResponse>,
             tonic::Status,
         > {
             self.inner
@@ -1953,14 +1951,14 @@ pub mod fungi_daemon_client {
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/DiscoverPeerCapabilities",
+                "/fungi_daemon.FungiDaemon/GetPeerCapabilitySummary",
             );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(
                     GrpcMethod::new(
                         "fungi_daemon.FungiDaemon",
-                        "DiscoverPeerCapabilities",
+                        "GetPeerCapabilitySummary",
                     ),
                 );
             self.inner.unary(req, path, codec).await
@@ -2100,12 +2098,12 @@ pub mod fungi_daemon_client {
                 );
             self.inner.unary(req, path, codec).await
         }
-        /// Enables automatic local forwarding for all named endpoints of a remote service.
-        pub async fn enable_remote_service(
+        /// Creates local access entries for all named endpoints of a published remote service.
+        pub async fn attach_service_access(
             &mut self,
-            request: impl tonic::IntoRequest<super::EnableRemoteServiceRequest>,
+            request: impl tonic::IntoRequest<super::AttachServiceAccessRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::EnabledRemoteServiceResponse>,
+            tonic::Response<super::ServiceAccessResponse>,
             tonic::Status,
         > {
             self.inner
@@ -2118,19 +2116,19 @@ pub mod fungi_daemon_client {
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/EnableRemoteService",
+                "/fungi_daemon.FungiDaemon/AttachServiceAccess",
             );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "EnableRemoteService"),
+                    GrpcMethod::new("fungi_daemon.FungiDaemon", "AttachServiceAccess"),
                 );
             self.inner.unary(req, path, codec).await
         }
-        /// Disables automatic local forwarding for a previously enabled remote service.
-        pub async fn disable_remote_service(
+        /// Removes local access entries for a previously attached remote service.
+        pub async fn detach_service_access(
             &mut self,
-            request: impl tonic::IntoRequest<super::DisableRemoteServiceRequest>,
+            request: impl tonic::IntoRequest<super::DetachServiceAccessRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
             self.inner
                 .ready()
@@ -2142,21 +2140,21 @@ pub mod fungi_daemon_client {
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/DisableRemoteService",
+                "/fungi_daemon.FungiDaemon/DetachServiceAccess",
             );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(
-                    GrpcMethod::new("fungi_daemon.FungiDaemon", "DisableRemoteService"),
+                    GrpcMethod::new("fungi_daemon.FungiDaemon", "DetachServiceAccess"),
                 );
             self.inner.unary(req, path, codec).await
         }
-        /// Lists remote services that are currently enabled for local forwarding.
-        pub async fn list_enabled_remote_services(
+        /// Lists service access entries currently attached on the local node.
+        pub async fn list_service_accesses(
             &mut self,
-            request: impl tonic::IntoRequest<super::ListEnabledRemoteServicesRequest>,
+            request: impl tonic::IntoRequest<super::ListServiceAccessesRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::EnabledRemoteServicesResponse>,
+            tonic::Response<super::ServiceAccessesResponse>,
             tonic::Status,
         > {
             self.inner
@@ -2169,15 +2167,12 @@ pub mod fungi_daemon_client {
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/ListEnabledRemoteServices",
+                "/fungi_daemon.FungiDaemon/ListServiceAccesses",
             );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(
-                    GrpcMethod::new(
-                        "fungi_daemon.FungiDaemon",
-                        "ListEnabledRemoteServices",
-                    ),
+                    GrpcMethod::new("fungi_daemon.FungiDaemon", "ListServiceAccesses"),
                 );
             self.inner.unary(req, path, codec).await
         }
@@ -2506,20 +2501,20 @@ pub mod fungi_daemon_server {
             tonic::Response<super::ListServicesResponse>,
             tonic::Status,
         >;
-        /// Queries a remote peer for currently discoverable services.
-        async fn discover_peer_services(
+        /// Lists services published by a remote peer for consumption.
+        async fn list_peer_catalog(
             &self,
-            request: tonic::Request<super::DiscoverPeerServicesRequest>,
+            request: tonic::Request<super::ListPeerCatalogRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::DiscoverPeerServicesResponse>,
+            tonic::Response<super::ListPeerCatalogResponse>,
             tonic::Status,
         >;
-        /// Queries a remote peer for minimal node runtime capabilities.
-        async fn discover_peer_capabilities(
+        /// Queries a remote peer for a minimal node runtime capability summary.
+        async fn get_peer_capability_summary(
             &self,
-            request: tonic::Request<super::DiscoverPeerCapabilitiesRequest>,
+            request: tonic::Request<super::GetPeerCapabilitySummaryRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::DiscoverPeerCapabilitiesResponse>,
+            tonic::Response<super::GetPeerCapabilitySummaryResponse>,
             tonic::Status,
         >;
         /// Pulls a service on a remote peer by sending a manifest to the local daemon.
@@ -2562,25 +2557,25 @@ pub mod fungi_daemon_server {
             tonic::Response<super::ListServicesResponse>,
             tonic::Status,
         >;
-        /// Enables automatic local forwarding for all named endpoints of a remote service.
-        async fn enable_remote_service(
+        /// Creates local access entries for all named endpoints of a published remote service.
+        async fn attach_service_access(
             &self,
-            request: tonic::Request<super::EnableRemoteServiceRequest>,
+            request: tonic::Request<super::AttachServiceAccessRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::EnabledRemoteServiceResponse>,
+            tonic::Response<super::ServiceAccessResponse>,
             tonic::Status,
         >;
-        /// Disables automatic local forwarding for a previously enabled remote service.
-        async fn disable_remote_service(
+        /// Removes local access entries for a previously attached remote service.
+        async fn detach_service_access(
             &self,
-            request: tonic::Request<super::DisableRemoteServiceRequest>,
+            request: tonic::Request<super::DetachServiceAccessRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Lists remote services that are currently enabled for local forwarding.
-        async fn list_enabled_remote_services(
+        /// Lists service access entries currently attached on the local node.
+        async fn list_service_accesses(
             &self,
-            request: tonic::Request<super::ListEnabledRemoteServicesRequest>,
+            request: tonic::Request<super::ListServiceAccessesRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::EnabledRemoteServicesResponse>,
+            tonic::Response<super::ServiceAccessesResponse>,
             tonic::Status,
         >;
     }
@@ -4861,26 +4856,25 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/DiscoverPeerServices" => {
+                "/fungi_daemon.FungiDaemon/ListPeerCatalog" => {
                     #[allow(non_camel_case_types)]
-                    struct DiscoverPeerServicesSvc<T: FungiDaemon>(pub Arc<T>);
+                    struct ListPeerCatalogSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<
                         T: FungiDaemon,
-                    > tonic::server::UnaryService<super::DiscoverPeerServicesRequest>
-                    for DiscoverPeerServicesSvc<T> {
-                        type Response = super::DiscoverPeerServicesResponse;
+                    > tonic::server::UnaryService<super::ListPeerCatalogRequest>
+                    for ListPeerCatalogSvc<T> {
+                        type Response = super::ListPeerCatalogResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::DiscoverPeerServicesRequest>,
+                            request: tonic::Request<super::ListPeerCatalogRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::discover_peer_services(&inner, request)
-                                    .await
+                                <T as FungiDaemon>::list_peer_catalog(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -4891,7 +4885,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = DiscoverPeerServicesSvc(inner);
+                        let method = ListPeerCatalogSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -4907,14 +4901,14 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/DiscoverPeerCapabilities" => {
+                "/fungi_daemon.FungiDaemon/GetPeerCapabilitySummary" => {
                     #[allow(non_camel_case_types)]
-                    struct DiscoverPeerCapabilitiesSvc<T: FungiDaemon>(pub Arc<T>);
+                    struct GetPeerCapabilitySummarySvc<T: FungiDaemon>(pub Arc<T>);
                     impl<
                         T: FungiDaemon,
-                    > tonic::server::UnaryService<super::DiscoverPeerCapabilitiesRequest>
-                    for DiscoverPeerCapabilitiesSvc<T> {
-                        type Response = super::DiscoverPeerCapabilitiesResponse;
+                    > tonic::server::UnaryService<super::GetPeerCapabilitySummaryRequest>
+                    for GetPeerCapabilitySummarySvc<T> {
+                        type Response = super::GetPeerCapabilitySummaryResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
@@ -4922,12 +4916,12 @@ pub mod fungi_daemon_server {
                         fn call(
                             &mut self,
                             request: tonic::Request<
-                                super::DiscoverPeerCapabilitiesRequest,
+                                super::GetPeerCapabilitySummaryRequest,
                             >,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::discover_peer_capabilities(
+                                <T as FungiDaemon>::get_peer_capability_summary(
                                         &inner,
                                         request,
                                     )
@@ -4942,7 +4936,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = DiscoverPeerCapabilitiesSvc(inner);
+                        let method = GetPeerCapabilitySummarySvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -5188,25 +5182,25 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/EnableRemoteService" => {
+                "/fungi_daemon.FungiDaemon/AttachServiceAccess" => {
                     #[allow(non_camel_case_types)]
-                    struct EnableRemoteServiceSvc<T: FungiDaemon>(pub Arc<T>);
+                    struct AttachServiceAccessSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<
                         T: FungiDaemon,
-                    > tonic::server::UnaryService<super::EnableRemoteServiceRequest>
-                    for EnableRemoteServiceSvc<T> {
-                        type Response = super::EnabledRemoteServiceResponse;
+                    > tonic::server::UnaryService<super::AttachServiceAccessRequest>
+                    for AttachServiceAccessSvc<T> {
+                        type Response = super::ServiceAccessResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::EnableRemoteServiceRequest>,
+                            request: tonic::Request<super::AttachServiceAccessRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::enable_remote_service(&inner, request)
+                                <T as FungiDaemon>::attach_service_access(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -5218,7 +5212,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = EnableRemoteServiceSvc(inner);
+                        let method = AttachServiceAccessSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -5234,13 +5228,13 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/DisableRemoteService" => {
+                "/fungi_daemon.FungiDaemon/DetachServiceAccess" => {
                     #[allow(non_camel_case_types)]
-                    struct DisableRemoteServiceSvc<T: FungiDaemon>(pub Arc<T>);
+                    struct DetachServiceAccessSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<
                         T: FungiDaemon,
-                    > tonic::server::UnaryService<super::DisableRemoteServiceRequest>
-                    for DisableRemoteServiceSvc<T> {
+                    > tonic::server::UnaryService<super::DetachServiceAccessRequest>
+                    for DetachServiceAccessSvc<T> {
                         type Response = super::Empty;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
@@ -5248,11 +5242,11 @@ pub mod fungi_daemon_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::DisableRemoteServiceRequest>,
+                            request: tonic::Request<super::DetachServiceAccessRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::disable_remote_service(&inner, request)
+                                <T as FungiDaemon>::detach_service_access(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -5264,7 +5258,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = DisableRemoteServiceSvc(inner);
+                        let method = DetachServiceAccessSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -5280,31 +5274,25 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/ListEnabledRemoteServices" => {
+                "/fungi_daemon.FungiDaemon/ListServiceAccesses" => {
                     #[allow(non_camel_case_types)]
-                    struct ListEnabledRemoteServicesSvc<T: FungiDaemon>(pub Arc<T>);
+                    struct ListServiceAccessesSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<
                         T: FungiDaemon,
-                    > tonic::server::UnaryService<
-                        super::ListEnabledRemoteServicesRequest,
-                    > for ListEnabledRemoteServicesSvc<T> {
-                        type Response = super::EnabledRemoteServicesResponse;
+                    > tonic::server::UnaryService<super::ListServiceAccessesRequest>
+                    for ListServiceAccessesSvc<T> {
+                        type Response = super::ServiceAccessesResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::ListEnabledRemoteServicesRequest,
-                            >,
+                            request: tonic::Request<super::ListServiceAccessesRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::list_enabled_remote_services(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as FungiDaemon>::list_service_accesses(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -5316,7 +5304,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = ListEnabledRemoteServicesSvc(inner);
+                        let method = ListServiceAccessesSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
