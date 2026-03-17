@@ -6,7 +6,7 @@ pub mod runtime;
 mod service_control;
 mod service_state;
 
-pub use api::{EnabledRemoteService, EnabledRemoteServiceEndpoint};
+pub use api::{ServiceAccess, ServiceAccessEndpoint};
 use clap::Parser;
 pub use daemon::FungiDaemon;
 pub use node_capabilities::{
@@ -15,8 +15,8 @@ pub use node_capabilities::{
     build_local_runtime_status,
 };
 pub use runtime::{
-    DiscoveredService, DiscoveredServiceEndpoint, ManifestResolutionPolicy, RuntimeControl,
-    RuntimeKind, ServiceExpose, ServiceExposeEndpointBinding, ServiceExposeTransport,
+    CatalogService, CatalogServiceEndpoint, ManifestResolutionPolicy, RuntimeControl, RuntimeKind,
+    ServiceExpose, ServiceExposeEndpointBinding, ServiceExposeTransport,
     ServiceExposeTransportKind, ServiceExposeUsage, ServiceExposeUsageKind, ServiceInstance,
     ServiceLogs, ServiceLogsOptions, ServiceManifest, ServiceManifestDocument,
     ServiceManifestExpose, ServiceManifestExposeTransport, ServiceManifestExposeUsage,

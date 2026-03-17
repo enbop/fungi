@@ -117,7 +117,7 @@ pub struct ServiceStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DiscoveredService {
+pub struct CatalogService {
     pub service_name: String,
     pub service_id: String,
     pub display_name: String,
@@ -127,12 +127,12 @@ pub struct DiscoveredService {
     pub icon_url: Option<String>,
     pub catalog_id: Option<String>,
     #[serde(default)]
-    pub endpoints: Vec<DiscoveredServiceEndpoint>,
+    pub endpoints: Vec<CatalogServiceEndpoint>,
     pub status: ServiceStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DiscoveredServiceEndpoint {
+pub struct CatalogServiceEndpoint {
     pub name: String,
     pub protocol: String,
     pub service_port: u16,

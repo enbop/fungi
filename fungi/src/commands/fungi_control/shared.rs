@@ -1,3 +1,171 @@
+use clap::Args;
+use fungi_config::{FungiDir, address_book::AddressBookConfig};
+use libp2p::PeerId;
+use serde::{Deserialize, Serialize};
+
+use crate::commands::CommonArgs;
+
+const CLI_CONTEXT_FILE: &str = "cli_context.json";
+
+#[derive(Args, Debug, Clone)]
+pub struct PeerTargetArg {
+    #[arg(short = 'p', long = "peer", help = "Peer ID or alias")]
+    pub peer: Option<String>,
+}
+
+#[derive(Args, Debug, Clone, Default)]
+pub struct OptionalPeerTargetArg {
+    #[arg(short = 'p', long = "peer", help = "Peer ID or alias")]
+    pub peer: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedPeerTarget {
+    pub peer_id: String,
+    pub alias: Option<String>,
+    pub hostname: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct CliContext {
+    #[serde(default)]
+    current_peer_id: Option<String>,
+    #[serde(default)]
+    current_peer_alias: Option<String>,
+}
+
+pub fn resolve_required_peer(
+    args: &CommonArgs,
+    peer: Option<&str>,
+) -> Result<ResolvedPeerTarget, String> {
+    if let Some(peer) = peer.filter(|value| !value.trim().is_empty()) {
+        return resolve_peer_input(args, peer);
+    }
+
+    if let Some(peer) = get_current_peer(args)? {
+        return Ok(peer);
+    }
+
+    Err("No peer selected. Use --peer/-p or `fungi peer use <peer>`.".to_string())
+}
+
+pub fn resolve_optional_peer(
+    args: &CommonArgs,
+    peer: Option<&str>,
+) -> Result<Option<ResolvedPeerTarget>, String> {
+    match peer.filter(|value| !value.trim().is_empty()) {
+        Some(peer) => resolve_peer_input(args, peer).map(Some),
+        None => Ok(None),
+    }
+}
+
+pub fn get_current_peer(args: &CommonArgs) -> Result<Option<ResolvedPeerTarget>, String> {
+    let Some(peer_id) = load_cli_context(args)?.current_peer_id else {
+        return Ok(None);
+    };
+    resolve_peer_input(args, &peer_id).map(Some)
+}
+
+pub fn set_current_peer(args: &CommonArgs, peer: &ResolvedPeerTarget) -> Result<(), String> {
+    let context = CliContext {
+        current_peer_id: Some(peer.peer_id.clone()),
+        current_peer_alias: peer.alias.clone(),
+    };
+    save_cli_context(args, &context)
+}
+
+pub fn clear_current_peer(args: &CommonArgs) -> Result<(), String> {
+    let path = cli_context_path(args);
+    if path.exists() {
+        std::fs::remove_file(&path)
+            .map_err(|error| format!("Failed to clear current peer context: {error}"))?;
+    }
+    Ok(())
+}
+
+pub fn resolve_peer_input(args: &CommonArgs, peer: &str) -> Result<ResolvedPeerTarget, String> {
+    if let Ok(peer_id) = peer.parse::<PeerId>() {
+        let peer_info = lookup_peer_info(args, &peer_id.to_string())?;
+        let alias = peer_info.as_ref().and_then(|entry| entry.alias.clone());
+        if alias.is_none() {
+            return Err(format!(
+                "Peer {} is not named yet. Name it first with `fungi device add {} --alias <name>` or `fungi device rename {} <name>`.",
+                peer_id, peer_id, peer_id
+            ));
+        }
+        return Ok(ResolvedPeerTarget {
+            peer_id: peer_id.to_string(),
+            alias,
+            hostname: peer_info.and_then(|entry| entry.hostname.clone()),
+        });
+    }
+
+    let address_book = AddressBookConfig::apply_from_dir(&args.fungi_dir())
+        .map_err(|error| format!("Failed to load address book: {error}"))?;
+    match address_book.get_peer_by_alias(peer) {
+        Some(entry) => Ok(ResolvedPeerTarget {
+            peer_id: entry.peer_id.to_string(),
+            alias: entry.alias.clone(),
+            hostname: entry.hostname.clone(),
+        }),
+        None => Err(format!(
+            "Unknown peer or alias: {peer}. Use --peer/-p with a peer ID, or set an address book alias first."
+        )),
+    }
+}
+
+pub fn require_named_peer_by_id(
+    args: &CommonArgs,
+    peer_id: &str,
+) -> Result<ResolvedPeerTarget, String> {
+    resolve_peer_input(args, peer_id)
+}
+
+fn lookup_peer_info(
+    args: &CommonArgs,
+    peer_id: &str,
+) -> Result<Option<fungi_config::address_book::PeerInfo>, String> {
+    let address_book = AddressBookConfig::apply_from_dir(&args.fungi_dir())
+        .map_err(|error| format!("Failed to load address book: {error}"))?;
+    Ok(address_book
+        .get_all_peers()
+        .iter()
+        .find(|entry| entry.peer_id.to_string() == peer_id)
+        .cloned())
+}
+
+pub fn print_target_peer(peer: &ResolvedPeerTarget) {
+    let alias = peer.alias.as_deref().unwrap_or("<unnamed>");
+    match peer.hostname.as_deref() {
+        Some(hostname) if !hostname.is_empty() => {
+            eprintln!("Target peer: {alias} ({}) [{hostname}]", peer.peer_id)
+        }
+        _ => eprintln!("Target peer: {alias} ({})", peer.peer_id),
+    }
+}
+
+fn cli_context_path(args: &CommonArgs) -> std::path::PathBuf {
+    args.fungi_dir().join(CLI_CONTEXT_FILE)
+}
+
+fn load_cli_context(args: &CommonArgs) -> Result<CliContext, String> {
+    let path = cli_context_path(args);
+    if !path.exists() {
+        return Ok(CliContext::default());
+    }
+
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|error| format!("Failed to read CLI context: {error}"))?;
+    serde_json::from_str(&raw).map_err(|error| format!("Failed to parse CLI context: {error}"))
+}
+
+fn save_cli_context(args: &CommonArgs, context: &CliContext) -> Result<(), String> {
+    let path = cli_context_path(args);
+    let raw = serde_json::to_string_pretty(context)
+        .map_err(|error| format!("Failed to encode CLI context: {error}"))?;
+    std::fs::write(path, raw).map_err(|error| format!("Failed to save CLI context: {error}"))
+}
+
 pub fn parse_address(address: &str) -> Result<(String, u16), String> {
     let parts: Vec<&str> = address.rsplitn(2, ':').collect();
     if parts.len() != 2 {

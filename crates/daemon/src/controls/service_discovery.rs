@@ -1,6 +1,6 @@
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
-use crate::{DiscoveredService, RuntimeControl};
+use crate::{CatalogService, RuntimeControl};
 use anyhow::Result;
 use fungi_swarm::{ConnectionSelectionStrategy, SwarmControl};
 use fungi_util::protocols::FUNGI_SERVICE_DISCOVERY_PROTOCOL;
@@ -46,7 +46,7 @@ impl ServiceDiscoveryControl {
         Ok(())
     }
 
-    pub async fn discover_peer_services(&self, peer_id: PeerId) -> Result<Vec<DiscoveredService>> {
+    pub async fn list_peer_catalog(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
         let (mut stream, _handle, _connection_id) = self
             .swarm_control
             .open_stream_with_strategy(
@@ -80,7 +80,7 @@ impl ServiceDiscoveryControl {
 
             let this = self.clone();
             tokio::spawn(async move {
-                let services = match this.runtime_control.list_exposed_services().await {
+                let services = match this.runtime_control.list_catalog_services().await {
                     Ok(services) => services,
                     Err(error) => {
                         log::warn!("Failed to list exposed services for discovery: {}", error);

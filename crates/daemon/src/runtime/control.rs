@@ -228,7 +228,7 @@ impl RuntimeControl {
         self.logs(runtime, name, options).await
     }
 
-    pub async fn list_exposed_services(&self) -> Result<Vec<DiscoveredService>> {
+    pub async fn list_catalog_services(&self) -> Result<Vec<CatalogService>> {
         let manifests = self
             .service_manifests
             .lock()
@@ -258,7 +258,7 @@ impl RuntimeControl {
                 continue;
             }
 
-            services.push(DiscoveredService {
+            services.push(CatalogService {
                 service_name: manifest.name.clone(),
                 service_id: expose.service_id,
                 display_name: expose.display_name,
@@ -269,7 +269,7 @@ impl RuntimeControl {
                 catalog_id: expose.catalog_id,
                 endpoints: service_expose_endpoint_bindings(&manifest)
                     .into_iter()
-                    .map(|endpoint| DiscoveredServiceEndpoint {
+                    .map(|endpoint| CatalogServiceEndpoint {
                         name: endpoint.name,
                         protocol: endpoint.protocol,
                         service_port: endpoint.service_port,

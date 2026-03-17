@@ -33,7 +33,7 @@ cargo build --package fungi-tests --bin test-tunnel-cli
 Starts two temporary daemon nodes, uses one as a WASI service provider, and validates:
 
 - local `service` pull/list/inspect/start/logs/stop/remove`
-- remote `capabilities`, `service pull/list/start/discover/forward/forwarded/unforward/stop/remove`
+- `peer capability`, `service pull/list/start/discover/forward/forwarded/unforward/stop/remove`
 - HTTP reachability for both direct local service access and remote-forwarded access
 
 **Run:**

@@ -166,13 +166,13 @@ service FungiDaemon {
   // Lists all pulled services on the local node, including stopped ones.
   rpc ListServices(Empty) returns (ListServicesResponse) {}
 
-  // Queries a remote peer for currently discoverable services.
-  rpc DiscoverPeerServices(DiscoverPeerServicesRequest)
-      returns (DiscoverPeerServicesResponse) {}
+    // Lists services published by a remote peer for consumption.
+    rpc ListPeerCatalog(ListPeerCatalogRequest)
+      returns (ListPeerCatalogResponse) {}
 
-    // Queries a remote peer for minimal node runtime capabilities.
-    rpc DiscoverPeerCapabilities(DiscoverPeerCapabilitiesRequest)
-      returns (DiscoverPeerCapabilitiesResponse) {}
+    // Queries a remote peer for a minimal node runtime capability summary.
+    rpc GetPeerCapabilitySummary(GetPeerCapabilitySummaryRequest)
+      returns (GetPeerCapabilitySummaryResponse) {}
 
     // Pulls a service on a remote peer by sending a manifest to the local daemon.
     rpc RemotePullService(RemotePullServiceRequest)
@@ -194,17 +194,17 @@ service FungiDaemon {
     rpc RemoteListServices(RemotePeerRequest)
       returns (ListServicesResponse) {}
 
-    // Enables automatic local forwarding for all named endpoints of a remote service.
-    rpc EnableRemoteService(EnableRemoteServiceRequest)
-      returns (EnabledRemoteServiceResponse) {}
+    // Creates local access entries for all named endpoints of a published remote service.
+    rpc AttachServiceAccess(AttachServiceAccessRequest)
+      returns (ServiceAccessResponse) {}
 
-    // Disables automatic local forwarding for a previously enabled remote service.
-    rpc DisableRemoteService(DisableRemoteServiceRequest)
+    // Removes local access entries for a previously attached remote service.
+    rpc DetachServiceAccess(DetachServiceAccessRequest)
       returns (Empty) {}
 
-    // Lists remote services that are currently enabled for local forwarding.
-    rpc ListEnabledRemoteServices(ListEnabledRemoteServicesRequest)
-      returns (EnabledRemoteServicesResponse) {}
+    // Lists service access entries currently attached on the local node.
+    rpc ListServiceAccesses(ListServiceAccessesRequest)
+      returns (ServiceAccessesResponse) {}
 }
 
 message Empty {}
@@ -506,13 +506,13 @@ message ServiceLogsResponse {
 
 message ListServicesResponse { string services_json = 1; }
 
-message DiscoverPeerServicesRequest { string peer_id = 1; }
+message ListPeerCatalogRequest { string peer_id = 1; }
 
-message DiscoverPeerServicesResponse { string services_json = 1; }
+message ListPeerCatalogResponse { string services_json = 1; }
 
-message DiscoverPeerCapabilitiesRequest { string peer_id = 1; }
+message GetPeerCapabilitySummaryRequest { string peer_id = 1; }
 
-message DiscoverPeerCapabilitiesResponse { string capabilities_json = 1; }
+message GetPeerCapabilitySummaryResponse { string capability_summary_json = 1; }
 
 message RemotePullServiceRequest {
   string peer_id = 1;
@@ -528,20 +528,20 @@ message RemotePeerRequest { string peer_id = 1; }
 
 message RemoteServiceControlResponse { string service_name = 1; }
 
-message EnableRemoteServiceRequest {
+message AttachServiceAccessRequest {
   string peer_id = 1;
   string service_id = 2;
 }
 
-message DisableRemoteServiceRequest {
+message DetachServiceAccessRequest {
   string peer_id = 1;
   string service_id = 2;
 }
 
-message ListEnabledRemoteServicesRequest {
+message ListServiceAccessesRequest {
   string peer_id = 1;
 }
 
-message EnabledRemoteServiceResponse { string enabled_service_json = 1; }
+message ServiceAccessResponse { string service_access_json = 1; }
 
-message EnabledRemoteServicesResponse { string enabled_services_json = 1; }
+message ServiceAccessesResponse { string service_accesses_json = 1; }

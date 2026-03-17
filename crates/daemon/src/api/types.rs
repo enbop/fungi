@@ -31,15 +31,15 @@ pub struct ActiveStreamSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EnabledRemoteService {
+pub struct ServiceAccess {
     pub peer_id: String,
     pub service_id: String,
     pub service_name: String,
-    pub endpoints: Vec<EnabledRemoteServiceEndpoint>,
+    pub endpoints: Vec<ServiceAccessEndpoint>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EnabledRemoteServiceEndpoint {
+pub struct ServiceAccessEndpoint {
     pub name: String,
     pub protocol: String,
     pub local_host: String,

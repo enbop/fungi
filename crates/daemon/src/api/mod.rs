@@ -5,4 +5,4 @@ mod runtime;
 mod tcp_tunneling;
 mod types;
 
-pub use types::{EnabledRemoteService, EnabledRemoteServiceEndpoint};
+pub use types::{ServiceAccess, ServiceAccessEndpoint};

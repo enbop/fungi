@@ -5,8 +5,8 @@ use fungi_config::runtime::{AllowedPortRange, Runtime as RuntimeConfig};
 use libp2p::PeerId;
 
 use crate::runtime::{
-    DiscoveredService, RuntimeKind, ServiceInstance, ServiceLogs, ServiceLogsOptions,
-    ServiceManifest, service_expose_endpoint_bindings,
+    CatalogService, RuntimeKind, ServiceInstance, ServiceLogs, ServiceLogsOptions, ServiceManifest,
+    service_expose_endpoint_bindings,
 };
 use crate::{
     FungiDaemon, LocalRuntimeStatus, ManifestResolutionPolicy, NodeCapabilities,
@@ -238,13 +238,13 @@ impl FungiDaemon {
         self.runtime_control().list_services().await
     }
 
-    pub async fn list_exposed_services(&self) -> Result<Vec<DiscoveredService>> {
-        self.runtime_control().list_exposed_services().await
+    pub async fn list_catalog_services(&self) -> Result<Vec<CatalogService>> {
+        self.runtime_control().list_catalog_services().await
     }
 
-    pub async fn discover_peer_services(&self, peer_id: PeerId) -> Result<Vec<DiscoveredService>> {
+    pub async fn list_peer_catalog(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
         self.service_discovery_control()
-            .discover_peer_services(peer_id)
+            .list_peer_catalog(peer_id)
             .await
     }
 
@@ -258,7 +258,7 @@ impl FungiDaemon {
         build_local_runtime_status(&config, self.runtime_control())
     }
 
-    pub async fn discover_peer_capabilities(&self, peer_id: PeerId) -> Result<NodeCapabilities> {
+    pub async fn get_peer_capability_summary(&self, peer_id: PeerId) -> Result<NodeCapabilities> {
         self.node_capabilities_control()
             .discover_peer_capabilities(peer_id)
             .await
@@ -306,7 +306,7 @@ impl FungiDaemon {
             .unwrap_or_default()
             .to_string();
         if !service_key.is_empty() {
-            let _ = self.disable_remote_service_by_match(peer_id, &service_key);
+            let _ = self.detach_service_access_by_match(peer_id, &service_key);
         }
         Ok(response)
     }
@@ -327,7 +327,7 @@ impl FungiDaemon {
             .unwrap_or_default()
             .to_string();
         if !service_key.is_empty() {
-            let _ = self.disable_remote_service_by_match(peer_id, &service_key);
+            let _ = self.detach_service_access_by_match(peer_id, &service_key);
         }
         Ok(response)
     }

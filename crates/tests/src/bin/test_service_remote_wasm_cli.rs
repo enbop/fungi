@@ -294,11 +294,12 @@ fn run_remote_service_checks(
 ) -> Result<()> {
     println!("\n=== Remote service smoke ===");
 
-    let capabilities_output = controller.run_cli(["remote", "capabilities", provider_peer_id])?;
+    let capabilities_output =
+        controller.run_cli(["peer", "capability", "--peer", provider_peer_id])?;
     assert_contains(
         &capabilities_output,
         "\"wasmtime\": true",
-        "remote capabilities",
+        "peer capability summary",
     )?;
 
     let remote_pull_output = controller.run_cli([

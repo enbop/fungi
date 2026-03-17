@@ -241,8 +241,53 @@ impl AddressBookConfig {
         Ok(new_config)
     }
 
+    pub fn normalize_alias(alias: &str) -> String {
+        alias.trim().to_lowercase()
+    }
+
+    pub fn validate_alias(alias: &str) -> Result<String> {
+        let trimmed = alias.trim();
+        if trimmed.is_empty() {
+            return Err(anyhow::anyhow!("Alias cannot be empty"));
+        }
+        Ok(trimmed.to_string())
+    }
+
+    pub fn alias_exists(&self, alias: &str, except_peer_id: Option<&PeerId>) -> bool {
+        let normalized = Self::normalize_alias(alias);
+        self.peers.iter().any(|peer| {
+            if let Some(except_peer_id) = except_peer_id
+                && peer.peer_id == *except_peer_id
+            {
+                return false;
+            }
+
+            peer.alias.as_deref().map(Self::normalize_alias).as_deref() == Some(normalized.as_str())
+        })
+    }
+
+    pub fn get_peer_by_alias(&self, alias: &str) -> Option<&PeerInfo> {
+        let normalized = Self::normalize_alias(alias);
+        self.peers.iter().find(|peer| {
+            peer.alias.as_deref().map(Self::normalize_alias).as_deref() == Some(normalized.as_str())
+        })
+    }
+
     pub fn add_or_update_peer(&self, peer_info: PeerInfo) -> Result<Self> {
+        let validated_alias = match peer_info.alias.as_deref() {
+            Some(alias) => Some(Self::validate_alias(alias)?),
+            None => None,
+        };
+
+        if let Some(alias) = validated_alias.as_deref()
+            && self.alias_exists(alias, Some(&peer_info.peer_id))
+        {
+            return Err(anyhow::anyhow!("Alias already exists: {}", alias));
+        }
+
         self.update_and_save(|config| {
+            let mut peer_info = peer_info.clone();
+            peer_info.alias = validated_alias.clone();
             if let Some(existing_peer) = config
                 .peers
                 .iter_mut()
@@ -363,5 +408,62 @@ mod tests {
         assert_eq!(peer_info.alias, Some("alias1".to_string()));
         assert_eq!(peer_info.hostname, Some("host2".to_string()));
         assert_eq!(peer_info.version, "1.0.1");
+    }
+
+    #[test]
+    fn test_add_peer_rejects_duplicate_alias_case_insensitive() {
+        let (config, _temp_dir) = create_temp_peers_config();
+
+        let first = PeerInfo {
+            peer_id: PeerId::random(),
+            alias: Some("MacBook".to_string()),
+            hostname: None,
+            os: Os::this_device(),
+            public_ip: None,
+            private_ips: vec![],
+            version: "1.0.0".to_string(),
+            created_at: SystemTime::now(),
+            last_connected: SystemTime::now(),
+        };
+
+        let second = PeerInfo {
+            peer_id: PeerId::random(),
+            alias: Some("  macbook  ".to_string()),
+            hostname: None,
+            os: Os::this_device(),
+            public_ip: None,
+            private_ips: vec![],
+            version: "1.0.0".to_string(),
+            created_at: SystemTime::now(),
+            last_connected: SystemTime::now(),
+        };
+
+        let updated = config.add_or_update_peer(first).unwrap();
+        assert!(updated.add_or_update_peer(second).is_err());
+    }
+
+    #[test]
+    fn test_add_peer_trims_alias_before_saving() {
+        let (config, _temp_dir) = create_temp_peers_config();
+        let peer_id = PeerId::random();
+        let peer_info = PeerInfo {
+            peer_id,
+            alias: Some("  work-laptop  ".to_string()),
+            hostname: None,
+            os: Os::this_device(),
+            public_ip: None,
+            private_ips: vec![],
+            version: "1.0.0".to_string(),
+            created_at: SystemTime::now(),
+            last_connected: SystemTime::now(),
+        };
+
+        let updated = config.add_or_update_peer(peer_info).unwrap();
+        assert_eq!(
+            updated
+                .get_peer_info(&peer_id)
+                .and_then(|peer| peer.alias.clone()),
+            Some("work-laptop".to_string())
+        );
     }
 }

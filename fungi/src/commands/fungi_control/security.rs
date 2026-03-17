@@ -10,6 +10,8 @@ use fungi_daemon_grpc::{
 use crate::commands::CommonArgs;
 
 use super::{
+    AllowedPeerCommands,
+    allowed_peers::execute_allowed_peer,
     client::get_rpc_client,
     shared::{fatal, fatal_grpc},
 };
@@ -18,6 +20,9 @@ use super::{
 pub enum SecurityCommands {
     /// Show current runtime safety boundary configuration
     Show,
+    /// Manage peers allowed to initiate incoming connections
+    #[command(subcommand)]
+    AllowedPeers(AllowedPeerCommands),
     /// Add an allowed host path root
     AllowPath {
         /// Absolute host path root
@@ -55,6 +60,11 @@ pub enum SecurityCommands {
 }
 
 pub async fn execute_security(args: CommonArgs, cmd: SecurityCommands) {
+    if let SecurityCommands::AllowedPeers(subcmd) = cmd {
+        execute_allowed_peer(args, subcmd).await;
+        return;
+    }
+
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
         None => fatal("Cannot connect to Fungi daemon. Is it running?"),
@@ -81,6 +91,7 @@ pub async fn execute_security(args: CommonArgs, cmd: SecurityCommands) {
             }
             Err(e) => fatal_grpc(e),
         },
+        SecurityCommands::AllowedPeers(_) => unreachable!(),
         SecurityCommands::AllowPath { path } => {
             let req = RuntimeAllowedHostPathRequest { path };
             match client

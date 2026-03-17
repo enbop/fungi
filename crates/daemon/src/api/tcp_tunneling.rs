@@ -8,7 +8,7 @@ use libp2p::PeerId;
 
 use crate::FungiDaemon;
 
-use super::types::{EnabledRemoteService, EnabledRemoteServiceEndpoint};
+use super::types::{ServiceAccess, ServiceAccessEndpoint};
 
 impl FungiDaemon {
     pub fn get_tcp_forwarding_rules(
@@ -139,13 +139,13 @@ impl FungiDaemon {
         self.add_tcp_listening_rule_internal(rule).await
     }
 
-    pub async fn enable_remote_service(
+    pub async fn attach_service_access(
         &self,
         peer_id: PeerId,
         service_id: String,
-    ) -> Result<EnabledRemoteService> {
-        let discovered_services = self.discover_peer_services(peer_id).await?;
-        let service = discovered_services
+    ) -> Result<ServiceAccess> {
+        let catalog_services = self.list_peer_catalog(peer_id).await?;
+        let service = catalog_services
             .into_iter()
             .find(|service| service.service_id == service_id)
             .ok_or_else(|| anyhow::anyhow!("remote service not found: {}", service_id))?;
@@ -171,7 +171,7 @@ impl FungiDaemon {
                     && rule.remote_service_id.as_deref() == Some(service.service_id.as_str())
                     && rule.remote_service_port_name.as_deref() == Some(endpoint.name.as_str())
             }) {
-                enabled_endpoints.push(EnabledRemoteServiceEndpoint {
+                enabled_endpoints.push(ServiceAccessEndpoint {
                     name: endpoint.name,
                     protocol: endpoint.protocol,
                     local_host: rule.local_host.clone(),
@@ -196,7 +196,7 @@ impl FungiDaemon {
             )
             .await?;
 
-            enabled_endpoints.push(EnabledRemoteServiceEndpoint {
+            enabled_endpoints.push(ServiceAccessEndpoint {
                 name: endpoint.name,
                 protocol: endpoint.protocol,
                 local_host: "127.0.0.1".to_string(),
@@ -205,7 +205,7 @@ impl FungiDaemon {
         }
 
         enabled_endpoints.sort_by(|left, right| left.name.cmp(&right.name));
-        Ok(EnabledRemoteService {
+        Ok(ServiceAccess {
             peer_id: peer_id_string,
             service_id: service.service_id,
             service_name: service.service_name,
@@ -213,11 +213,11 @@ impl FungiDaemon {
         })
     }
 
-    pub fn disable_remote_service(&self, peer_id: PeerId, service_id: String) -> Result<()> {
-        self.disable_remote_service_by_match(peer_id, &service_id)
+    pub fn detach_service_access(&self, peer_id: PeerId, service_id: String) -> Result<()> {
+        self.detach_service_access_by_match(peer_id, &service_id)
     }
 
-    pub fn disable_remote_service_by_match(&self, peer_id: PeerId, matcher: &str) -> Result<()> {
+    pub fn detach_service_access_by_match(&self, peer_id: PeerId, matcher: &str) -> Result<()> {
         let peer_id_string = peer_id.to_string();
         let rules_to_remove = self
             .get_tcp_forwarding_rules()
@@ -237,13 +237,9 @@ impl FungiDaemon {
         Ok(())
     }
 
-    pub fn list_enabled_remote_services(
-        &self,
-        peer_id: Option<PeerId>,
-    ) -> Vec<EnabledRemoteService> {
+    pub fn list_service_accesses(&self, peer_id: Option<PeerId>) -> Vec<ServiceAccess> {
         let peer_filter = peer_id.map(|peer_id| peer_id.to_string());
-        let mut grouped =
-            BTreeMap::<(String, String, String), Vec<EnabledRemoteServiceEndpoint>>::new();
+        let mut grouped = BTreeMap::<(String, String, String), Vec<ServiceAccessEndpoint>>::new();
 
         for (_, rule) in self.get_tcp_forwarding_rules() {
             let Some(service_id) = rule.remote_service_id.clone() else {
@@ -264,7 +260,7 @@ impl FungiDaemon {
             grouped
                 .entry((rule.remote_peer_id.clone(), service_id, service_name))
                 .or_default()
-                .push(EnabledRemoteServiceEndpoint {
+                .push(ServiceAccessEndpoint {
                     name: endpoint_name,
                     protocol: rule.remote_protocol.clone().unwrap_or_default(),
                     local_host: rule.local_host.clone(),
@@ -276,7 +272,7 @@ impl FungiDaemon {
             .into_iter()
             .map(|((peer_id, service_id, service_name), mut endpoints)| {
                 endpoints.sort_by(|left, right| left.name.cmp(&right.name));
-                EnabledRemoteService {
+                ServiceAccess {
                     peer_id,
                     service_id,
                     service_name,

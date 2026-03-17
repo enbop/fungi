@@ -1089,41 +1089,40 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         Ok(Response::new(ListServicesResponse { services_json }))
     }
 
-    async fn discover_peer_services(
+    async fn list_peer_catalog(
         &self,
-        request: Request<DiscoverPeerServicesRequest>,
-    ) -> Result<Response<DiscoverPeerServicesResponse>, Status> {
+        request: Request<ListPeerCatalogRequest>,
+    ) -> Result<Response<ListPeerCatalogResponse>, Status> {
         let req = request.into_inner();
         let peer_id = PeerId::from_str(&req.peer_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
         let services = self
             .inner
-            .discover_peer_services(peer_id)
+            .list_peer_catalog(peer_id)
             .await
-            .map_err(|e| Status::internal(format!("Failed to discover peer services: {e}")))?;
+            .map_err(|e| Status::internal(format!("Failed to list peer catalog: {e}")))?;
         let services_json = serde_json::to_string(&services)
-            .map_err(|e| Status::internal(format!("Failed to serialize peer services: {e}")))?;
-        Ok(Response::new(DiscoverPeerServicesResponse {
-            services_json,
-        }))
+            .map_err(|e| Status::internal(format!("Failed to serialize peer catalog: {e}")))?;
+        Ok(Response::new(ListPeerCatalogResponse { services_json }))
     }
 
-    async fn discover_peer_capabilities(
+    async fn get_peer_capability_summary(
         &self,
-        request: Request<DiscoverPeerCapabilitiesRequest>,
-    ) -> Result<Response<DiscoverPeerCapabilitiesResponse>, Status> {
+        request: Request<GetPeerCapabilitySummaryRequest>,
+    ) -> Result<Response<GetPeerCapabilitySummaryResponse>, Status> {
         let req = request.into_inner();
         let peer_id = PeerId::from_str(&req.peer_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
-        let capabilities = self
+        let capability_summary = self
             .inner
-            .discover_peer_capabilities(peer_id)
+            .get_peer_capability_summary(peer_id)
             .await
-            .map_err(|e| Status::internal(format!("Failed to discover peer capabilities: {e}")))?;
-        let capabilities_json = serde_json::to_string(&capabilities)
-            .map_err(|e| Status::internal(format!("Failed to serialize peer capabilities: {e}")))?;
-        Ok(Response::new(DiscoverPeerCapabilitiesResponse {
-            capabilities_json,
+            .map_err(|e| Status::internal(format!("Failed to get peer capability summary: {e}")))?;
+        let capability_summary_json = serde_json::to_string(&capability_summary).map_err(|e| {
+            Status::internal(format!("Failed to serialize peer capability summary: {e}"))
+        })?;
+        Ok(Response::new(GetPeerCapabilitySummaryResponse {
+            capability_summary_json,
         }))
     }
 
@@ -1234,47 +1233,47 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         }))
     }
 
-    async fn enable_remote_service(
+    async fn attach_service_access(
         &self,
-        request: Request<EnableRemoteServiceRequest>,
-    ) -> Result<Response<EnabledRemoteServiceResponse>, Status> {
+        request: Request<AttachServiceAccessRequest>,
+    ) -> Result<Response<ServiceAccessResponse>, Status> {
         let req = request.into_inner();
         let peer_id = PeerId::from_str(&req.peer_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
 
-        let enabled_service = self
+        let service_access = self
             .inner
-            .enable_remote_service(peer_id, req.service_id)
+            .attach_service_access(peer_id, req.service_id)
             .await
-            .map_err(|e| Status::internal(format!("Failed to enable remote service: {e}")))?;
+            .map_err(|e| Status::internal(format!("Failed to attach service access: {e}")))?;
 
-        let enabled_service_json = serde_json::to_string(&enabled_service)
-            .map_err(|e| Status::internal(format!("Failed to serialize enabled service: {e}")))?;
+        let service_access_json = serde_json::to_string(&service_access)
+            .map_err(|e| Status::internal(format!("Failed to serialize service access: {e}")))?;
 
-        Ok(Response::new(EnabledRemoteServiceResponse {
-            enabled_service_json,
+        Ok(Response::new(ServiceAccessResponse {
+            service_access_json,
         }))
     }
 
-    async fn disable_remote_service(
+    async fn detach_service_access(
         &self,
-        request: Request<DisableRemoteServiceRequest>,
+        request: Request<DetachServiceAccessRequest>,
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
         let peer_id = PeerId::from_str(&req.peer_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
 
         self.inner
-            .disable_remote_service(peer_id, req.service_id)
-            .map_err(|e| Status::internal(format!("Failed to disable remote service: {e}")))?;
+            .detach_service_access(peer_id, req.service_id)
+            .map_err(|e| Status::internal(format!("Failed to detach service access: {e}")))?;
 
         Ok(Response::new(Empty {}))
     }
 
-    async fn list_enabled_remote_services(
+    async fn list_service_accesses(
         &self,
-        request: Request<ListEnabledRemoteServicesRequest>,
-    ) -> Result<Response<EnabledRemoteServicesResponse>, Status> {
+        request: Request<ListServiceAccessesRequest>,
+    ) -> Result<Response<ServiceAccessesResponse>, Status> {
         let req = request.into_inner();
         let peer_id = if req.peer_id.trim().is_empty() {
             None
@@ -1285,13 +1284,12 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             )
         };
 
-        let enabled_services = self.inner.list_enabled_remote_services(peer_id);
-        let enabled_services_json = serde_json::to_string(&enabled_services).map_err(|e| {
-            Status::internal(format!("Failed to serialize enabled remote services: {e}"))
-        })?;
+        let service_accesses = self.inner.list_service_accesses(peer_id);
+        let service_accesses_json = serde_json::to_string(&service_accesses)
+            .map_err(|e| Status::internal(format!("Failed to serialize service accesses: {e}")))?;
 
-        Ok(Response::new(EnabledRemoteServicesResponse {
-            enabled_services_json,
+        Ok(Response::new(ServiceAccessesResponse {
+            service_accesses_json,
         }))
     }
 }
