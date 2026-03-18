@@ -9,8 +9,6 @@
 
 <p align="center" style="font-size: 1.2rem;">Build a private P2P device network for capability-first services</p>
 
-Fungi is a private-device networking stack centered on encrypted P2P connectivity and capability-first services.
-
 With Fungi, you can securely connect your own devices, run container or WASI services under explicit runtime policy, control remote peers from CLI or GUI, and open published services locally.
 
 This repository contains the **Core Daemon** and **CLI** tools.
@@ -39,7 +37,12 @@ Download the latest binaries from [GitHub Releases](https://github.com/enbop/fun
 
 ## Documentation
 
-📚For full documentation, visit [fungi.rs/docs](https://fungi.rs/docs/intro).
+Start with the beginner quick starts:
+
+- [3 Minutes: Build Your Private P2P Network](https://fungi.rs/docs/quick-start/private-p2p-network)
+- [3 Minutes: Run a Remote Sandbox App Locally](https://fungi.rs/docs/quick-start/remote-sandbox-app)
+
+Full documentation: [fungi.rs/docs](https://fungi.rs/docs/intro).
 
 Recommended starting points:
 
