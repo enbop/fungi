@@ -98,8 +98,8 @@ pub enum Commands {
     Connection(fungi_control::ConnectionCommands),
     /// Continuously ping all active connections to a peer
     Ping {
-        /// Peer ID to ping
-        peer_id: String,
+        /// Peer ID or alias to ping
+        peer: fungi_control::PeerInput,
         /// Ping interval in milliseconds
         #[arg(long, default_value_t = 2000)]
         interval_ms: u32,

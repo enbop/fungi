@@ -14,7 +14,7 @@ use crate::commands::CommonArgs;
 
 use super::{
     client::get_rpc_client,
-    shared::{fatal, fatal_grpc, resolve_peer_input},
+    shared::{fatal, fatal_grpc, resolve_peer_value},
 };
 
 #[derive(Subcommand, Debug, Clone)]
@@ -95,7 +95,7 @@ pub async fn execute_allowed_peer(args: CommonArgs, cmd: AllowedPeerCommands) {
             }
         }
         AllowedPeerCommands::Remove { peer } => {
-            let peer_id = match resolve_peer_input(&args, &peer) {
+            let peer_id = match resolve_peer_value(&args, &peer) {
                 Ok(peer) => peer.peer_id,
                 Err(_) => peer,
             };
@@ -153,7 +153,7 @@ async fn resolve_allowed_peer_for_add(
         };
     }
 
-    let resolved = match resolve_peer_input(args, peer) {
+    let resolved = match resolve_peer_value(args, peer) {
         Ok(peer) => peer,
         Err(error) => fatal(error),
     };

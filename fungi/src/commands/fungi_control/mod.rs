@@ -26,4 +26,5 @@ pub use peer::{PeerCommands, execute_peer};
 pub use ping::execute_ping;
 pub use security::{SecurityCommands, execute_security};
 pub use service::{ServiceCommands, execute_service};
+pub use shared::PeerInput;
 pub use tunnel::{TunnelCommands, execute_tunnel};

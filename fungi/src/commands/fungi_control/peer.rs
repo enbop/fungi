@@ -14,8 +14,8 @@ use super::{
     client::get_rpc_client,
     service::read_manifest_yaml_file,
     shared::{
-        PeerTargetArg, clear_current_peer, fatal, fatal_grpc, get_current_peer, print_target_peer,
-        resolve_peer_input, resolve_required_peer, set_current_peer,
+        PeerInput, PeerTargetArg, clear_current_peer, fatal, fatal_grpc, get_current_peer,
+        print_target_peer, resolve_peer_input, resolve_required_peer, set_current_peer,
     },
 };
 
@@ -26,7 +26,7 @@ pub enum PeerCommands {
     /// Set the current default peer context
     Use {
         /// Peer ID or alias
-        peer: String,
+        peer: PeerInput,
     },
     /// Clear the current default peer context
     Clear,
@@ -108,7 +108,7 @@ pub async fn execute_peer(args: CommonArgs, cmd: PeerCommands) {
             println!("Current peer cleared");
         }
         PeerCommands::Capability { peer } => {
-            let resolved = match resolve_required_peer(&args, peer.peer.as_deref()) {
+            let resolved = match resolve_required_peer(&args, peer.peer.as_ref()) {
                 Ok(peer) => peer,
                 Err(error) => fatal(error),
             };
@@ -143,7 +143,7 @@ pub async fn execute_peer(args: CommonArgs, cmd: PeerCommands) {
         PeerCommands::Admin(admin_cmd) => match admin_cmd {
             PeerAdminCommands::Service(service_cmd) => match service_cmd {
                 PeerAdminServiceCommands::List { peer } => {
-                    let peer = match resolve_required_peer(&args, peer.peer.as_deref()) {
+                    let peer = match resolve_required_peer(&args, peer.peer.as_ref()) {
                         Ok(peer) => peer,
                         Err(error) => fatal(error),
                     };
@@ -163,7 +163,7 @@ pub async fn execute_peer(args: CommonArgs, cmd: PeerCommands) {
                     }
                 }
                 PeerAdminServiceCommands::Pull { manifest, peer } => {
-                    let peer = match resolve_required_peer(&args, peer.peer.as_deref()) {
+                    let peer = match resolve_required_peer(&args, peer.peer.as_ref()) {
                         Ok(peer) => peer,
                         Err(error) => fatal(error),
                     };
@@ -183,7 +183,7 @@ pub async fn execute_peer(args: CommonArgs, cmd: PeerCommands) {
                     }
                 }
                 PeerAdminServiceCommands::Start { name, peer } => {
-                    let peer = match resolve_required_peer(&args, peer.peer.as_deref()) {
+                    let peer = match resolve_required_peer(&args, peer.peer.as_ref()) {
                         Ok(peer) => peer,
                         Err(error) => fatal(error),
                     };
@@ -202,7 +202,7 @@ pub async fn execute_peer(args: CommonArgs, cmd: PeerCommands) {
                     }
                 }
                 PeerAdminServiceCommands::Stop { name, peer } => {
-                    let peer = match resolve_required_peer(&args, peer.peer.as_deref()) {
+                    let peer = match resolve_required_peer(&args, peer.peer.as_ref()) {
                         Ok(peer) => peer,
                         Err(error) => fatal(error),
                     };
@@ -221,7 +221,7 @@ pub async fn execute_peer(args: CommonArgs, cmd: PeerCommands) {
                     }
                 }
                 PeerAdminServiceCommands::Remove { name, peer } => {
-                    let peer = match resolve_required_peer(&args, peer.peer.as_deref()) {
+                    let peer = match resolve_required_peer(&args, peer.peer.as_ref()) {
                         Ok(peer) => peer,
                         Err(error) => fatal(error),
                     };

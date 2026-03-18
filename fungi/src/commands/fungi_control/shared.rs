@@ -2,6 +2,7 @@ use clap::Args;
 use fungi_config::{FungiDir, address_book::AddressBookConfig};
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
+use std::{fmt, str::FromStr};
 
 use crate::commands::CommonArgs;
 
@@ -10,13 +11,45 @@ const CLI_CONTEXT_FILE: &str = "cli_context.json";
 #[derive(Args, Debug, Clone)]
 pub struct PeerTargetArg {
     #[arg(short = 'p', long = "peer", help = "Peer ID or alias")]
-    pub peer: Option<String>,
+    pub peer: Option<PeerInput>,
 }
 
 #[derive(Args, Debug, Clone, Default)]
 pub struct OptionalPeerTargetArg {
     #[arg(short = 'p', long = "peer", help = "Peer ID or alias")]
-    pub peer: Option<String>,
+    pub peer: Option<PeerInput>,
+}
+
+#[derive(Debug, Clone)]
+pub enum PeerInput {
+    PeerId(PeerId),
+    Alias(String),
+}
+
+impl FromStr for PeerInput {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let value = value.trim();
+        if value.is_empty() {
+            return Err("Peer ID or alias cannot be empty".to_string());
+        }
+
+        if let Ok(peer_id) = value.parse::<PeerId>() {
+            return Ok(Self::PeerId(peer_id));
+        }
+
+        Ok(Self::Alias(value.to_string()))
+    }
+}
+
+impl fmt::Display for PeerInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::PeerId(peer_id) => write!(f, "{peer_id}"),
+            Self::Alias(alias) => write!(f, "{alias}"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -36,9 +69,9 @@ struct CliContext {
 
 pub fn resolve_required_peer(
     args: &CommonArgs,
-    peer: Option<&str>,
+    peer: Option<&PeerInput>,
 ) -> Result<ResolvedPeerTarget, String> {
-    if let Some(peer) = peer.filter(|value| !value.trim().is_empty()) {
+    if let Some(peer) = peer {
         return resolve_peer_input(args, peer);
     }
 
@@ -51,9 +84,9 @@ pub fn resolve_required_peer(
 
 pub fn resolve_optional_peer(
     args: &CommonArgs,
-    peer: Option<&str>,
+    peer: Option<&PeerInput>,
 ) -> Result<Option<ResolvedPeerTarget>, String> {
-    match peer.filter(|value| !value.trim().is_empty()) {
+    match peer {
         Some(peer) => resolve_peer_input(args, peer).map(Some),
         None => Ok(None),
     }
@@ -63,7 +96,7 @@ pub fn get_current_peer(args: &CommonArgs) -> Result<Option<ResolvedPeerTarget>,
     let Some(peer_id) = load_cli_context(args)?.current_peer_id else {
         return Ok(None);
     };
-    resolve_peer_input(args, &peer_id).map(Some)
+    resolve_peer_value(args, &peer_id).map(Some)
 }
 
 pub fn set_current_peer(args: &CommonArgs, peer: &ResolvedPeerTarget) -> Result<(), String> {
@@ -83,35 +116,47 @@ pub fn clear_current_peer(args: &CommonArgs) -> Result<(), String> {
     Ok(())
 }
 
-pub fn resolve_peer_input(args: &CommonArgs, peer: &str) -> Result<ResolvedPeerTarget, String> {
-    if let Ok(peer_id) = peer.parse::<PeerId>() {
-        let peer_info = lookup_peer_info(args, &peer_id.to_string())?;
-        let alias = peer_info.as_ref().and_then(|entry| entry.alias.clone());
-        if alias.is_none() {
-            return Err(format!(
-                "Peer {} is not named yet. Name it first with `fungi device add {} --alias <name>` or `fungi device rename {} <name>`.",
-                peer_id, peer_id, peer_id
-            ));
-        }
-        return Ok(ResolvedPeerTarget {
-            peer_id: peer_id.to_string(),
-            alias,
-            hostname: peer_info.and_then(|entry| entry.hostname.clone()),
-        });
-    }
+pub fn resolve_peer_input(
+    args: &CommonArgs,
+    peer: &PeerInput,
+) -> Result<ResolvedPeerTarget, String> {
+    match peer {
+        PeerInput::PeerId(peer_id) => {
+            let peer_info = lookup_peer_info(args, &peer_id.to_string())?;
+            let alias = peer_info.as_ref().and_then(|entry| entry.alias.clone());
+            if alias.is_none() {
+                return Err(format!(
+                    "Peer {} is not named yet. Name it first with `fungi device add {} --alias <name>` or `fungi device rename {} <name>`.",
+                    peer_id, peer_id, peer_id
+                ));
+            }
 
-    let address_book = AddressBookConfig::apply_from_dir(&args.fungi_dir())
-        .map_err(|error| format!("Failed to load address book: {error}"))?;
-    match address_book.get_peer_by_alias(peer) {
-        Some(entry) => Ok(ResolvedPeerTarget {
-            peer_id: entry.peer_id.to_string(),
-            alias: entry.alias.clone(),
-            hostname: entry.hostname.clone(),
-        }),
-        None => Err(format!(
-            "Unknown peer or alias: {peer}. Use --peer/-p with a peer ID, or set an address book alias first."
-        )),
+            Ok(ResolvedPeerTarget {
+                peer_id: peer_id.to_string(),
+                alias,
+                hostname: peer_info.and_then(|entry| entry.hostname.clone()),
+            })
+        }
+        PeerInput::Alias(alias) => {
+            let address_book = AddressBookConfig::apply_from_dir(&args.fungi_dir())
+                .map_err(|error| format!("Failed to load address book: {error}"))?;
+            match address_book.get_peer_by_alias(alias) {
+                Some(entry) => Ok(ResolvedPeerTarget {
+                    peer_id: entry.peer_id.to_string(),
+                    alias: entry.alias.clone(),
+                    hostname: entry.hostname.clone(),
+                }),
+                None => Err(format!(
+                    "Unknown peer or alias: {alias}. Use --peer/-p with a peer ID, or set an address book alias first."
+                )),
+            }
+        }
     }
+}
+
+pub fn resolve_peer_value(args: &CommonArgs, peer: &str) -> Result<ResolvedPeerTarget, String> {
+    let peer = peer.parse::<PeerInput>()?;
+    resolve_peer_input(args, &peer)
 }
 
 fn lookup_peer_info(

@@ -69,7 +69,7 @@ pub async fn execute_access(args: CommonArgs, cmd: AccessCommands) {
 
     match cmd {
         AccessCommands::List { peer, verbose } => {
-            let peer = match resolve_optional_peer(&args, peer.peer.as_deref()) {
+            let peer = match resolve_optional_peer(&args, peer.peer.as_ref()) {
                 Ok(peer) => peer,
                 Err(error) => fatal(error),
             };
@@ -85,7 +85,7 @@ pub async fn execute_access(args: CommonArgs, cmd: AccessCommands) {
             peer,
             verbose,
         } => {
-            let peer = match resolve_required_peer(&args, peer.peer.as_deref()) {
+            let peer = match resolve_required_peer(&args, peer.peer.as_ref()) {
                 Ok(peer) => peer,
                 Err(error) => fatal(error),
             };
@@ -94,7 +94,7 @@ pub async fn execute_access(args: CommonArgs, cmd: AccessCommands) {
             print_access(&access, verbose);
         }
         AccessCommands::Detach { service_id, peer } => {
-            let peer = match resolve_required_peer(&args, peer.peer.as_deref()) {
+            let peer = match resolve_required_peer(&args, peer.peer.as_ref()) {
                 Ok(peer) => peer,
                 Err(error) => fatal(error),
             };
@@ -117,7 +117,7 @@ pub async fn execute_access(args: CommonArgs, cmd: AccessCommands) {
                 fatal("Ephemeral access is not implemented yet")
             }
 
-            let peer = match resolve_required_peer(&args, peer.peer.as_deref()) {
+            let peer = match resolve_required_peer(&args, peer.peer.as_ref()) {
                 Ok(peer) => peer,
                 Err(error) => fatal(error),
             };

@@ -8,19 +8,25 @@ use crate::commands::CommonArgs;
 use super::{
     client::get_rpc_client,
     shared::{
-        fatal, fatal_grpc, shorten_peer_id, simplify_multiaddr_peer_ids,
-        summarize_ping_error_message,
+        PeerInput, fatal, fatal_grpc, print_target_peer, resolve_peer_input, shorten_peer_id,
+        simplify_multiaddr_peer_ids, summarize_ping_error_message,
     },
 };
 
-pub async fn execute_ping(args: CommonArgs, peer_id: String, interval_ms: u32, verbose: bool) {
+pub async fn execute_ping(args: CommonArgs, peer: PeerInput, interval_ms: u32, verbose: bool) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
         None => fatal("Cannot connect to Fungi daemon. Is it running?"),
     };
 
+    let resolved = match resolve_peer_input(&args, &peer) {
+        Ok(peer) => peer,
+        Err(error) => fatal(error),
+    };
+    print_target_peer(&resolved);
+
     let req = PingPeerRequest {
-        peer_id: peer_id.clone(),
+        peer_id: resolved.peer_id.clone(),
         interval_ms,
     };
 
@@ -33,9 +39,9 @@ pub async fn execute_ping(args: CommonArgs, peer_id: String, interval_ms: u32, v
     println!(
         "Ping stream peer={} interval={}ms (Ctrl+C to stop)",
         if verbose {
-            peer_id.clone()
+            resolved.peer_id.clone()
         } else {
-            shorten_peer_id(&peer_id)
+            shorten_peer_id(&resolved.peer_id)
         },
         interval_ms
     );

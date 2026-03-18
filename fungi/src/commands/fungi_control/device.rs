@@ -13,7 +13,7 @@ use crate::commands::CommonArgs;
 
 use super::{
     client::get_rpc_client,
-    shared::{fatal, fatal_grpc, resolve_peer_input},
+    shared::{fatal, fatal_grpc, resolve_peer_value},
 };
 
 #[derive(Subcommand, Debug, Clone)]
@@ -122,7 +122,7 @@ pub async fn execute_device(args: CommonArgs, cmd: DeviceCommands) {
             let target_peer_id = if let Ok(value) = peer.parse::<PeerId>() {
                 value.to_string()
             } else {
-                match resolve_peer_input(&args, &peer) {
+                match resolve_peer_value(&args, &peer) {
                     Ok(peer) => peer.peer_id,
                     Err(error) => fatal(error),
                 }

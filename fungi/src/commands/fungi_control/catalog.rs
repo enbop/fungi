@@ -43,7 +43,7 @@ pub async fn execute_catalog(args: CommonArgs, cmd: CatalogCommands) {
 
     match cmd {
         CatalogCommands::List { peer, verbose } => {
-            let peer = match resolve_required_peer(&args, peer.peer.as_deref()) {
+            let peer = match resolve_required_peer(&args, peer.peer.as_ref()) {
                 Ok(peer) => peer,
                 Err(error) => fatal(error),
             };
@@ -57,7 +57,7 @@ pub async fn execute_catalog(args: CommonArgs, cmd: CatalogCommands) {
             peer,
             verbose,
         } => {
-            let peer = match resolve_required_peer(&args, peer.peer.as_deref()) {
+            let peer = match resolve_required_peer(&args, peer.peer.as_ref()) {
                 Ok(peer) => peer,
                 Err(error) => fatal(error),
             };
