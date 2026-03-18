@@ -188,14 +188,14 @@ fn resolve_socket_path(explicit: Option<&Path>) -> Result<PathBuf, Box<dyn std::
         return Ok(path.to_path_buf());
     }
 
-    if let Ok(host) = env::var("DOCKER_HOST")
-        && let Some(path) = host.strip_prefix("unix://")
-    {
+    let docker_host = env::var("DOCKER_HOST").ok();
+
+    if let Some(path) = docker_host.as_deref().and_then(|host| host.strip_prefix("unix://")) {
         return Ok(PathBuf::from(path));
     }
 
     #[cfg(windows)]
-    if let Some(path) = docker_host_named_pipe_path(&host) {
+    if let Some(path) = docker_host.as_deref().and_then(docker_host_named_pipe_path) {
         return Ok(path);
     }
 

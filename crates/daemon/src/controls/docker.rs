@@ -111,9 +111,9 @@ fn resolve_socket_path(explicit: Option<&Path>) -> Option<PathBuf> {
         return docker_endpoint_available(path).then(|| path.to_path_buf());
     }
 
-    if let Ok(host) = env::var("DOCKER_HOST")
-        && let Some(path) = host.strip_prefix("unix://")
-    {
+    let docker_host = env::var("DOCKER_HOST").ok();
+
+    if let Some(path) = docker_host.as_deref().and_then(|host| host.strip_prefix("unix://")) {
         let candidate = PathBuf::from(path);
         if docker_endpoint_available(&candidate) {
             return Some(candidate);
@@ -121,7 +121,7 @@ fn resolve_socket_path(explicit: Option<&Path>) -> Option<PathBuf> {
     }
 
     #[cfg(windows)]
-    if let Some(candidate) = docker_host_named_pipe_path(&host)
+    if let Some(candidate) = docker_host.as_deref().and_then(docker_host_named_pipe_path)
         && docker_endpoint_available(&candidate)
     {
         return Some(candidate);
