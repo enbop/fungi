@@ -337,3 +337,21 @@ pub fn summarize_ping_error_message(message: &str, verbose: bool) -> String {
         parts.join(", ")
     )
 }
+
+pub fn host_path_risk_note(path: &str) -> Option<String> {
+    let path = std::path::Path::new(path);
+    if path == std::path::Path::new("/") {
+        return Some("CRITICAL: this exposes the entire host filesystem".to_string());
+    }
+
+    let home_dir = home::home_dir()?;
+    if path == home_dir {
+        return Some("HIGH: this exposes the entire current user's home directory".to_string());
+    }
+
+    if home_dir.starts_with(path) {
+        return Some("HIGH: this path contains the current user's home directory".to_string());
+    }
+
+    None
+}

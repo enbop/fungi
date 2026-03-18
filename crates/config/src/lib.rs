@@ -139,6 +139,9 @@ impl FungiConfig {
     }
 
     pub fn add_runtime_allowed_host_path(&self, path: PathBuf) -> Result<Self> {
+        let fungi_dir = self.config_file.parent().unwrap_or_else(|| Path::new("."));
+        let path = Runtime::validate_allowed_host_path(&path, fungi_dir)?;
+
         self.update_and_save(|config| {
             if !config
                 .runtime

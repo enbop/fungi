@@ -13,7 +13,7 @@ use super::{
     AllowedPeerCommands,
     allowed_peers::execute_allowed_peer,
     client::get_rpc_client,
-    shared::{fatal, fatal_grpc},
+    shared::{fatal, fatal_grpc, host_path_risk_note},
 };
 
 #[derive(Subcommand, Debug, Clone)]
@@ -79,6 +79,9 @@ pub async fn execute_security(args: CommonArgs, cmd: SecurityCommands) {
                 println!("allowed_host_paths:");
                 for path in config.allowed_host_paths {
                     println!("  {}", path);
+                    if let Some(note) = host_path_risk_note(&path) {
+                        println!("  ! {}", note);
+                    }
                 }
                 println!("allowed_ports:");
                 for port in config.allowed_ports {
@@ -93,6 +96,9 @@ pub async fn execute_security(args: CommonArgs, cmd: SecurityCommands) {
         },
         SecurityCommands::AllowedPeers(_) => unreachable!(),
         SecurityCommands::AllowPath { path } => {
+            if let Some(note) = host_path_risk_note(&path) {
+                eprintln!("Warning: {}", note);
+            }
             let req = RuntimeAllowedHostPathRequest { path };
             match client
                 .add_runtime_allowed_host_path(Request::new(req))

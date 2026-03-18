@@ -14,7 +14,7 @@ use crate::commands::CommonArgs;
 
 use super::{
     client::get_rpc_client,
-    shared::{fatal, fatal_grpc, resolve_peer_value},
+    shared::{fatal, fatal_grpc, host_path_risk_note, resolve_peer_value},
 };
 
 #[derive(Subcommand, Debug, Clone)]
@@ -313,6 +313,9 @@ fn print_string_list(items: &[String], empty_message: &str) {
 
     for item in items {
         println!("    - {item}");
+        if let Some(note) = host_path_risk_note(item) {
+            println!("      ! {note}");
+        }
     }
 }
 

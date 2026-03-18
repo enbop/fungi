@@ -1,3 +1,4 @@
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -44,8 +45,51 @@ impl Runtime {
             return;
         }
 
-        self.allowed_host_paths = vec![fungi_dir.to_path_buf(), fungi_dir.join("services")];
+        self.allowed_host_paths = default_allowed_host_paths(fungi_dir);
     }
+
+    pub fn validate_allowed_host_path(path: &Path, fungi_dir: &Path) -> Result<PathBuf> {
+        let normalized = normalize_absolute_path(path)?;
+        if is_sensitive_fungi_path(&normalized, fungi_dir)? {
+            bail!(
+                "refusing to allow fungi home secrets path: {}. Use {}/services or a directory outside fungi home",
+                normalized.display(),
+                normalize_absolute_path(fungi_dir.join("services").as_path())?.display()
+            );
+        }
+        Ok(normalized)
+    }
+}
+
+fn default_allowed_host_paths(fungi_dir: &Path) -> Vec<PathBuf> {
+    vec![fungi_dir.join("services")]
+}
+
+fn is_sensitive_fungi_path(path: &Path, fungi_dir: &Path) -> Result<bool> {
+    let fungi_home = normalize_absolute_path(fungi_dir)?;
+    let services_root = normalize_absolute_path(&fungi_home.join("services"))?;
+
+    Ok(path.starts_with(&fungi_home) && !path.starts_with(&services_root))
+}
+
+fn normalize_absolute_path(path: &Path) -> Result<PathBuf> {
+    if !path.is_absolute() {
+        bail!("host path must be absolute: {}", path.display());
+    }
+
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::RootDir => normalized.push(component.as_os_str()),
+            std::path::Component::Normal(part) => normalized.push(part),
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            std::path::Component::Prefix(_) => normalized.push(component.as_os_str()),
+        }
+    }
+    Ok(normalized)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -78,6 +122,55 @@ mod tests {
                 start: 18080,
                 end: 18199,
             }]
+        );
+    }
+
+    #[test]
+    fn runtime_defaults_only_allow_services_subdir() {
+        let fungi_home = PathBuf::from("/tmp/fungi-home");
+        let mut runtime = Runtime::default();
+
+        runtime.apply_default_allowed_host_paths(&fungi_home);
+
+        assert_eq!(
+            runtime.allowed_host_paths,
+            vec![fungi_home.join("services")]
+        );
+    }
+
+    #[test]
+    fn runtime_defaults_preserve_explicit_allowed_host_paths() {
+        let fungi_home = PathBuf::from("/tmp/fungi-home");
+        let mut runtime = Runtime {
+            allowed_host_paths: vec![
+                fungi_home.clone(),
+                fungi_home.join("services"),
+                fungi_home.join("services/demo"),
+            ],
+            ..Runtime::default()
+        };
+
+        runtime.apply_default_allowed_host_paths(&fungi_home);
+
+        assert_eq!(
+            runtime.allowed_host_paths,
+            vec![
+                fungi_home,
+                PathBuf::from("/tmp/fungi-home/services"),
+                PathBuf::from("/tmp/fungi-home/services/demo")
+            ]
+        );
+    }
+
+    #[test]
+    fn validate_allowed_host_path_rejects_fungi_home_root() {
+        let fungi_home = PathBuf::from("/tmp/fungi-home");
+        let error = Runtime::validate_allowed_host_path(&fungi_home, &fungi_home).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("refusing to allow fungi home secrets path")
         );
     }
 }

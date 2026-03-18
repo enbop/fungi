@@ -254,7 +254,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         self.inner
             .add_runtime_allowed_host_path(path)
             .map_err(|e| {
-                Status::internal(format!("Failed to add runtime allowed host path: {}", e))
+                Status::invalid_argument(format!("Failed to add runtime allowed host path: {}", e))
             })?;
         Ok(Response::new(Empty {}))
     }
