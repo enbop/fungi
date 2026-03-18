@@ -114,13 +114,6 @@ pub fn resolve_peer_input(args: &CommonArgs, peer: &str) -> Result<ResolvedPeerT
     }
 }
 
-pub fn require_named_peer_by_id(
-    args: &CommonArgs,
-    peer_id: &str,
-) -> Result<ResolvedPeerTarget, String> {
-    resolve_peer_input(args, peer_id)
-}
-
 fn lookup_peer_info(
     args: &CommonArgs,
     peer_id: &str,
