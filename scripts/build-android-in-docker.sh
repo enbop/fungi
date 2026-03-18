@@ -15,6 +15,7 @@ CARGO_REGISTRY_VOLUME="${CARGO_REGISTRY_VOLUME:-fungi-android-cargo-registry}"
 CARGO_GIT_VOLUME="${CARGO_GIT_VOLUME:-fungi-android-cargo-git}"
 TARGET_VOLUME="${TARGET_VOLUME:-fungi-android-target}"
 RUSTFLAGS_STAMP_FILE=".android-rustflags"
+RUSTFLAGS_VALUE="${RUSTFLAGS:-}"
 
 if ! docker image inspect "$ANDROID_BUILD_REF" >/dev/null 2>&1; then
   docker build \
@@ -41,6 +42,7 @@ docker run --rm \
   -e ANDROID_PLATFORM="$ANDROID_PLATFORM" \
   -e RUST_TOOLCHAIN="$RUST_TOOLCHAIN" \
   -e OUTPUT_TAR="$OUTPUT_TAR" \
+  -e RUSTFLAGS="$RUSTFLAGS_VALUE" \
   -e RUSTFLAGS_STAMP_FILE="$RUSTFLAGS_STAMP_FILE" \
   "$ANDROID_BUILD_REF" \
   bash -lc '

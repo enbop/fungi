@@ -1,3 +1,4 @@
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use std::process::Command;
 
 use clap::Subcommand;
@@ -325,21 +326,39 @@ fn build_local_urls(service: &CatalogService, access: &ServiceAccess) -> Vec<Str
     urls
 }
 
-fn open_url(url: &str) {
-    #[cfg(target_os = "macos")]
-    let status = Command::new("open").arg(url).status();
-
-    #[cfg(target_os = "linux")]
-    let status = Command::new("xdg-open").arg(url).status();
-
-    #[cfg(target_os = "windows")]
-    let status = Command::new("cmd").args(["/C", "start", "", url]).status();
-
-    match status {
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+fn run_url_opener(mut command: Command) {
+    match command.status() {
         Ok(result) if result.success() => {}
         Ok(result) => fatal(format!("Failed to open URL, exit code: {result}")),
         Err(error) => fatal(format!("Failed to launch URL opener: {error}")),
     }
+}
+
+#[cfg(target_os = "macos")]
+fn open_url(url: &str) {
+    let mut command = Command::new("open");
+    command.arg(url);
+    run_url_opener(command);
+}
+
+#[cfg(target_os = "linux")]
+fn open_url(url: &str) {
+    let mut command = Command::new("xdg-open");
+    command.arg(url);
+    run_url_opener(command);
+}
+
+#[cfg(target_os = "windows")]
+fn open_url(url: &str) {
+    let mut command = Command::new("cmd");
+    command.args(["/C", "start", "", url]);
+    run_url_opener(command);
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+fn open_url(_url: &str) {
+    fatal("Opening URLs is not supported on this platform")
 }
 
 fn print_json<T: Serialize>(value: &T, label: &str) {
