@@ -109,6 +109,10 @@ fn default_allowed_port_ranges() -> Vec<AllowedPortRange> {
 mod tests {
     use super::*;
 
+    fn test_fungi_home() -> PathBuf {
+        std::env::temp_dir().join("fungi-home")
+    }
+
     #[test]
     fn default_runtime_policy_is_enabled_with_safe_defaults() {
         let runtime = Runtime::default();
@@ -127,7 +131,7 @@ mod tests {
 
     #[test]
     fn runtime_defaults_only_allow_services_subdir() {
-        let fungi_home = PathBuf::from("/tmp/fungi-home");
+        let fungi_home = test_fungi_home();
         let mut runtime = Runtime::default();
 
         runtime.apply_default_allowed_host_paths(&fungi_home);
@@ -140,7 +144,7 @@ mod tests {
 
     #[test]
     fn runtime_defaults_preserve_explicit_allowed_host_paths() {
-        let fungi_home = PathBuf::from("/tmp/fungi-home");
+        let fungi_home = test_fungi_home();
         let mut runtime = Runtime {
             allowed_host_paths: vec![
                 fungi_home.clone(),
@@ -156,15 +160,15 @@ mod tests {
             runtime.allowed_host_paths,
             vec![
                 fungi_home,
-                PathBuf::from("/tmp/fungi-home/services"),
-                PathBuf::from("/tmp/fungi-home/services/demo")
+                test_fungi_home().join("services"),
+                test_fungi_home().join("services/demo")
             ]
         );
     }
 
     #[test]
     fn validate_allowed_host_path_rejects_fungi_home_root() {
-        let fungi_home = PathBuf::from("/tmp/fungi-home");
+        let fungi_home = test_fungi_home();
         let error = Runtime::validate_allowed_host_path(&fungi_home, &fungi_home).unwrap_err();
 
         assert!(
