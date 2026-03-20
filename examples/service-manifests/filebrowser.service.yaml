@@ -35,10 +35,6 @@ spec:
     FB_NOAUTH: "true"
 
 notes:
-  - "This manifest can be pulled directly with fungi service pull."
+  - "Upstream project: https://github.com/filebrowser/filebrowser"
   - "${APP_HOME} resolves on the target node to fungi_home/services/<service-name>."
   - "hostPort: auto asks the target node to choose an available port from its allowed port policy."
-  - "For exposed TCP services, each forwarded port should have a stable spec.ports[].name so peers can enable it locally."
-  - The Docker runtime now pulls the image automatically if it is missing locally.
-  - start/inspect/logs/stop/remove now accept just the service name.
-  - "spec.expose describes how the service should appear in discovery and what client UX is recommended."
