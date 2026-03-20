@@ -40,13 +40,13 @@ Download the latest binaries from [GitHub Releases](https://github.com/enbop/fun
 Start with the beginner quick starts:
 
 - [3 Minutes: Build Your Private P2P Network](https://fungi.rs/docs/quick-start/private-p2p-network)
-- [3 Minutes: Run a Remote Sandbox App Locally](https://fungi.rs/docs/quick-start/remote-sandbox-app)
+- [2 Minutes: Run a Remote Sandbox App Locally](https://fungi.rs/docs/quick-start/remote-sandbox-app)
 
 Full documentation: [fungi.rs/docs](https://fungi.rs/docs/intro).
 
 Recommended starting points:
 
-- [CLI Quick Start](https://fungi.rs/docs/cli-service-quick-start)
+- [Fungi CLI Guide](https://fungi.rs/docs/cli-service-quick-start)
 - [Remote Service Control](https://fungi.rs/docs/remote-service-control)
 - [Services And Runtimes](https://fungi.rs/docs/service-manifests)
 
