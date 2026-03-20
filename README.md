@@ -23,7 +23,7 @@ This repository contains the **Core Daemon** and **CLI** tools.
 
 *   **P2P Connectivity**: Built on [rust-libp2p](https://github.com/libp2p/rust-libp2p), supporting automatic NAT traversal and mDNS discovery.
 *   **Secure**: End-to-end encryption with PeerID-based authentication.
-*   **Fast and Lightweight**: Built in Rust, around 20 MB idle memory, with support for macOS, Windows, Linux, and Android.
+*   **Fast and Lightweight**: Built in Rust, around 20 MB idle RAM, with support for macOS, Windows, Linux, and Android.
 *   **Sandboxed Services**: Run sandboxed services with the built-in WASI runtime or an optional Docker backend.
 *   **Simple Remote Service Control**: Use a few commands like `pull`, `start`, `stop`, and `remove` to manage remote services locally.
 *   **Port Forwarding and File Transfer**: forward any TCP service and includes a built-in file transfer module, making it easy to create a lightweight NAS.
