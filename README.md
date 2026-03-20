@@ -15,6 +15,9 @@ This repository contains the **Core Daemon** and **CLI** tools.
 
 > **Looking for the GUI?**
 > Check out **[fungi-app](https://github.com/enbop/fungi-app)**, the official Flutter-based graphical interface for Fungi.
+>
+> **Need help or want to follow updates?**
+> Join the **[Fungi Discord](https://discord.gg/A2vUXXB726)**.
 
 ## Key Features
 
@@ -26,13 +29,19 @@ This repository contains the **Core Daemon** and **CLI** tools.
 *   **Modular architecture:**
     *   **`fungi-daemon`**: The background service that handles P2P networking and manage services.
     *   **`fungi-cli`**: A command-line tool to interact with the daemon via gRPC.
-*   **WASI Runtime**: Wasmtime-backed service runtime for WebAssembly components. Android support is not available yet. [Learn more](https://fungi.rs/docs/wasi)
 
 > **Note on file transfer**
 > The older FTP/WebDAV-style file transfer path is being gradually deprecated in favor of service-based workflows.
 
 ## Download
-Download the latest binaries from [GitHub Releases](https://github.com/enbop/fungi/releases/latest).
+macOS / Linux quick install:
+
+```bash
+curl -fsSL https://fungi.rs/install.sh | sh
+```
+
+- Or download from [GitHub Releases](https://github.com/enbop/fungi/releases/latest)
+- Or see the [full install guide](https://fungi.rs/docs/install)
 
 
 ## Documentation
@@ -52,37 +61,7 @@ Recommended starting points:
 
 ## Build from Source
 
-### Prerequisites
-
-**All platforms require:**
-- Rust toolchain
-- Protocol Buffers compiler (protoc)
-
-#### Install Dependencies
-
-**Ubuntu/Debian:**
-```bash
-sudo apt-get install -y protobuf-compiler clang cmake ninja-build pkg-config
-```
-
-**macOS:**
-```bash
-brew install protobuf
-```
-
-**Windows:**
-- Install build tools for aws-lc-rs [build dependencies](https://aws.github.io/aws-lc-rs/requirements/windows.html) (Ensure you have at least: C/C++ Compiler, CMake, NASM)
-- Install protoc: `choco install protoc`
-
-### Build
-
-
-
-```bash
-cargo build --release --bin fungi
-```
-
-Binary location: `./target/release/fungi`
+See the install guide for source build instructions: [fungi.rs/docs/install](https://fungi.rs/docs/install).
 
 ## Platform Support
 

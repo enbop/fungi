@@ -96,6 +96,15 @@ jobs:
         run: |
           cp crates/daemon-grpc/proto/fungi_daemon.proto fungi_daemon.proto
 
+      - name: Generate artifact checksum
+        shell: bash
+        run: |
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum fungi-${{ matrix.platform-name }}.tar.gz > fungi-${{ matrix.platform-name }}.tar.gz.sha256
+          else
+            shasum -a 256 fungi-${{ matrix.platform-name }}.tar.gz > fungi-${{ matrix.platform-name }}.tar.gz.sha256
+          fi
+
       - name: GH publish
         shell: bash
         env:
@@ -108,6 +117,7 @@ jobs:
           fi
           
           gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-${{ matrix.platform-name }}.tar.gz
+          gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi-${{ matrix.platform-name }}.tar.gz.sha256
           
           if [ -f fungi_daemon.proto ]; then
             gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi_daemon.proto
