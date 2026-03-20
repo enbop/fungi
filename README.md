@@ -23,15 +23,16 @@ This repository contains the **Core Daemon** and **CLI** tools.
 
 *   **P2P Connectivity**: Built on [rust-libp2p](https://github.com/libp2p/rust-libp2p), supporting automatic NAT traversal and mDNS discovery.
 *   **Secure**: End-to-end encryption with PeerID-based authentication.
-*   **Capability-First Services**: Run Docker-compatible container services and WASI services within explicit path and port boundaries.
-*   **Remote Service Workflow**: Use `peer`, `catalog`, and `access` to control remote nodes and open their published web apps locally.
-*   **gRPC Interface**: The daemon exposes a gRPC API, allowing any client (CLI, GUI, scripts) to control it.
+*   **Fast and Lightweight**: Built in Rust, around 20 MB idle memory, with support for macOS, Windows, Linux, and Android.
+*   **Sandboxed Services**: Run sandboxed services with the built-in WASI runtime or an optional Docker backend.
+*   **Simple Remote Service Control**: Use a few commands like `pull`, `start`, `stop`, and `remove` to manage remote services locally.
+*   **Port Forwarding and File Transfer**: forward any TCP service and includes a built-in file transfer module, making it easy to create a lightweight NAS.
 *   **Modular architecture:**
     *   **`fungi-daemon`**: The background service that handles P2P networking and manage services.
     *   **`fungi-cli`**: A command-line tool to interact with the daemon via gRPC.
 
 > **Note on file transfer**
-> The older FTP/WebDAV-style file transfer path is being gradually deprecated in favor of service-based workflows.
+> The older FTP/WebDAV-style file transfer path is being gradually deprecated in favor of Sandboxed Services.
 
 ## Download
 macOS / Linux quick install:
@@ -40,8 +41,15 @@ macOS / Linux quick install:
 curl -fsSL https://fungi.rs/install.sh | sh
 ```
 
-- Or download from [GitHub Releases](https://github.com/enbop/fungi/releases/latest)
-- Or see the [full install guide](https://fungi.rs/docs/install)
+- Or download from [GitHub Releases](https://github.com/enbop/fungi/releases/latest) (Windows/Linux/macOS/Android binaries available)
+- Or see the [install and build guide](https://fungi.rs/docs/install)
+
+
+| Demo |
+| --- |
+|Build a secure private P2P network with ease:<br /><img src="https://fungi.rs/assets/images/ping-ad101ea46e9e8bd25649d55fe290e801.gif" alt="Build a secure private P2P network" width="760" /> |
+| Create a remote service and access it locally right away:<br /><img src="https://fungi.rs/assets/images/service-8e947b850359183aa2fc709388327e31.gif" alt="Create and start a remote service locally" width="760" /> |
+||
 
 
 ## Documentation
