@@ -202,7 +202,7 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
 #[test]
 fn manifest_document_supports_app_home_and_auto_host_port() {
     let yaml = r#"
-apiVersion: fungi.dev/v1alpha1
+apiVersion: fungi.rs/v1alpha1
 kind: ServiceManifest
 metadata:
     name: filebrowser
@@ -281,7 +281,7 @@ async fn wasmtime_provider_downloads_remote_component() {
 #[test]
 fn parse_manifest_expose_defaults_service_identity() {
     let yaml = r#"
-apiVersion: fungi.dev/v1alpha1
+apiVersion: fungi.rs/v1alpha1
 kind: ServiceManifest
 metadata:
     name: filebrowser
@@ -316,7 +316,7 @@ spec:
 #[test]
 fn parse_manifest_expose_disabled_returns_none() {
     let yaml = r#"
-apiVersion: fungi.dev/v1alpha1
+apiVersion: fungi.rs/v1alpha1
 kind: ServiceManifest
 metadata:
     name: raw-service

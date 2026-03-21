@@ -9,13 +9,16 @@
 
 <p align="center" style="font-size: 1.2rem;">Build a private P2P device network for capability-first services</p>
 
-With Fungi, you can securely connect your own devices, run container or WASI services under explicit runtime policy, control remote peers from CLI or GUI, and open published services locally.
+With Fungi, you can securely connect your own devices, run container or WASI services under explicit runtime policy, 
+manage remote services with simple commands, and access them locally without exposing them to the public internet.
 
-This repository contains the **Core Daemon** and **CLI** tools.
+| Demo |
+| --- |
+|Build a secure private P2P network with ease:<br /><img src="https://fungi.rs/assets/images/ping-ad101ea46e9e8bd25649d55fe290e801.gif" alt="Build a secure private P2P network" /> |
+| Create a remote service and access it locally right away:<br /><img src="https://fungi.rs/assets/images/service-8e947b850359183aa2fc709388327e31.gif" alt="Create and start a remote service locally" /><br />(This demo shows creating a no-client file manager service running on a remote device, and accessing it with a browser locally) |
+||
 
-> **Looking for the GUI?**
-> Check out **[fungi-app](https://github.com/enbop/fungi-app)**, the official Flutter-based graphical interface for Fungi.
->
+
 > **Need help or want to follow updates?**
 > Join the **[Fungi Discord](https://discord.gg/A2vUXXB726)**.
 
@@ -34,6 +37,7 @@ This repository contains the **Core Daemon** and **CLI** tools.
 > **Note on file transfer**
 > The older FTP/WebDAV-style file transfer path is being gradually deprecated in favor of Sandboxed Services.
 
+
 ## Download
 macOS / Linux quick install:
 
@@ -44,13 +48,10 @@ curl -fsSL https://fungi.rs/install.sh | sh
 - Or download from [GitHub Releases](https://github.com/enbop/fungi/releases/latest) (Windows/Linux/macOS/Android binaries available)
 - Or see the [install and build guide](https://fungi.rs/docs/install)
 
+> This repository contains the **Core Daemon** and **CLI** tools.
 
-| Demo |
-| --- |
-|Build a secure private P2P network with ease:<br /><img src="https://fungi.rs/assets/images/ping-ad101ea46e9e8bd25649d55fe290e801.gif" alt="Build a secure private P2P network" width="760" /> |
-| Create a remote service and access it locally right away:<br /><img src="https://fungi.rs/assets/images/service-8e947b850359183aa2fc709388327e31.gif" alt="Create and start a remote service locally" width="760" /> |
-||
-
+> **Looking for the GUI?**
+> Check out **[fungi-app](https://github.com/enbop/fungi-app)**, the official Flutter-based graphical interface for Fungi.
 
 ## Documentation
 

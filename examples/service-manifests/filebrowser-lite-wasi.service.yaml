@@ -1,4 +1,4 @@
-apiVersion: fungi.dev/v1alpha1
+apiVersion: fungi.rs/v1alpha1
 kind: ServiceManifest
 
 metadata:
