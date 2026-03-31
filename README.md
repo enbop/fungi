@@ -33,9 +33,10 @@ manage remote services with simple commands, and access them locally without exp
 *   **Modular architecture:**
     *   **`fungi-daemon`**: The background service that handles P2P networking and manage services.
     *   **`fungi-cli`**: A command-line tool to interact with the daemon via gRPC.
+    *   **`fungi-app`**: (optional, external) An official GUI client for easier management (see [fungi-app](https://github.com/enbop/fungi-app)).
 
 > **Note on file transfer**
-> The older FTP/WebDAV-style file transfer path is being gradually deprecated in favor of Sandboxed Services.
+> The older FTP/WebDAV-style file transfer is being gradually deprecated in favor of Sandboxed Services.
 
 
 ## Download
@@ -48,29 +49,14 @@ curl -fsSL https://fungi.rs/install.sh | sh
 - Or download from [GitHub Releases](https://github.com/enbop/fungi/releases/latest) (Windows/Linux/macOS/Android binaries available)
 - Or see the [install and build guide](https://fungi.rs/docs/install)
 
-> This repository contains the **Core Daemon** and **CLI** tools.
-
-> **Looking for the GUI?**
-> Check out **[fungi-app](https://github.com/enbop/fungi-app)**, the official Flutter-based graphical interface for Fungi.
-
 ## Documentation
 
-Start with the beginner quick starts:
+Start with the quick starts:
 
 - [3 Minutes: Build Your Private P2P Network](https://fungi.rs/docs/quick-start/private-p2p-network)
 - [2 Minutes: Run a Remote Sandbox App Locally](https://fungi.rs/docs/quick-start/remote-sandbox-app)
 
 Full documentation: [fungi.rs/docs](https://fungi.rs/docs/intro).
-
-Recommended starting points:
-
-- [Fungi CLI Guide](https://fungi.rs/docs/cli-service-quick-start)
-- [Remote Service Control](https://fungi.rs/docs/remote-service-control)
-- [Services And Runtimes](https://fungi.rs/docs/service-manifests)
-
-## Build from Source
-
-See the install guide for source build instructions: [fungi.rs/docs/install](https://fungi.rs/docs/install).
 
 ## Platform Support
 
@@ -82,13 +68,13 @@ See the install guide for source build instructions: [fungi.rs/docs/install](htt
 | Android  | ✅ Ready |
 | iOS      | 🚧 In progress |
 
-## Contributing
+## Development
+Starting from 2026, the Fungi project actively adopts AI-assisted coding.
 
-We welcome all contributions:
-- 🐛 Bug reports and fixes
-- ✨ New features
-- 📖 Documentation
-- 🎨 UI improvements
+#### Code Quality
+- Rust ensures safety in most cases
+- Modular design
+- Following TDD as much as possible
 
 ## License
 
