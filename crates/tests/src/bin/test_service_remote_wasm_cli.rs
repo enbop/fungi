@@ -91,7 +91,7 @@ impl TestNode {
         let listen_tcp_port = find_free_port()?;
         let listen_udp_port = find_free_port()?;
         let config_toml = format!(
-            "[rpc]\nlisten_address = \"127.0.0.1:{rpc_port}\"\n\n[network]\nlisten_tcp_port = {listen_tcp_port}\nlisten_udp_port = {listen_udp_port}\ndisable_relay = true\n\n[runtime]\ndisable_docker = true\ndisable_wasmtime = false\nallowed_host_paths = [\"{}\", \"{}\"]\nallowed_ports = [{allowed_service_port}]\nallowed_port_ranges = []\n",
+            "[rpc]\nlisten_address = \"127.0.0.1:{rpc_port}\"\n\n[network]\nlisten_tcp_port = {listen_tcp_port}\nlisten_udp_port = {listen_udp_port}\nrelay_enabled = false\nuse_community_relays = false\n\n[runtime]\ndisable_docker = true\ndisable_wasmtime = false\nallowed_host_paths = [\"{}\", \"{}\"]\nallowed_ports = [{allowed_service_port}]\nallowed_port_ranges = []\n",
             fungi_dir.display(),
             fungi_dir.join("services").display(),
         );

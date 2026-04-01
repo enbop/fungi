@@ -63,6 +63,10 @@ pub enum Commands {
     /// Start a simple Fungi relay server
     Relay(fungi_relay::RelayArgs),
 
+    /// Manage relay configuration for the local daemon
+    #[command(subcommand)]
+    RelayConfig(fungi_control::RelayConfigCommands),
+
     /// Show daemon information
     #[command(subcommand)]
     Info(fungi_control::InfoCommands),
