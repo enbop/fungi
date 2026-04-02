@@ -73,12 +73,6 @@ pub enum Commands {
     /// Manage runtime safety boundary settings and incoming peer allowlists
     #[command(subcommand, visible_alias = "sec")]
     Security(fungi_control::SecurityCommands),
-    /// Manage file transfer service
-    #[command(subcommand, visible_alias = "fs")]
-    FtService(fungi_control::FtServiceCommands),
-    /// Manage file transfer client config and FTP and WebDAV proxies
-    #[command(subcommand, visible_alias = "fc")]
-    FtClient(fungi_control::FtClientCommands),
     /// Manage TCP tunneling
     #[command(subcommand, visible_alias = "tn")]
     Tunnel(fungi_control::TunnelCommands),
@@ -117,4 +111,10 @@ pub enum Commands {
     #[cfg(feature = "wasi")]
     /// [WASI runtime] Serve wasi-http requests (re-exported wasmtime command)
     Serve(wasmtime_cli::commands::ServeCommand),
+    /// Deprecated: manage legacy file transfer service; this command will be removed in a future release
+    #[command(subcommand, visible_alias = "fs")]
+    FtService(fungi_control::FtServiceCommands),
+    /// Deprecated: manage legacy file transfer client config and FTP/WebDAV proxies; this command will be removed in a future release
+    #[command(subcommand, visible_alias = "fc")]
+    FtClient(fungi_control::FtClientCommands),
 }

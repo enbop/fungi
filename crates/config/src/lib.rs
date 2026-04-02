@@ -531,6 +531,15 @@ mod tests {
     }
 
     #[test]
+    fn test_file_transfer_defaults_disabled() {
+        let (config, _temp_dir) = create_temp_config();
+
+        assert!(!config.file_transfer.server.enabled);
+        assert!(!config.file_transfer.proxy_ftp.enabled);
+        assert!(!config.file_transfer.proxy_webdav.enabled);
+    }
+
+    #[test]
     fn test_set_relay_enabled_persists() {
         let (config, _temp_dir) = create_temp_config();
 
