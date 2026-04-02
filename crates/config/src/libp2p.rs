@@ -123,7 +123,8 @@ mod tests {
     #[test]
     fn default_network_relay_is_enabled() {
         let n = Network::default();
-        assert!(!n.disable_relay);
+        assert!(n.relay_enabled);
+        assert!(n.use_community_relays);
     }
 
     #[test]
@@ -144,7 +145,8 @@ mod tests {
         let config: toml::Value = toml::from_str(toml).unwrap();
         let network: Network = config["network"].clone().try_into().unwrap();
         assert_eq!(network.idle_connection_timeout_secs, 300);
-        assert!(!network.disable_relay);
+        assert!(network.relay_enabled);
+        assert!(network.use_community_relays);
     }
 
     #[test]
@@ -157,11 +159,47 @@ mod tests {
     }
 
     #[test]
-    fn network_deserializes_disable_relay() {
-        let toml = "[network]\ndisable_relay = true\n";
+    fn network_relay_disabled_via_relay_enabled_false() {
+        let toml = "[network]\nrelay_enabled = false\n";
         let config: toml::Value = toml::from_str(toml).unwrap();
         let network: Network = config["network"].clone().try_into().unwrap();
-        assert!(network.disable_relay);
+        assert!(!network.relay_enabled);
+        assert!(
+            network
+                .effective_relay_addresses(&[])
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn network_relay_disabled_returns_no_effective_addresses() {
+        let mut n = Network::default();
+        n.relay_enabled = false;
+        let community: Vec<multiaddr::Multiaddr> =
+            vec!["/ip4/1.2.3.4/tcp/443".parse().unwrap()];
+        assert!(n.effective_relay_addresses(&community).is_empty());
+    }
+
+    #[test]
+    fn network_relay_enabled_with_community_includes_community_relays() {
+        let n = Network::default();
+        let community: Vec<multiaddr::Multiaddr> =
+            vec!["/ip4/1.2.3.4/tcp/443".parse().unwrap()];
+        let effective = n.effective_relay_addresses(&community);
+        assert_eq!(effective.len(), 1);
+        assert_eq!(effective[0].source, RelayAddressSource::Community);
+    }
+
+    #[test]
+    fn network_relay_custom_addresses_are_tagged_as_custom() {
+        let mut n = Network::default();
+        n.use_community_relays = false;
+        let custom_addr: multiaddr::Multiaddr = "/ip4/5.6.7.8/tcp/9000".parse().unwrap();
+        n.custom_relay_addresses.push(custom_addr.clone());
+        let effective = n.effective_relay_addresses(&[]);
+        assert_eq!(effective.len(), 1);
+        assert_eq!(effective[0].source, RelayAddressSource::Custom);
+        assert_eq!(effective[0].address, custom_addr);
     }
 
     #[test]
