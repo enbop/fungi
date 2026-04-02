@@ -6,6 +6,12 @@ pub mod runtime;
 mod service_control;
 mod service_state;
 
+/// Utilities for spawning ephemeral [`FungiDaemon`] instances in tests.
+///
+/// Always compiled for integration-test discoverability. External crates can depend on this crate
+/// with `features = ["test-support"]` to gate their own compilation on it.
+pub mod test_support;
+
 pub use api::{ServiceAccess, ServiceAccessEndpoint};
 use clap::Parser;
 pub use daemon::FungiDaemon;

@@ -37,7 +37,7 @@ fn main() -> Result<()> {
     assert_contains(&output, "Restart daemon to fully apply changes")?;
 
     let output = ctx.run_cli(["relay-config", "use-community", "off"])?;
-    assert_contains(&output, "Community relay disabled")?;
+    assert_contains(&output, "Community relays disabled")?;
 
     let output = ctx.run_cli(["relay-config", "add", CUSTOM_RELAY])?;
     assert_contains(&output, "Custom relay added")?;

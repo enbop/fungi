@@ -100,9 +100,9 @@ pub async fn execute_relay_config(args: CommonArgs, cmd: RelayConfigCommands) {
                 {
                     Ok(_) => print_update_message(
                         if enabled {
-                            "Community relay enabled"
+                            "Community relays enabled"
                         } else {
-                            "Community relay disabled"
+                            "Community relays disabled"
                         },
                         true,
                     ),
@@ -117,9 +117,9 @@ pub async fn execute_relay_config(args: CommonArgs, cmd: RelayConfigCommands) {
                     });
                 print_update_message(
                     if enabled {
-                        "Community relay enabled"
+                        "Community relays enabled"
                     } else {
-                        "Community relay disabled"
+                        "Community relays disabled"
                     },
                     false,
                 );
