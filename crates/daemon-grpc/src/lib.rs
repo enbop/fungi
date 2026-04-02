@@ -13,9 +13,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use fungi_config::RelayAddressSource;
 use fungi_daemon_grpc::fungi_daemon_server::FungiDaemon;
 use fungi_daemon_grpc::*;
 use libp2p_identity::PeerId;
+use multiaddr::Multiaddr;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tokio_stream::wrappers::ReceiverStream;
@@ -197,6 +199,91 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .remove_incoming_allowed_peer(peer_id)
             .map_err(|e| Status::internal(format!("Failed to remove peer: {}", e)))?;
 
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn get_relay_config(
+        &self,
+        _request: Request<Empty>,
+    ) -> Result<Response<RelayConfigResponse>, Status> {
+        let response = RelayConfigResponse {
+            relay_enabled: self.inner.relay_enabled(),
+            use_community_relays: self.inner.use_community_relays(),
+            custom_relay_addresses: self
+                .inner
+                .custom_relay_addresses()
+                .into_iter()
+                .map(|address| address.to_string())
+                .collect(),
+            effective_relay_addresses: self
+                .inner
+                .effective_relay_addresses()
+                .into_iter()
+                .map(|entry| EffectiveRelayAddress {
+                    address: entry.address.to_string(),
+                    source: match entry.source {
+                        RelayAddressSource::Community => "community".to_string(),
+                        RelayAddressSource::Custom => "custom".to_string(),
+                    },
+                })
+                .collect(),
+        };
+        Ok(Response::new(response))
+    }
+
+    async fn set_relay_enabled(
+        &self,
+        request: Request<RelayEnabledRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        self.inner
+            .set_relay_enabled(request.into_inner().enabled)
+            .map_err(|e| {
+                Status::internal(format!("Failed to update relay enabled state: {}", e))
+            })?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn set_use_community_relays(
+        &self,
+        request: Request<UseCommunityRelaysRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        self.inner
+            .set_use_community_relays(request.into_inner().enabled)
+            .map_err(|e| {
+                Status::internal(format!("Failed to update community relay setting: {}", e))
+            })?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn add_custom_relay_address(
+        &self,
+        request: Request<RelayAddressRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let address = request
+            .into_inner()
+            .address
+            .parse::<Multiaddr>()
+            .map_err(|e| Status::invalid_argument(format!("Invalid relay address: {}", e)))?;
+        self.inner
+            .add_custom_relay_address(address)
+            .map_err(|e| Status::internal(format!("Failed to add custom relay address: {}", e)))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn remove_custom_relay_address(
+        &self,
+        request: Request<RelayAddressRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let address = request
+            .into_inner()
+            .address
+            .parse::<Multiaddr>()
+            .map_err(|e| Status::invalid_argument(format!("Invalid relay address: {}", e)))?;
+        self.inner
+            .remove_custom_relay_address(address)
+            .map_err(|e| {
+                Status::internal(format!("Failed to remove custom relay address: {}", e))
+            })?;
         Ok(Response::new(Empty {}))
     }
 

@@ -1,16 +1,25 @@
 use crate::commands::CommonArgs;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use fungi_config::FungiDir;
 pub use fungi_daemon::DaemonArgs;
 use fungi_daemon::FungiDaemon;
 use fungi_daemon_grpc::start_grpc_server;
 
 pub async fn run(common: CommonArgs, args: DaemonArgs) -> Result<()> {
-    fungi_config::init(&common, false)?;
+    if let Err(error) = fungi_config::init(&common, false) {
+        print_startup_error("Failed to initialize Fungi configuration", &error);
+        return Err(error);
+    }
 
     log::info!("Starting Fungi daemon...");
 
-    let daemon = FungiDaemon::start(common.fungi_dir(), args.clone()).await?;
+    let daemon = match FungiDaemon::start(common.fungi_dir(), args.clone()).await {
+        Ok(daemon) => daemon,
+        Err(error) => {
+            print_startup_error("Failed to start Fungi daemon", &error);
+            return Err(error);
+        }
+    };
 
     let swarm_control = daemon.swarm_control().clone();
     log::info!("Local Peer ID: {}", swarm_control.local_peer_id());
@@ -22,7 +31,17 @@ pub async fn run(common: CommonArgs, args: DaemonArgs) -> Result<()> {
     log::info!("Network info: {network_info:?}");
 
     let rpc_listen_address = daemon.config().lock().rpc.listen_address.clone();
-    let server_fut = start_grpc_server(daemon, rpc_listen_address.parse().unwrap());
+    let rpc_socket_addr = match rpc_listen_address
+        .parse()
+        .with_context(|| format!("Invalid RPC listen address: {rpc_listen_address}"))
+    {
+        Ok(addr) => addr,
+        Err(error) => {
+            print_startup_error("Failed to parse daemon RPC listen address", &error);
+            return Err(error);
+        }
+    };
+    let server_fut = start_grpc_server(daemon, rpc_socket_addr);
 
     let stdin_monitor = if args.exit_on_stdin_close {
         Some(tokio::spawn(stdin_monitor()))
@@ -35,8 +54,10 @@ pub async fn run(common: CommonArgs, args: DaemonArgs) -> Result<()> {
             log::info!("Received Ctrl+C, shutting down Fungi daemon...");
         },
         res = server_fut => {
-            if let Err(e) = res {
-                log::error!("Error occurred while serving: {}", e);
+            if let Err(error) = res {
+                print_grpc_startup_error(&rpc_listen_address, &error);
+                log::error!("Error occurred while serving: {}", error);
+                return Err(error);
             }
         },
         _ = async {
@@ -51,6 +72,47 @@ pub async fn run(common: CommonArgs, args: DaemonArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn print_grpc_startup_error(rpc_listen_address: &str, error: &anyhow::Error) {
+    if error_chain_contains(error, "address already in use")
+        || error_chain_contains(error, "addrinuse")
+    {
+        println!(
+            "Failed to start daemon RPC server on {}: address already in use.",
+            rpc_listen_address
+        );
+        println!(
+            "Another process is already listening on that port, and it is often an already-running fungi daemon."
+        );
+        print_error_reasons(error);
+        return;
+    }
+
+    println!(
+        "Failed to start daemon RPC server on {}.",
+        rpc_listen_address
+    );
+    print_error_reasons(error);
+}
+
+fn print_startup_error(summary: &str, error: &anyhow::Error) {
+    println!("{summary}.");
+    print_error_reasons(error);
+}
+
+fn print_error_reasons(error: &anyhow::Error) {
+    println!("Reason: {}", error);
+    for cause in error.chain().skip(1) {
+        println!("Caused by: {}", cause);
+    }
+}
+
+fn error_chain_contains(error: &anyhow::Error, needle: &str) -> bool {
+    let needle = needle.to_ascii_lowercase();
+    error
+        .chain()
+        .any(|cause| cause.to_string().to_ascii_lowercase().contains(&needle))
 }
 
 // Monitor stdin for EOF to detect parent process termination

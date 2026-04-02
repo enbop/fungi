@@ -31,6 +31,21 @@ service FungiDaemon {
   rpc RemoveIncomingAllowedPeer(RemoveIncomingAllowedPeerRequest)
       returns (Empty) {}
 
+  // Returns persisted relay configuration and the current effective relay list.
+  rpc GetRelayConfig(Empty) returns (RelayConfigResponse) {}
+
+  // Enables or disables relay usage for this node.
+  rpc SetRelayEnabled(RelayEnabledRequest) returns (Empty) {}
+
+  // Enables or disables built-in community relay addresses.
+  rpc SetUseCommunityRelays(UseCommunityRelaysRequest) returns (Empty) {}
+
+  // Adds a custom relay address to the persisted configuration.
+  rpc AddCustomRelayAddress(RelayAddressRequest) returns (Empty) {}
+
+  // Removes a custom relay address from the persisted configuration.
+  rpc RemoveCustomRelayAddress(RelayAddressRequest) returns (Empty) {}
+
   // Returns runtime enablement flags and the current shared safety boundary.
   rpc GetRuntimeConfig(Empty) returns (RuntimeConfigResponse) {}
 
@@ -222,6 +237,24 @@ message IncomingAllowedPeersListResponse { repeated PeerInfo peers = 1; }
 message AddIncomingAllowedPeerRequest { string peer_id = 1; }
 
 message RemoveIncomingAllowedPeerRequest { string peer_id = 1; }
+
+message RelayEnabledRequest { bool enabled = 1; }
+
+message UseCommunityRelaysRequest { bool enabled = 1; }
+
+message RelayAddressRequest { string address = 1; }
+
+message EffectiveRelayAddress {
+  string address = 1;
+  string source = 2;
+}
+
+message RelayConfigResponse {
+  bool relay_enabled = 1;
+  bool use_community_relays = 2;
+  repeated string custom_relay_addresses = 3;
+  repeated EffectiveRelayAddress effective_relay_addresses = 4;
+}
 
 message RuntimeAllowedHostPathRequest { string path = 1; }
 

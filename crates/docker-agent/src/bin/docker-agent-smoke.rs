@@ -190,7 +190,10 @@ fn resolve_socket_path(explicit: Option<&Path>) -> Result<PathBuf, Box<dyn std::
 
     let docker_host = env::var("DOCKER_HOST").ok();
 
-    if let Some(path) = docker_host.as_deref().and_then(|host| host.strip_prefix("unix://")) {
+    if let Some(path) = docker_host
+        .as_deref()
+        .and_then(|host| host.strip_prefix("unix://"))
+    {
         return Ok(PathBuf::from(path));
     }
 

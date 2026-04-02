@@ -6,11 +6,12 @@ mod rpc;
 pub mod runtime;
 pub mod tcp_tunneling;
 
+pub use crate::libp2p::*;
 pub use init::init;
 
 use anyhow::{Context as _, Result};
-use libp2p::*;
 use libp2p_identity::PeerId;
+use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use std::{
     net::IpAddr,
@@ -224,6 +225,35 @@ impl FungiConfig {
                 .network
                 .incoming_allowed_peers
                 .retain(|p| p != peer_id);
+        })
+    }
+
+    pub fn set_relay_enabled(&self, enabled: bool) -> Result<Self> {
+        self.update_and_save(|config| {
+            config.network.relay_enabled = enabled;
+        })
+    }
+
+    pub fn set_use_community_relays(&self, enabled: bool) -> Result<Self> {
+        self.update_and_save(|config| {
+            config.network.use_community_relays = enabled;
+        })
+    }
+
+    pub fn add_custom_relay_address(&self, address: Multiaddr) -> Result<Self> {
+        self.update_and_save(|config| {
+            if !config.network.custom_relay_addresses.contains(&address) {
+                config.network.custom_relay_addresses.push(address);
+            }
+        })
+    }
+
+    pub fn remove_custom_relay_address(&self, address: &Multiaddr) -> Result<Self> {
+        self.update_and_save(|config| {
+            config
+                .network
+                .custom_relay_addresses
+                .retain(|entry| entry != address);
         })
     }
 
@@ -489,6 +519,100 @@ mod tests {
         // Verify changes were persisted
         let content = std::fs::read_to_string(&config.config_file).unwrap();
         assert!(!content.contains(&peer_id.to_string()));
+    }
+
+    #[test]
+    fn test_default_network_relay_settings() {
+        let (config, _temp_dir) = create_temp_config();
+
+        assert!(config.network.relay_enabled);
+        assert!(config.network.use_community_relays);
+        assert!(config.network.custom_relay_addresses.is_empty());
+    }
+
+    #[test]
+    fn test_file_transfer_defaults_disabled() {
+        let (config, _temp_dir) = create_temp_config();
+
+        assert!(!config.file_transfer.server.enabled);
+        assert!(!config.file_transfer.proxy_ftp.enabled);
+        assert!(!config.file_transfer.proxy_webdav.enabled);
+    }
+
+    #[test]
+    fn test_set_relay_enabled_persists() {
+        let (config, _temp_dir) = create_temp_config();
+
+        let updated = config.set_relay_enabled(false).unwrap();
+
+        assert!(!updated.network.relay_enabled);
+        let content = std::fs::read_to_string(&config.config_file).unwrap();
+        assert!(content.contains("relay_enabled = false"));
+    }
+
+    #[test]
+    fn test_set_use_community_relays_persists() {
+        let (config, _temp_dir) = create_temp_config();
+
+        let updated = config.set_use_community_relays(false).unwrap();
+
+        assert!(!updated.network.use_community_relays);
+        let content = std::fs::read_to_string(&config.config_file).unwrap();
+        assert!(content.contains("use_community_relays = false"));
+    }
+
+    #[test]
+    fn test_add_and_remove_custom_relay_address_persist() {
+        let (config, _temp_dir) = create_temp_config();
+        let address: Multiaddr =
+            "/ip4/127.0.0.1/tcp/30001/p2p/16Uiu2HAmGXFS6aYsKKYRkEDo1tNigZKN8TAYrsfSnEdC5sZLNkiE"
+                .parse()
+                .unwrap();
+
+        let updated = config.add_custom_relay_address(address.clone()).unwrap();
+        assert_eq!(
+            updated.network.custom_relay_addresses,
+            vec![address.clone()]
+        );
+
+        let deduped = updated.add_custom_relay_address(address.clone()).unwrap();
+        assert_eq!(
+            deduped.network.custom_relay_addresses,
+            vec![address.clone()]
+        );
+
+        let final_config = deduped.remove_custom_relay_address(&address).unwrap();
+        assert!(final_config.network.custom_relay_addresses.is_empty());
+
+        let content = std::fs::read_to_string(&config.config_file).unwrap();
+        assert!(!content.contains(&address.to_string()));
+    }
+
+    #[test]
+    fn test_effective_relay_addresses_follow_flags() {
+        let mut network = Network::default();
+        let community: Multiaddr =
+            "/ip4/10.0.0.1/tcp/30001/p2p/16Uiu2HAmGXFS6aYsKKYRkEDo1tNigZKN8TAYrsfSnEdC5sZLNkiE"
+                .parse()
+                .unwrap();
+        let custom: Multiaddr =
+            "/ip4/10.0.0.2/tcp/30001/p2p/16Uiu2HAmGXFS6aYsKKYRkEDo1tNigZKN8TAYrsfSnEdC5sZLNkiE"
+                .parse()
+                .unwrap();
+
+        network.custom_relay_addresses.push(custom.clone());
+
+        let effective = network.effective_relay_addresses(std::slice::from_ref(&community));
+        assert_eq!(effective.len(), 2);
+
+        network.use_community_relays = false;
+        let effective = network.effective_relay_addresses(std::slice::from_ref(&community));
+        assert_eq!(effective.len(), 1);
+        assert_eq!(effective[0].address, custom);
+
+        network.relay_enabled = false;
+        let effective = network.effective_relay_addresses(&[community]);
+        assert!(effective.is_empty());
     }
 
     #[test]

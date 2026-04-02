@@ -23,6 +23,7 @@ fn main() -> Result<()> {
         Commands::Daemon(args) => block_on(fungi_daemon::run(fungi_args.common.clone(), args))?,
         Commands::Init(args) => block_on(fungi_init::run(fungi_args.common, args))?,
         Commands::Relay(args) => block_on(fungi_relay::run(args))?,
+        Commands::RelayConfig(cmd) => block_on(execute_relay_config(fungi_args.common, cmd)),
 
         // control commands
         Commands::Info(cmd) => block_on(execute_info(fungi_args.common, cmd)),
