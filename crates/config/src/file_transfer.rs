@@ -47,7 +47,7 @@ pub struct FtpProxy {
 impl Default for FtpProxy {
     fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: false,
             host: "127.0.0.1".parse().unwrap(),
             port: DEFAULT_FTP_PORT,
         }
@@ -64,7 +64,7 @@ pub struct WebdavProxy {
 impl Default for WebdavProxy {
     fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: false,
             host: "127.0.0.1".parse().unwrap(),
             port: DEFAULT_WEBDAV_PORT,
         }

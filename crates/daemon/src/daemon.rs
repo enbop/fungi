@@ -129,14 +129,12 @@ impl FungiDaemon {
                 .collect(),
         );
 
-        let relay_addrs = match (
-            config.network.disable_relay,
-            config.network.custom_relay_addresses.is_empty(),
-        ) {
-            (true, _) => Vec::new(),
-            (false, true) => fungi_swarm::get_default_relay_addrs(),
-            (false, false) => config.network.custom_relay_addresses.clone(),
-        };
+        let relay_addrs = config
+            .network
+            .effective_relay_addresses(&fungi_swarm::get_default_relay_addrs())
+            .into_iter()
+            .map(|entry| entry.address)
+            .collect::<Vec<_>>();
         if relay_addrs.is_empty() {
             log::info!("Run without relay addresses");
         } else {

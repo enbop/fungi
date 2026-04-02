@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.1] - 2026-04-01
+
+### Changed
+
+- Relay configuration has been redesigned around a clearer positive model: `relay_enabled`, `use_community_relays`, and `custom_relay_addresses`.
+- This is a breaking config change. Older `disable_relay`-based config files are no longer the active model for relay behavior in this release.
+- Relay resolution now combines the community relay set and custom relay addresses explicitly, instead of treating custom relay addresses as an implicit full replacement path.
+
+### Added
+
+- New `fungi relay-config` command group for local relay configuration management.
+- New daemon gRPC relay configuration APIs for showing relay config, toggling relay usage, toggling community relays, and adding or removing custom relay addresses.
+- Relay config persistence helpers and unit coverage in `fungi-config`.
+- A real CLI smoke test covering offline relay config changes, online relay config changes through the daemon, and protection against later daemon-driven config writes overwriting relay updates.
+
+### Fixed
+
+- Local CLI daemon connection now verifies that the connected daemon belongs to the requested `--fungi-dir`, avoiding accidental writes against another local fungi daemon that happens to share the same RPC port.
+
 ## [0.6.0-preview] - 2026-03-15
 
 ### Changed
