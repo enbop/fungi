@@ -1,0 +1,6 @@
+Cargo.lock
+/target/
+**/*.rs.bk
+.vscode
+src/xml
+.idea

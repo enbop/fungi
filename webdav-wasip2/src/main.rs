@@ -56,19 +56,10 @@ async fn smoke_get(addr: SocketAddr) -> anyhow::Result<()> {
         .context("timed out connecting to webdav server")??;
 
     stream
-        .write_all(
-            b"GET /hello.txt HTTP/1.1
-Host: localhost
-Connection: close
-
-",
-        )
+        .write_all(b"GET /hello.txt HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
         .await
         .context("failed to write request")?;
-    stream
-        .shutdown()
-        .await
-        .context("failed to shutdown request stream")?;
+    stream.flush().await.context("failed to flush request")?;
 
     let mut response = Vec::new();
     timeout(Duration::from_secs(5), stream.read_to_end(&mut response))

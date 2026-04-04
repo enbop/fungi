@@ -1,7 +1,6 @@
 use std::time::SystemTime;
 
 use async_trait::async_trait;
-use typed_path::{Utf8Component, Utf8Path, Utf8PathBuf, Utf8UnixEncoding};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BackendError {
@@ -83,33 +82,24 @@ pub trait WebDavBackend: Clone + Send + Sync + 'static {
 }
 
 pub fn normalize_path(path: &str) -> Result<String> {
-    let unix_path = convert_string_to_utf8_unix_path_buf(path);
-    if unix_path
-        .components()
-        .any(|component| component.is_parent())
-    {
-        return Err(BackendError::InvalidPath {
-            path: path.to_string(),
-        });
+    let path = path.replace('\\', "/");
+    let mut normalized = Vec::new();
+
+    for component in path.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                return Err(BackendError::InvalidPath {
+                    path: path.to_string(),
+                });
+            }
+            other => normalized.push(other),
+        }
     }
 
-    let normalized = unix_path.normalize();
-    let trimmed = normalized.as_str().trim_matches('/');
-    if trimmed.is_empty() || trimmed == "." {
+    if normalized.is_empty() {
         Ok(String::new())
     } else {
-        Ok(trimmed.to_string())
-    }
-}
-
-fn convert_string_to_utf8_unix_path_buf(path: &str) -> Utf8PathBuf<Utf8UnixEncoding> {
-    #[cfg(windows)]
-    {
-        let windows_path = Utf8Path::<typed_path::Utf8WindowsEncoding>::new(path);
-        windows_path.with_encoding::<Utf8UnixEncoding>()
-    }
-    #[cfg(not(windows))]
-    {
-        Utf8Path::<Utf8UnixEncoding>::new(path).with_encoding()
+        Ok(normalized.join("/"))
     }
 }

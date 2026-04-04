@@ -1,0 +1,842 @@
+//! Local filesystem access.
+//!
+//! This implementation is stateless. So the easiest way to use it
+//! is to create a new instance in your handler every time
+//! you need one.
+
+use std::any::Any;
+use std::collections::VecDeque;
+use std::future::{self, Future};
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::mem;
+#[cfg(unix)]
+use std::os::unix::{
+    ffi::OsStrExt,
+    fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt},
+};
+#[cfg(target_os = "windows")]
+use std::os::windows::prelude::*;
+use std::path::{Path, PathBuf};
+use std::pin::Pin;
+use std::pin::pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use bytes::{Buf, Bytes, BytesMut};
+use futures_util::{FutureExt, Stream, future::BoxFuture};
+use tokio::task;
+
+use libc;
+use reflink_copy::reflink_or_copy;
+
+use crate::davpath::DavPath;
+use crate::fs::*;
+use crate::localfs_macos::DUCacheBuilder;
+
+// Run some code via block_in_place() or spawn_blocking().
+//
+// There's also a method on LocalFs for this, use the freestanding
+// function if you do not want the fs_access_guard() closure to be used.
+#[cfg(feature = "localfs")]
+#[inline]
+async fn blocking<F, R>(func: F) -> R
+where
+    F: FnOnce() -> R,
+    F: Send + 'static,
+    R: Send + 'static,
+{
+    match tokio::runtime::Handle::current().runtime_flavor() {
+        tokio::runtime::RuntimeFlavor::MultiThread => task::block_in_place(func),
+        _ => task::spawn_blocking(func).await.unwrap(),
+    }
+}
+
+#[derive(Debug, Clone)]
+struct LocalFsMetaData(std::fs::Metadata);
+
+/// Local Filesystem implementation.
+#[derive(Clone)]
+pub struct LocalFs {
+    pub(crate) inner: Arc<LocalFsInner>,
+}
+
+// inner struct.
+pub(crate) struct LocalFsInner {
+    pub basedir: PathBuf,
+    #[allow(dead_code)]
+    pub public: bool,
+    pub case_insensitive: bool,
+    pub macos: bool,
+    pub is_file: bool,
+    pub fs_access_guard: Option<Box<dyn Fn() -> Box<dyn Any> + Send + Sync + 'static>>,
+}
+
+#[derive(Debug)]
+struct LocalFsFile {
+    file: Option<std::fs::File>,
+    buf: BytesMut,
+}
+
+struct LocalFsReadDir {
+    fs: LocalFs,
+    do_meta: ReadDirMeta,
+    buffer: VecDeque<io::Result<LocalFsDirEntry>>,
+    dir_cache: Option<DUCacheBuilder>,
+    iterator: Option<std::fs::ReadDir>,
+    fut: Option<BoxFuture<'static, ReadDirBatch>>,
+}
+
+// a DirEntry either already has the metadata available, or a handle
+// to the filesystem so it can call fs.blocking()
+enum Meta {
+    Data(io::Result<std::fs::Metadata>),
+    Fs(LocalFs),
+}
+
+/// Helper function to create directory on basedir
+#[allow(unused)]
+fn helper_create_directory(basedir: &Path, _new_dir_name: &str) {
+    let new_path = basedir.join(_new_dir_name);
+    std::fs::create_dir_all(&new_path)
+        .expect("Failed to create default CalDAV directory; verify that 'basedir' is correct.");
+}
+
+// Items from the readdir stream.
+struct LocalFsDirEntry {
+    meta: Meta,
+    entry: std::fs::DirEntry,
+}
+
+impl LocalFs {
+    /// Create a new LocalFs DavFileSystem, serving "base".
+    ///
+    /// If "public" is set to true, all files and directories created will be
+    /// publically readable (mode 644/755), otherwise they will be private
+    /// (mode 600/700). Umask still overrides this.
+    ///
+    /// If "case_insensitive" is set to true, all filesystem lookups will
+    /// be case insensitive. Note that this has a _lot_ of overhead!
+    pub fn new<P: AsRef<Path>>(
+        base: P,
+        public: bool,
+        case_insensitive: bool,
+        macos: bool,
+    ) -> Box<LocalFs> {
+        let basedir = base.as_ref().to_path_buf();
+
+        #[cfg(feature = "caldav")]
+        helper_create_directory(&basedir, crate::caldav::DEFAULT_CALDAV_NAME);
+
+        #[cfg(feature = "carddav")]
+        helper_create_directory(&basedir, crate::carddav::DEFAULT_CARDDAV_NAME);
+
+        let inner = LocalFsInner {
+            basedir,
+            public,
+            macos,
+            case_insensitive,
+            is_file: false,
+            fs_access_guard: None,
+        };
+        Box::new({
+            LocalFs {
+                inner: Arc::new(inner),
+            }
+        })
+    }
+
+    /// Create a new LocalFs DavFileSystem, serving "file".
+    ///
+    /// This is like `new()`, but it always serves this single file.
+    /// The request path is ignored.
+    pub fn new_file<P: AsRef<Path>>(file: P, public: bool) -> Box<LocalFs> {
+        let inner = LocalFsInner {
+            basedir: file.as_ref().to_path_buf(),
+            public,
+            macos: false,
+            case_insensitive: false,
+            is_file: true,
+            fs_access_guard: None,
+        };
+        Box::new({
+            LocalFs {
+                inner: Arc::new(inner),
+            }
+        })
+    }
+
+    // Like new() but pass in a fs_access_guard hook.
+    #[doc(hidden)]
+    pub fn new_with_fs_access_guard<P: AsRef<Path>>(
+        base: P,
+        public: bool,
+        case_insensitive: bool,
+        macos: bool,
+        fs_access_guard: Option<Box<dyn Fn() -> Box<dyn Any> + Send + Sync + 'static>>,
+    ) -> Box<LocalFs> {
+        let basedir = base.as_ref().to_path_buf();
+
+        #[cfg(feature = "caldav")]
+        helper_create_directory(&basedir, crate::caldav::DEFAULT_CALDAV_NAME);
+
+        #[cfg(feature = "carddav")]
+        helper_create_directory(&basedir, crate::carddav::DEFAULT_CARDDAV_NAME);
+
+        let inner = LocalFsInner {
+            basedir,
+            public,
+            macos,
+            case_insensitive,
+            is_file: false,
+            fs_access_guard,
+        };
+        Box::new({
+            LocalFs {
+                inner: Arc::new(inner),
+            }
+        })
+    }
+
+    fn fspath_dbg(&self, path: &DavPath) -> PathBuf {
+        let mut pathbuf = self.inner.basedir.clone();
+        if !self.inner.is_file {
+            pathbuf.push(path.as_rel_ospath());
+        }
+        pathbuf
+    }
+
+    fn fspath(&self, path: &DavPath) -> PathBuf {
+        if self.inner.case_insensitive {
+            crate::localfs_windows::resolve(&self.inner.basedir, path)
+        } else {
+            let mut pathbuf = self.inner.basedir.clone();
+            if !self.inner.is_file {
+                pathbuf.push(path.as_rel_ospath());
+            }
+            pathbuf
+        }
+    }
+
+    // threadpool::blocking() adapter, also runs the before/after hooks.
+    #[doc(hidden)]
+    pub async fn blocking<F, R>(&self, func: F) -> R
+    where
+        F: FnOnce() -> R + Send + 'static,
+        R: Send + 'static,
+    {
+        let this = self.clone();
+        blocking(move || {
+            let _guard = this.inner.fs_access_guard.as_ref().map(|f| f());
+            func()
+        })
+        .await
+    }
+}
+
+// This implementation is basically a bunch of boilerplate to
+// wrap the std::fs call in self.blocking() calls.
+impl DavFileSystem for LocalFs {
+    fn metadata<'a>(&'a self, davpath: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
+        async move {
+            if let Some(meta) = self.is_virtual(davpath) {
+                return Ok(meta);
+            }
+            let path = self.fspath(davpath);
+            if self.is_notfound(&path) {
+                return Err(FsError::NotFound);
+            }
+            self.blocking(move || match std::fs::metadata(path) {
+                Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<dyn DavMetaData>),
+                Err(e) => Err(e.into()),
+            })
+            .await
+        }
+        .boxed()
+    }
+
+    fn symlink_metadata<'a>(&'a self, davpath: &'a DavPath) -> FsFuture<'a, Box<dyn DavMetaData>> {
+        async move {
+            if let Some(meta) = self.is_virtual(davpath) {
+                return Ok(meta);
+            }
+            let path = self.fspath(davpath);
+            if self.is_notfound(&path) {
+                return Err(FsError::NotFound);
+            }
+            self.blocking(move || match std::fs::symlink_metadata(path) {
+                Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<dyn DavMetaData>),
+                Err(e) => Err(e.into()),
+            })
+            .await
+        }
+        .boxed()
+    }
+
+    // read_dir is a bit more involved - but not much - than a simple wrapper,
+    // because it returns a stream.
+    fn read_dir<'a>(
+        &'a self,
+        davpath: &'a DavPath,
+        meta: ReadDirMeta,
+    ) -> FsFuture<'a, FsStream<Box<dyn DavDirEntry>>> {
+        async move {
+            trace!("FS: read_dir {:?}", self.fspath_dbg(davpath));
+            let path = self.fspath(davpath);
+            let path2 = path.clone();
+            let iter = self.blocking(move || std::fs::read_dir(&path)).await;
+            match iter {
+                Ok(iterator) => {
+                    let strm = LocalFsReadDir {
+                        fs: self.clone(),
+                        do_meta: meta,
+                        buffer: VecDeque::new(),
+                        dir_cache: self.dir_cache_builder(path2),
+                        iterator: Some(iterator),
+                        fut: None,
+                    };
+                    Ok(Box::pin(strm) as FsStream<Box<dyn DavDirEntry>>)
+                }
+                Err(e) => Err(e.into()),
+            }
+        }
+        .boxed()
+    }
+
+    fn open<'a>(
+        &'a self,
+        path: &'a DavPath,
+        options: OpenOptions,
+    ) -> FsFuture<'a, Box<dyn DavFile>> {
+        async move {
+            trace!("FS: open {:?}", self.fspath_dbg(path));
+            if self.is_forbidden(path) {
+                return Err(FsError::Forbidden);
+            }
+            #[cfg(unix)]
+            let mode = if self.inner.public { 0o644 } else { 0o600 };
+            let path = self.fspath(path);
+            self.blocking(move || {
+                #[cfg(unix)]
+                let res = std::fs::OpenOptions::new()
+                    .read(options.read)
+                    .write(options.write)
+                    .append(options.append)
+                    .truncate(options.truncate)
+                    .create(options.create)
+                    .create_new(options.create_new)
+                    .mode(mode)
+                    .open(path);
+                #[cfg(windows)]
+                let res = std::fs::OpenOptions::new()
+                    .read(options.read)
+                    .write(options.write)
+                    .append(options.append)
+                    .truncate(options.truncate)
+                    .create(options.create)
+                    .create_new(options.create_new)
+                    .open(path);
+                match res {
+                    Ok(file) => Ok(Box::new(LocalFsFile {
+                        file: Some(file),
+                        buf: BytesMut::new(),
+                    }) as Box<dyn DavFile>),
+                    Err(e) => Err(e.into()),
+                }
+            })
+            .await
+        }
+        .boxed()
+    }
+
+    fn create_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
+        async move {
+            trace!("FS: create_dir {:?}", self.fspath_dbg(path));
+            if self.is_forbidden(path) {
+                return Err(FsError::Forbidden);
+            }
+            #[cfg(unix)]
+            let mode = if self.inner.public { 0o755 } else { 0o700 };
+            let path = self.fspath(path);
+            self.blocking(move || {
+                #[cfg(unix)]
+                {
+                    std::fs::DirBuilder::new()
+                        .mode(mode)
+                        .create(path)
+                        .map_err(|e| e.into())
+                }
+                #[cfg(windows)]
+                {
+                    std::fs::DirBuilder::new()
+                        .create(path)
+                        .map_err(|e| e.into())
+                }
+            })
+            .await
+        }
+        .boxed()
+    }
+
+    fn remove_dir<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
+        async move {
+            trace!("FS: remove_dir {:?}", self.fspath_dbg(path));
+            let path = self.fspath(path);
+            self.blocking(move || std::fs::remove_dir(path).map_err(|e| e.into()))
+                .await
+        }
+        .boxed()
+    }
+
+    fn remove_file<'a>(&'a self, path: &'a DavPath) -> FsFuture<'a, ()> {
+        async move {
+            trace!("FS: remove_file {:?}", self.fspath_dbg(path));
+            if self.is_forbidden(path) {
+                return Err(FsError::Forbidden);
+            }
+            let path = self.fspath(path);
+            self.blocking(move || std::fs::remove_file(path).map_err(|e| e.into()))
+                .await
+        }
+        .boxed()
+    }
+
+    fn rename<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<'a, ()> {
+        async move {
+            trace!(
+                "FS: rename {:?} {:?}",
+                self.fspath_dbg(from),
+                self.fspath_dbg(to)
+            );
+            if self.is_forbidden(from) || self.is_forbidden(to) {
+                return Err(FsError::Forbidden);
+            }
+            let frompath = self.fspath(from);
+            let topath = self.fspath(to);
+            self.blocking(move || {
+                match std::fs::rename(&frompath, &topath) {
+                    Ok(v) => Ok(v),
+                    Err(e) => {
+                        // webdav allows a rename from a directory to a file.
+                        // note that this check is racy, and I'm not quite sure what
+                        // we should do if the source is a symlink. anyway ...
+                        if e.raw_os_error() == Some(libc::ENOTDIR) && frompath.is_dir() {
+                            // remove and try again.
+                            let _ = std::fs::remove_file(&topath);
+                            std::fs::rename(frompath, topath).map_err(|e| e.into())
+                        } else {
+                            Err(e.into())
+                        }
+                    }
+                }
+            })
+            .await
+        }
+        .boxed()
+    }
+
+    fn copy<'a>(&'a self, from: &'a DavPath, to: &'a DavPath) -> FsFuture<'a, ()> {
+        async move {
+            trace!(
+                "FS: copy {:?} {:?}",
+                self.fspath_dbg(from),
+                self.fspath_dbg(to)
+            );
+            if self.is_forbidden(from) || self.is_forbidden(to) {
+                return Err(FsError::Forbidden);
+            }
+            let path_from = self.fspath(from);
+            let path_to = self.fspath(to);
+
+            match self
+                .blocking(move || reflink_or_copy(path_from, path_to))
+                .await
+            {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    debug!(
+                        "copy({:?}, {:?}) failed: {}",
+                        self.fspath_dbg(from),
+                        self.fspath_dbg(to),
+                        e
+                    );
+                    Err(e.into())
+                }
+            }
+        }
+        .boxed()
+    }
+}
+
+// read_batch() result.
+struct ReadDirBatch {
+    iterator: Option<std::fs::ReadDir>,
+    buffer: VecDeque<io::Result<LocalFsDirEntry>>,
+}
+
+// Read the next batch of LocalFsDirEntry structs (up to 256).
+// This is sync code, must be run in `blocking()`.
+fn read_batch(
+    iterator: Option<std::fs::ReadDir>,
+    fs: LocalFs,
+    do_meta: ReadDirMeta,
+) -> ReadDirBatch {
+    let mut buffer = VecDeque::new();
+    let mut iterator = match iterator {
+        Some(i) => i,
+        None => {
+            return ReadDirBatch {
+                buffer,
+                iterator: None,
+            };
+        }
+    };
+    let _guard = match do_meta {
+        ReadDirMeta::None => None,
+        _ => fs.inner.fs_access_guard.as_ref().map(|f| f()),
+    };
+    for _ in 0..256 {
+        match iterator.next() {
+            Some(Ok(entry)) => {
+                let meta = match do_meta {
+                    ReadDirMeta::Data => Meta::Data(std::fs::metadata(entry.path())),
+                    ReadDirMeta::DataSymlink => Meta::Data(entry.metadata()),
+                    ReadDirMeta::None => Meta::Fs(fs.clone()),
+                };
+                let d = LocalFsDirEntry { meta, entry };
+                buffer.push_back(Ok(d))
+            }
+            Some(Err(e)) => {
+                buffer.push_back(Err(e));
+                break;
+            }
+            None => break,
+        }
+    }
+    ReadDirBatch {
+        buffer,
+        iterator: Some(iterator),
+    }
+}
+
+impl LocalFsReadDir {
+    // Create a future that calls read_batch().
+    //
+    // The 'iterator' is moved into the future, and returned when it completes,
+    // together with a list of directory entries.
+    fn read_batch(&mut self) -> BoxFuture<'static, ReadDirBatch> {
+        let iterator = self.iterator.take();
+        let fs = self.fs.clone();
+        let do_meta = self.do_meta;
+
+        let fut: BoxFuture<ReadDirBatch> =
+            blocking(move || read_batch(iterator, fs, do_meta)).boxed();
+        fut
+    }
+}
+
+// The stream implementation tries to be smart and batch I/O operations
+impl Stream for LocalFsReadDir {
+    type Item = FsResult<Box<dyn DavDirEntry>>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = Pin::into_inner(self);
+
+        // If the buffer is empty, fill it.
+        if this.buffer.is_empty() {
+            // If we have no pending future, create one.
+            if this.fut.is_none() {
+                if this.iterator.is_none() {
+                    return Poll::Ready(None);
+                }
+                this.fut = Some(this.read_batch());
+            }
+
+            // Poll the future.
+            let mut fut = pin!(this.fut.as_mut().unwrap());
+            match Pin::new(&mut fut).poll(cx) {
+                Poll::Ready(batch) => {
+                    this.fut.take();
+                    if let Some(ref mut nb) = this.dir_cache {
+                        batch.buffer.iter().for_each(|e| {
+                            if let Ok(e) = e {
+                                nb.add(e.entry.file_name());
+                            }
+                        });
+                    }
+                    this.buffer = batch.buffer;
+                    this.iterator = batch.iterator;
+                }
+                Poll::Pending => return Poll::Pending,
+            }
+        }
+
+        // we filled the buffer, now pop from the buffer.
+        match this.buffer.pop_front() {
+            Some(Ok(item)) => Poll::Ready(Some(Ok(Box::new(item)))),
+            Some(Err(err)) => {
+                // fuse the iterator.
+                this.iterator.take();
+                // finish the cache.
+                if let Some(ref mut nb) = this.dir_cache {
+                    nb.finish();
+                }
+                // return error of stream.
+                Poll::Ready(Some(Err(err.into())))
+            }
+            None => {
+                // fuse the iterator.
+                this.iterator.take();
+                // finish the cache.
+                if let Some(ref mut nb) = this.dir_cache {
+                    nb.finish();
+                }
+                // return end-of-stream.
+                Poll::Ready(None)
+            }
+        }
+    }
+}
+
+enum Is {
+    File,
+    Dir,
+    Symlink,
+}
+
+impl LocalFsDirEntry {
+    async fn is_a(&self, is: Is) -> FsResult<bool> {
+        match self.meta {
+            Meta::Data(Ok(ref meta)) => Ok(match is {
+                Is::File => meta.file_type().is_file(),
+                Is::Dir => meta.file_type().is_dir(),
+                Is::Symlink => meta.file_type().is_symlink(),
+            }),
+            Meta::Data(Err(ref e)) => Err(e.into()),
+            Meta::Fs(ref fs) => {
+                let fullpath = self.entry.path();
+                let ft = fs
+                    .blocking(move || std::fs::metadata(&fullpath))
+                    .await?
+                    .file_type();
+                Ok(match is {
+                    Is::File => ft.is_file(),
+                    Is::Dir => ft.is_dir(),
+                    Is::Symlink => ft.is_symlink(),
+                })
+            }
+        }
+    }
+}
+
+impl DavDirEntry for LocalFsDirEntry {
+    fn metadata(&'_ self) -> FsFuture<'_, Box<dyn DavMetaData>> {
+        match self.meta {
+            Meta::Data(ref meta) => {
+                let m = match meta {
+                    Ok(meta) => Ok(Box::new(LocalFsMetaData(meta.clone())) as Box<dyn DavMetaData>),
+                    Err(e) => Err(e.into()),
+                };
+                Box::pin(future::ready(m))
+            }
+            Meta::Fs(ref fs) => {
+                let fullpath = self.entry.path();
+                fs.blocking(move || match std::fs::metadata(&fullpath) {
+                    Ok(meta) => Ok(Box::new(LocalFsMetaData(meta)) as Box<dyn DavMetaData>),
+                    Err(e) => Err(e.into()),
+                })
+                .boxed()
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    fn name(&self) -> Vec<u8> {
+        self.entry.file_name().as_bytes().to_vec()
+    }
+
+    #[cfg(windows)]
+    fn name(&self) -> Vec<u8> {
+        self.entry.file_name().to_str().unwrap().as_bytes().to_vec()
+    }
+
+    fn is_dir(&'_ self) -> FsFuture<'_, bool> {
+        Box::pin(self.is_a(Is::Dir))
+    }
+
+    fn is_file(&'_ self) -> FsFuture<'_, bool> {
+        Box::pin(self.is_a(Is::File))
+    }
+
+    fn is_symlink(&'_ self) -> FsFuture<'_, bool> {
+        Box::pin(self.is_a(Is::Symlink))
+    }
+}
+
+impl DavFile for LocalFsFile {
+    fn metadata(&'_ mut self) -> FsFuture<'_, Box<dyn DavMetaData>> {
+        async move {
+            let file = self.file.take().unwrap();
+            let (meta, file) = blocking(move || (file.metadata(), file)).await;
+            self.file = Some(file);
+            Ok(Box::new(LocalFsMetaData(meta?)) as Box<dyn DavMetaData>)
+        }
+        .boxed()
+    }
+
+    fn write_bytes(&'_ mut self, buf: Bytes) -> FsFuture<'_, ()> {
+        async move {
+            let mut file = self.file.take().unwrap();
+            let (res, file) = blocking(move || (file.write_all(&buf), file)).await;
+            self.file = Some(file);
+            res.map_err(|e| e.into())
+        }
+        .boxed()
+    }
+
+    fn write_buf(&'_ mut self, mut buf: Box<dyn Buf + Send>) -> FsFuture<'_, ()> {
+        async move {
+            let mut file = self.file.take().unwrap();
+            let (res, file) = blocking(move || {
+                while buf.remaining() > 0 {
+                    let n = match file.write(buf.chunk()) {
+                        Ok(n) => n,
+                        Err(e) => return (Err(e), file),
+                    };
+                    buf.advance(n);
+                }
+                (Ok(()), file)
+            })
+            .await;
+            self.file = Some(file);
+            res.map_err(|e| e.into())
+        }
+        .boxed()
+    }
+
+    fn read_bytes(&'_ mut self, count: usize) -> FsFuture<'_, Bytes> {
+        async move {
+            let mut file = self.file.take().unwrap();
+            let mut buf = mem::take(&mut self.buf);
+            let (res, file, buf) = blocking(move || {
+                buf.reserve(count);
+                let res = unsafe {
+                    buf.set_len(count);
+                    file.read(&mut buf).map(|n| {
+                        buf.set_len(n);
+                        buf.split().freeze()
+                    })
+                };
+                (res, file, buf)
+            })
+            .await;
+            self.file = Some(file);
+            self.buf = buf;
+            res.map_err(|e| e.into())
+        }
+        .boxed()
+    }
+
+    fn seek(&'_ mut self, pos: SeekFrom) -> FsFuture<'_, u64> {
+        async move {
+            let mut file = self.file.take().unwrap();
+            let (res, file) = blocking(move || (file.seek(pos), file)).await;
+            self.file = Some(file);
+            res.map_err(|e| e.into())
+        }
+        .boxed()
+    }
+
+    fn flush(&'_ mut self) -> FsFuture<'_, ()> {
+        async move {
+            let mut file = self.file.take().unwrap();
+            let (res, file) = blocking(move || (file.flush(), file)).await;
+            self.file = Some(file);
+            res.map_err(|e| e.into())
+        }
+        .boxed()
+    }
+}
+
+impl DavMetaData for LocalFsMetaData {
+    fn len(&self) -> u64 {
+        self.0.len()
+    }
+    fn created(&self) -> FsResult<SystemTime> {
+        self.0.created().map_err(|e| e.into())
+    }
+    fn modified(&self) -> FsResult<SystemTime> {
+        self.0.modified().map_err(|e| e.into())
+    }
+    fn accessed(&self) -> FsResult<SystemTime> {
+        self.0.accessed().map_err(|e| e.into())
+    }
+
+    #[cfg(unix)]
+    fn status_changed(&self) -> FsResult<SystemTime> {
+        Ok(UNIX_EPOCH + Duration::new(self.0.ctime() as u64, 0))
+    }
+
+    #[cfg(windows)]
+    fn status_changed(&self) -> FsResult<SystemTime> {
+        Ok(UNIX_EPOCH + Duration::from_nanos(self.0.creation_time() - 116444736000000000))
+    }
+
+    fn is_dir(&self) -> bool {
+        self.0.is_dir()
+    }
+    fn is_file(&self) -> bool {
+        self.0.is_file()
+    }
+    fn is_symlink(&self) -> bool {
+        self.0.file_type().is_symlink()
+    }
+    #[cfg(feature = "caldav")]
+    fn is_calendar(&self, path: &DavPath) -> bool {
+        crate::caldav::is_path_in_caldav_directory(path)
+    }
+    #[cfg(feature = "carddav")]
+    fn is_addressbook(&self, path: &DavPath) -> bool {
+        crate::carddav::is_path_in_carddav_directory(path)
+    }
+
+    #[cfg(unix)]
+    fn executable(&self) -> FsResult<bool> {
+        if self.0.is_file() {
+            return Ok((self.0.permissions().mode() & 0o100) > 0);
+        }
+        Err(FsError::NotImplemented)
+    }
+
+    #[cfg(windows)]
+    fn executable(&self) -> FsResult<bool> {
+        // FIXME: implement
+        Err(FsError::NotImplemented)
+    }
+
+    // same as the default apache etag.
+    #[cfg(unix)]
+    fn etag(&self) -> Option<String> {
+        let modified = self.0.modified().ok()?;
+        let t = modified.duration_since(UNIX_EPOCH).ok()?;
+        let t = t.as_secs() * 1000000 + t.subsec_nanos() as u64 / 1000;
+        if self.is_file() {
+            Some(format!("{:x}-{:x}-{:x}", self.0.ino(), self.0.len(), t))
+        } else {
+            Some(format!("{:x}-{:x}", self.0.ino(), t))
+        }
+    }
+
+    // same as the default apache etag.
+    #[cfg(windows)]
+    fn etag(&self) -> Option<String> {
+        let modified = self.0.modified().ok()?;
+        let t = modified.duration_since(UNIX_EPOCH).ok()?;
+        let t = t.as_secs() * 1000000 + t.subsec_nanos() as u64 / 1000;
+        if self.is_file() {
+            Some(format!("{:x}-{:x}", self.0.len(), t))
+        } else {
+            Some(format!("{:x}", t))
+        }
+    }
+}
