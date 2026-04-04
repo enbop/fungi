@@ -25,7 +25,7 @@ pub use ft_service::{FtServiceCommands, execute_ft_service};
 pub use info::{InfoCommands, execute_info};
 pub use peer::{PeerCommands, execute_peer};
 pub use ping::execute_ping;
-pub use relay_config::{RelayConfigCommands, execute_relay_config};
+pub use relay_config::{RelayCommands, execute_relay};
 pub use security::{SecurityCommands, execute_security};
 pub use service::{ServiceCommands, execute_service};
 pub use shared::PeerInput;

@@ -57,15 +57,12 @@ impl FungiDir for CommonArgs {
 pub enum Commands {
     /// Initialize a Fungi configuration, and generate a keypair
     Init(fungi_init::InitArgs),
-    /// Start a Fungi daemon
-    ///
-    Daemon(fungi_daemon::DaemonArgs),
-    /// Start a simple Fungi relay server
-    Relay(fungi_relay::RelayArgs),
+    /// Start a Fungi daemon or daemon-managed background services
+    Daemon(fungi_daemon::DaemonCommandArgs),
 
     /// Manage relay configuration for the local daemon
     #[command(subcommand)]
-    RelayConfig(fungi_control::RelayConfigCommands),
+    Relay(fungi_control::RelayCommands),
 
     /// Show daemon information
     #[command(subcommand)]
