@@ -1819,14 +1819,12 @@ version = "0.6.1"
 dependencies = [
  "anyhow",
  "futures",
- "interprocess",
  "libp2p-identity",
  "libp2p-swarm",
  "log",
  "serde",
  "sysinfo",
  "tokio",
- "tokio-util",
 ]
 
 [[package]]

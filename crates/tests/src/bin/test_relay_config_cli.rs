@@ -60,7 +60,7 @@ fn main() -> Result<()> {
     assert_contains(&config_text, "19001")?;
 
     drop(daemon);
-    println!("Relay CLI smoke test passed.");
+    println!("Relay config CLI smoke test passed.");
     Ok(())
 }
 

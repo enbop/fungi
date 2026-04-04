@@ -1,99 +1,31 @@
-use fungi_config::FungiConfig;
-use fungi_daemon::FungiDaemon;
-use libp2p::identity::Keypair;
-use tempfile::TempDir;
-
-const CLIENT_TCP_PORT: u16 = 50030;
-const SERVER_TCP_PORT: u16 = 50040;
+use fungi_daemon::test_support::{TestDaemon, spawn_connected_pair};
+use std::time::Duration;
 
 // Create client and server daemons for TCP tunneling testing
-async fn create_tcp_tunneling_daemons() -> (FungiDaemon, FungiDaemon, TempDir, TempDir) {
-    let client_key = Keypair::generate_secp256k1();
-    let server_key = Keypair::generate_secp256k1();
-
-    let client_peer_id = client_key.public().to_peer_id();
-    let _server_peer_id = server_key.public().to_peer_id();
-
-    let client_temp_dir = TempDir::new().unwrap();
-    let server_temp_dir = TempDir::new().unwrap();
-
-    // Server config
-    let mut server_config = FungiConfig::apply_from_dir(server_temp_dir.path()).unwrap();
-    server_config
-        .network
-        .incoming_allowed_peers
-        .push(client_peer_id);
-    server_config.network.listen_tcp_port = SERVER_TCP_PORT;
-    server_config.network.listen_udp_port = SERVER_TCP_PORT + 1000;
-
-    // Disable other services
-    server_config.file_transfer.server.enabled = false;
-    server_config.file_transfer.proxy_ftp.enabled = false;
-    server_config.file_transfer.proxy_webdav.enabled = false;
-
-    // Client config
-    let mut client_config = FungiConfig::apply_from_dir(client_temp_dir.path()).unwrap();
-    client_config.network.listen_tcp_port = CLIENT_TCP_PORT;
-    client_config.network.listen_udp_port = CLIENT_TCP_PORT + 1000;
-
-    // Disable other services
-    client_config.file_transfer.server.enabled = false;
-    client_config.file_transfer.proxy_ftp.enabled = false;
-    client_config.file_transfer.proxy_webdav.enabled = false;
-
-    let client_daemon = FungiDaemon::start_with(
-        Default::default(),
-        client_config,
-        client_key,
-        Default::default(),
-    )
-    .await
-    .expect("Failed to start client daemon");
-
-    let server_daemon = FungiDaemon::start_with(
-        Default::default(),
-        server_config,
-        server_key,
-        Default::default(),
-    )
-    .await
-    .expect("Failed to start server daemon");
-
-    // Connect client to server
-    let server_peer_id = server_daemon.swarm_control().local_peer_id();
-    let server_addr = format!("/ip4/127.0.0.1/tcp/{SERVER_TCP_PORT}/p2p/{server_peer_id}");
+async fn create_tcp_tunneling_daemons() -> (TestDaemon, TestDaemon) {
+    let (client_daemon, server_daemon) = spawn_connected_pair()
+        .await
+        .expect("Failed to create daemon pair");
 
     client_daemon
-        .swarm_control()
-        .invoke_swarm(move |swarm| {
-            swarm.add_peer_address(server_peer_id, server_addr.parse().unwrap())
-        })
+        .connect_to(&server_daemon)
         .await
-        .expect("Failed to add server address to client");
+        .expect("Failed to connect client to server");
+    client_daemon
+        .wait_connected(server_daemon.peer_id(), Duration::from_secs(5))
+        .await
+        .expect("Client did not observe the server connection");
+    server_daemon
+        .wait_connected(client_daemon.peer_id(), Duration::from_secs(5))
+        .await
+        .expect("Server did not observe the client connection");
 
-    // server_daemon
-    //     .swarm_control()
-    //     .listen_relay(get_default_relay_addr())
-    //     .await
-    //     .unwrap();
+    println!("✅ Client daemon started on port {}", client_daemon.tcp_port);
+    println!("✅ Server daemon started on port {}", server_daemon.tcp_port);
+    println!("✅ Client peer ID: {}", client_daemon.peer_id());
+    println!("✅ Server peer ID: {}", server_daemon.peer_id());
 
-    println!("✅ Client Daemon started on port {CLIENT_TCP_PORT}");
-    println!("✅ Server Daemon started on port {SERVER_TCP_PORT}");
-    println!(
-        "✅ Client peer ID: {}",
-        client_daemon.swarm_control().local_peer_id()
-    );
-    println!(
-        "✅ Server peer ID: {}",
-        server_daemon.swarm_control().local_peer_id()
-    );
-
-    (
-        client_daemon,
-        server_daemon,
-        client_temp_dir,
-        server_temp_dir,
-    )
+    (client_daemon, server_daemon)
 }
 
 #[tokio::main]
@@ -103,15 +35,15 @@ async fn main() {
     println!("🚀 Starting TCP Tunneling Test Program");
     println!("=======================================");
 
-    let (client_daemon, server_daemon, _client_temp, _server_temp) =
-        create_tcp_tunneling_daemons().await;
+    let (client_daemon, server_daemon) = create_tcp_tunneling_daemons().await;
 
-    let server_peer_id = server_daemon.swarm_control().local_peer_id();
+    let server_peer_id = server_daemon.peer_id();
 
     println!("🔧 Setting up test tunneling rules...");
 
     // Add a listening rule on server (port 8888 -> tunneled traffic)
     match server_daemon
+        .daemon()
         .add_tcp_listening_rule("127.0.0.1".to_string(), 8888, vec![])
         .await
     {
@@ -124,6 +56,7 @@ async fn main() {
 
     // Add a forwarding rule on client (port 7777 -> server:8888)
     match client_daemon
+        .daemon()
         .add_tcp_forwarding_rule(
             "127.0.0.1".to_string(),
             7777,
@@ -145,11 +78,11 @@ async fn main() {
     println!("📋 Test Setup:");
     println!(
         "   Client peer ID: {}",
-        client_daemon.swarm_control().local_peer_id()
+        client_daemon.peer_id()
     );
     println!("   Server peer ID: {server_peer_id}");
-    println!("   Client TCP port: {CLIENT_TCP_PORT}");
-    println!("   Server TCP port: {SERVER_TCP_PORT}");
+    println!("   Client TCP port: {}", client_daemon.tcp_port);
+    println!("   Server TCP port: {}", server_daemon.tcp_port);
     println!();
     println!("🧪 How to Test:");
     println!("   1. Start a server on the server side: nc -l 8888");

@@ -13,8 +13,6 @@ futures = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
-interprocess = { workspace = true }
-tokio-util = { version = "0.7", features = ["compat"] }
 serde = { workspace = true }
 anyhow = { workspace = true }
 sysinfo = "0.35.2"
