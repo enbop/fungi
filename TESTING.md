@@ -47,20 +47,12 @@ when a test needs to inspect restarted state from a persisted directory.
 
 ---
 
-## What to test (and what not to)
+## What to test
 
-**Test behaviour, not defaults.**  A test that only asserts a struct's default field value
-will break whenever that default is intentionally changed — it gives no signal about whether
-the feature works.  Write tests that exercise a code path:
-
-```rust
-// ❌ fragile — breaks on any intentional default change
-assert_eq!(network.idle_connection_timeout_secs, 300);
-
-// ✅ tests the actual behaviour
-network.relay_enabled = false;
-assert!(network.effective_relay_addresses(&community).is_empty());
-```
+**Prefer observable outcomes over implementation details.**  Tests are most useful when they
+validate a user-visible result, a persisted invariant, or an error contract.  Be cautious about
+assertions that only lock in internal representation or incidental values unless compatibility
+depends on them.
 
 **Smoke before unit.**  For any new component, start with a single smoke test that confirms
 it boots/parses/runs, then add focused tests for non-obvious paths.

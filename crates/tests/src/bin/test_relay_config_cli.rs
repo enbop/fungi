@@ -14,10 +14,10 @@ fn main() -> Result<()> {
     let ctx = RelayTestContext::new()?;
 
     println!("=== Offline relay config ===");
-    let output = ctx.run_cli(["relay-config", "disable"])?;
+    let output = ctx.run_cli(["relay", "disable"])?;
     assert_contains(&output, "Relay disabled")?;
 
-    let offline_show = ctx.run_cli(["relay-config", "show"])?;
+    let offline_show = ctx.run_cli(["relay", "show"])?;
     assert_contains(&offline_show, "relay_enabled: false")?;
     assert_contains(&offline_show, "effective_relay_addresses:")?;
     assert_contains(&offline_show, "  <none>")?;
@@ -32,14 +32,14 @@ fn main() -> Result<()> {
     let daemon = DaemonProcess::start(ctx.fungi_dir())?;
 
     println!("=== Online relay config via daemon ===");
-    let output = ctx.run_cli(["relay-config", "enable"])?;
+    let output = ctx.run_cli(["relay", "enable"])?;
     assert_contains(&output, "Relay enabled")?;
     assert_contains(&output, "Restart daemon to fully apply changes")?;
 
-    let output = ctx.run_cli(["relay-config", "use-community", "off"])?;
+    let output = ctx.run_cli(["relay", "use-community", "off"])?;
     assert_contains(&output, "Community relay disabled")?;
 
-    let output = ctx.run_cli(["relay-config", "add", CUSTOM_RELAY])?;
+    let output = ctx.run_cli(["relay", "add", CUSTOM_RELAY])?;
     assert_contains(&output, "Custom relay added")?;
 
     println!("=== Mutate unrelated config through daemon ===");
@@ -47,7 +47,7 @@ fn main() -> Result<()> {
     assert_contains(&output, "Allowed port added")?;
 
     println!("=== Verify relay config survived ===");
-    let show = ctx.run_cli(["relay-config", "show"])?;
+    let show = ctx.run_cli(["relay", "show"])?;
     assert_contains(&show, "relay_enabled: true")?;
     assert_contains(&show, "use_community_relays: false")?;
     assert_contains(&show, CUSTOM_RELAY)?;
