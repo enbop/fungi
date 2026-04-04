@@ -8,7 +8,7 @@
 //!   daemon starts, so tests never step on each other.
 //! * **Automatic cleanup** – the temp directory is deleted when `TestDaemon` is dropped.
 //! * **Composable** – use `TestDaemonBuilder` when you need extra configuration
-//!   (known PeerId, allowed peers, …).
+//!   (known PeerId, allowed peers, config tweaks, …).
 //!
 //! # Quick start
 //!
@@ -48,6 +48,8 @@ use libp2p::{Multiaddr, PeerId, identity::Keypair, multiaddr::Protocol};
 use tempfile::TempDir;
 
 use crate::{DaemonArgs, FungiDaemon};
+
+type ConfigMutator = Box<dyn Fn(&mut FungiConfig) + Send + Sync + 'static>;
 
 // Fallback counter for UDP-only conflicts; only used when the TCP port itself is already
 // determined via `reserve_ephemeral_port`.
@@ -90,6 +92,7 @@ fn minimal_test_config(dir: &TempDir, tcp_port: u16) -> FungiConfig {
 pub struct TestDaemonBuilder {
     keypair: Option<Keypair>,
     allowed_peers: Vec<PeerId>,
+    config_mutators: Vec<ConfigMutator>,
 }
 
 impl TestDaemonBuilder {
@@ -109,6 +112,12 @@ impl TestDaemonBuilder {
         self
     }
 
+    /// Apply additional configuration after the standard isolated test defaults are set.
+    pub fn with_config(mut self, configure: impl Fn(&mut FungiConfig) + Send + Sync + 'static) -> Self {
+        self.config_mutators.push(Box::new(configure));
+        self
+    }
+
     /// Spawn the daemon.
     pub async fn build(self) -> Result<TestDaemon> {
         let dir = TempDir::new()?;
@@ -118,6 +127,9 @@ impl TestDaemonBuilder {
         cfg.network
             .incoming_allowed_peers
             .extend(self.allowed_peers);
+        for configure in self.config_mutators {
+            configure(&mut cfg);
+        }
 
         let daemon =
             FungiDaemon::start_with(DaemonArgs::default(), cfg, keypair, AddressBookConfig::default()).await?;
@@ -316,5 +328,18 @@ mod tests {
             .incoming_allowed_peers
             .contains(&client.peer_id());
         assert!(client_in_list, "server should allow client peer");
+    }
+
+    #[tokio::test]
+    async fn builder_can_customize_config() {
+        let d = TestDaemonBuilder::new()
+            .with_config(|cfg| {
+                cfg.file_transfer.server.enabled = true;
+            })
+            .build()
+            .await
+            .unwrap();
+
+        assert!(d.daemon().config().lock().file_transfer.server.enabled);
     }
 }
