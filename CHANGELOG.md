@@ -12,7 +12,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- New `fungi relay-config` command group for local relay configuration management.
+- New `fungi relay` command group for local relay configuration management.
 - New daemon gRPC relay configuration APIs for showing relay config, toggling relay usage, toggling community relays, and adding or removing custom relay addresses.
 - Relay config persistence helpers and unit coverage in `fungi-config`.
 - A real CLI smoke test covering offline relay config changes, online relay config changes through the daemon, and protection against later daemon-driven config writes overwriting relay updates.

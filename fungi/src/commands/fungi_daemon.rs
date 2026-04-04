@@ -1,11 +1,37 @@
 use crate::commands::CommonArgs;
 use anyhow::{Context, Result};
+use clap::{Parser, Subcommand};
 use fungi_config::FungiDir;
-pub use fungi_daemon::DaemonArgs;
 use fungi_daemon::FungiDaemon;
 use fungi_daemon_grpc::start_grpc_server;
 
-pub async fn run(common: CommonArgs, args: DaemonArgs) -> Result<()> {
+use super::fungi_relay::RelayArgs;
+
+#[derive(Debug, Clone, Parser)]
+pub struct DaemonCommandArgs {
+    #[command(subcommand)]
+    pub subcommand: Option<DaemonSubcommand>,
+
+    #[command(flatten)]
+    pub daemon_args: fungi_daemon::DaemonArgs,
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum DaemonSubcommand {
+    /// Start a simple Fungi relay server
+    RelayServer(RelayArgs),
+}
+
+pub async fn execute(common: CommonArgs, args: DaemonCommandArgs) -> Result<()> {
+    match args.subcommand {
+        Some(DaemonSubcommand::RelayServer(relay_args)) => {
+            super::fungi_relay::run(relay_args).await
+        }
+        None => run(common, args.daemon_args).await,
+    }
+}
+
+pub async fn run(common: CommonArgs, args: fungi_daemon::DaemonArgs) -> Result<()> {
     if let Err(error) = fungi_config::init(&common, false) {
         print_startup_error("Failed to initialize Fungi configuration", &error);
         return Err(error);

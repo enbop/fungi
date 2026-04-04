@@ -16,7 +16,7 @@ use super::{
 };
 
 #[derive(Subcommand, Debug, Clone)]
-pub enum RelayConfigCommands {
+pub enum RelayCommands {
     /// Show current relay configuration
     Show,
     /// Enable relay usage
@@ -40,14 +40,14 @@ pub enum RelayMode {
     Off,
 }
 
-pub async fn execute_relay_config(args: CommonArgs, cmd: RelayConfigCommands) {
+pub async fn execute_relay(args: CommonArgs, cmd: RelayCommands) {
     fungi_config::init(&args, false)
         .unwrap_or_else(|error| fatal(format!("Failed to initialize config: {error}")));
 
     let mut client = get_rpc_client(&args).await;
 
     match cmd {
-        RelayConfigCommands::Show => {
+        RelayCommands::Show => {
             if let Some(client) = client.as_mut() {
                 match client.get_relay_config(Request::new(Empty {})).await {
                     Ok(resp) => print_proto_relay_config(resp.into_inner()),
@@ -57,7 +57,7 @@ pub async fn execute_relay_config(args: CommonArgs, cmd: RelayConfigCommands) {
                 print_local_relay_config(&read_config(&args));
             }
         }
-        RelayConfigCommands::Enable => {
+        RelayCommands::Enable => {
             if let Some(client) = client.as_mut() {
                 match client
                     .set_relay_enabled(Request::new(RelayEnabledRequest { enabled: true }))
@@ -74,7 +74,7 @@ pub async fn execute_relay_config(args: CommonArgs, cmd: RelayConfigCommands) {
                 print_update_message("Relay enabled", false);
             }
         }
-        RelayConfigCommands::Disable => {
+        RelayCommands::Disable => {
             if let Some(client) = client.as_mut() {
                 match client
                     .set_relay_enabled(Request::new(RelayEnabledRequest { enabled: false }))
@@ -91,7 +91,7 @@ pub async fn execute_relay_config(args: CommonArgs, cmd: RelayConfigCommands) {
                 print_update_message("Relay disabled", false);
             }
         }
-        RelayConfigCommands::UseCommunity { mode } => {
+        RelayCommands::UseCommunity { mode } => {
             let enabled = matches!(mode, RelayMode::On);
             if let Some(client) = client.as_mut() {
                 match client
@@ -100,9 +100,9 @@ pub async fn execute_relay_config(args: CommonArgs, cmd: RelayConfigCommands) {
                 {
                     Ok(_) => print_update_message(
                         if enabled {
-                            "Community relays enabled"
+                            "Community relay enabled"
                         } else {
-                            "Community relays disabled"
+                            "Community relay disabled"
                         },
                         true,
                     ),
@@ -117,15 +117,15 @@ pub async fn execute_relay_config(args: CommonArgs, cmd: RelayConfigCommands) {
                     });
                 print_update_message(
                     if enabled {
-                        "Community relays enabled"
+                        "Community relay enabled"
                     } else {
-                        "Community relays disabled"
+                        "Community relay disabled"
                     },
                     false,
                 );
             }
         }
-        RelayConfigCommands::Add { address } => {
+        RelayCommands::Add { address } => {
             validate_multiaddr(&address);
             if let Some(client) = client.as_mut() {
                 match client
@@ -150,7 +150,7 @@ pub async fn execute_relay_config(args: CommonArgs, cmd: RelayConfigCommands) {
                 print_update_message("Custom relay added", false);
             }
         }
-        RelayConfigCommands::Remove { address } => {
+        RelayCommands::Remove { address } => {
             validate_multiaddr(&address);
             if let Some(client) = client.as_mut() {
                 match client
