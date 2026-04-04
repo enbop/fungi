@@ -42,7 +42,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use fungi_config::{FungiConfig, address_book::AddressBookConfig};
 use libp2p::{Multiaddr, PeerId, identity::Keypair, multiaddr::Protocol};
 use tempfile::TempDir;
@@ -113,6 +113,10 @@ impl TestDaemonBuilder {
     }
 
     /// Apply additional configuration after the standard isolated test defaults are set.
+    ///
+    /// Use this when a scenario needs one-off config beyond the common builder helpers, such as
+    /// enabling a specific subsystem or seeding a service-specific client entry, while still
+    /// keeping the rest of the daemon setup on the shared test-support path.
     pub fn with_config(mut self, configure: impl Fn(&mut FungiConfig) + Send + Sync + 'static) -> Self {
         self.config_mutators.push(Box::new(configure));
         self
