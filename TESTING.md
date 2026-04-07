@@ -1,87 +1,43 @@
-# Fungi – Testing Guidelines
+# Fungi Testing Guide
 
----
+## Pick the right test
 
-## Test categories
-
-| Category | Location | Runner |
+| If you are testing... | Put the test here | Run with |
 |---|---|---|
-| Unit tests (pure logic, no I/O) | `#[cfg(test)] mod tests` inside the source file | `cargo test --lib -p <crate>` |
-| Integration tests (daemon API, multi-component) | `crates/daemon/tests/` | `cargo test -p fungi-daemon --test <name>` |
-| CLI smoke tests (binary + gRPC, real processes) | `crates/tests/src/bin/` | `cargo run --package fungi-tests --bin <name>` |
+| Pure logic with no I/O | `#[cfg(test)] mod tests` in the same file | `cargo test --lib -p <crate>` |
+| Daemon API behavior or multiple components working together | `crates/daemon/tests/` | `cargo test -p fungi-daemon --test <name>` |
+| The real CLI talking to real processes over gRPC | `crates/tests/src/bin/` | `cargo run --package fungi-tests --bin <name>` |
 
----
+Start with the smallest test that proves the behavior you care about. Move to integration or CLI tests only when the behavior crosses process or API boundaries.
 
-## `test_support` — ephemeral daemon helpers
+## Use `test_support` for daemon tests
 
-**`fungi_daemon::test_support`** provides RAII test daemons inspired by
-[libp2p-swarm-test](https://github.com/libp2p/rust-libp2p/tree/master/swarm-test).
-Use it as the default for any test that needs a running `FungiDaemon`.
+`fungi_daemon::test_support` should be the default for tests that need a running `FungiDaemon`. It gives you temp dirs, random ports, and cleanup automatically, so you do not need to hand-roll test setup.
 
 ```rust
 use fungi_daemon::test_support::{TestDaemon, TestDaemonBuilder, spawn_connected_pair};
 
-// Single isolated daemon – random identity, OS-assigned port, temp dir auto-deleted
+// Single isolated daemon
 let d = TestDaemon::spawn().await?;
 let pid: PeerId   = d.peer_id();
 let addr: Multiaddr = d.tcp_multiaddr(); // /ip4/127.0.0.1/tcp/<port>/p2p/<peer>
 
-// Known keypair (deterministic PeerId)
+// Deterministic PeerId
 let d = TestDaemon::spawn_with_keypair(Keypair::generate_ed25519()).await?;
 
-// Builder: add allowed peers, custom keypair
+// Custom setup
 let server = TestDaemon::spawn().await?;
 let client = TestDaemonBuilder::new()
     .with_allowed_peer(server.peer_id())
     .build().await?;
 
-// Pre-wired pair (each side allows the other)
+// Connected pair
 let (client, server) = spawn_connected_pair().await?;
 client.connect_to(&server).await?;
 client.wait_connected(server.peer_id(), Duration::from_secs(5)).await?;
 ```
 
-Key properties: ephemeral identity, OS-reserved port (no hard-coded ports, no counters),
-relay disabled, `TempDir` cleaned up on drop.  Only reach for raw `FungiDaemon::start_with`
-when a test needs to inspect restarted state from a persisted directory.
-
----
-
-## What to test
-
-**Prefer observable outcomes over implementation details.**  Tests are most useful when they
-validate a user-visible result, a persisted invariant, or an error contract.  Be cautious about
-assertions that only lock in internal representation or incidental values unless compatibility
-depends on them.
-
-**Smoke before unit.**  For any new component, start with a single smoke test that confirms
-it boots/parses/runs, then add focused tests for non-obvious paths.
-
-**Test the error path.**  Invalid input, missing files, parse failures — these are the cases
-that actually break in production and are often skipped.
-
-**Config round-trips.**  After any mutation via the daemon API, verify the change survives
-a `save_to_file` → `apply_from_dir` round-trip.
-
-**gRPC boundary.**  RPC handlers convert domain errors to `tonic::Status`.  For each new
-handler, add a unit test that checks valid input → `Ok` and malformed input →
-`Status::invalid_argument`.
-
-**Don't test deprecated code.**  `file_transfer` is deprecated; `util::ipc` is deleted.
-Do not add tests for either.
-
----
-
-## TDD workflow for AI-assisted coding
-
-1. **State what the test should prove**, not how to implement it.
-2. **One assert per test**, or give each assert a descriptive message.
-3. **Use `TestDaemon::spawn()`** as the default for daemon-level tests.
-4. **`invoke_swarm` is async** — always `.await` it or the future is silently dropped.
-
----
-
-## Running the tests
+## Running tests
 
 ```bash
 cargo test --lib                   # all unit tests

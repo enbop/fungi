@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - Relay configuration has been redesigned around a clearer positive model: `relay_enabled`, `use_community_relays`, and `custom_relay_addresses`.
-- This is a breaking config change. Older `disable_relay`-based config files are no longer the active model for relay behavior in this release.
+- This is a **BREAKING** config change. Older `disable_relay`-based config files are no longer the active model for relay behavior in this release.
 - Relay resolution now combines the community relay set and custom relay addresses explicitly, instead of treating custom relay addresses as an implicit full replacement path.
 
 ### Added
