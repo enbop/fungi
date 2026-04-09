@@ -125,3 +125,24 @@ jobs:
           if [ -f fungi_daemon.proto ]; then
             gh release upload -R ${{ github.repository }} --clobber $RELEASE_TAG fungi_daemon.proto
           fi
+
+  update_homebrew_tap:
+    name: Update Homebrew tap
+    needs: release_build_and_publish
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger tap update
+        env:
+          TAP_REPO_TOKEN: ${{ secrets.TAP_REPO_TOKEN }}
+        run: |
+          if [ -z "$TAP_REPO_TOKEN" ]; then
+            echo "TAP_REPO_TOKEN is not set; skipping tap update."
+            exit 0
+          fi
+
+          curl -fsSL -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${TAP_REPO_TOKEN}" \
+            https://api.github.com/repos/enbop/homebrew-fungi/dispatches \
+            -d '{"event_type":"update_fungi_tap"}'
