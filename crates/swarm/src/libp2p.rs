@@ -14,7 +14,7 @@ use libp2p::{
     identity::Keypair,
     mdns,
     multiaddr::Protocol,
-    noise,
+    noise, relay,
     swarm::{
         ConnectionId, DialError, SwarmEvent,
         dial_opts::{DialOpts, PeerCondition},
@@ -39,8 +39,6 @@ use tokio::{
 // Relay connection retry constants
 const RELAY_RETRY_MAX_ATTEMPTS: u32 = 4;
 const RELAY_RETRY_BASE_DELAY_MS: u64 = 500;
-const OUTBOUND_PING_INTERVAL: Duration = Duration::from_secs(15);
-
 /// Simple RAII guard to ensure atomic bool is reset when task completes
 struct TaskGuard {
     flag: Arc<AtomicBool>,
@@ -618,7 +616,7 @@ impl FungiSwarm {
         let stream_control = swarm.behaviour().stream.new_control();
 
         let (ping_event_tx, ping_event_rx) = mpsc::unbounded_channel::<PingRttEvent>();
-        let mut ping_state = PingState::new(OUTBOUND_PING_INTERVAL, ping_event_tx);
+        let mut ping_state = PingState::new(Duration::from_secs(15), ping_event_tx);
         ping_state.init(stream_control.clone());
         let ping_state = Arc::new(ping_state);
 
@@ -693,6 +691,9 @@ async fn handle_swarm_event(
                 println!("[Swarm event] NewListenAddr {address:?}");
                 handle_new_listen_addr(&swarm_control, address);
             }
+            SwarmEvent::Behaviour(FungiBehavioursEvent::Relay(event)) => {
+                handle_relay_behaviour_event(event);
+            }
             SwarmEvent::NewExternalAddrCandidate { address, .. } => {
                 log::info!("[Swarm event] NewExternalAddrCandidate {address:?}");
             }
@@ -741,9 +742,36 @@ async fn handle_swarm_event(
                     cause
                 );
 
+                reconnect_relay_for_closed_connection(
+                    &swarm_control,
+                    peer_id,
+                    endpoint.get_remote_address(),
+                );
                 connection_state::handle_connection_closed(&swarm_control, peer_id, connection_id);
             }
             _ => {}
+        }
+    }
+}
+
+fn handle_relay_behaviour_event(event: relay::client::Event) {
+    match event {
+        relay::client::Event::ReservationReqAccepted {
+            relay_peer_id,
+            renewal,
+            ..
+        } => {
+            if renewal {
+                log::info!("Relay reservation renewed on {relay_peer_id}");
+            } else {
+                log::info!("Relay reservation established on {relay_peer_id}");
+            }
+        }
+        relay::client::Event::OutboundCircuitEstablished { relay_peer_id, .. } => {
+            log::debug!("Outbound relay circuit established via {relay_peer_id}");
+        }
+        relay::client::Event::InboundCircuitEstablished { src_peer_id, .. } => {
+            log::debug!("Inbound relay circuit established from {src_peer_id}");
         }
     }
 }
@@ -803,60 +831,13 @@ fn handle_new_listen_addr(swarm_control: &SwarmControl, new_addr: Multiaddr) {
     if should_listen_relay {
         let relay_addresses_state = swarm_control.relay_addresses_state.clone();
 
-        fn spawn_listen_task(
-            swarm_control: &SwarmControl,
-            relay_addr: &Multiaddr,
-            is_running: &Arc<AtomicBool>,
-        ) {
-            let Some(_guard) = TaskGuard::try_acquire(is_running.clone()) else {
-                return;
-            };
-
-            let swarm_control_cl = swarm_control.clone();
-            let relay_addr_cl = relay_addr.clone();
-
-            tokio::spawn(async move {
-                // move _guard to this async task
-                // and it will set the flag to false when the task is dropped
-                let _guard = _guard;
-
-                for attempt in 1..=RELAY_RETRY_MAX_ATTEMPTS {
-                    match listen_relay_by_addr(swarm_control_cl.clone(), relay_addr_cl.clone())
-                        .await
-                    {
-                        Ok(()) => {
-                            log::info!(
-                                "Successfully connected to relay {relay_addr_cl:?} on attempt {attempt}"
-                            );
-                            return;
-                        }
-                        Err(e) => {
-                            log::warn!(
-                                "Failed to connect to relay {relay_addr_cl:?} on attempt {attempt}: {e}"
-                            );
-                            if attempt < RELAY_RETRY_MAX_ATTEMPTS {
-                                let delay = Duration::from_millis(
-                                    RELAY_RETRY_BASE_DELAY_MS * (1 << (attempt - 1)),
-                                );
-                                tokio::time::sleep(delay).await;
-                            }
-                        }
-                    }
-                }
-
-                log::error!(
-                    "Failed to connect to relay {relay_addr_cl:?} after {RELAY_RETRY_MAX_ATTEMPTS} attempts"
-                );
-            });
-        }
-
         match new_addr_iter.next() {
             Some(Protocol::Tcp(_)) => {
                 for (relay_addr, is_running) in relay_addresses_state.iter() {
                     if !relay_addr.to_string().contains("/tcp/") {
                         continue;
                     }
-                    spawn_listen_task(swarm_control, relay_addr, is_running);
+                    spawn_relay_listen_task(swarm_control, relay_addr, is_running);
                 }
             }
             Some(Protocol::Udp(_)) => {
@@ -864,10 +845,95 @@ fn handle_new_listen_addr(swarm_control: &SwarmControl, new_addr: Multiaddr) {
                     if !relay_addr.to_string().contains("/udp/") {
                         continue;
                     }
-                    spawn_listen_task(swarm_control, relay_addr, is_running);
+                    spawn_relay_listen_task(swarm_control, relay_addr, is_running);
                 }
             }
             _ => {}
+        }
+    }
+}
+
+fn spawn_relay_listen_task(
+    swarm_control: &SwarmControl,
+    relay_addr: &Multiaddr,
+    is_running: &Arc<AtomicBool>,
+) {
+    let Some(_guard) = TaskGuard::try_acquire(is_running.clone()) else {
+        return;
+    };
+
+    let swarm_control_cl = swarm_control.clone();
+    let relay_addr_cl = relay_addr.clone();
+
+    tokio::spawn(async move {
+        let _guard = _guard;
+
+        for attempt in 1..=RELAY_RETRY_MAX_ATTEMPTS {
+            match listen_relay_by_addr(swarm_control_cl.clone(), relay_addr_cl.clone()).await {
+                Ok(()) => {
+                    log::info!(
+                        "Successfully connected to relay {relay_addr_cl:?} on attempt {attempt}"
+                    );
+                    return;
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Failed to connect to relay {relay_addr_cl:?} on attempt {attempt}: {e}"
+                    );
+                    if attempt < RELAY_RETRY_MAX_ATTEMPTS {
+                        let delay =
+                            Duration::from_millis(RELAY_RETRY_BASE_DELAY_MS * (1 << (attempt - 1)));
+                        tokio::time::sleep(delay).await;
+                    }
+                }
+            }
+        }
+
+        log::error!(
+            "Failed to connect to relay {relay_addr_cl:?} after {RELAY_RETRY_MAX_ATTEMPTS} attempts"
+        );
+    });
+}
+
+fn relay_addr_peer_id(relay_addr: &Multiaddr) -> Option<PeerId> {
+    relay_addr.iter().find_map(|protocol| match protocol {
+        Protocol::P2p(peer_id) => Some(peer_id),
+        _ => None,
+    })
+}
+
+fn is_matching_transport_addr(addr: &Multiaddr, remote_addr: &Multiaddr) -> bool {
+    let addr_str = addr.to_string();
+    let remote_str = remote_addr.to_string();
+
+    (addr_str.contains("/tcp/") && remote_str.contains("/tcp/"))
+        || (addr_str.contains("/udp/") && remote_str.contains("/udp/"))
+}
+
+fn reconnect_relay_for_closed_connection(
+    swarm_control: &SwarmControl,
+    peer_id: PeerId,
+    remote_addr: &Multiaddr,
+) {
+    if remote_addr.to_string().contains("/p2p-circuit") {
+        return;
+    }
+
+    for (relay_addr, is_running) in swarm_control.relay_addresses_state.iter() {
+        let Some(relay_peer_id) = relay_addr_peer_id(relay_addr) else {
+            continue;
+        };
+
+        if relay_peer_id == peer_id && is_matching_transport_addr(relay_addr, remote_addr) {
+            // A strict-NAT node stays reachable only while it keeps an active
+            // reservation on the relay. Recreate the reservation as soon as the
+            // underlying direct connection to that relay transport goes away.
+            log::info!(
+                "Relay connection to peer {} via {} closed, re-establishing reservation",
+                peer_id,
+                relay_addr
+            );
+            spawn_relay_listen_task(swarm_control, relay_addr, is_running);
         }
     }
 }

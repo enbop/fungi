@@ -2,6 +2,12 @@ use libp2p_identity::PeerId;
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 
+#[cfg(target_os = "android")]
+const fn default_idle_connection_timeout_secs() -> u64 {
+    90
+}
+
+#[cfg(not(target_os = "android"))]
 const fn default_idle_connection_timeout_secs() -> u64 {
     300
 }
