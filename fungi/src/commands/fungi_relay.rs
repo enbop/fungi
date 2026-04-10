@@ -12,9 +12,12 @@ use libp2p::{
     tcp, yamux,
 };
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::time::Duration;
 
 const DEFAULT_CONFIG_DIR: &str = ".fungi-relay-server";
 const DEFAULT_LISTEN_PORT: u16 = 30001;
+const DEFAULT_MAX_CIRCUIT_DURATION_SECS: u64 = 24 * 60 * 60;
+const DEFAULT_MAX_CIRCUIT_BYTES: u64 = u64::MAX;
 
 #[derive(Debug, Clone, Parser)]
 pub struct RelayArgs {
@@ -36,6 +39,20 @@ pub struct RelayArgs {
         default_value_t = DEFAULT_LISTEN_PORT
     )]
     pub udp_listen_port: u16,
+
+    #[clap(
+        long,
+        help = "Maximum lifetime of a relayed circuit in seconds",
+        default_value_t = DEFAULT_MAX_CIRCUIT_DURATION_SECS
+    )]
+    pub max_circuit_duration_secs: u64,
+
+    #[clap(
+        long,
+        help = "Maximum total bytes forwarded on a relayed circuit",
+        default_value_t = DEFAULT_MAX_CIRCUIT_BYTES
+    )]
+    pub max_circuit_bytes: u64,
 }
 
 #[derive(NetworkBehaviour)]
@@ -50,8 +67,15 @@ pub async fn run(args: RelayArgs) -> Result<()> {
     let public_ip = args.public_ip;
     let tcp_listen_port = args.tcp_listen_port;
     let udp_listen_port = args.udp_listen_port;
+    let max_circuit_duration = Duration::from_secs(args.max_circuit_duration_secs);
+    let max_circuit_bytes = args.max_circuit_bytes;
 
     let keypair = get_or_init_keypair()?;
+    let relay_config = relay::Config {
+        max_circuit_duration,
+        max_circuit_bytes,
+        ..Default::default()
+    };
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
         .with_tokio()
@@ -62,7 +86,7 @@ pub async fn run(args: RelayArgs) -> Result<()> {
         )?
         .with_quic()
         .with_behaviour(|key| Behaviour {
-            relay: relay::Behaviour::new(key.public().to_peer_id(), Default::default()),
+            relay: relay::Behaviour::new(key.public().to_peer_id(), relay_config),
             ping: ping::Behaviour::new(ping::Config::new()),
             identify: identify::Behaviour::new(identify::Config::new(
                 "/fungi-relay/0.1.0".to_string(),
@@ -74,6 +98,10 @@ pub async fn run(args: RelayArgs) -> Result<()> {
 
     let peer_id = *swarm.local_peer_id();
     println!("Local peer id: {}", swarm.local_peer_id());
+    println!(
+        "Relay limits: max_circuit_duration={:?}, max_circuit_bytes={}",
+        max_circuit_duration, max_circuit_bytes
+    );
 
     listen_all_interfaces(&mut swarm, tcp_listen_port, udp_listen_port)?;
 
