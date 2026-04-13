@@ -108,6 +108,18 @@ jobs:
             shasum -a 256 fungi-${{ matrix.platform-name }}.tar.gz > fungi-${{ matrix.platform-name }}.tar.gz.sha256
           fi
 
+      - name: Update nightly release notes
+        if: (github.event_name == 'workflow_dispatch' || github.ref_name == 'nightly') && matrix.platform-name == 'linux-x86_64'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BUILD_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          gh release edit nightly \
+            --title "Nightly Build" \
+            --notes "Latest development build from commit ${{ github.sha }} (${BUILD_DATE})" \
+            --target "${{ github.sha }}" || true
+
       - name: GH publish
         shell: bash
         env:
@@ -129,7 +141,7 @@ jobs:
   update_homebrew_tap:
     name: Update Homebrew tap
     needs: release_build_and_publish
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/tags/nightly')
     runs-on: ubuntu-latest
     steps:
       - name: Trigger tap update
@@ -141,8 +153,14 @@ jobs:
             exit 0
           fi
 
+          if [ "${{ github.ref_name }}" = "nightly" ]; then
+            payload='{"event_type":"update_fungi_tap","client_payload":{"channel":"nightly"}}'
+          else
+            payload='{"event_type":"update_fungi_tap","client_payload":{"channel":"stable"}}'
+          fi
+
           curl -fsSL -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${TAP_REPO_TOKEN}" \
             https://api.github.com/repos/enbop/homebrew-fungi/dispatches \
-            -d '{"event_type":"update_fungi_tap"}'
+            -d "$payload"

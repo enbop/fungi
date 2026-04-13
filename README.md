@@ -46,6 +46,20 @@ macOS / Linux quick install:
 curl -fsSL https://fungi.rs/install.sh | sh
 ```
 
+- Or install from Homebrew on macOS:
+
+```bash
+brew tap enbop/fungi
+brew install fungi
+```
+
+- Or install the nightly Homebrew channel on macOS:
+
+```bash
+brew tap enbop/fungi
+brew install fungi-nightly
+```
+
 - Or download from [GitHub Releases](https://github.com/enbop/fungi/releases/latest) (Windows/Linux/macOS/Android binaries available)
 - Or see the [install and build guide](https://fungi.rs/docs/install)
 
