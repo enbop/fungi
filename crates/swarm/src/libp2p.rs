@@ -39,6 +39,7 @@ use tokio::{
 // Relay connection retry constants
 const RELAY_RETRY_MAX_ATTEMPTS: u32 = 4;
 const RELAY_RETRY_BASE_DELAY_MS: u64 = 500;
+const RELAY_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 /// Simple RAII guard to ensure atomic bool is reset when task completes
 struct TaskGuard {
     flag: Arc<AtomicBool>,
@@ -502,11 +503,13 @@ impl SwarmControl {
                 }
 
                 let direct_dial_result = if force_redial_when_connected {
+                    log::info!("Force redialing peer {peer_id}");
                     let dial_opts = DialOpts::peer_id(peer_id)
                         .condition(PeerCondition::Always)
                         .build();
                     swarm.dial(dial_opts)
                 } else {
+                    log::debug!("Dialing peer {peer_id} directly");
                     swarm.dial(peer_id)
                 };
 
@@ -518,9 +521,9 @@ impl SwarmControl {
                                 return Err(DialError::NoAddresses);
                             }
                             // TODO: add a rendezvous server
-                            // dial with relay when no mDNS addresses are available
+                            // Fall back to relay addresses when no direct addresses are known.
                             log::info!(
-                                "Dialing {peer_id} with relay address {:?}",
+                                "No direct addresses for {peer_id}; dialing with relay addresses {:?}",
                                 relay_addresses_state.iter().map(|(addr, _)| addr).collect::<Vec<_>>()
                             );
                             let mut full_addrs = Vec::new();
@@ -637,12 +640,14 @@ impl FungiSwarm {
         );
         let event_handle_fut = handle_swarm_event(swarm_control.clone(), swarm_event_rx);
         let ping_handle_fut = handle_ping_event(swarm_control.clone(), ping_event_rx);
+        let relay_health_fut = relay_health_loop(swarm_control.clone());
 
         let join_handle = tokio::spawn(async move {
             tokio::select! {
                 _ = swarm_fut => {},
                 _ = event_handle_fut => {},
                 _ = ping_handle_fut => {},
+                _ = relay_health_fut => {},
             }
         });
 
@@ -691,8 +696,14 @@ async fn handle_swarm_event(
                 println!("[Swarm event] NewListenAddr {address:?}");
                 handle_new_listen_addr(&swarm_control, address);
             }
+            SwarmEvent::Behaviour(FungiBehavioursEvent::Mdns(event)) => {
+                handle_mdns_behaviour_event(event);
+            }
             SwarmEvent::Behaviour(FungiBehavioursEvent::Relay(event)) => {
                 handle_relay_behaviour_event(event);
+            }
+            SwarmEvent::Behaviour(FungiBehavioursEvent::Dcutr(event)) => {
+                handle_dcutr_behaviour_event(event);
             }
             SwarmEvent::NewExternalAddrCandidate { address, .. } => {
                 log::info!("[Swarm event] NewExternalAddrCandidate {address:?}");
@@ -754,6 +765,21 @@ async fn handle_swarm_event(
     }
 }
 
+fn handle_mdns_behaviour_event(event: mdns::Event) {
+    match event {
+        mdns::Event::Discovered(entries) => {
+            for (peer_id, addr) in entries {
+                log::info!("libp2p mDNS discovered peer {} at {}", peer_id, addr);
+            }
+        }
+        mdns::Event::Expired(entries) => {
+            for (peer_id, addr) in entries {
+                log::info!("libp2p mDNS expired peer {} at {}", peer_id, addr);
+            }
+        }
+    }
+}
+
 fn handle_relay_behaviour_event(event: relay::client::Event) {
     match event {
         relay::client::Event::ReservationReqAccepted {
@@ -772,6 +798,58 @@ fn handle_relay_behaviour_event(event: relay::client::Event) {
         }
         relay::client::Event::InboundCircuitEstablished { src_peer_id, .. } => {
             log::debug!("Inbound relay circuit established from {src_peer_id}");
+        }
+    }
+}
+
+fn handle_dcutr_behaviour_event(event: libp2p::dcutr::Event) {
+    match event.result {
+        Ok(connection_id) => {
+            log::info!(
+                "Hole punch succeeded for peer {} on connection {:?}",
+                event.remote_peer_id,
+                connection_id
+            );
+        }
+        Err(error) => {
+            log::warn!(
+                "Hole punch failed for peer {}: {}",
+                event.remote_peer_id,
+                error
+            );
+        }
+    }
+}
+
+async fn relay_health_loop(swarm_control: SwarmControl) {
+    loop {
+        tokio::time::sleep(RELAY_HEALTH_CHECK_INTERVAL).await;
+
+        if swarm_control.relay_addresses_state.is_empty() {
+            continue;
+        }
+
+        for (relay_addr, is_running) in swarm_control.relay_addresses_state.iter() {
+            let listener_registered =
+                match relay_listener_registered(&swarm_control, relay_addr).await {
+                    Ok(value) => value,
+                    Err(error) => {
+                        log::warn!(
+                            "Failed to inspect relay listener state for {}: {}",
+                            relay_addr,
+                            error
+                        );
+                        false
+                    }
+                };
+
+            if !listener_registered {
+                log::info!(
+                    "Relay health check re-establishing reservation for {} because no relay listener is registered",
+                    relay_addr
+                );
+                spawn_relay_listen_task(&swarm_control, relay_addr, is_running);
+            }
         }
     }
 }
@@ -895,6 +973,16 @@ fn spawn_relay_listen_task(
     });
 }
 
+async fn relay_listener_registered(
+    swarm_control: &SwarmControl,
+    relay_addr: &Multiaddr,
+) -> Result<bool> {
+    let target_listener = relay_addr.clone().with(Protocol::P2pCircuit);
+    swarm_control
+        .invoke_swarm(move |swarm| swarm.listeners().any(|addr| *addr == target_listener))
+        .await
+}
+
 fn relay_addr_peer_id(relay_addr: &Multiaddr) -> Option<PeerId> {
     relay_addr.iter().find_map(|protocol| match protocol {
         Protocol::P2p(peer_id) => Some(peer_id),
@@ -950,19 +1038,66 @@ async fn listen_relay_by_addr(swarm_control: SwarmControl, relay_addr: Multiaddr
         })
         .ok_or_else(|| anyhow::anyhow!("Invalid relay address"))?;
 
-    // 1. dial to relay server will retrieve and update local public address (sent to SwarmEvent::NewExternalAddrCandidate) automatically
-    let relay_addr_cl = relay_addr.clone();
+    // Dialing the relay also lets libp2p refresh our observed external address state.
+    dial_relay_by_addr(&swarm_control, relay_peer, relay_addr.clone(), false).await?;
+
+    if let Err(error) = perform_relay_handshake(&swarm_control, relay_peer).await {
+        log::warn!(
+            "Relay handshake to {} via {} failed: {}. Forcing redial.",
+            relay_peer,
+            relay_addr,
+            error
+        );
+        dial_relay_by_addr(&swarm_control, relay_peer, relay_addr.clone(), true).await?;
+        perform_relay_handshake(&swarm_control, relay_peer).await?;
+    }
+
+    if relay_listener_registered(&swarm_control, &relay_addr).await? {
+        log::debug!("Relay listener already active for {relay_addr}");
+        return Ok(());
+    };
+
+    // 3. listen on relay
+    println!("Listening on relay address: {relay_addr:?}");
+    swarm_control
+        .invoke_swarm(move |swarm| swarm.listen_on(relay_addr.with(Protocol::P2pCircuit)))
+        .await??;
+
+    Ok(())
+}
+
+async fn dial_relay_by_addr(
+    swarm_control: &SwarmControl,
+    relay_peer: PeerId,
+    relay_addr: Multiaddr,
+    force_redial: bool,
+) -> Result<()> {
     swarm_control
         .invoke_swarm(move |swarm| {
+            if force_redial {
+                let dial_opts = DialOpts::peer_id(relay_peer)
+                    .addresses(vec![relay_addr.clone()])
+                    .condition(PeerCondition::Always)
+                    .build();
+                if let Err(error) = swarm.dial(dial_opts) {
+                    log::warn!(
+                        "Failed to force redial relay {relay_peer} via {relay_addr}: {error}"
+                    );
+                }
+                return;
+            }
+
             if !swarm.is_connected(&relay_peer)
-                && let Err(e) = swarm.dial(relay_addr_cl)
+                && let Err(error) = swarm.dial(relay_addr.clone())
             {
-                log::error!("Failed to dial relay address {relay_peer}: {e}");
+                log::error!("Failed to dial relay address {relay_peer} via {relay_addr}: {error}");
             }
         })
         .await?;
+    Ok(())
+}
 
-    // 2. We have to establish a connection with the relay server before listen_on P2pCircuit
+async fn perform_relay_handshake(swarm_control: &SwarmControl, relay_peer: PeerId) -> Result<()> {
     let Ok(stream_result) = tokio::time::timeout(
         Duration::from_secs(5),
         swarm_control
@@ -974,23 +1109,20 @@ async fn listen_relay_by_addr(swarm_control: SwarmControl, relay_addr: Multiaddr
     else {
         bail!("Handshake timeout")
     };
+
     let mut stream = match stream_result {
         Ok(stream) => stream,
-        Err(e) => bail!("Handshake failed: {:?}", e),
+        Err(error) => bail!("Handshake failed: {:?}", error),
     };
     let mut buf = [0u8; 32];
-    // TODO
-    // implement a proper handshake protocol, currently just read the response to make sure both sides are reachable
-    let n = stream.read(&mut buf).await?;
+    let Ok(read_result) = tokio::time::timeout(Duration::from_secs(5), stream.read(&mut buf)).await
+    else {
+        bail!("Handshake read timeout")
+    };
+    let n = read_result?;
     if n < 1 {
         bail!("Handshake failed: empty response");
-    };
-
-    // 3. listen on relay
-    println!("Listening on relay address: {relay_addr:?}");
-    swarm_control
-        .invoke_swarm(move |swarm| swarm.listen_on(relay_addr.with(Protocol::P2pCircuit)))
-        .await??;
+    }
 
     Ok(())
 }
