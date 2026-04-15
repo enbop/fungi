@@ -16,6 +16,10 @@ path = "src/bin/test_service_remote_wasm_cli.rs"
 name = "test-relay-config-cli"
 path = "src/bin/test_relay_config_cli.rs"
 
+[[bin]]
+name = "test-relay-runtime-cli"
+path = "src/bin/test_relay_runtime_cli.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 log = { workspace = true }
