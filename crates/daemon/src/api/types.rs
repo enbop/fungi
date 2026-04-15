@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 pub struct ExternalAddressSnapshot {
     pub address: String,
     pub transport: String,
+    pub freshness: String,
+    pub recommend_refresh_before_dcutr: bool,
     pub first_observed_at: SystemTime,
     pub last_observed_at: SystemTime,
     pub confirmed_at: Option<SystemTime>,
@@ -26,9 +28,12 @@ pub struct RelayEndpointStatusSnapshot {
     pub transport: String,
     pub listener_registered: bool,
     pub task_running: bool,
+    pub current_direct_connection_id: Option<String>,
     pub last_listener_seen_at: Option<SystemTime>,
     pub last_listener_missing_at: Option<SystemTime>,
     pub last_reservation_accepted_at: Option<SystemTime>,
+    pub last_reservation_established_at: Option<SystemTime>,
+    pub last_reservation_renewed_at: Option<SystemTime>,
     pub last_direct_connection_closed_at: Option<SystemTime>,
     pub last_management_action: Option<String>,
     pub last_error: Option<String>,
@@ -36,9 +41,12 @@ pub struct RelayEndpointStatusSnapshot {
 
 impl From<ExternalAddressCandidateRecord> for ExternalAddressSnapshot {
     fn from(record: ExternalAddressCandidateRecord) -> Self {
+        let now = SystemTime::now();
         Self {
             address: record.address.to_string(),
             transport: record.transport_kind.as_str().to_string(),
+            freshness: record.freshness(now).as_str().to_string(),
+            recommend_refresh_before_dcutr: record.recommend_refresh_before_dcutr(now),
             first_observed_at: record.first_observed_at,
             last_observed_at: record.last_observed_at,
             confirmed_at: record.confirmed_at,
@@ -61,9 +69,14 @@ impl From<RelayEndpointStatusRecord> for RelayEndpointStatusSnapshot {
             transport: record.transport_kind.as_str().to_string(),
             listener_registered: record.listener_registered,
             task_running: record.task_running,
+            current_direct_connection_id: record
+                .current_direct_connection_id
+                .map(|connection_id| connection_id.to_string()),
             last_listener_seen_at: record.last_listener_seen_at,
             last_listener_missing_at: record.last_listener_missing_at,
             last_reservation_accepted_at: record.last_reservation_accepted_at,
+            last_reservation_established_at: record.last_reservation_established_at,
+            last_reservation_renewed_at: record.last_reservation_renewed_at,
             last_direct_connection_closed_at: record.last_direct_connection_closed_at,
             last_management_action: record
                 .last_management_action

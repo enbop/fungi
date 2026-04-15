@@ -858,6 +858,7 @@ async fn handle_swarm_event(
                 record_relay_connection_closed(
                     &swarm_control,
                     peer_id,
+                    connection_id,
                     endpoint.get_remote_address(),
                 );
                 state::handle_connection_closed(&swarm_control, peer_id, connection_id);
@@ -1133,6 +1134,7 @@ async fn relay_listener_registered(
 fn record_relay_connection_closed(
     swarm_control: &SwarmControl,
     peer_id: PeerId,
+    connection_id: ConnectionId,
     remote_addr: &Multiaddr,
 ) {
     if remote_addr.to_string().contains("/p2p-circuit") {
@@ -1145,9 +1147,11 @@ fn record_relay_connection_closed(
         };
 
         if relay_peer_id == peer_id && relay_endpoint.matches_transport(remote_addr) {
-            swarm_control
-                .state()
-                .record_relay_connection_closed(peer_id, remote_addr);
+            swarm_control.state().record_relay_connection_closed(
+                peer_id,
+                connection_id,
+                remote_addr,
+            );
             swarm_control.state().record_relay_management_action(
                 relay_endpoint.addr(),
                 crate::RelayManagementAction::DirectConnectionClosedAwaitingManagementLoop,

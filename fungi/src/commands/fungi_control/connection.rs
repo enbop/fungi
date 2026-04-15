@@ -305,8 +305,8 @@ async fn execute_addr_candidates(args: CommonArgs, verbose: bool) {
 
             println!("External address candidates");
             println!(
-                "{:<8} {:<8} {:<8} {:<14} ADDR",
-                "TRANSP", "OBS", "CNFRM", "LAST_SEEN"
+                "{:<8} {:<8} {:<8} {:<8} {:<8} ADDR",
+                "TRANSP", "OBS", "CNFRM", "FRESH", "RFRESH"
             );
 
             for candidate in candidates {
@@ -317,7 +317,7 @@ async fn execute_addr_candidates(args: CommonArgs, verbose: bool) {
                 };
 
                 println!(
-                    "{:<8} {:<8} {:<8} {:<14} {}",
+                    "{:<8} {:<8} {:<8} {:<8} {:<8} {}",
                     candidate.transport,
                     candidate.observation_count,
                     if candidate.confirmed_at_unix_ms == 0 {
@@ -325,14 +325,20 @@ async fn execute_addr_candidates(args: CommonArgs, verbose: bool) {
                     } else {
                         "yes"
                     },
-                    candidate.last_observed_at_unix_ms,
+                    candidate.freshness,
+                    if candidate.recommend_refresh_before_dcutr {
+                        "yes"
+                    } else {
+                        "no"
+                    },
                     addr_display,
                 );
 
                 if verbose {
                     println!(
-                        "  first_seen={} confirmed_at={} expired_at={} sources={}",
+                        "  first_seen={} last_seen={} confirmed_at={} expired_at={} sources={}",
                         candidate.first_observed_at_unix_ms,
+                        candidate.last_observed_at_unix_ms,
                         candidate.confirmed_at_unix_ms,
                         candidate.expired_at_unix_ms,
                         candidate.sources.join(",")
@@ -394,15 +400,22 @@ async fn execute_relay_status(args: CommonArgs, verbose: bool) {
 
                 if verbose {
                     println!(
-                        "  peer_id={} last_seen={} last_missing={} reservation_at={} closed_at={} error={}",
+                        "  peer_id={} direct_conn={} last_seen={} last_missing={} accepted_at={} established_at={} renewed_at={} closed_at={} error={}",
                         if status.relay_peer_id.is_empty() {
                             "-"
                         } else {
                             &status.relay_peer_id
                         },
+                        if status.current_direct_connection_id.is_empty() {
+                            "-"
+                        } else {
+                            &status.current_direct_connection_id
+                        },
                         status.last_listener_seen_at_unix_ms,
                         status.last_listener_missing_at_unix_ms,
                         status.last_reservation_accepted_at_unix_ms,
+                        status.last_reservation_established_at_unix_ms,
+                        status.last_reservation_renewed_at_unix_ms,
                         status.last_direct_connection_closed_at_unix_ms,
                         if status.last_error.is_empty() {
                             "-"

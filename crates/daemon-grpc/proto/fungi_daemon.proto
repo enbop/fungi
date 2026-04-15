@@ -519,12 +519,14 @@ message ListActiveStreamsResponse {
 message ExternalAddressSnapshot {
   string address = 1;
   string transport = 2;
-  int64 first_observed_at_unix_ms = 3;
-  int64 last_observed_at_unix_ms = 4;
-  int64 confirmed_at_unix_ms = 5;
-  int64 expired_at_unix_ms = 6;
-  uint64 observation_count = 7;
-  repeated string sources = 8;
+  string freshness = 3;
+  bool recommend_refresh_before_dcutr = 4;
+  int64 first_observed_at_unix_ms = 5;
+  int64 last_observed_at_unix_ms = 6;
+  int64 confirmed_at_unix_ms = 7;
+  int64 expired_at_unix_ms = 8;
+  uint64 observation_count = 9;
+  repeated string sources = 10;
 }
 
 message ListExternalAddressCandidatesResponse {
@@ -537,12 +539,15 @@ message RelayEndpointStatusSnapshot {
   string transport = 3;
   bool listener_registered = 4;
   bool task_running = 5;
-  int64 last_listener_seen_at_unix_ms = 6;
-  int64 last_listener_missing_at_unix_ms = 7;
-  int64 last_reservation_accepted_at_unix_ms = 8;
-  int64 last_direct_connection_closed_at_unix_ms = 9;
-  string last_management_action = 10;
-  string last_error = 11;
+  string current_direct_connection_id = 6;
+  int64 last_listener_seen_at_unix_ms = 7;
+  int64 last_listener_missing_at_unix_ms = 8;
+  int64 last_reservation_accepted_at_unix_ms = 9;
+  int64 last_reservation_established_at_unix_ms = 10;
+  int64 last_reservation_renewed_at_unix_ms = 11;
+  int64 last_direct_connection_closed_at_unix_ms = 12;
+  string last_management_action = 13;
+  string last_error = 14;
 }
 
 message ListRelayEndpointStatusesResponse {

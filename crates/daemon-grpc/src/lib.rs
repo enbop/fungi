@@ -1034,6 +1034,8 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .map(|candidate| ExternalAddressSnapshot {
                 address: candidate.address,
                 transport: candidate.transport,
+                freshness: candidate.freshness,
+                recommend_refresh_before_dcutr: candidate.recommend_refresh_before_dcutr,
                 first_observed_at_unix_ms: system_time_to_unix_ms(candidate.first_observed_at),
                 last_observed_at_unix_ms: system_time_to_unix_ms(candidate.last_observed_at),
                 confirmed_at_unix_ms: system_time_to_unix_ms_optional(candidate.confirmed_at),
@@ -1062,6 +1064,9 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 transport: status.transport,
                 listener_registered: status.listener_registered,
                 task_running: status.task_running,
+                current_direct_connection_id: status
+                    .current_direct_connection_id
+                    .unwrap_or_default(),
                 last_listener_seen_at_unix_ms: system_time_to_unix_ms_optional(
                     status.last_listener_seen_at,
                 ),
@@ -1070,6 +1075,12 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 ),
                 last_reservation_accepted_at_unix_ms: system_time_to_unix_ms_optional(
                     status.last_reservation_accepted_at,
+                ),
+                last_reservation_established_at_unix_ms: system_time_to_unix_ms_optional(
+                    status.last_reservation_established_at,
+                ),
+                last_reservation_renewed_at_unix_ms: system_time_to_unix_ms_optional(
+                    status.last_reservation_renewed_at,
                 ),
                 last_direct_connection_closed_at_unix_ms: system_time_to_unix_ms_optional(
                     status.last_direct_connection_closed_at,

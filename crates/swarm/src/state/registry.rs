@@ -1,6 +1,7 @@
 use crate::{
-    ConnectivityState, ExternalAddressCandidateRecord, ExternalAddressSource,
-    RelayEndpointStatusRecord, SwarmControl, peer_handshake::PeerHandshakePayload,
+    AddressTransportKind, ConnectivityState, ExternalAddressCandidateRecord, ExternalAddressSource,
+    RelayDirectConnectionSnapshot, RelayEndpointStatusRecord, SwarmControl,
+    peer_handshake::PeerHandshakePayload,
 };
 use async_result::Completer;
 use libp2p::{
@@ -175,15 +176,21 @@ impl State {
         relay_peer_id: PeerId,
         change: crate::RelayManagementAction,
     ) {
+        let direct_connections = self.current_direct_relay_connections(relay_peer_id);
         self.connectivity_state
             .lock()
-            .record_relay_reservation_accepted(relay_peer_id, change);
+            .record_relay_reservation_accepted(relay_peer_id, change, &direct_connections);
     }
 
-    pub fn record_relay_connection_closed(&self, relay_peer_id: PeerId, remote_addr: &Multiaddr) {
+    pub fn record_relay_connection_closed(
+        &self,
+        relay_peer_id: PeerId,
+        connection_id: ConnectionId,
+        remote_addr: &Multiaddr,
+    ) {
         self.connectivity_state
             .lock()
-            .record_relay_connection_closed(relay_peer_id, remote_addr);
+            .record_relay_connection_closed(relay_peer_id, connection_id, remote_addr);
     }
 
     pub fn record_external_address_candidate(
@@ -399,6 +406,37 @@ impl State {
             .lock()
             .get(peer_id)
             .is_some_and(|peers| peers.total_connections() > 0)
+    }
+
+    fn current_direct_relay_connections(
+        &self,
+        peer_id: PeerId,
+    ) -> Vec<RelayDirectConnectionSnapshot> {
+        let Some(peer_connections) = self.peer_connections.lock().get(&peer_id).cloned() else {
+            return Vec::new();
+        };
+
+        let mut direct_connections = Vec::new();
+
+        for connection in peer_connections.outbound() {
+            let transport_kind = crate::address_transport_kind(connection.multiaddr());
+            if matches!(
+                transport_kind,
+                AddressTransportKind::Tcp | AddressTransportKind::Udp
+            ) && !direct_connections
+                .iter()
+                .any(|snapshot: &RelayDirectConnectionSnapshot| {
+                    snapshot.transport_kind == transport_kind
+                })
+            {
+                direct_connections.push(RelayDirectConnectionSnapshot {
+                    transport_kind,
+                    connection_id: connection.connection_id(),
+                });
+            }
+        }
+
+        direct_connections
     }
 }
 

@@ -497,17 +497,21 @@ pub struct ExternalAddressSnapshot {
     pub address: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub transport: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
-    pub first_observed_at_unix_ms: i64,
-    #[prost(int64, tag = "4")]
-    pub last_observed_at_unix_ms: i64,
+    #[prost(string, tag = "3")]
+    pub freshness: ::prost::alloc::string::String,
+    #[prost(bool, tag = "4")]
+    pub recommend_refresh_before_dcutr: bool,
     #[prost(int64, tag = "5")]
-    pub confirmed_at_unix_ms: i64,
+    pub first_observed_at_unix_ms: i64,
     #[prost(int64, tag = "6")]
+    pub last_observed_at_unix_ms: i64,
+    #[prost(int64, tag = "7")]
+    pub confirmed_at_unix_ms: i64,
+    #[prost(int64, tag = "8")]
     pub expired_at_unix_ms: i64,
-    #[prost(uint64, tag = "7")]
+    #[prost(uint64, tag = "9")]
     pub observation_count: u64,
-    #[prost(string, repeated, tag = "8")]
+    #[prost(string, repeated, tag = "10")]
     pub sources: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -527,17 +531,23 @@ pub struct RelayEndpointStatusSnapshot {
     pub listener_registered: bool,
     #[prost(bool, tag = "5")]
     pub task_running: bool,
-    #[prost(int64, tag = "6")]
-    pub last_listener_seen_at_unix_ms: i64,
+    #[prost(string, tag = "6")]
+    pub current_direct_connection_id: ::prost::alloc::string::String,
     #[prost(int64, tag = "7")]
-    pub last_listener_missing_at_unix_ms: i64,
+    pub last_listener_seen_at_unix_ms: i64,
     #[prost(int64, tag = "8")]
-    pub last_reservation_accepted_at_unix_ms: i64,
+    pub last_listener_missing_at_unix_ms: i64,
     #[prost(int64, tag = "9")]
+    pub last_reservation_accepted_at_unix_ms: i64,
+    #[prost(int64, tag = "10")]
+    pub last_reservation_established_at_unix_ms: i64,
+    #[prost(int64, tag = "11")]
+    pub last_reservation_renewed_at_unix_ms: i64,
+    #[prost(int64, tag = "12")]
     pub last_direct_connection_closed_at_unix_ms: i64,
-    #[prost(string, tag = "10")]
+    #[prost(string, tag = "13")]
     pub last_management_action: ::prost::alloc::string::String,
-    #[prost(string, tag = "11")]
+    #[prost(string, tag = "14")]
     pub last_error: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
