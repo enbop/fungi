@@ -492,6 +492,60 @@ pub struct ListActiveStreamsResponse {
     pub streams: ::prost::alloc::vec::Vec<ActiveStreamSnapshot>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ExternalAddressSnapshot {
+    #[prost(string, tag = "1")]
+    pub address: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub transport: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub first_observed_at_unix_ms: i64,
+    #[prost(int64, tag = "4")]
+    pub last_observed_at_unix_ms: i64,
+    #[prost(int64, tag = "5")]
+    pub confirmed_at_unix_ms: i64,
+    #[prost(int64, tag = "6")]
+    pub expired_at_unix_ms: i64,
+    #[prost(uint64, tag = "7")]
+    pub observation_count: u64,
+    #[prost(string, repeated, tag = "8")]
+    pub sources: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListExternalAddressCandidatesResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub candidates: ::prost::alloc::vec::Vec<ExternalAddressSnapshot>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RelayEndpointStatusSnapshot {
+    #[prost(string, tag = "1")]
+    pub relay_addr: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub relay_peer_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub transport: ::prost::alloc::string::String,
+    #[prost(bool, tag = "4")]
+    pub listener_registered: bool,
+    #[prost(bool, tag = "5")]
+    pub task_running: bool,
+    #[prost(int64, tag = "6")]
+    pub last_listener_seen_at_unix_ms: i64,
+    #[prost(int64, tag = "7")]
+    pub last_listener_missing_at_unix_ms: i64,
+    #[prost(int64, tag = "8")]
+    pub last_reservation_accepted_at_unix_ms: i64,
+    #[prost(int64, tag = "9")]
+    pub last_direct_connection_closed_at_unix_ms: i64,
+    #[prost(string, tag = "10")]
+    pub last_management_action: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub last_error: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListRelayEndpointStatusesResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub statuses: ::prost::alloc::vec::Vec<RelayEndpointStatusSnapshot>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PullServiceRequest {
     #[prost(string, tag = "1")]
     pub manifest_yaml: ::prost::alloc::string::String,
@@ -1897,6 +1951,66 @@ pub mod fungi_daemon_client {
                 );
             self.inner.unary(req, path, codec).await
         }
+        /// Lists externally observed local address candidates and their lifecycle.
+        pub async fn list_external_address_candidates(
+            &mut self,
+            request: impl tonic::IntoRequest<super::Empty>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListExternalAddressCandidatesResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/ListExternalAddressCandidates",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "fungi_daemon.FungiDaemon",
+                        "ListExternalAddressCandidates",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        /// Lists runtime relay endpoint statuses tracked by the daemon.
+        pub async fn list_relay_endpoint_statuses(
+            &mut self,
+            request: impl tonic::IntoRequest<super::Empty>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListRelayEndpointStatusesResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/ListRelayEndpointStatuses",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "fungi_daemon.FungiDaemon",
+                        "ListRelayEndpointStatuses",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
         /// Pulls a service from a serialized manifest payload.
         pub async fn pull_service(
             &mut self,
@@ -2635,6 +2749,22 @@ pub mod fungi_daemon_server {
             request: tonic::Request<super::ListActiveStreamsRequest>,
         ) -> std::result::Result<
             tonic::Response<super::ListActiveStreamsResponse>,
+            tonic::Status,
+        >;
+        /// Lists externally observed local address candidates and their lifecycle.
+        async fn list_external_address_candidates(
+            &self,
+            request: tonic::Request<super::Empty>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListExternalAddressCandidatesResponse>,
+            tonic::Status,
+        >;
+        /// Lists runtime relay endpoint statuses tracked by the daemon.
+        async fn list_relay_endpoint_statuses(
+            &self,
+            request: tonic::Request<super::Empty>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListRelayEndpointStatusesResponse>,
             tonic::Status,
         >;
         /// Pulls a service from a serialized manifest payload.
@@ -4946,6 +5076,100 @@ pub mod fungi_daemon_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = ListActiveStreamsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/ListExternalAddressCandidates" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListExternalAddressCandidatesSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
+                    for ListExternalAddressCandidatesSvc<T> {
+                        type Response = super::ListExternalAddressCandidatesResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::Empty>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::list_external_address_candidates(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListExternalAddressCandidatesSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/ListRelayEndpointStatuses" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListRelayEndpointStatusesSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty>
+                    for ListRelayEndpointStatusesSvc<T> {
+                        type Response = super::ListRelayEndpointStatusesResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::Empty>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::list_relay_endpoint_statuses(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListRelayEndpointStatusesSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

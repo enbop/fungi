@@ -1,7 +1,7 @@
 use clap::Subcommand;
 use fungi_daemon_grpc::{
     Request,
-    fungi_daemon_grpc::{ListActiveStreamsRequest, ListConnectionsRequest},
+    fungi_daemon_grpc::{Empty, ListActiveStreamsRequest, ListConnectionsRequest},
 };
 
 use crate::commands::CommonArgs;
@@ -39,6 +39,18 @@ pub enum ConnectionCommands {
         #[arg(short, long, default_value_t = false)]
         verbose: bool,
     },
+    /// Show observed external address candidates for this daemon
+    AddrCandidates {
+        /// Show detailed output
+        #[arg(short, long, default_value_t = false)]
+        verbose: bool,
+    },
+    /// Show runtime relay endpoint status tracked by the daemon
+    RelayStatus {
+        /// Show detailed output
+        #[arg(short, long, default_value_t = false)]
+        verbose: bool,
+    },
 }
 
 pub async fn execute_connection(args: CommonArgs, cmd: ConnectionCommands) {
@@ -53,6 +65,10 @@ pub async fn execute_connection(args: CommonArgs, cmd: ConnectionCommands) {
             protocol_name,
             verbose,
         } => execute_connection_streams(args, peer_id, protocol_name, verbose).await,
+        ConnectionCommands::AddrCandidates { verbose } => {
+            execute_addr_candidates(args, verbose).await
+        }
+        ConnectionCommands::RelayStatus { verbose } => execute_relay_status(args, verbose).await,
     }
 }
 
@@ -264,6 +280,137 @@ async fn execute_connection_streams(
                     opened_at,
                     stream.protocol_name,
                 );
+            }
+        }
+        Err(e) => fatal_grpc(e),
+    }
+}
+
+async fn execute_addr_candidates(args: CommonArgs, verbose: bool) {
+    let mut client = match get_rpc_client(&args).await {
+        Some(c) => c,
+        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
+    };
+
+    match client
+        .list_external_address_candidates(Request::new(Empty {}))
+        .await
+    {
+        Ok(resp) => {
+            let candidates = resp.into_inner().candidates;
+            if candidates.is_empty() {
+                println!("No external address candidates recorded");
+                return;
+            }
+
+            println!("External address candidates");
+            println!(
+                "{:<8} {:<8} {:<8} {:<14} ADDR",
+                "TRANSP", "OBS", "CNFRM", "LAST_SEEN"
+            );
+
+            for candidate in candidates {
+                let addr_display = if verbose {
+                    candidate.address.clone()
+                } else {
+                    simplify_multiaddr_peer_ids(&candidate.address)
+                };
+
+                println!(
+                    "{:<8} {:<8} {:<8} {:<14} {}",
+                    candidate.transport,
+                    candidate.observation_count,
+                    if candidate.confirmed_at_unix_ms == 0 {
+                        "no"
+                    } else {
+                        "yes"
+                    },
+                    candidate.last_observed_at_unix_ms,
+                    addr_display,
+                );
+
+                if verbose {
+                    println!(
+                        "  first_seen={} confirmed_at={} expired_at={} sources={}",
+                        candidate.first_observed_at_unix_ms,
+                        candidate.confirmed_at_unix_ms,
+                        candidate.expired_at_unix_ms,
+                        candidate.sources.join(",")
+                    );
+                }
+            }
+        }
+        Err(e) => fatal_grpc(e),
+    }
+}
+
+async fn execute_relay_status(args: CommonArgs, verbose: bool) {
+    let mut client = match get_rpc_client(&args).await {
+        Some(c) => c,
+        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
+    };
+
+    match client
+        .list_relay_endpoint_statuses(Request::new(Empty {}))
+        .await
+    {
+        Ok(resp) => {
+            let statuses = resp.into_inner().statuses;
+            if statuses.is_empty() {
+                println!("No relay endpoints tracked");
+                return;
+            }
+
+            println!("Relay endpoint status");
+            println!(
+                "{:<8} {:<8} {:<8} {:<16} ADDR",
+                "TRANSP", "LSTNR", "TASK", "LAST_ACTION"
+            );
+
+            for status in statuses {
+                let addr_display = if verbose {
+                    status.relay_addr.clone()
+                } else {
+                    simplify_multiaddr_peer_ids(&status.relay_addr)
+                };
+                let last_action = if status.last_management_action.is_empty() {
+                    "-"
+                } else {
+                    &status.last_management_action
+                };
+
+                println!(
+                    "{:<8} {:<8} {:<8} {:<16} {}",
+                    status.transport,
+                    if status.listener_registered {
+                        "yes"
+                    } else {
+                        "no"
+                    },
+                    if status.task_running { "yes" } else { "no" },
+                    last_action,
+                    addr_display,
+                );
+
+                if verbose {
+                    println!(
+                        "  peer_id={} last_seen={} last_missing={} reservation_at={} closed_at={} error={}",
+                        if status.relay_peer_id.is_empty() {
+                            "-"
+                        } else {
+                            &status.relay_peer_id
+                        },
+                        status.last_listener_seen_at_unix_ms,
+                        status.last_listener_missing_at_unix_ms,
+                        status.last_reservation_accepted_at_unix_ms,
+                        status.last_direct_connection_closed_at_unix_ms,
+                        if status.last_error.is_empty() {
+                            "-"
+                        } else {
+                            &status.last_error
+                        }
+                    );
+                }
             }
         }
         Err(e) => fatal_grpc(e),

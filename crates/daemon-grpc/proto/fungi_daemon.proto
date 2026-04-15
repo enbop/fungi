@@ -160,6 +160,14 @@ service FungiDaemon {
   rpc ListActiveStreams(ListActiveStreamsRequest)
       returns (ListActiveStreamsResponse) {}
 
+    // Lists externally observed local address candidates and their lifecycle.
+    rpc ListExternalAddressCandidates(Empty)
+      returns (ListExternalAddressCandidatesResponse) {}
+
+    // Lists runtime relay endpoint statuses tracked by the daemon.
+    rpc ListRelayEndpointStatuses(Empty)
+      returns (ListRelayEndpointStatusesResponse) {}
+
   // Pulls a service from a serialized manifest payload.
   rpc PullService(PullServiceRequest) returns (ServiceInstanceResponse) {}
 
@@ -506,6 +514,39 @@ message ActiveStreamSnapshot {
 
 message ListActiveStreamsResponse {
   repeated ActiveStreamSnapshot streams = 1;
+}
+
+message ExternalAddressSnapshot {
+  string address = 1;
+  string transport = 2;
+  int64 first_observed_at_unix_ms = 3;
+  int64 last_observed_at_unix_ms = 4;
+  int64 confirmed_at_unix_ms = 5;
+  int64 expired_at_unix_ms = 6;
+  uint64 observation_count = 7;
+  repeated string sources = 8;
+}
+
+message ListExternalAddressCandidatesResponse {
+  repeated ExternalAddressSnapshot candidates = 1;
+}
+
+message RelayEndpointStatusSnapshot {
+  string relay_addr = 1;
+  string relay_peer_id = 2;
+  string transport = 3;
+  bool listener_registered = 4;
+  bool task_running = 5;
+  int64 last_listener_seen_at_unix_ms = 6;
+  int64 last_listener_missing_at_unix_ms = 7;
+  int64 last_reservation_accepted_at_unix_ms = 8;
+  int64 last_direct_connection_closed_at_unix_ms = 9;
+  string last_management_action = 10;
+  string last_error = 11;
+}
+
+message ListRelayEndpointStatusesResponse {
+  repeated RelayEndpointStatusSnapshot statuses = 1;
 }
 
 enum ServiceRuntimeKind {

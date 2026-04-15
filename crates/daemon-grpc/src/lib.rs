@@ -1023,6 +1023,67 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         Ok(Response::new(ListActiveStreamsResponse { streams }))
     }
 
+    async fn list_external_address_candidates(
+        &self,
+        _request: Request<Empty>,
+    ) -> Result<Response<ListExternalAddressCandidatesResponse>, Status> {
+        let candidates = self
+            .inner
+            .list_external_address_candidates()
+            .into_iter()
+            .map(|candidate| ExternalAddressSnapshot {
+                address: candidate.address,
+                transport: candidate.transport,
+                first_observed_at_unix_ms: system_time_to_unix_ms(candidate.first_observed_at),
+                last_observed_at_unix_ms: system_time_to_unix_ms(candidate.last_observed_at),
+                confirmed_at_unix_ms: system_time_to_unix_ms_optional(candidate.confirmed_at),
+                expired_at_unix_ms: system_time_to_unix_ms_optional(candidate.expired_at),
+                observation_count: candidate.observation_count,
+                sources: candidate.sources,
+            })
+            .collect();
+
+        Ok(Response::new(ListExternalAddressCandidatesResponse {
+            candidates,
+        }))
+    }
+
+    async fn list_relay_endpoint_statuses(
+        &self,
+        _request: Request<Empty>,
+    ) -> Result<Response<ListRelayEndpointStatusesResponse>, Status> {
+        let statuses = self
+            .inner
+            .list_relay_endpoint_statuses()
+            .into_iter()
+            .map(|status| RelayEndpointStatusSnapshot {
+                relay_addr: status.relay_addr,
+                relay_peer_id: status.relay_peer_id.unwrap_or_default(),
+                transport: status.transport,
+                listener_registered: status.listener_registered,
+                task_running: status.task_running,
+                last_listener_seen_at_unix_ms: system_time_to_unix_ms_optional(
+                    status.last_listener_seen_at,
+                ),
+                last_listener_missing_at_unix_ms: system_time_to_unix_ms_optional(
+                    status.last_listener_missing_at,
+                ),
+                last_reservation_accepted_at_unix_ms: system_time_to_unix_ms_optional(
+                    status.last_reservation_accepted_at,
+                ),
+                last_direct_connection_closed_at_unix_ms: system_time_to_unix_ms_optional(
+                    status.last_direct_connection_closed_at,
+                ),
+                last_management_action: status.last_management_action.unwrap_or_default(),
+                last_error: status.last_error.unwrap_or_default(),
+            })
+            .collect();
+
+        Ok(Response::new(ListRelayEndpointStatusesResponse {
+            statuses,
+        }))
+    }
+
     async fn pull_service(
         &self,
         request: Request<PullServiceRequest>,
