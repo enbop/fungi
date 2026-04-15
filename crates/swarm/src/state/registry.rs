@@ -1,4 +1,7 @@
-use crate::{SwarmControl, peer_handshake::PeerHandshakePayload};
+use crate::{
+    ConnectivityState, ExternalAddressCandidateRecord, ExternalAddressSource,
+    RelayEndpointStatusRecord, SwarmControl, peer_handshake::PeerHandshakePayload,
+};
 use async_result::Completer;
 use libp2p::{
     Multiaddr, PeerId,
@@ -91,6 +94,8 @@ impl PeerConnections {
     }
 }
 
+/// Runtime registry for peer connections, ping info, stream observations and connectivity
+/// diagnostics.
 #[derive(Default, Clone)]
 pub struct State {
     dial_callback: DialCallback,
@@ -99,6 +104,7 @@ pub struct State {
     incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
     next_stream_id: Arc<AtomicU64>,
     stream_state: Arc<Mutex<StreamObservationState>>,
+    connectivity_state: Arc<Mutex<ConnectivityState>>,
 }
 
 impl State {
@@ -110,6 +116,7 @@ impl State {
             incoming_allowed_peers: Arc::new(RwLock::new(incoming_allowed_peers)),
             next_stream_id: Arc::new(AtomicU64::new(0)),
             stream_state: Arc::new(Mutex::new(StreamObservationState::default())),
+            connectivity_state: Arc::new(Mutex::new(ConnectivityState::default())),
         }
     }
 
@@ -127,6 +134,94 @@ impl State {
 
     pub fn incoming_allowed_peers(&self) -> Arc<RwLock<HashSet<PeerId>>> {
         self.incoming_allowed_peers.clone()
+    }
+
+    pub fn register_relay_endpoint(&self, relay_addr: Multiaddr) {
+        self.connectivity_state
+            .lock()
+            .register_relay_endpoint(relay_addr);
+    }
+
+    pub fn set_relay_task_running(&self, relay_addr: &Multiaddr, task_running: bool) {
+        self.connectivity_state
+            .lock()
+            .set_relay_task_running(relay_addr, task_running);
+    }
+
+    pub fn record_relay_listener_check(&self, relay_addr: &Multiaddr, listener_registered: bool) {
+        self.connectivity_state
+            .lock()
+            .record_relay_listener_check(relay_addr, listener_registered);
+    }
+
+    pub fn record_relay_management_action(
+        &self,
+        relay_addr: &Multiaddr,
+        action: crate::RelayManagementAction,
+    ) {
+        self.connectivity_state
+            .lock()
+            .record_relay_management_action(relay_addr, action);
+    }
+
+    pub fn record_relay_management_error(&self, relay_addr: &Multiaddr, error: impl Into<String>) {
+        self.connectivity_state
+            .lock()
+            .record_relay_management_error(relay_addr, error);
+    }
+
+    pub fn record_relay_reservation_accepted(
+        &self,
+        relay_peer_id: PeerId,
+        change: crate::RelayManagementAction,
+    ) {
+        self.connectivity_state
+            .lock()
+            .record_relay_reservation_accepted(relay_peer_id, change);
+    }
+
+    pub fn record_relay_connection_closed(&self, relay_peer_id: PeerId, remote_addr: &Multiaddr) {
+        self.connectivity_state
+            .lock()
+            .record_relay_connection_closed(relay_peer_id, remote_addr);
+    }
+
+    pub fn record_external_address_candidate(
+        &self,
+        address: Multiaddr,
+        source: ExternalAddressSource,
+    ) {
+        self.connectivity_state
+            .lock()
+            .record_external_address_candidate(address, source);
+    }
+
+    pub fn record_external_address_confirmed(
+        &self,
+        address: Multiaddr,
+        source: ExternalAddressSource,
+    ) {
+        self.connectivity_state
+            .lock()
+            .record_external_address_confirmed(address, source);
+    }
+
+    pub fn expire_external_address(&self, address: &Multiaddr) {
+        self.connectivity_state
+            .lock()
+            .expire_external_address(address);
+    }
+
+    pub fn list_external_address_candidates(&self) -> Vec<ExternalAddressCandidateRecord> {
+        self.connectivity_state
+            .lock()
+            .list_external_address_candidates()
+    }
+
+    pub fn list_relay_endpoint_statuses(&self) -> Vec<RelayEndpointStatusRecord> {
+        self.connectivity_state
+            .lock()
+            .list_relay_endpoint_statuses()
     }
 
     pub fn get_incoming_allowed_peers_list(&self) -> Vec<PeerId> {
@@ -326,13 +421,9 @@ pub struct ObservedStreamEntry {
 
 #[derive(Debug, Default)]
 struct StreamObservationState {
-    // Primary storage: stream id -> stream metadata.
     streams_by_id: HashMap<StreamId, ObservedStreamEntry>,
-    // Secondary index: connection id -> active stream ids.
     stream_ids_by_connection: HashMap<ConnectionId, HashSet<StreamId>>,
-    // Secondary index: protocol name -> active stream ids.
     stream_ids_by_protocol: HashMap<String, HashSet<StreamId>>,
-    // Secondary index: peer id -> active stream ids.
     stream_ids_by_peer: HashMap<PeerId, HashSet<StreamId>>,
 }
 

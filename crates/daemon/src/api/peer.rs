@@ -1,14 +1,63 @@
 use std::{path::PathBuf, time::Duration};
 
 use anyhow::Result;
-use fungi_swarm::PeerConnections;
+use fungi_swarm::{ConnectionInfo, PeerConnections, State};
 use libp2p::{PeerId, swarm::ConnectionId};
 
 use crate::FungiDaemon;
 
-use super::types::{ActiveStreamSnapshot, ConnectionSnapshot, ProtocolStreamCountSnapshot};
+use super::types::{
+    ActiveStreamSnapshot, ConnectionSnapshot, ExternalAddressSnapshot, ProtocolStreamCountSnapshot,
+    RelayEndpointStatusSnapshot,
+};
 
 impl FungiDaemon {
+    fn build_connection_snapshot(
+        state: &State,
+        peer_id: PeerId,
+        direction: &str,
+        conn: &ConnectionInfo,
+    ) -> ConnectionSnapshot {
+        let ping_info = state.connection_ping_info(&conn.connection_id());
+        let (last_rtt_ms, last_ping_at) = match ping_info {
+            Some(info) => match (info.last_rtt, info.last_rtt_at) {
+                (Some(last_rtt), Some(last_rtt_at)) => {
+                    (last_rtt.as_millis() as u64, Some(last_rtt_at))
+                }
+                _ => (0, None),
+            },
+            None => (0, None),
+        };
+
+        let active_streams_by_protocol = state
+            .connection_active_stream_protocol_counts(&conn.connection_id())
+            .into_iter()
+            .map(
+                |(protocol_name, stream_count)| ProtocolStreamCountSnapshot {
+                    protocol_name,
+                    stream_count,
+                },
+            )
+            .collect::<Vec<_>>();
+        let active_streams_total = active_streams_by_protocol
+            .iter()
+            .map(|entry| entry.stream_count)
+            .sum();
+
+        let remote_addr = conn.multiaddr().to_string();
+        ConnectionSnapshot {
+            peer_id: peer_id.to_string(),
+            connection_id: conn.connection_id().to_string(),
+            direction: direction.to_string(),
+            is_relay: remote_addr.contains("/p2p-circuit"),
+            remote_addr,
+            last_rtt_ms,
+            last_ping_at,
+            active_streams_total,
+            active_streams_by_protocol,
+        }
+    }
+
     pub fn host_name(&self) -> Option<String> {
         self.config().lock().get_hostname()
     }
@@ -79,6 +128,24 @@ impl FungiDaemon {
         self.swarm_control().state().get_peer_connections(&peer_id)
     }
 
+    pub fn list_external_address_candidates(&self) -> Vec<ExternalAddressSnapshot> {
+        self.swarm_control()
+            .state()
+            .list_external_address_candidates()
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
+    pub fn list_relay_endpoint_statuses(&self) -> Vec<RelayEndpointStatusSnapshot> {
+        self.swarm_control()
+            .state()
+            .list_relay_endpoint_statuses()
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
     pub fn list_connections(&self, peer_id: Option<PeerId>) -> Vec<ConnectionSnapshot> {
         let state = self.swarm_control().state();
         let peer_connections = state.peer_connections();
@@ -93,85 +160,15 @@ impl FungiDaemon {
             }
 
             for conn in peer_conn.inbound() {
-                let ping_info = state.connection_ping_info(&conn.connection_id());
-                let (last_rtt_ms, last_ping_at) = match ping_info {
-                    Some(info) => match (info.last_rtt, info.last_rtt_at) {
-                        (Some(last_rtt), Some(last_rtt_at)) => {
-                            (last_rtt.as_millis() as u64, Some(last_rtt_at))
-                        }
-                        _ => (0, None),
-                    },
-                    None => (0, None),
-                };
-
-                let active_streams_by_protocol = state
-                    .connection_active_stream_protocol_counts(&conn.connection_id())
-                    .into_iter()
-                    .map(
-                        |(protocol_name, stream_count)| ProtocolStreamCountSnapshot {
-                            protocol_name,
-                            stream_count,
-                        },
-                    )
-                    .collect::<Vec<_>>();
-                let active_streams_total = active_streams_by_protocol
-                    .iter()
-                    .map(|entry| entry.stream_count)
-                    .sum();
-
-                let remote_addr = conn.multiaddr().to_string();
-                snapshots.push(ConnectionSnapshot {
-                    peer_id: pid.to_string(),
-                    connection_id: conn.connection_id().to_string(),
-                    direction: "inbound".to_string(),
-                    is_relay: remote_addr.contains("/p2p-circuit"),
-                    remote_addr,
-                    last_rtt_ms,
-                    last_ping_at,
-                    active_streams_total,
-                    active_streams_by_protocol,
-                });
+                snapshots.push(Self::build_connection_snapshot(
+                    state, *pid, "inbound", conn,
+                ));
             }
 
             for conn in peer_conn.outbound() {
-                let ping_info = state.connection_ping_info(&conn.connection_id());
-                let (last_rtt_ms, last_ping_at) = match ping_info {
-                    Some(info) => match (info.last_rtt, info.last_rtt_at) {
-                        (Some(last_rtt), Some(last_rtt_at)) => {
-                            (last_rtt.as_millis() as u64, Some(last_rtt_at))
-                        }
-                        _ => (0, None),
-                    },
-                    _ => (0, None),
-                };
-
-                let active_streams_by_protocol = state
-                    .connection_active_stream_protocol_counts(&conn.connection_id())
-                    .into_iter()
-                    .map(
-                        |(protocol_name, stream_count)| ProtocolStreamCountSnapshot {
-                            protocol_name,
-                            stream_count,
-                        },
-                    )
-                    .collect::<Vec<_>>();
-                let active_streams_total = active_streams_by_protocol
-                    .iter()
-                    .map(|entry| entry.stream_count)
-                    .sum();
-
-                let remote_addr = conn.multiaddr().to_string();
-                snapshots.push(ConnectionSnapshot {
-                    peer_id: pid.to_string(),
-                    connection_id: conn.connection_id().to_string(),
-                    direction: "outbound".to_string(),
-                    is_relay: remote_addr.contains("/p2p-circuit"),
-                    remote_addr,
-                    last_rtt_ms,
-                    last_ping_at,
-                    active_streams_total,
-                    active_streams_by_protocol,
-                });
+                snapshots.push(Self::build_connection_snapshot(
+                    state, *pid, "outbound", conn,
+                ));
             }
         }
 

@@ -1,6 +1,77 @@
 use std::time::SystemTime;
 
+use fungi_swarm::{ExternalAddressCandidateRecord, RelayEndpointStatusRecord};
 use serde::{Deserialize, Serialize};
+
+/// Daemon-layer DTO for external address observability.
+///
+/// These snapshot structs exist to decouple the daemon/API surface from internal swarm state and
+/// to provide stable, serialization-friendly data for CLI, gRPC and future UI layers.
+#[derive(Debug, Clone)]
+pub struct ExternalAddressSnapshot {
+    pub address: String,
+    pub transport: String,
+    pub first_observed_at: SystemTime,
+    pub last_observed_at: SystemTime,
+    pub confirmed_at: Option<SystemTime>,
+    pub expired_at: Option<SystemTime>,
+    pub observation_count: u64,
+    pub sources: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RelayEndpointStatusSnapshot {
+    pub relay_addr: String,
+    pub relay_peer_id: Option<String>,
+    pub transport: String,
+    pub listener_registered: bool,
+    pub task_running: bool,
+    pub last_listener_seen_at: Option<SystemTime>,
+    pub last_listener_missing_at: Option<SystemTime>,
+    pub last_reservation_accepted_at: Option<SystemTime>,
+    pub last_direct_connection_closed_at: Option<SystemTime>,
+    pub last_management_action: Option<String>,
+    pub last_error: Option<String>,
+}
+
+impl From<ExternalAddressCandidateRecord> for ExternalAddressSnapshot {
+    fn from(record: ExternalAddressCandidateRecord) -> Self {
+        Self {
+            address: record.address.to_string(),
+            transport: record.transport_kind.as_str().to_string(),
+            first_observed_at: record.first_observed_at,
+            last_observed_at: record.last_observed_at,
+            confirmed_at: record.confirmed_at,
+            expired_at: record.expired_at,
+            observation_count: record.observation_count,
+            sources: record
+                .sources
+                .into_iter()
+                .map(|source| source.as_str().to_string())
+                .collect(),
+        }
+    }
+}
+
+impl From<RelayEndpointStatusRecord> for RelayEndpointStatusSnapshot {
+    fn from(record: RelayEndpointStatusRecord) -> Self {
+        Self {
+            relay_addr: record.relay_addr.to_string(),
+            relay_peer_id: record.relay_peer_id.map(|peer_id| peer_id.to_string()),
+            transport: record.transport_kind.as_str().to_string(),
+            listener_registered: record.listener_registered,
+            task_running: record.task_running,
+            last_listener_seen_at: record.last_listener_seen_at,
+            last_listener_missing_at: record.last_listener_missing_at,
+            last_reservation_accepted_at: record.last_reservation_accepted_at,
+            last_direct_connection_closed_at: record.last_direct_connection_closed_at,
+            last_management_action: record
+                .last_management_action
+                .map(|action| action.as_str().to_string()),
+            last_error: record.last_error,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ConnectionSnapshot {
