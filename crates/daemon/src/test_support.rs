@@ -42,7 +42,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use fungi_config::{FungiConfig, address_book::AddressBookConfig};
 use libp2p::{Multiaddr, PeerId, identity::Keypair, multiaddr::Protocol};
 use tempfile::TempDir;
@@ -70,8 +70,7 @@ pub fn reserve_ephemeral_port() -> u16 {
 ///
 /// Relay is **disabled** and file-transfer proxies are **off** so tests stay self-contained.
 fn minimal_test_config(dir: &TempDir, tcp_port: u16) -> FungiConfig {
-    let mut cfg =
-        FungiConfig::apply_from_dir(dir.path()).expect("failed to init test config dir");
+    let mut cfg = FungiConfig::apply_from_dir(dir.path()).expect("failed to init test config dir");
     cfg.network.listen_tcp_port = tcp_port;
     // Derive UDP port from TCP port to keep them paired and avoid collisions with other
     // concurrently-running test daemons.  The OS-reserved TCP port will already be >1024
@@ -117,7 +116,10 @@ impl TestDaemonBuilder {
     /// Use this when a scenario needs one-off config beyond the common builder helpers, such as
     /// enabling a specific subsystem or seeding a service-specific client entry, while still
     /// keeping the rest of the daemon setup on the shared test-support path.
-    pub fn with_config(mut self, configure: impl Fn(&mut FungiConfig) + Send + Sync + 'static) -> Self {
+    pub fn with_config(
+        mut self,
+        configure: impl Fn(&mut FungiConfig) + Send + Sync + 'static,
+    ) -> Self {
         self.config_mutators.push(Box::new(configure));
         self
     }
@@ -135,8 +137,13 @@ impl TestDaemonBuilder {
             configure(&mut cfg);
         }
 
-        let daemon =
-            FungiDaemon::start_with(DaemonArgs::default(), cfg, keypair, AddressBookConfig::default()).await?;
+        let daemon = FungiDaemon::start_with(
+            DaemonArgs::default(),
+            cfg,
+            keypair,
+            AddressBookConfig::default(),
+        )
+        .await?;
         Ok(TestDaemon {
             inner: daemon,
             tcp_port,
@@ -222,7 +229,10 @@ impl TestDaemon {
             .await?;
 
         // Initiate the dial.
-        self.swarm_control().connect(target_peer_id).await.map_err(|e| anyhow!("dial failed: {e}"))?;
+        self.swarm_control()
+            .connect(target_peer_id)
+            .await
+            .map_err(|e| anyhow!("dial failed: {e}"))?;
 
         Ok(())
     }
@@ -302,7 +312,10 @@ mod tests {
     async fn tcp_multiaddr_contains_port_and_peer_id() {
         let d = TestDaemon::spawn().await.unwrap();
         let addr = d.tcp_multiaddr().to_string();
-        assert!(addr.contains(&d.tcp_port.to_string()), "addr should contain port: {addr}");
+        assert!(
+            addr.contains(&d.tcp_port.to_string()),
+            "addr should contain port: {addr}"
+        );
         assert!(
             addr.contains(&d.peer_id().to_string()),
             "addr should contain peer id: {addr}"

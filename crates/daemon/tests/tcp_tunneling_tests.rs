@@ -4,8 +4,10 @@
 //! logic lives in one place and tests stay readable.
 
 use fungi_config::FungiConfig;
-use fungi_daemon::test_support::{TestDaemon, TestDaemonBuilder, reserve_ephemeral_port, spawn_connected_pair};
 use fungi_daemon::FungiDaemon;
+use fungi_daemon::test_support::{
+    TestDaemon, TestDaemonBuilder, reserve_ephemeral_port, spawn_connected_pair,
+};
 use fungi_util::protocols::service_port_protocol;
 use libp2p::identity::Keypair;
 use tempfile::TempDir;
@@ -21,9 +23,14 @@ async fn spawn_daemon_in_dir(dir: &TempDir) -> FungiDaemon {
     config.file_transfer.proxy_ftp.enabled = false;
     config.file_transfer.proxy_webdav.enabled = false;
     config.save_to_file().unwrap();
-    FungiDaemon::start_with(Default::default(), config, Keypair::generate_ed25519(), Default::default())
-        .await
-        .expect("failed to start daemon")
+    FungiDaemon::start_with(
+        Default::default(),
+        config,
+        Keypair::generate_ed25519(),
+        Default::default(),
+    )
+    .await
+    .expect("failed to start daemon")
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -136,7 +143,10 @@ async fn multiple_forwarding_rules_have_distinct_ids() {
 
     assert_ne!(id1, id2);
     assert_eq!(d.daemon().get_tcp_forwarding_rules().len(), 2);
-    assert_eq!(d.daemon().get_tcp_tunneling_config().forwarding.rules.len(), 2);
+    assert_eq!(
+        d.daemon().get_tcp_tunneling_config().forwarding.rules.len(),
+        2
+    );
 }
 
 #[tokio::test]

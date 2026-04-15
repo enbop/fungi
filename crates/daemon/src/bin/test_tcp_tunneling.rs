@@ -20,8 +20,14 @@ async fn create_tcp_tunneling_daemons() -> (TestDaemon, TestDaemon) {
         .await
         .expect("Server did not observe the client connection");
 
-    println!("✅ Client daemon started on port {}", client_daemon.tcp_port);
-    println!("✅ Server daemon started on port {}", server_daemon.tcp_port);
+    println!(
+        "✅ Client daemon started on port {}",
+        client_daemon.tcp_port
+    );
+    println!(
+        "✅ Server daemon started on port {}",
+        server_daemon.tcp_port
+    );
     println!("✅ Client peer ID: {}", client_daemon.peer_id());
     println!("✅ Server peer ID: {}", server_daemon.peer_id());
 
@@ -76,10 +82,7 @@ async fn main() {
     println!("🔗 TCP Tunnel Setup Complete!");
     println!("===============================");
     println!("📋 Test Setup:");
-    println!(
-        "   Client peer ID: {}",
-        client_daemon.peer_id()
-    );
+    println!("   Client peer ID: {}", client_daemon.peer_id());
     println!("   Server peer ID: {server_peer_id}");
     println!("   Client TCP port: {}", client_daemon.tcp_port);
     println!("   Server TCP port: {}", server_daemon.tcp_port);
