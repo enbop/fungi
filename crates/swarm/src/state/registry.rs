@@ -1,7 +1,7 @@
 use crate::{
     AddressTransportKind, ConnectivityState, ExternalAddressCandidateRecord, ExternalAddressSource,
-    RelayDirectConnectionSnapshot, RelayEndpointStatusRecord, SwarmControl,
-    peer_handshake::PeerHandshakePayload,
+    PeerAddressRecord, PeerAddressSource, RelayDirectConnectionSnapshot, RelayEndpointStatusRecord,
+    SwarmControl, peer_handshake::PeerHandshakePayload,
 };
 use async_result::Completer;
 use libp2p::{
@@ -187,10 +187,27 @@ impl State {
         relay_peer_id: PeerId,
         connection_id: ConnectionId,
         remote_addr: &Multiaddr,
+    ) -> bool {
+        self.connectivity_state
+            .lock()
+            .record_relay_connection_closed(relay_peer_id, connection_id, remote_addr)
+    }
+
+    pub fn record_relay_connection_established(
+        &self,
+        relay_peer_id: PeerId,
+        connection_id: ConnectionId,
+        remote_addr: &Multiaddr,
     ) {
         self.connectivity_state
             .lock()
-            .record_relay_connection_closed(relay_peer_id, connection_id, remote_addr);
+            .record_relay_connection_established(relay_peer_id, connection_id, remote_addr);
+    }
+
+    pub fn relay_endpoint_has_active_direct_connection(&self, relay_addr: &Multiaddr) -> bool {
+        self.connectivity_state
+            .lock()
+            .relay_endpoint_has_active_direct_connection(relay_addr)
     }
 
     pub fn record_external_address_candidate(
@@ -229,6 +246,25 @@ impl State {
         self.connectivity_state
             .lock()
             .list_relay_endpoint_statuses()
+    }
+
+    pub fn record_peer_address(
+        &self,
+        peer_id: PeerId,
+        address: Multiaddr,
+        source: PeerAddressSource,
+    ) -> crate::PeerAddressObservation {
+        self.connectivity_state
+            .lock()
+            .record_peer_address(peer_id, address, source)
+    }
+
+    pub fn list_peer_addresses(&self) -> Vec<PeerAddressRecord> {
+        self.connectivity_state.lock().list_peer_addresses()
+    }
+
+    pub fn peer_address_revision(&self) -> u64 {
+        self.connectivity_state.lock().peer_address_revision()
     }
 
     pub fn get_incoming_allowed_peers_list(&self) -> Vec<PeerId> {

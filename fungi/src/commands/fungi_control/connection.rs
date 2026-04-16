@@ -51,6 +51,15 @@ pub enum ConnectionCommands {
         #[arg(short, long, default_value_t = false)]
         verbose: bool,
     },
+    /// Show peer listen addresses learned into fungi-owned address state
+    PeerAddresses {
+        /// Optional peer ID filter
+        #[arg(long)]
+        peer_id: Option<String>,
+        /// Show detailed output
+        #[arg(short, long, default_value_t = false)]
+        verbose: bool,
+    },
 }
 
 pub async fn execute_connection(args: CommonArgs, cmd: ConnectionCommands) {
@@ -69,6 +78,9 @@ pub async fn execute_connection(args: CommonArgs, cmd: ConnectionCommands) {
             execute_addr_candidates(args, verbose).await
         }
         ConnectionCommands::RelayStatus { verbose } => execute_relay_status(args, verbose).await,
+        ConnectionCommands::PeerAddresses { peer_id, verbose } => {
+            execute_peer_addresses(args, peer_id, verbose).await
+        }
     }
 }
 
@@ -422,6 +434,74 @@ async fn execute_relay_status(args: CommonArgs, verbose: bool) {
                         } else {
                             &status.last_error
                         }
+                    );
+                }
+            }
+        }
+        Err(e) => fatal_grpc(e),
+    }
+}
+
+async fn execute_peer_addresses(args: CommonArgs, peer_id: Option<String>, verbose: bool) {
+    let mut client = match get_rpc_client(&args).await {
+        Some(c) => c,
+        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
+    };
+
+    match client.list_peer_addresses(Request::new(Empty {})).await {
+        Ok(resp) => {
+            let mut addresses = resp.into_inner().addresses;
+            if let Some(filter_peer_id) = &peer_id {
+                addresses.retain(|entry| entry.peer_id == *filter_peer_id);
+            }
+
+            if addresses.is_empty() {
+                if let Some(filter_peer_id) = peer_id {
+                    println!("No learned peer addresses for peer {}", filter_peer_id);
+                } else {
+                    println!("No learned peer addresses");
+                }
+                return;
+            }
+
+            addresses.sort_by(|a, b| {
+                a.peer_id
+                    .cmp(&b.peer_id)
+                    .then(a.address.cmp(&b.address))
+                    .then(a.source.cmp(&b.source))
+            });
+
+            println!("Learned peer addresses");
+            println!(
+                "{:<22} {:<8} {:<10} {:<5} ADDR",
+                "PEER", "TRANSP", "SOURCE", "OBS"
+            );
+
+            for entry in addresses {
+                let peer_display = if verbose {
+                    entry.peer_id.clone()
+                } else {
+                    shorten_peer_id(&entry.peer_id)
+                };
+                let addr_display = if verbose {
+                    entry.address.clone()
+                } else {
+                    simplify_multiaddr_peer_ids(&entry.address)
+                };
+
+                println!(
+                    "{:<22} {:<8} {:<10} {:<5} {}",
+                    peer_display,
+                    entry.transport,
+                    entry.source,
+                    entry.observation_count,
+                    addr_display,
+                );
+
+                if verbose {
+                    println!(
+                        "  first_seen={} last_seen={}",
+                        entry.first_observed_at_unix_ms, entry.last_observed_at_unix_ms,
                     );
                 }
             }

@@ -41,6 +41,29 @@ impl ExternalAddressSource {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum PeerAddressSource {
+    Identify,
+    Mdns,
+    Manual,
+    RelayDerived,
+    AutoNat,
+    Other,
+}
+
+impl PeerAddressSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PeerAddressSource::Identify => "identify",
+            PeerAddressSource::Mdns => "mdns",
+            PeerAddressSource::Manual => "manual",
+            PeerAddressSource::RelayDerived => "relay-derived",
+            PeerAddressSource::AutoNat => "autonat",
+            PeerAddressSource::Other => "other",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum AddressFreshness {
     Fresh,
     Aging,
@@ -65,6 +88,7 @@ pub enum RelayManagementAction {
     ListenTaskSucceeded,
     ListenTaskExhausted,
     ListenerMissingReconcile,
+    DirectConnectionMissingReconcile,
     ReservationEstablished,
     ReservationRenewed,
     DirectConnectionClosed,
@@ -78,6 +102,9 @@ impl RelayManagementAction {
             RelayManagementAction::ListenTaskSucceeded => "listen-task-succeeded",
             RelayManagementAction::ListenTaskExhausted => "listen-task-exhausted",
             RelayManagementAction::ListenerMissingReconcile => "listener-missing-reconcile",
+            RelayManagementAction::DirectConnectionMissingReconcile => {
+                "direct-connection-missing-reconcile"
+            }
             RelayManagementAction::ReservationEstablished => "reservation-established",
             RelayManagementAction::ReservationRenewed => "reservation-renewed",
             RelayManagementAction::DirectConnectionClosed => "direct-connection-closed",
@@ -138,6 +165,7 @@ pub struct RelayEndpointStatusRecord {
     pub listener_registered: bool,
     pub task_running: bool,
     pub current_direct_connection_id: Option<ConnectionId>,
+    pub last_direct_connection_established_at: Option<SystemTime>,
     pub last_listener_seen_at: Option<SystemTime>,
     pub last_listener_missing_at: Option<SystemTime>,
     pub last_reservation_accepted_at: Option<SystemTime>,
@@ -148,6 +176,24 @@ pub struct RelayEndpointStatusRecord {
     pub last_management_action: Option<RelayManagementAction>,
     /// Last reconciliation error observed for this endpoint.
     pub last_error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PeerAddressRecord {
+    pub peer_id: PeerId,
+    pub address: Multiaddr,
+    pub transport_kind: AddressTransportKind,
+    pub source: PeerAddressSource,
+    pub first_observed_at: SystemTime,
+    pub last_observed_at: SystemTime,
+    pub observation_count: u64,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum PeerAddressObservation {
+    New,
+    Refreshed,
+    Ignored,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -165,6 +211,8 @@ pub struct RelayDirectConnectionSnapshot {
 pub struct ConnectivityState {
     external_address_candidates: HashMap<Multiaddr, ExternalAddressCandidateRecord>,
     relay_endpoint_statuses: HashMap<Multiaddr, RelayEndpointStatusRecord>,
+    peer_address_records: HashMap<(PeerId, Multiaddr), PeerAddressRecord>,
+    peer_address_revision: u64,
 }
 
 impl ConnectivityState {
@@ -181,6 +229,7 @@ impl ConnectivityState {
                 listener_registered: false,
                 task_running: false,
                 current_direct_connection_id: None,
+                last_direct_connection_established_at: None,
                 last_listener_seen_at: None,
                 last_listener_missing_at: None,
                 last_reservation_accepted_at: None,
@@ -263,7 +312,7 @@ impl ConnectivityState {
         }
     }
 
-    pub fn record_relay_connection_closed(
+    pub fn record_relay_connection_established(
         &mut self,
         relay_peer_id: PeerId,
         connection_id: ConnectionId,
@@ -276,13 +325,44 @@ impl ConnectivityState {
             if status.relay_peer_id == Some(relay_peer_id)
                 && status.transport_kind == remote_transport
             {
-                if status.current_direct_connection_id == Some(connection_id) {
-                    status.current_direct_connection_id = None;
-                }
-                status.last_direct_connection_closed_at = Some(now);
-                status.last_management_action = Some(RelayManagementAction::DirectConnectionClosed);
+                status.current_direct_connection_id = Some(connection_id);
+                status.last_direct_connection_established_at = Some(now);
             }
         }
+    }
+
+    pub fn record_relay_connection_closed(
+        &mut self,
+        relay_peer_id: PeerId,
+        connection_id: ConnectionId,
+        remote_addr: &Multiaddr,
+    ) -> bool {
+        let remote_transport = address_transport_kind(remote_addr);
+        let now = SystemTime::now();
+        let mut closed_active_connection = false;
+
+        for status in self.relay_endpoint_statuses.values_mut() {
+            if status.relay_peer_id == Some(relay_peer_id)
+                && status.transport_kind == remote_transport
+            {
+                if status.current_direct_connection_id == Some(connection_id) {
+                    status.current_direct_connection_id = None;
+                    closed_active_connection = true;
+                    status.last_direct_connection_closed_at = Some(now);
+                    status.last_management_action =
+                        Some(RelayManagementAction::DirectConnectionClosed);
+                }
+            }
+        }
+
+        closed_active_connection
+    }
+
+    pub fn relay_endpoint_has_active_direct_connection(&self, relay_addr: &Multiaddr) -> bool {
+        self.relay_endpoint_statuses
+            .get(relay_addr)
+            .and_then(|status| status.current_direct_connection_id)
+            .is_some()
     }
 
     pub fn record_external_address_candidate(
@@ -321,6 +401,61 @@ impl ConnectivityState {
                 .cmp(&right.relay_addr.to_string())
         });
         statuses
+    }
+
+    pub fn record_peer_address(
+        &mut self,
+        peer_id: PeerId,
+        address: Multiaddr,
+        source: PeerAddressSource,
+    ) -> PeerAddressObservation {
+        let Some(normalized) = normalize_peer_address(&address, peer_id) else {
+            return PeerAddressObservation::Ignored;
+        };
+
+        let now = SystemTime::now();
+        let key = (peer_id, normalized.clone());
+        let transport_kind = address_transport_kind(&normalized);
+
+        match self.peer_address_records.get_mut(&key) {
+            Some(record) => {
+                record.last_observed_at = now;
+                record.observation_count += 1;
+                record.source = source;
+                PeerAddressObservation::Refreshed
+            }
+            None => {
+                self.peer_address_records.insert(
+                    key,
+                    PeerAddressRecord {
+                        peer_id,
+                        address: normalized,
+                        transport_kind,
+                        source,
+                        first_observed_at: now,
+                        last_observed_at: now,
+                        observation_count: 1,
+                    },
+                );
+                self.peer_address_revision += 1;
+                PeerAddressObservation::New
+            }
+        }
+    }
+
+    pub fn list_peer_addresses(&self) -> Vec<PeerAddressRecord> {
+        let mut records: Vec<_> = self.peer_address_records.values().cloned().collect();
+        records.sort_by(|left, right| {
+            left.peer_id
+                .to_string()
+                .cmp(&right.peer_id.to_string())
+                .then(left.address.to_string().cmp(&right.address.to_string()))
+        });
+        records
+    }
+
+    pub fn peer_address_revision(&self) -> u64 {
+        self.peer_address_revision
     }
 
     fn record_external_address(
@@ -388,5 +523,226 @@ fn freshness_windows(transport_kind: AddressTransportKind) -> (Duration, Duratio
         AddressTransportKind::Tcp => (Duration::from_secs(300), Duration::from_secs(900)),
         AddressTransportKind::Relayed => (Duration::from_secs(600), Duration::from_secs(1800)),
         AddressTransportKind::Other => (Duration::from_secs(300), Duration::from_secs(900)),
+    }
+}
+
+fn normalize_peer_address(address: &Multiaddr, peer_id: PeerId) -> Option<Multiaddr> {
+    let mut normalized = Multiaddr::empty();
+    let mut protocols = address.iter().peekable();
+    let mut saw_transport = false;
+
+    while let Some(protocol) = protocols.next() {
+        match protocol {
+            Protocol::Ip4(ip) => {
+                if ip.is_unspecified() || ip.is_loopback() {
+                    return None;
+                }
+                normalized.push(Protocol::Ip4(ip));
+            }
+            Protocol::Ip6(ip) => {
+                if ip.is_unspecified() || ip.is_loopback() {
+                    return None;
+                }
+                normalized.push(Protocol::Ip6(ip));
+            }
+            Protocol::Dns(name) => {
+                if is_local_hostname(&name) {
+                    return None;
+                }
+                normalized.push(Protocol::Dns(name));
+            }
+            Protocol::Dns4(name) => {
+                if is_local_hostname(&name) {
+                    return None;
+                }
+                normalized.push(Protocol::Dns4(name));
+            }
+            Protocol::Dns6(name) => {
+                if is_local_hostname(&name) {
+                    return None;
+                }
+                normalized.push(Protocol::Dns6(name));
+            }
+            Protocol::Dnsaddr(name) => {
+                if is_local_hostname(&name) {
+                    return None;
+                }
+                normalized.push(Protocol::Dnsaddr(name));
+            }
+            Protocol::Tcp(port) => {
+                if port == 0 {
+                    return None;
+                }
+                saw_transport = true;
+                normalized.push(Protocol::Tcp(port));
+            }
+            Protocol::Udp(port) => {
+                if port == 0 {
+                    return None;
+                }
+                saw_transport = true;
+                normalized.push(Protocol::Udp(port));
+            }
+            Protocol::QuicV1 => normalized.push(Protocol::QuicV1),
+            Protocol::P2p(observed_peer_id) => {
+                if observed_peer_id != peer_id {
+                    return None;
+                }
+
+                if protocols.peek().is_none() {
+                    break;
+                }
+
+                return None;
+            }
+            Protocol::P2pCircuit => normalized.push(Protocol::P2pCircuit),
+            _ => return None,
+        }
+    }
+
+    if !saw_transport {
+        return None;
+    }
+
+    Some(normalized)
+}
+
+fn is_local_hostname(name: &str) -> bool {
+    name.eq_ignore_ascii_case("localhost")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn peer_address_normalization_accepts_direct_identify_addr() {
+        let peer_id = PeerId::random();
+        let address: Multiaddr = format!("/ip4/192.168.1.7/tcp/4001/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+
+        let normalized = normalize_peer_address(&address, peer_id).unwrap();
+        assert_eq!(normalized.to_string(), "/ip4/192.168.1.7/tcp/4001");
+    }
+
+    #[test]
+    fn peer_address_normalization_rejects_mismatched_peer_suffix() {
+        let peer_id = PeerId::random();
+        let wrong_peer_id = PeerId::random();
+        let address: Multiaddr = format!("/ip4/192.168.1.7/tcp/4001/p2p/{wrong_peer_id}")
+            .parse()
+            .unwrap();
+
+        assert!(normalize_peer_address(&address, peer_id).is_none());
+    }
+
+    #[test]
+    fn peer_address_normalization_rejects_unspecified_ip() {
+        let peer_id = PeerId::random();
+        let address: Multiaddr = format!("/ip4/0.0.0.0/tcp/4001/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+
+        assert!(normalize_peer_address(&address, peer_id).is_none());
+    }
+
+    #[test]
+    fn peer_address_normalization_rejects_loopback_ip() {
+        let peer_id = PeerId::random();
+        let address: Multiaddr = format!("/ip4/127.0.0.1/tcp/4001/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+
+        assert!(normalize_peer_address(&address, peer_id).is_none());
+    }
+
+    #[test]
+    fn peer_address_normalization_rejects_localhost_dns() {
+        let peer_id = PeerId::random();
+        let address: Multiaddr = format!("/dns4/localhost/tcp/4001/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+
+        assert!(normalize_peer_address(&address, peer_id).is_none());
+    }
+
+    #[test]
+    fn peer_address_normalization_rejects_zero_port() {
+        let peer_id = PeerId::random();
+        let address: Multiaddr = format!("/ip4/192.168.1.7/tcp/0/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+
+        assert!(normalize_peer_address(&address, peer_id).is_none());
+    }
+
+    #[test]
+    fn peer_address_record_deduplicates_and_counts_observations() {
+        let peer_id = PeerId::random();
+        let address: Multiaddr = format!("/ip4/192.168.1.7/tcp/4001/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let mut state = ConnectivityState::default();
+
+        assert_eq!(
+            state.record_peer_address(peer_id, address.clone(), PeerAddressSource::Identify),
+            PeerAddressObservation::New
+        );
+        assert_eq!(
+            state.record_peer_address(peer_id, address, PeerAddressSource::Identify),
+            PeerAddressObservation::Refreshed
+        );
+
+        let records = state.list_peer_addresses();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].observation_count, 2);
+    }
+
+    #[test]
+    fn peer_address_revision_only_changes_for_new_addresses() {
+        let peer_id = PeerId::random();
+        let address: Multiaddr = format!("/ip4/192.168.1.7/tcp/4001/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let mut state = ConnectivityState::default();
+
+        assert_eq!(state.peer_address_revision(), 0);
+        assert_eq!(
+            state.record_peer_address(peer_id, address.clone(), PeerAddressSource::Identify),
+            PeerAddressObservation::New
+        );
+        assert_eq!(state.peer_address_revision(), 1);
+        assert_eq!(
+            state.record_peer_address(peer_id, address, PeerAddressSource::Identify),
+            PeerAddressObservation::Refreshed
+        );
+        assert_eq!(state.peer_address_revision(), 1);
+    }
+
+    #[test]
+    fn relay_connection_close_only_clears_current_direct_connection() {
+        let relay_addr: Multiaddr = "/ip4/160.16.206.21/udp/30001/quic-v1/p2p/12D3KooWQd4YvW5yV7k3K14rH4VJm6AqW4U4GQnVx2q4iH7z3fAr"
+            .parse()
+            .unwrap();
+        let relay_peer_id = relay_peer_id(&relay_addr).unwrap();
+        let mut state = ConnectivityState::default();
+        state.register_relay_endpoint(relay_addr.clone());
+
+        let old_connection = ConnectionId::new_unchecked(7);
+        let current_connection = ConnectionId::new_unchecked(8);
+
+        state.record_relay_connection_established(relay_peer_id, old_connection, &relay_addr);
+        state.record_relay_connection_established(relay_peer_id, current_connection, &relay_addr);
+
+        assert!(!state.record_relay_connection_closed(relay_peer_id, old_connection, &relay_addr));
+        assert!(state.relay_endpoint_has_active_direct_connection(&relay_addr));
+
+        assert!(state.record_relay_connection_closed(
+            relay_peer_id,
+            current_connection,
+            &relay_addr
+        ));
+        assert!(!state.relay_endpoint_has_active_direct_connection(&relay_addr));
     }
 }

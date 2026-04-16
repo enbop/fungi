@@ -72,6 +72,8 @@ pub struct PeerInfo {
     pub peer_id: PeerId,
     pub alias: Option<String>,
     pub hostname: Option<String>,
+    #[serde(default)]
+    pub multiaddrs: Vec<String>,
     pub private_ips: Vec<String>,
     pub os: Os,
     pub version: String,
@@ -91,6 +93,7 @@ impl PeerInfo {
             peer_id,
             alias: None,
             hostname,
+            multiaddrs: vec![],
             os,
             public_ip: None,
             private_ips: local_ip.map(|ip| vec![ip]).unwrap_or_default(),
@@ -132,6 +135,7 @@ impl PeerInfo {
             peer_id,
             alias: None,
             hostname: None,
+            multiaddrs: vec![],
             os: Os::Unknown,
             public_ip: None,
             private_ips: vec![],
@@ -174,6 +178,7 @@ impl TryFrom<&mdns_sd::TxtProperties> for PeerInfo {
             peer_id,
             alias: None,
             hostname,
+            multiaddrs: vec![],
             os,
             public_ip,
             private_ips,
@@ -322,6 +327,45 @@ impl AddressBookConfig {
             config.peers.retain(|p| p.peer_id != *peer_id);
         })
     }
+
+    pub fn sync_peer_multiaddrs(&self, updates: HashMap<PeerId, Vec<String>>) -> Result<Self> {
+        let mut new_config = self.clone();
+        let mut changed = false;
+
+        for (peer_id, multiaddrs) in updates {
+            let mut normalized = multiaddrs
+                .into_iter()
+                .map(|addr| addr.trim().to_string())
+                .filter(|addr| !addr.is_empty())
+                .collect::<Vec<_>>();
+            normalized.sort();
+            normalized.dedup();
+
+            if normalized.is_empty() {
+                continue;
+            }
+
+            if let Some(existing_peer) = new_config.peers.iter_mut().find(|p| p.peer_id == peer_id)
+            {
+                if existing_peer.multiaddrs != normalized {
+                    existing_peer.multiaddrs = normalized;
+                    changed = true;
+                }
+                continue;
+            }
+
+            let mut peer = PeerInfo::new_unknown(peer_id);
+            peer.multiaddrs = normalized;
+            new_config.peers.push(peer);
+            changed = true;
+        }
+
+        if changed {
+            new_config.save_to_file()?;
+        }
+
+        Ok(new_config)
+    }
 }
 
 #[cfg(test)]
@@ -358,6 +402,7 @@ mod tests {
             peer_id,
             alias: None,
             hostname: hostname.clone(),
+            multiaddrs: vec![],
             os: Os::this_device(),
             public_ip: None,
             private_ips: vec![],
@@ -381,6 +426,7 @@ mod tests {
             peer_id,
             alias: None,
             hostname: Some("host1".to_string()),
+            multiaddrs: vec![],
             os: Os::this_device(),
             public_ip: None,
             private_ips: vec![],
@@ -394,6 +440,7 @@ mod tests {
             peer_id,
             alias: Some("alias1".to_string()),
             hostname: Some("host2".to_string()),
+            multiaddrs: vec![],
             os: Os::this_device(),
             public_ip: None,
             private_ips: vec![],
@@ -418,6 +465,7 @@ mod tests {
             peer_id: PeerId::random(),
             alias: Some("MacBook".to_string()),
             hostname: None,
+            multiaddrs: vec![],
             os: Os::this_device(),
             public_ip: None,
             private_ips: vec![],
@@ -430,6 +478,7 @@ mod tests {
             peer_id: PeerId::random(),
             alias: Some("  macbook  ".to_string()),
             hostname: None,
+            multiaddrs: vec![],
             os: Os::this_device(),
             public_ip: None,
             private_ips: vec![],
@@ -450,6 +499,7 @@ mod tests {
             peer_id,
             alias: Some("  work-laptop  ".to_string()),
             hostname: None,
+            multiaddrs: vec![],
             os: Os::this_device(),
             public_ip: None,
             private_ips: vec![],
@@ -464,6 +514,42 @@ mod tests {
                 .get_peer_info(&peer_id)
                 .and_then(|peer| peer.alias.clone()),
             Some("work-laptop".to_string())
+        );
+    }
+
+    #[test]
+    fn test_sync_peer_multiaddrs_updates_existing_peer() {
+        let (config, _temp_dir) = create_temp_peers_config();
+        let peer_id = PeerId::random();
+        let updated = config
+            .add_or_update_peer(PeerInfo {
+                peer_id,
+                alias: None,
+                hostname: Some("host1".to_string()),
+                multiaddrs: vec![],
+                os: Os::this_device(),
+                public_ip: None,
+                private_ips: vec![],
+                version: "1.0.0".to_string(),
+                created_at: SystemTime::now(),
+                last_connected: SystemTime::now(),
+            })
+            .unwrap();
+
+        let synced = updated
+            .sync_peer_multiaddrs(HashMap::from([(
+                peer_id,
+                vec![
+                    "/ip4/192.168.1.7/tcp/4001".to_string(),
+                    "/ip4/192.168.1.7/tcp/4001".to_string(),
+                ],
+            )]))
+            .unwrap();
+
+        let peer = synced.get_peer_info(&peer_id).unwrap();
+        assert_eq!(
+            peer.multiaddrs,
+            vec!["/ip4/192.168.1.7/tcp/4001".to_string()]
         );
     }
 }

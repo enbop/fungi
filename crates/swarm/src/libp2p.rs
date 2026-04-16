@@ -11,6 +11,7 @@ use fungi_util::protocols::{FUNGI_PEER_HANDSHAKE_PROTOCOL, FUNGI_RELAY_HANDSHAKE
 use libp2p::{
     Multiaddr, PeerId, Stream, StreamProtocol, Swarm,
     futures::{AsyncReadExt, AsyncWriteExt, StreamExt},
+    identify,
     identity::Keypair,
     mdns,
     multiaddr::Protocol,
@@ -23,6 +24,7 @@ use libp2p::{
 };
 use std::{
     any::Any,
+    collections::HashMap,
     ops::Deref,
     sync::{
         Arc,
@@ -786,6 +788,9 @@ async fn handle_swarm_event(
             SwarmEvent::Behaviour(FungiBehavioursEvent::Mdns(event)) => {
                 handle_mdns_behaviour_event(event);
             }
+            SwarmEvent::Behaviour(FungiBehavioursEvent::Identify(event)) => {
+                handle_identify_behaviour_event(&swarm_control, event);
+            }
             SwarmEvent::Behaviour(FungiBehavioursEvent::Relay(event)) => {
                 handle_relay_behaviour_event(&swarm_control, event);
             }
@@ -830,6 +835,12 @@ async fn handle_swarm_event(
                     connection_id,
                     &endpoint,
                 );
+                record_relay_connection_established(
+                    &swarm_control,
+                    peer_id,
+                    connection_id,
+                    endpoint.get_remote_address(),
+                );
             }
             SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
                 log::info!("[Swarm event] OutgoingConnectionError {peer_id:?}: {error:?}");
@@ -860,6 +871,7 @@ async fn handle_swarm_event(
                     peer_id,
                     connection_id,
                     endpoint.get_remote_address(),
+                    cause.as_ref().map(|cause| format!("{cause:?}")),
                 );
                 state::handle_connection_closed(&swarm_control, peer_id, connection_id);
             }
@@ -879,6 +891,62 @@ fn handle_mdns_behaviour_event(event: mdns::Event) {
             for (peer_id, addr) in entries {
                 log::info!("libp2p mDNS expired peer {} at {}", peer_id, addr);
             }
+        }
+    }
+}
+
+fn handle_identify_behaviour_event(swarm_control: &SwarmControl, event: identify::Event) {
+    match event {
+        identify::Event::Received { peer_id, info, .. } => {
+            let mut new_addresses = Vec::new();
+            let mut refreshed_count = 0usize;
+            let mut ignored_count = 0usize;
+
+            for address in info.listen_addrs {
+                match swarm_control.state().record_peer_address(
+                    peer_id,
+                    address.clone(),
+                    crate::PeerAddressSource::Identify,
+                ) {
+                    crate::PeerAddressObservation::New => new_addresses.push(address),
+                    crate::PeerAddressObservation::Refreshed => refreshed_count += 1,
+                    crate::PeerAddressObservation::Ignored => ignored_count += 1,
+                }
+            }
+
+            if !new_addresses.is_empty() {
+                log::info!(
+                    "Identify learned {} new address(es) for peer {}: {}",
+                    new_addresses.len(),
+                    peer_id,
+                    summarize_multiaddrs(&new_addresses)
+                );
+            }
+
+            if refreshed_count > 0 {
+                log::debug!(
+                    "Identify refreshed {} existing address(es) for peer {}",
+                    refreshed_count,
+                    peer_id
+                );
+            }
+
+            if ignored_count > 0 {
+                log::debug!(
+                    "Identify ignored {} unusable address(es) for peer {}",
+                    ignored_count,
+                    peer_id
+                );
+            }
+        }
+        identify::Event::Sent { peer_id, .. } => {
+            log::debug!("Identify sent to peer {}", peer_id);
+        }
+        identify::Event::Pushed { peer_id, .. } => {
+            log::debug!("Identify pushed update to peer {}", peer_id);
+        }
+        identify::Event::Error { peer_id, error, .. } => {
+            log::debug!("Identify error for peer {}: {}", peer_id, error);
         }
     }
 }
@@ -932,6 +1000,23 @@ fn handle_dcutr_behaviour_event(event: libp2p::dcutr::Event) {
     }
 }
 
+fn summarize_multiaddrs(addrs: &[Multiaddr]) -> String {
+    const PREVIEW_LIMIT: usize = 3;
+
+    let preview = addrs
+        .iter()
+        .take(PREVIEW_LIMIT)
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    if addrs.len() > PREVIEW_LIMIT {
+        format!("{preview}, ... (+{} more)", addrs.len() - PREVIEW_LIMIT)
+    } else {
+        preview
+    }
+}
+
 async fn relay_management_loop(swarm_control: SwarmControl) {
     loop {
         tokio::time::sleep(RELAY_HEALTH_CHECK_INTERVAL).await;
@@ -939,6 +1024,8 @@ async fn relay_management_loop(swarm_control: SwarmControl) {
         if swarm_control.relay_endpoints.is_empty() {
             continue;
         }
+
+        let mut endpoint_health = Vec::with_capacity(swarm_control.relay_endpoints.len());
 
         for relay_endpoint in swarm_control.relay_endpoints.iter() {
             let listener_registered =
@@ -958,21 +1045,69 @@ async fn relay_management_loop(swarm_control: SwarmControl) {
                     }
                 };
 
+            let has_active_direct_connection = swarm_control
+                .state()
+                .relay_endpoint_has_active_direct_connection(relay_endpoint.addr());
+
             swarm_control
                 .state()
                 .record_relay_listener_check(relay_endpoint.addr(), listener_registered);
 
-            if !listener_registered {
-                swarm_control.state().record_relay_management_action(
-                    relay_endpoint.addr(),
-                    crate::RelayManagementAction::ListenerMissingReconcile,
-                );
-                log::info!(
-                    "Relay health check re-establishing reservation for {} because no relay listener is registered",
+            endpoint_health.push((
+                relay_endpoint.clone(),
+                listener_registered,
+                has_active_direct_connection,
+            ));
+        }
+
+        let mut relay_peer_has_healthy_endpoint = HashMap::<PeerId, bool>::new();
+        for (relay_endpoint, listener_registered, has_active_direct_connection) in &endpoint_health
+        {
+            let Some(relay_peer_id) = relay_endpoint.peer_id() else {
+                continue;
+            };
+
+            let entry = relay_peer_has_healthy_endpoint
+                .entry(relay_peer_id)
+                .or_insert(false);
+            *entry |= *listener_registered && *has_active_direct_connection;
+        }
+
+        for (relay_endpoint, listener_registered, has_active_direct_connection) in endpoint_health {
+            if listener_registered && has_active_direct_connection {
+                continue;
+            }
+
+            let sibling_endpoint_healthy = relay_endpoint
+                .peer_id()
+                .and_then(|relay_peer_id| {
+                    relay_peer_has_healthy_endpoint.get(&relay_peer_id).copied()
+                })
+                .unwrap_or(false);
+
+            if sibling_endpoint_healthy {
+                log::debug!(
+                    "Skipping relay reconcile for {} because another endpoint for the same relay peer is already healthy",
                     relay_endpoint.addr()
                 );
-                spawn_relay_listen_task(&swarm_control, relay_endpoint);
+                continue;
             }
+
+            let action = if !listener_registered {
+                crate::RelayManagementAction::ListenerMissingReconcile
+            } else {
+                crate::RelayManagementAction::DirectConnectionMissingReconcile
+            };
+            swarm_control
+                .state()
+                .record_relay_management_action(relay_endpoint.addr(), action);
+            log::info!(
+                "Relay health check re-establishing reservation for {} because listener_registered={} active_direct_connection={}",
+                relay_endpoint.addr(),
+                listener_registered,
+                has_active_direct_connection
+            );
+            spawn_relay_listen_task(&swarm_control, &relay_endpoint);
         }
     }
 }
@@ -1131,7 +1266,7 @@ async fn relay_listener_registered(
         .await
 }
 
-fn record_relay_connection_closed(
+fn record_relay_connection_established(
     swarm_control: &SwarmControl,
     peer_id: PeerId,
     connection_id: ConnectionId,
@@ -1147,15 +1282,75 @@ fn record_relay_connection_closed(
         };
 
         if relay_peer_id == peer_id && relay_endpoint.matches_transport(remote_addr) {
-            swarm_control.state().record_relay_connection_closed(
+            swarm_control.state().record_relay_connection_established(
                 peer_id,
                 connection_id,
                 remote_addr,
             );
-            swarm_control.state().record_relay_management_action(
-                relay_endpoint.addr(),
-                crate::RelayManagementAction::DirectConnectionClosedAwaitingManagementLoop,
+            log::info!(
+                "Relay carrier connection established peer={} transport={} connection_id={} addr={}",
+                peer_id,
+                relay_endpoint
+                    .transport_kind()
+                    .map(|kind| match kind {
+                        RelayTransportKind::Tcp => "tcp",
+                        RelayTransportKind::Udp => "udp",
+                    })
+                    .unwrap_or("unknown"),
+                connection_id,
+                remote_addr
             );
+        }
+    }
+}
+
+fn record_relay_connection_closed(
+    swarm_control: &SwarmControl,
+    peer_id: PeerId,
+    connection_id: ConnectionId,
+    remote_addr: &Multiaddr,
+    cause: Option<String>,
+) {
+    if remote_addr.to_string().contains("/p2p-circuit") {
+        return;
+    }
+
+    for relay_endpoint in swarm_control.relay_endpoints.iter() {
+        let Some(relay_peer_id) = relay_endpoint.peer_id() else {
+            continue;
+        };
+
+        if relay_peer_id == peer_id && relay_endpoint.matches_transport(remote_addr) {
+            let closed_active_connection = swarm_control.state().record_relay_connection_closed(
+                peer_id,
+                connection_id,
+                remote_addr,
+            );
+            if closed_active_connection {
+                log::warn!(
+                    "Relay carrier connection closed peer={} transport={} connection_id={} addr={} cause={}",
+                    peer_id,
+                    relay_endpoint
+                        .transport_kind()
+                        .map(|kind| match kind {
+                            RelayTransportKind::Tcp => "tcp",
+                            RelayTransportKind::Udp => "udp",
+                        })
+                        .unwrap_or("unknown"),
+                    connection_id,
+                    remote_addr,
+                    cause.as_deref().unwrap_or("unknown")
+                );
+                if let Some(cause) = cause.as_deref() {
+                    swarm_control
+                        .state()
+                        .record_relay_management_error(relay_endpoint.addr(), cause.to_string());
+                }
+                swarm_control.state().record_relay_management_action(
+                    relay_endpoint.addr(),
+                    crate::RelayManagementAction::DirectConnectionClosedAwaitingManagementLoop,
+                );
+            }
         }
     }
 }

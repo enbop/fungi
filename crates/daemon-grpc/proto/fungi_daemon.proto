@@ -22,14 +22,14 @@ service FungiDaemon {
 
   // Lists peers that are allowed to initiate incoming connections.
   rpc GetIncomingAllowedPeers(Empty)
-      returns (IncomingAllowedPeersListResponse) {}
+  returns (IncomingAllowedPeersListResponse) {}
 
   // Adds a peer ID to the allowlist for incoming connections and persists it.
   rpc AddIncomingAllowedPeer(AddIncomingAllowedPeerRequest) returns (Empty) {}
 
   // Removes a peer ID from the allowlist for incoming connections.
   rpc RemoveIncomingAllowedPeer(RemoveIncomingAllowedPeerRequest)
-      returns (Empty) {}
+  returns (Empty) {}
 
   // Returns persisted relay configuration and the current effective relay list.
   rpc GetRelayConfig(Empty) returns (RelayConfigResponse) {}
@@ -57,7 +57,7 @@ service FungiDaemon {
 
   // Removes a host path root from the shared runtime safety boundary.
   rpc RemoveRuntimeAllowedHostPath(RuntimeAllowedHostPathRequest)
-      returns (Empty) {}
+  returns (Empty) {}
 
   // Adds a single TCP port to the shared runtime safety boundary.
   rpc AddRuntimeAllowedPort(RuntimeAllowedPortRequest) returns (Empty) {}
@@ -67,24 +67,24 @@ service FungiDaemon {
 
   // Adds a TCP port range to the shared runtime safety boundary.
   rpc AddRuntimeAllowedPortRange(RuntimeAllowedPortRangeRequest)
-      returns (Empty) {}
+  returns (Empty) {}
 
   // Removes a TCP port range from the shared runtime safety boundary.
   rpc RemoveRuntimeAllowedPortRange(RuntimeAllowedPortRangeRequest)
-      returns (Empty) {}
+  returns (Empty) {}
 
   // Indicates whether the embedded file transfer service is running.
   rpc GetFileTransferServiceEnabled(Empty)
-      returns (FileTransferServiceEnabledResponse) {}
+  returns (FileTransferServiceEnabledResponse) {}
 
   // Returns the root directory shared by the file transfer service.
   rpc GetFileTransferServiceRootDir(Empty)
-      returns (FileTransferServiceRootDirResponse) {}
+  returns (FileTransferServiceRootDirResponse) {}
 
   // Starts the file transfer service with a new root directory, updating
   // config.
   rpc StartFileTransferService(StartFileTransferServiceRequest)
-      returns (Empty) {}
+  returns (Empty) {}
 
   // Stops the running file transfer service and updates the stored config.
   rpc StopFileTransferService(Empty) returns (Empty) {}
@@ -95,11 +95,11 @@ service FungiDaemon {
 
   // Removes a remote file transfer client and forgets its configuration.
   rpc RemoveFileTransferClient(RemoveFileTransferClientRequest)
-      returns (Empty) {}
+  returns (Empty) {}
 
   // Enables or disables a remote file transfer client and syncs its metadata.
   rpc EnableFileTransferClient(EnableFileTransferClientRequest)
-      returns (Empty) {}
+  returns (Empty) {}
 
   // Lists all configured remote file transfer clients with their status.
   rpc GetAllFileTransferClients(Empty) returns (FileTransferClientsResponse) {}
@@ -121,14 +121,14 @@ service FungiDaemon {
 
   // Creates a new TCP forwarding rule and returns its generated identifier.
   rpc AddTcpForwardingRule(AddTcpForwardingRuleRequest)
-      returns (TcpForwardingRuleResponse) {}
+  returns (TcpForwardingRuleResponse) {}
 
   // Deletes an existing TCP forwarding rule by identifier.
   rpc RemoveTcpForwardingRule(RemoveTcpForwardingRuleRequest) returns (Empty) {}
 
   // Creates a new TCP listening rule and returns its generated identifier.
   rpc AddTcpListeningRule(AddTcpListeningRuleRequest)
-      returns (TcpListeningRuleResponse) {}
+  returns (TcpListeningRuleResponse) {}
 
   // Deletes an existing TCP listening rule by identifier.
   rpc RemoveTcpListeningRule(RemoveTcpListeningRuleRequest) returns (Empty) {}
@@ -158,15 +158,18 @@ service FungiDaemon {
 
   // Lists currently active streams with optional peer/protocol filters.
   rpc ListActiveStreams(ListActiveStreamsRequest)
-      returns (ListActiveStreamsResponse) {}
+  returns (ListActiveStreamsResponse) {}
 
     // Lists externally observed local address candidates and their lifecycle.
-    rpc ListExternalAddressCandidates(Empty)
-      returns (ListExternalAddressCandidatesResponse) {}
+  rpc ListExternalAddressCandidates(Empty)
+  returns (ListExternalAddressCandidatesResponse) {}
 
     // Lists runtime relay endpoint statuses tracked by the daemon.
-    rpc ListRelayEndpointStatuses(Empty)
-      returns (ListRelayEndpointStatusesResponse) {}
+  rpc ListRelayEndpointStatuses(Empty)
+  returns (ListRelayEndpointStatusesResponse) {}
+
+    // Lists peer listen addresses learned into fungi-owned address state.
+  rpc ListPeerAddresses(Empty) returns (ListPeerAddressesResponse) {}
 
   // Pulls a service from a serialized manifest payload.
   rpc PullService(PullServiceRequest) returns (ServiceInstanceResponse) {}
@@ -190,44 +193,44 @@ service FungiDaemon {
   rpc ListServices(Empty) returns (ListServicesResponse) {}
 
     // Lists services published by a remote peer for consumption.
-    rpc ListPeerCatalog(ListPeerCatalogRequest)
-      returns (ListPeerCatalogResponse) {}
+  rpc ListPeerCatalog(ListPeerCatalogRequest)
+  returns (ListPeerCatalogResponse) {}
 
     // Queries a remote peer for a minimal node runtime capability summary.
-    rpc GetPeerCapabilitySummary(GetPeerCapabilitySummaryRequest)
-      returns (GetPeerCapabilitySummaryResponse) {}
+  rpc GetPeerCapabilitySummary(GetPeerCapabilitySummaryRequest)
+  returns (GetPeerCapabilitySummaryResponse) {}
 
     // Pulls a service on a remote peer by sending a manifest to the local daemon.
-    rpc RemotePullService(RemotePullServiceRequest)
-      returns (RemoteServiceControlResponse) {}
+  rpc RemotePullService(RemotePullServiceRequest)
+  returns (RemoteServiceControlResponse) {}
 
     // Starts a service on a remote peer by service name.
-    rpc RemoteStartService(RemoteServiceNameRequest)
-      returns (RemoteServiceControlResponse) {}
+  rpc RemoteStartService(RemoteServiceNameRequest)
+  returns (RemoteServiceControlResponse) {}
 
     // Stops a service on a remote peer by service name.
-    rpc RemoteStopService(RemoteServiceNameRequest)
-      returns (RemoteServiceControlResponse) {}
+  rpc RemoteStopService(RemoteServiceNameRequest)
+  returns (RemoteServiceControlResponse) {}
 
     // Removes a service on a remote peer by service name.
-    rpc RemoteRemoveService(RemoteServiceNameRequest)
-      returns (RemoteServiceControlResponse) {}
+  rpc RemoteRemoveService(RemoteServiceNameRequest)
+  returns (RemoteServiceControlResponse) {}
 
     // Lists pulled services on a remote peer, including stopped ones.
-    rpc RemoteListServices(RemotePeerRequest)
-      returns (ListServicesResponse) {}
+  rpc RemoteListServices(RemotePeerRequest)
+  returns (ListServicesResponse) {}
 
     // Creates local access entries for all named endpoints of a published remote service.
-    rpc AttachServiceAccess(AttachServiceAccessRequest)
-      returns (ServiceAccessResponse) {}
+  rpc AttachServiceAccess(AttachServiceAccessRequest)
+  returns (ServiceAccessResponse) {}
 
     // Removes local access entries for a previously attached remote service.
-    rpc DetachServiceAccess(DetachServiceAccessRequest)
-      returns (Empty) {}
+  rpc DetachServiceAccess(DetachServiceAccessRequest)
+  returns (Empty) {}
 
     // Lists service access entries currently attached on the local node.
-    rpc ListServiceAccesses(ListServiceAccessesRequest)
-      returns (ServiceAccessesResponse) {}
+  rpc ListServiceAccesses(ListServiceAccessesRequest)
+  returns (ServiceAccessesResponse) {}
 }
 
 message Empty {}
@@ -254,13 +257,13 @@ message RelayAddressRequest { string address = 1; }
 
 message EffectiveRelayAddress {
   string address = 1;
-  string source = 2;
+  string source  = 2;
 }
 
 message RelayConfigResponse {
-  bool relay_enabled = 1;
-  bool use_community_relays = 2;
-  repeated string custom_relay_addresses = 3;
+  bool                           relay_enabled             = 1;
+  bool                           use_community_relays      = 2;
+  repeated string                custom_relay_addresses    = 3;
   repeated EffectiveRelayAddress effective_relay_addresses = 4;
 }
 
@@ -270,31 +273,31 @@ message RuntimeAllowedPortRequest { int32 port = 1; }
 
 message RuntimeAllowedPortRangeRequest {
   int32 start = 1;
-  int32 end = 2;
+  int32 end   = 2;
 }
 
 message RuntimeAllowedPortRange {
   int32 start = 1;
-  int32 end = 2;
+  int32 end   = 2;
 }
 
 message RuntimeConfigResponse {
-  bool disable_docker = 1;
-  bool disable_wasmtime = 2;
-  repeated string allowed_host_paths = 3;
-  repeated int32 allowed_ports = 4;
+  bool                             disable_docker      = 1;
+  bool                             disable_wasmtime    = 2;
+  repeated string                  allowed_host_paths  = 3;
+  repeated int32                   allowed_ports       = 4;
   repeated RuntimeAllowedPortRange allowed_port_ranges = 5;
 }
 
 message RuntimeAvailabilityStatus {
-  bool config_enabled = 1;
-  bool detected = 2;
-  bool active = 3;
-  string endpoint = 4;
+  bool   config_enabled = 1;
+  bool   detected       = 2;
+  bool   active         = 3;
+  string endpoint       = 4;
 }
 
 message LocalRuntimeStatusResponse {
-  RuntimeAvailabilityStatus docker = 1;
+  RuntimeAvailabilityStatus docker   = 1;
   RuntimeAvailabilityStatus wasmtime = 2;
 }
 
@@ -305,8 +308,8 @@ message FileTransferServiceRootDirResponse { string root_dir = 1; }
 message StartFileTransferServiceRequest { string root_dir = 1; }
 
 message AddFileTransferClientRequest {
-  bool enabled = 1;
-  string name = 2;
+  bool   enabled = 1;
+  string name    = 2;
   string peer_id = 3;
 }
 
@@ -314,112 +317,112 @@ message RemoveFileTransferClientRequest { string peer_id = 1; }
 
 message EnableFileTransferClientRequest {
   string peer_id = 1;
-  bool enabled = 2;
+  bool   enabled = 2;
 }
 
 message FileTransferClient {
-  bool enabled = 1;
-  string name = 2;
+  bool   enabled = 1;
+  string name    = 2;
   string peer_id = 3;
 }
 
 message FileTransferClientsResponse { repeated FileTransferClient clients = 1; }
 
 message FtpProxyResponse {
-  bool enabled = 1;
-  string host = 2;
-  int32 port = 3;
+  bool   enabled = 1;
+  string host    = 2;
+  int32  port    = 3;
 }
 
 message UpdateFtpProxyRequest {
-  bool enabled = 1;
-  string host = 2;
-  int32 port = 3;
+  bool   enabled = 1;
+  string host    = 2;
+  int32  port    = 3;
 }
 
 message WebdavProxyResponse {
-  bool enabled = 1;
-  string host = 2;
-  int32 port = 3;
+  bool   enabled = 1;
+  string host    = 2;
+  int32  port    = 3;
 }
 
 message UpdateWebdavProxyRequest {
-  bool enabled = 1;
-  string host = 2;
-  int32 port = 3;
+  bool   enabled = 1;
+  string host    = 2;
+  int32  port    = 3;
 }
 
 message ForwardingRule {
-  string local_host = 1;
-  int32 local_port = 2;
-  string remote_peer_id = 3;
-  int32 remote_port = 4;
-  string remote_protocol = 5;
-  string remote_service_id = 6;
-  string remote_service_name = 7;
+  string local_host               = 1;
+  int32  local_port               = 2;
+  string remote_peer_id           = 3;
+  int32  remote_port              = 4;
+  string remote_protocol          = 5;
+  string remote_service_id        = 6;
+  string remote_service_name      = 7;
   string remote_service_port_name = 8;
 }
 
 message ListeningRule {
-  string host = 1;
-  int32 port = 2;
+  string          host          = 1;
+  int32           port          = 2;
   repeated string allowed_peers = 3;
-  string protocol = 4;
+  string          protocol      = 4;
 }
 
 message TcpTunnelingConfigResponse {
-  bool forwarding_enabled = 1;
-  bool listening_enabled = 2;
-  repeated ForwardingRule forwarding_rules = 3;
-  repeated ListeningRule listening_rules = 4;
+  bool                    forwarding_enabled = 1;
+  bool                    listening_enabled  = 2;
+  repeated ForwardingRule forwarding_rules   = 3;
+  repeated ListeningRule  listening_rules    = 4;
 }
 
 message AddTcpForwardingRuleRequest {
-  string local_host = 1;
-  int32 local_port = 2;
-  string peer_id = 3;
-  int32 remote_port = 4;
-  string remote_protocol = 5;
-  string remote_service_id = 6;
-  string remote_service_name = 7;
+  string local_host               = 1;
+  int32  local_port               = 2;
+  string peer_id                  = 3;
+  int32  remote_port              = 4;
+  string remote_protocol          = 5;
+  string remote_service_id        = 6;
+  string remote_service_name      = 7;
   string remote_service_port_name = 8;
 }
 
 message TcpForwardingRuleResponse { string rule_id = 1; }
 
 message RemoveTcpForwardingRuleRequest {
-  string local_host = 1;
-  int32 local_port = 2;
-  string peer_id = 3;
-  int32 remote_port = 4;
+  string local_host      = 1;
+  int32  local_port      = 2;
+  string peer_id         = 3;
+  int32  remote_port     = 4;
   string remote_protocol = 5;
 }
 
 message AddTcpListeningRuleRequest {
-  string local_host = 1;
-  int32 local_port = 2;
+  string          local_host    = 1;
+  int32           local_port    = 2;
   repeated string allowed_peers = 3;
-  string protocol = 4;
+  string          protocol      = 4;
 }
 
 message TcpListeningRuleResponse { string rule_id = 1; }
 
 message RemoveTcpListeningRuleRequest {
   string local_host = 1;
-  int32 local_port = 2;
-  string protocol = 3;
+  int32  local_port = 2;
+  string protocol   = 3;
 }
 
 message PeerInfo {
-  string peer_id = 1;
-  string alias = 2;
-  string hostname = 3;
-  string os = 4;
-  string public_ip = 5;
-  repeated string private_ips = 6;
-  int64 created_at = 7;
-  int64 last_connected = 8;
-  string version = 9;
+  string          peer_id        = 1;
+  string          alias          = 2;
+  string          hostname       = 3;
+  string          os             = 4;
+  string          public_ip      = 5;
+  repeated string private_ips    = 6;
+  int64           created_at     = 7;
+  int64           last_connected = 8;
+  string          version        = 9;
 }
 
 message PeerInfoListResponse { repeated PeerInfo peers = 1; }
@@ -433,21 +436,21 @@ message GetAddressBookPeerRequest { string peer_id = 1; }
 message RemoveAddressBookPeerRequest { string peer_id = 1; }
 
 message PingPeerRequest {
-  string peer_id = 1;
+  string peer_id     = 1;
   uint32 interval_ms = 2;
 }
 
 message PingPeerEvent {
-  string peer_id = 1;
-  uint64 tick_seq = 2;
-  int64 ts_unix_ms = 3;
+  string peer_id    = 1;
+  uint64 tick_seq   = 2;
+  int64  ts_unix_ms = 3;
 
   oneof event {
     PingPeerConnecting connecting = 10;
-    PingPeerConnected connected = 11;
-    PingPeerIdle idle = 12;
-    PingPeerResult result = 13;
-    PingPeerError error = 14;
+    PingPeerConnected  connected  = 11;
+    PingPeerIdle       idle       = 12;
+    PingPeerResult     result     = 13;
+    PingPeerError      error      = 14;
   }
 }
 
@@ -459,16 +462,16 @@ message PingPeerIdle {}
 
 message PingPeerResult {
   string connection_id = 1;
-  string direction = 2;
-  string remote_addr = 3;
-  uint64 rtt_ms = 4;
+  string direction     = 2;
+  string remote_addr   = 3;
+  uint64 rtt_ms        = 4;
 }
 
 message PingPeerError {
   string connection_id = 1;
-  string direction = 2;
-  string remote_addr = 3;
-  string message = 4;
+  string direction     = 2;
+  string remote_addr   = 3;
+  string message       = 4;
 }
 
 message ListConnectionsRequest {
@@ -477,21 +480,21 @@ message ListConnectionsRequest {
 }
 
 message ConnectionSnapshot {
-  string peer_id = 1;
+  string peer_id       = 1;
   string connection_id = 2;
-  string direction = 3;
-  string remote_addr = 4;
-  bool is_relay = 5;
-  uint64 last_rtt_ms = 6;
+  string direction     = 3;
+  string remote_addr   = 4;
+  bool   is_relay      = 5;
+  uint64 last_rtt_ms   = 6;
   // 0 means no ping has been recorded yet.
-  int64 last_ping_unix_ms = 7;
-  uint64 active_streams_total = 8;
+  int64                                last_ping_unix_ms          = 7;
+  uint64                               active_streams_total       = 8;
   repeated ProtocolStreamCountSnapshot active_streams_by_protocol = 9;
 }
 
 message ProtocolStreamCountSnapshot {
   string protocol_name = 1;
-  uint64 stream_count = 2;
+  uint64 stream_count  = 2;
 }
 
 message ListConnectionsResponse { repeated ConnectionSnapshot connections = 1; }
@@ -504,8 +507,8 @@ message ListActiveStreamsRequest {
 }
 
 message ActiveStreamSnapshot {
-  uint64 stream_id = 1;
-  string peer_id = 2;
+  uint64 stream_id     = 1;
+  string peer_id       = 2;
   string connection_id = 3;
   string protocol_name = 4;
   // 0 means unknown.
@@ -517,16 +520,16 @@ message ListActiveStreamsResponse {
 }
 
 message ExternalAddressSnapshot {
-  string address = 1;
-  string transport = 2;
-  string freshness = 3;
-  bool recommend_refresh_before_dcutr = 4;
-  int64 first_observed_at_unix_ms = 5;
-  int64 last_observed_at_unix_ms = 6;
-  int64 confirmed_at_unix_ms = 7;
-  int64 expired_at_unix_ms = 8;
-  uint64 observation_count = 9;
-  repeated string sources = 10;
+  string          address                        = 1;
+  string          transport                      = 2;
+  string          freshness                      = 3;
+  bool            recommend_refresh_before_dcutr = 4;
+  int64           first_observed_at_unix_ms      = 5;
+  int64           last_observed_at_unix_ms       = 6;
+  int64           confirmed_at_unix_ms           = 7;
+  int64           expired_at_unix_ms             = 8;
+  uint64          observation_count              = 9;
+  repeated string sources                        = 10;
 }
 
 message ListExternalAddressCandidatesResponse {
@@ -534,52 +537,64 @@ message ListExternalAddressCandidatesResponse {
 }
 
 message RelayEndpointStatusSnapshot {
-  string relay_addr = 1;
-  string relay_peer_id = 2;
-  string transport = 3;
-  bool listener_registered = 4;
-  bool task_running = 5;
-  string current_direct_connection_id = 6;
-  int64 last_listener_seen_at_unix_ms = 7;
-  int64 last_listener_missing_at_unix_ms = 8;
-  int64 last_reservation_accepted_at_unix_ms = 9;
-  int64 last_reservation_established_at_unix_ms = 10;
-  int64 last_reservation_renewed_at_unix_ms = 11;
-  int64 last_direct_connection_closed_at_unix_ms = 12;
-  string last_management_action = 13;
-  string last_error = 14;
+  string relay_addr                               = 1;
+  string relay_peer_id                            = 2;
+  string transport                                = 3;
+  bool   listener_registered                      = 4;
+  bool   task_running                             = 5;
+  string current_direct_connection_id             = 6;
+  int64  last_listener_seen_at_unix_ms            = 7;
+  int64  last_listener_missing_at_unix_ms         = 8;
+  int64  last_reservation_accepted_at_unix_ms     = 9;
+  int64  last_reservation_established_at_unix_ms  = 10;
+  int64  last_reservation_renewed_at_unix_ms      = 11;
+  int64  last_direct_connection_closed_at_unix_ms = 12;
+  string last_management_action                   = 13;
+  string last_error                               = 14;
 }
 
 message ListRelayEndpointStatusesResponse {
   repeated RelayEndpointStatusSnapshot statuses = 1;
 }
 
+message PeerAddressSnapshot {
+  string peer_id                   = 1;
+  string address                   = 2;
+  string transport                 = 3;
+  string source                    = 4;
+  int64  first_observed_at_unix_ms = 5;
+  int64  last_observed_at_unix_ms  = 6;
+  uint64 observation_count         = 7;
+}
+
+message ListPeerAddressesResponse { repeated PeerAddressSnapshot addresses = 1; }
+
 enum ServiceRuntimeKind {
   SERVICE_RUNTIME_KIND_UNSPECIFIED = 0;
-  SERVICE_RUNTIME_KIND_DOCKER = 1;
-  SERVICE_RUNTIME_KIND_WASMTIME = 2;
+  SERVICE_RUNTIME_KIND_DOCKER      = 1;
+  SERVICE_RUNTIME_KIND_WASMTIME    = 2;
 }
 
 message PullServiceRequest {
-  string manifest_yaml = 1;
+  string manifest_yaml     = 1;
   string manifest_base_dir = 2;
 }
 
 message ServiceNameRequest {
   ServiceRuntimeKind runtime = 1;
-  string name = 2;
+  string             name    = 2;
 }
 
 message GetServiceLogsRequest {
   ServiceRuntimeKind runtime = 1;
-  string name = 2;
-  string tail = 3;
+  string             name    = 2;
+  string             tail    = 3;
 }
 
 message ServiceInstanceResponse { string instance_json = 1; }
 
 message ServiceLogsResponse {
-  bytes raw = 1;
+  bytes  raw  = 1;
   string text = 2;
 }
 
@@ -594,13 +609,13 @@ message GetPeerCapabilitySummaryRequest { string peer_id = 1; }
 message GetPeerCapabilitySummaryResponse { string capability_summary_json = 1; }
 
 message RemotePullServiceRequest {
-  string peer_id = 1;
+  string peer_id       = 1;
   string manifest_yaml = 2;
 }
 
 message RemoteServiceNameRequest {
   string peer_id = 1;
-  string name = 2;
+  string name    = 2;
 }
 
 message RemotePeerRequest { string peer_id = 1; }
@@ -608,12 +623,12 @@ message RemotePeerRequest { string peer_id = 1; }
 message RemoteServiceControlResponse { string service_name = 1; }
 
 message AttachServiceAccessRequest {
-  string peer_id = 1;
+  string peer_id    = 1;
   string service_id = 2;
 }
 
 message DetachServiceAccessRequest {
-  string peer_id = 1;
+  string peer_id    = 1;
   string service_id = 2;
 }
 

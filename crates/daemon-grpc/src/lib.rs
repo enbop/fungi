@@ -1095,6 +1095,28 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         }))
     }
 
+    async fn list_peer_addresses(
+        &self,
+        _request: Request<Empty>,
+    ) -> Result<Response<ListPeerAddressesResponse>, Status> {
+        let addresses = self
+            .inner
+            .list_peer_addresses()
+            .into_iter()
+            .map(|address| PeerAddressSnapshot {
+                peer_id: address.peer_id,
+                address: address.address,
+                transport: address.transport,
+                source: address.source,
+                first_observed_at_unix_ms: system_time_to_unix_ms(address.first_observed_at),
+                last_observed_at_unix_ms: system_time_to_unix_ms(address.last_observed_at),
+                observation_count: address.observation_count,
+            })
+            .collect();
+
+        Ok(Response::new(ListPeerAddressesResponse { addresses }))
+    }
+
     async fn pull_service(
         &self,
         request: Request<PullServiceRequest>,
@@ -1492,6 +1514,7 @@ fn proto_to_peer_info(proto: PeerInfo) -> Result<fungi_config::address_book::Pee
         } else {
             Some(proto.hostname)
         },
+        multiaddrs: vec![],
         os: string_to_os(&proto.os),
         public_ip: if proto.public_ip.is_empty() {
             None

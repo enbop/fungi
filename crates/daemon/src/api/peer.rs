@@ -7,8 +7,8 @@ use libp2p::{PeerId, swarm::ConnectionId};
 use crate::FungiDaemon;
 
 use super::types::{
-    ActiveStreamSnapshot, ConnectionSnapshot, ExternalAddressSnapshot, ProtocolStreamCountSnapshot,
-    RelayEndpointStatusSnapshot,
+    ActiveStreamSnapshot, ConnectionSnapshot, ExternalAddressSnapshot, PeerAddressSnapshot,
+    ProtocolStreamCountSnapshot, RelayEndpointStatusSnapshot,
 };
 
 impl FungiDaemon {
@@ -141,6 +141,15 @@ impl FungiDaemon {
         self.swarm_control()
             .state()
             .list_relay_endpoint_statuses()
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
+    pub fn list_peer_addresses(&self) -> Vec<PeerAddressSnapshot> {
+        self.swarm_control()
+            .state()
+            .list_peer_addresses()
             .into_iter()
             .map(Into::into)
             .collect()

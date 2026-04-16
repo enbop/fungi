@@ -1,6 +1,6 @@
 use std::time::SystemTime;
 
-use fungi_swarm::{ExternalAddressCandidateRecord, RelayEndpointStatusRecord};
+use fungi_swarm::{ExternalAddressCandidateRecord, PeerAddressRecord, RelayEndpointStatusRecord};
 use serde::{Deserialize, Serialize};
 
 /// Daemon-layer DTO for external address observability.
@@ -37,6 +37,17 @@ pub struct RelayEndpointStatusSnapshot {
     pub last_direct_connection_closed_at: Option<SystemTime>,
     pub last_management_action: Option<String>,
     pub last_error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PeerAddressSnapshot {
+    pub peer_id: String,
+    pub address: String,
+    pub transport: String,
+    pub source: String,
+    pub first_observed_at: SystemTime,
+    pub last_observed_at: SystemTime,
+    pub observation_count: u64,
 }
 
 impl From<ExternalAddressCandidateRecord> for ExternalAddressSnapshot {
@@ -82,6 +93,20 @@ impl From<RelayEndpointStatusRecord> for RelayEndpointStatusSnapshot {
                 .last_management_action
                 .map(|action| action.as_str().to_string()),
             last_error: record.last_error,
+        }
+    }
+}
+
+impl From<PeerAddressRecord> for PeerAddressSnapshot {
+    fn from(record: PeerAddressRecord) -> Self {
+        Self {
+            peer_id: record.peer_id.to_string(),
+            address: record.address.to_string(),
+            transport: record.transport_kind.as_str().to_string(),
+            source: record.source.as_str().to_string(),
+            first_observed_at: record.first_observed_at,
+            last_observed_at: record.last_observed_at,
+            observation_count: record.observation_count,
         }
     }
 }

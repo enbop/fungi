@@ -1,7 +1,10 @@
 use anyhow::{Ok, Result};
-use flexi_logger::{Cleanup, Criterion, Duplicate, FileSpec, Logger, Naming};
+use env_logger::Env;
+use flexi_logger::{Cleanup, Criterion, DeferredNow, Duplicate, FileSpec, Logger, Naming};
 use fungi::commands::{Commands, FungiArgs};
 use fungi_config::FungiDir;
+use log::Record;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Once;
 
@@ -17,7 +20,9 @@ pub fn init_logging(fungi_args: &FungiArgs) -> Result<()> {
         return init_daemon_file_logging(fungi_args.common.fungi_dir());
     }
 
-    let _ = env_logger::try_init();
+    let _ = env_logger::Builder::from_env(Env::default())
+        .format_timestamp_millis()
+        .try_init();
     Ok(())
 }
 
@@ -46,6 +51,8 @@ fn init_daemon_file_logging(fungi_dir: PathBuf) -> Result<()> {
                 .basename("daemon")
                 .suffix("log"),
         )
+        .format_for_files(daemon_log_format)
+        .format_for_stderr(daemon_log_format)
         .duplicate_to_stderr(duplicate)
         .rotate(
             Criterion::Size(MAX_LOG_FILE_SIZE_BYTES),
@@ -59,9 +66,25 @@ fn init_daemon_file_logging(fungi_dir: PathBuf) -> Result<()> {
     Ok(())
 }
 
+fn daemon_log_format(
+    write: &mut dyn Write,
+    now: &mut DeferredNow,
+    record: &Record<'_>,
+) -> std::io::Result<()> {
+    write!(
+        write,
+        "{} {:<5} [{}] {}\n",
+        now.now().format("%Y-%m-%d %H:%M:%S%.3f%:z"),
+        record.level(),
+        record.module_path().unwrap_or(record.target()),
+        record.args()
+    )
+}
+
 fn install_panic_hook() {
     PANIC_HOOK_INIT.call_once(|| {
         std::panic::set_hook(Box::new(|panic_info| {
+            let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f%:z");
             let location = panic_info
                 .location()
                 .map(|loc| format!("{}:{}:{}", loc.file(), loc.line(), loc.column()))
@@ -75,7 +98,10 @@ fn install_panic_hook() {
                 .unwrap_or_else(|| "non-string panic payload".to_string());
 
             log::error!("panic at {}: {}", location, payload);
-            eprintln!("panic at {}: {}", location, payload);
+            eprintln!(
+                "{} ERROR [panic] panic at {}: {}",
+                timestamp, location, payload
+            );
         }));
     });
 }

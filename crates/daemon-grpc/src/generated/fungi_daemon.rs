@@ -554,6 +554,28 @@ pub struct ListRelayEndpointStatusesResponse {
     pub statuses: ::prost::alloc::vec::Vec<RelayEndpointStatusSnapshot>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PeerAddressSnapshot {
+    #[prost(string, tag = "1")]
+    pub peer_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub address: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub transport: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub source: ::prost::alloc::string::String,
+    #[prost(int64, tag = "5")]
+    pub first_observed_at_unix_ms: i64,
+    #[prost(int64, tag = "6")]
+    pub last_observed_at_unix_ms: i64,
+    #[prost(uint64, tag = "7")]
+    pub observation_count: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListPeerAddressesResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub addresses: ::prost::alloc::vec::Vec<PeerAddressSnapshot>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PullServiceRequest {
     #[prost(string, tag = "1")]
     pub manifest_yaml: ::prost::alloc::string::String,
@@ -1688,6 +1710,25 @@ pub mod fungi_daemon_client {
             ));
             self.inner.unary(req, path, codec).await
         }
+        /// Lists peer listen addresses learned into fungi-owned address state.
+        pub async fn list_peer_addresses(
+            &mut self,
+            request: impl tonic::IntoRequest<super::Empty>,
+        ) -> std::result::Result<tonic::Response<super::ListPeerAddressesResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/ListPeerAddresses");
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "ListPeerAddresses",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
         /// Pulls a service from a serialized manifest payload.
         pub async fn pull_service(
             &mut self,
@@ -2279,6 +2320,11 @@ pub mod fungi_daemon_server {
             tonic::Response<super::ListRelayEndpointStatusesResponse>,
             tonic::Status,
         >;
+        /// Lists peer listen addresses learned into fungi-owned address state.
+        async fn list_peer_addresses(
+            &self,
+            request: tonic::Request<super::Empty>,
+        ) -> std::result::Result<tonic::Response<super::ListPeerAddressesResponse>, tonic::Status>;
         /// Pulls a service from a serialized manifest payload.
         async fn pull_service(
             &self,
@@ -4318,6 +4364,42 @@ pub mod fungi_daemon_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = ListRelayEndpointStatusesSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/ListPeerAddresses" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListPeerAddressesSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for ListPeerAddressesSvc<T> {
+                        type Response = super::ListPeerAddressesResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::list_peer_addresses(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListPeerAddressesSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

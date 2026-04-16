@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     env,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::PathBuf,
@@ -27,11 +28,14 @@ use libp2p::{Multiaddr, identity::Keypair, multiaddr::Protocol};
 use parking_lot::Mutex;
 use tokio::task::JoinHandle;
 
+const PEER_ADDRESS_SYNC_INTERVAL: Duration = Duration::from_secs(600);
+
 #[allow(dead_code)]
 struct TaskHandles {
     swarm_task: JoinHandle<()>,
     proxy_ftp_task: Arc<Mutex<Option<JoinHandle<()>>>>,
     proxy_webdav_task: Arc<Mutex<Option<JoinHandle<()>>>>,
+    peer_address_sync_task: JoinHandle<()>,
 }
 
 #[allow(dead_code)]
@@ -241,14 +245,20 @@ impl FungiDaemon {
             None
         };
 
+        let address_book_config = Arc::new(Mutex::new(address_book_config));
+
         let task_handles = TaskHandles {
             swarm_task,
             proxy_ftp_task: Arc::new(Mutex::new(proxy_ftp_task)),
             proxy_webdav_task: Arc::new(Mutex::new(proxy_webdav_task)),
+            peer_address_sync_task: spawn_peer_address_sync_task(
+                swarm_control.clone(),
+                address_book_config.clone(),
+            ),
         };
         let daemon = Self {
             config: shared_config,
-            address_book_config: Arc::new(Mutex::new(address_book_config)),
+            address_book_config,
             args,
             swarm_control,
             mdns_control,
@@ -496,6 +506,49 @@ impl FungiDaemon {
         *self.config.lock() = updated_config;
         Ok(())
     }
+}
+
+fn spawn_peer_address_sync_task(
+    swarm_control: SwarmControl,
+    address_book_config: Arc<Mutex<AddressBookConfig>>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(PEER_ADDRESS_SYNC_INTERVAL);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        let mut last_synced_revision = 0;
+
+        loop {
+            interval.tick().await;
+
+            let revision_before_sync = swarm_control.state().peer_address_revision();
+            if revision_before_sync == last_synced_revision {
+                continue;
+            }
+
+            let mut grouped = HashMap::<libp2p::PeerId, Vec<String>>::new();
+            for record in swarm_control.state().list_peer_addresses() {
+                grouped
+                    .entry(record.peer_id)
+                    .or_default()
+                    .push(record.address.to_string());
+            }
+
+            if grouped.is_empty() {
+                continue;
+            }
+
+            let current = address_book_config.lock().clone();
+            match current.sync_peer_multiaddrs(grouped) {
+                Ok(updated) => {
+                    *address_book_config.lock() = updated;
+                    last_synced_revision = revision_before_sync;
+                }
+                Err(error) => {
+                    log::warn!("Failed to sync learned peer addresses into address book: {error}");
+                }
+            }
+        }
+    })
 }
 
 fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) -> Result<()> {
