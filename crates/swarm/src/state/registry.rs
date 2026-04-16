@@ -350,6 +350,13 @@ impl State {
         }
     }
 
+    pub fn connection_established_at(&self, connection_id: &ConnectionId) -> Option<SystemTime> {
+        self.connection_id_map
+            .lock()
+            .get(connection_id)
+            .map(|entry| entry.established_at)
+    }
+
     pub fn track_outbound_stream_opened(
         &self,
         peer_id: PeerId,
@@ -592,6 +599,7 @@ pub struct ConnectionEntry {
     pub peer_id: PeerId,
     pub ping_info: ConnectionPingInfo,
     pub governance: ConnectionGovernanceInfo,
+    pub established_at: SystemTime,
 }
 
 pub(crate) fn handle_connection_established(
@@ -622,6 +630,7 @@ pub(crate) fn handle_connection_established(
             peer_id,
             ping_info: ConnectionPingInfo::default(),
             governance: ConnectionGovernanceInfo::default(),
+            established_at: SystemTime::now(),
         },
     );
     state

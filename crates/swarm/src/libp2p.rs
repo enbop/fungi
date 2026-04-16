@@ -31,7 +31,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 use thiserror::Error;
 use tokio::{
@@ -224,6 +224,8 @@ pub struct SelectedConnection {
     pub remote_addr: Multiaddr,
     pub is_relay: bool,
     pub last_rtt: Option<Duration>,
+    pub active_stream_count: usize,
+    pub established_at: Option<SystemTime>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -485,6 +487,11 @@ impl SwarmControl {
         for conn in peer_connections.outbound() {
             let ping_info = self.state.connection_ping_info(&conn.connection_id());
             let last_rtt = ping_info.and_then(|info| info.last_rtt);
+            let active_stream_count = self
+                .state
+                .active_streams_by_connection(&conn.connection_id())
+                .len();
+            let established_at = self.state.connection_established_at(&conn.connection_id());
             let remote_addr = conn.multiaddr().clone();
             let is_relay = remote_addr.to_string().contains("/p2p-circuit");
             selected.push(SelectedConnection {
@@ -493,12 +500,19 @@ impl SwarmControl {
                 remote_addr,
                 is_relay,
                 last_rtt,
+                active_stream_count,
+                established_at,
             });
         }
 
         for conn in peer_connections.inbound() {
             let ping_info = self.state.connection_ping_info(&conn.connection_id());
             let last_rtt = ping_info.and_then(|info| info.last_rtt);
+            let active_stream_count = self
+                .state
+                .active_streams_by_connection(&conn.connection_id())
+                .len();
+            let established_at = self.state.connection_established_at(&conn.connection_id());
             let remote_addr = conn.multiaddr().clone();
             let is_relay = remote_addr.to_string().contains("/p2p-circuit");
             selected.push(SelectedConnection {
@@ -507,6 +521,8 @@ impl SwarmControl {
                 remote_addr,
                 is_relay,
                 last_rtt,
+                active_stream_count,
+                established_at,
             });
         }
 
@@ -517,35 +533,122 @@ impl SwarmControl {
         strategy: ConnectionSelectionStrategy,
         selected: &mut [SelectedConnection],
     ) {
-        fn conn_id_key(id: ConnectionId) -> u64 {
-            let s = id.to_string();
-            if let Ok(v) = s.parse::<u64>() {
-                return v;
-            }
-            let digits: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
-            digits.parse::<u64>().unwrap_or(u64::MAX)
-        }
-
-        fn rtt_key(rtt: Option<Duration>) -> u128 {
-            rtt.map(|v| v.as_millis()).unwrap_or(u128::MAX)
-        }
-
         selected.sort_by(|a, b| match strategy {
             ConnectionSelectionStrategy::PreferDirect => a
                 .is_relay
                 .cmp(&b.is_relay)
-                .then(rtt_key(a.last_rtt).cmp(&rtt_key(b.last_rtt)))
-                .then(conn_id_key(a.connection_id).cmp(&conn_id_key(b.connection_id))),
+                .then(b.active_stream_count.cmp(&a.active_stream_count))
+                .then(Self::rtt_key(a.last_rtt).cmp(&Self::rtt_key(b.last_rtt)))
+                .then(
+                    Self::established_at_key(a.established_at)
+                        .cmp(&Self::established_at_key(b.established_at)),
+                )
+                .then(Self::conn_id_key(a.connection_id).cmp(&Self::conn_id_key(b.connection_id))),
             ConnectionSelectionStrategy::PreferRelay => b
                 .is_relay
                 .cmp(&a.is_relay)
-                .then(rtt_key(a.last_rtt).cmp(&rtt_key(b.last_rtt)))
-                .then(conn_id_key(a.connection_id).cmp(&conn_id_key(b.connection_id))),
-            ConnectionSelectionStrategy::PreferLowLatency => rtt_key(a.last_rtt)
-                .cmp(&rtt_key(b.last_rtt))
+                .then(b.active_stream_count.cmp(&a.active_stream_count))
+                .then(Self::rtt_key(a.last_rtt).cmp(&Self::rtt_key(b.last_rtt)))
+                .then(
+                    Self::established_at_key(a.established_at)
+                        .cmp(&Self::established_at_key(b.established_at)),
+                )
+                .then(Self::conn_id_key(a.connection_id).cmp(&Self::conn_id_key(b.connection_id))),
+            ConnectionSelectionStrategy::PreferLowLatency => Self::rtt_key(a.last_rtt)
+                .cmp(&Self::rtt_key(b.last_rtt))
+                .then(b.active_stream_count.cmp(&a.active_stream_count))
                 .then(a.is_relay.cmp(&b.is_relay))
-                .then(conn_id_key(a.connection_id).cmp(&conn_id_key(b.connection_id))),
+                .then(
+                    Self::established_at_key(a.established_at)
+                        .cmp(&Self::established_at_key(b.established_at)),
+                )
+                .then(Self::conn_id_key(a.connection_id).cmp(&Self::conn_id_key(b.connection_id))),
         });
+    }
+
+    fn conn_id_key(id: ConnectionId) -> u64 {
+        let s = id.to_string();
+        if let Ok(v) = s.parse::<u64>() {
+            return v;
+        }
+        let digits: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
+        digits.parse::<u64>().unwrap_or(u64::MAX)
+    }
+
+    fn rtt_key(rtt: Option<Duration>) -> u128 {
+        rtt.map(|v| v.as_millis()).unwrap_or(u128::MAX)
+    }
+
+    fn established_at_key(established_at: Option<SystemTime>) -> Duration {
+        established_at
+            .and_then(|ts| ts.duration_since(SystemTime::UNIX_EPOCH).ok())
+            .unwrap_or(Duration::MAX)
+    }
+
+    fn recommended_reason(
+        strategy: ConnectionSelectionStrategy,
+        selected: &[SelectedConnection],
+    ) -> String {
+        let Some(recommended) = selected.first() else {
+            return "selected-by-policy".to_string();
+        };
+        let alternatives = &selected[1..];
+
+        match strategy {
+            ConnectionSelectionStrategy::PreferDirect
+                if !recommended.is_relay
+                    && alternatives.iter().any(|candidate| candidate.is_relay) =>
+            {
+                return "selected-by-prefer-direct".to_string();
+            }
+            ConnectionSelectionStrategy::PreferRelay
+                if recommended.is_relay
+                    && alternatives.iter().any(|candidate| !candidate.is_relay) =>
+            {
+                return "selected-by-prefer-relay".to_string();
+            }
+            ConnectionSelectionStrategy::PreferLowLatency
+                if recommended.last_rtt.is_some()
+                    && alternatives.iter().any(|candidate| {
+                        Self::rtt_key(recommended.last_rtt) < Self::rtt_key(candidate.last_rtt)
+                    }) =>
+            {
+                return "selected-by-low-latency".to_string();
+            }
+            _ => {}
+        }
+
+        if recommended.active_stream_count > 0
+            && alternatives
+                .iter()
+                .any(|candidate| recommended.active_stream_count > candidate.active_stream_count)
+        {
+            return "selected-by-active-streams".to_string();
+        }
+
+        if recommended.last_rtt.is_some()
+            && alternatives.iter().any(|candidate| {
+                Self::rtt_key(recommended.last_rtt) < Self::rtt_key(candidate.last_rtt)
+            })
+        {
+            return "selected-by-lower-rtt".to_string();
+        }
+
+        if recommended.established_at.is_some()
+            && alternatives.iter().any(|candidate| {
+                Self::established_at_key(recommended.established_at)
+                    < Self::established_at_key(candidate.established_at)
+            })
+        {
+            return "selected-by-earlier-established".to_string();
+        }
+
+        match strategy {
+            ConnectionSelectionStrategy::PreferDirect => "selected-by-prefer-direct-ordering",
+            ConnectionSelectionStrategy::PreferRelay => "selected-by-prefer-relay-ordering",
+            ConnectionSelectionStrategy::PreferLowLatency => "selected-by-low-latency-ordering",
+        }
+        .to_string()
     }
 
     fn build_connection_closure_plan(
@@ -1240,10 +1343,14 @@ async fn connection_governance_loop(swarm_control: SwarmControl) {
             );
 
             let recommended_connection_id = selected[0].connection_id;
+            let recommended_reason = SwarmControl::recommended_reason(
+                ConnectionSelectionStrategy::PreferDirect,
+                &selected,
+            );
             swarm_control.state().update_connection_governance(
                 &recommended_connection_id,
                 ConnectionGovernanceState::Recommended,
-                Some("selected-by-prefer-direct-baseline".to_string()),
+                Some(recommended_reason),
             );
 
             if selected.len() <= 1 {
@@ -1796,7 +1903,53 @@ mod tests {
             remote_addr: remote_addr.parse::<Multiaddr>().unwrap(),
             is_relay,
             last_rtt: last_rtt_ms.map(Duration::from_millis),
+            active_stream_count: 0,
+            established_at: None,
         }
+    }
+
+    #[test]
+    fn sort_selected_connections_prefers_active_streams_before_rtt() {
+        let mut selected = vec![
+            SelectedConnection {
+                active_stream_count: 0,
+                ..selected_connection(8, "/ip4/1.1.1.1/tcp/4002", false, Some(10))
+            },
+            SelectedConnection {
+                active_stream_count: 2,
+                ..selected_connection(6, "/ip4/1.1.1.1/tcp/4001", false, Some(30))
+            },
+        ];
+
+        SwarmControl::sort_selected_connections(
+            ConnectionSelectionStrategy::PreferDirect,
+            &mut selected,
+        );
+
+        assert_eq!(selected[0].connection_id, ConnectionId::new_unchecked(6));
+    }
+
+    #[test]
+    fn sort_selected_connections_prefers_earlier_established_when_other_signals_match() {
+        let earlier = SystemTime::UNIX_EPOCH + Duration::from_secs(10);
+        let later = SystemTime::UNIX_EPOCH + Duration::from_secs(20);
+        let mut selected = vec![
+            SelectedConnection {
+                established_at: Some(later),
+                ..selected_connection(8, "/ip4/1.1.1.1/tcp/4002", false, Some(30))
+            },
+            SelectedConnection {
+                established_at: Some(earlier),
+                ..selected_connection(6, "/ip4/1.1.1.1/tcp/4001", false, Some(30))
+            },
+        ];
+
+        SwarmControl::sort_selected_connections(
+            ConnectionSelectionStrategy::PreferDirect,
+            &mut selected,
+        );
+
+        assert_eq!(selected[0].connection_id, ConnectionId::new_unchecked(6));
     }
 
     #[test]
