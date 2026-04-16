@@ -1,5 +1,6 @@
 use crate::{
-    ConnectionDirection, ExternalAddressSource, State, StreamObservationHandle,
+    ConnectionDirection, ConnectionGovernanceInfo, ConnectionGovernanceState,
+    ExternalAddressSource, State, StreamObservationHandle,
     behaviours::{FungiBehaviours, FungiBehavioursEvent},
     peer_handshake::PeerHandshakePayload,
     ping::{PING_PROTOCOL, PingRttEvent, PingState, send_ping_with_timeout},
@@ -42,6 +43,8 @@ use tokio::{
 const RELAY_RETRY_MAX_ATTEMPTS: u32 = 4;
 const RELAY_RETRY_BASE_DELAY_MS: u64 = 500;
 const RELAY_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(60);
+const CONNECTION_GOVERNANCE_INTERVAL: Duration = Duration::from_secs(60);
+const CONNECTION_GOVERNANCE_GRACE_PERIOD: Duration = Duration::from_secs(120);
 /// Simple RAII guard to ensure atomic bool is reset when task completes
 struct TaskGuard {
     flag: Arc<AtomicBool>,
@@ -223,6 +226,20 @@ pub struct SelectedConnection {
     pub last_rtt: Option<Duration>,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+struct ConnectionClosurePlan {
+    connection_id: ConnectionId,
+    recommended_connection_id: ConnectionId,
+    action: GovernanceAction,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum GovernanceAction {
+    MarkDeprecated,
+    MarkClosing,
+    CloseNow,
+}
+
 impl SwarmControl {
     /// Create a new swarm control handle.
     pub fn new(
@@ -373,6 +390,11 @@ impl SwarmControl {
         };
         self.state.update_connection_ping(&connection_id, rtt);
         Ok(rtt)
+    }
+
+    pub async fn close_connection(&self, connection_id: ConnectionId) -> Result<bool> {
+        self.invoke_swarm(move |swarm| swarm.close_connection(connection_id))
+            .await
     }
 
     /// Unified outbound stream-open API used by ping, file transfer, tunneling,
@@ -526,6 +548,46 @@ impl SwarmControl {
         });
     }
 
+    fn build_connection_closure_plan(
+        strategy: ConnectionSelectionStrategy,
+        selected: &mut [SelectedConnection],
+        active_stream_counts: &HashMap<ConnectionId, usize>,
+        governance_info: &HashMap<ConnectionId, ConnectionGovernanceInfo>,
+        now: std::time::SystemTime,
+    ) -> Vec<ConnectionClosurePlan> {
+        if selected.len() <= 1 {
+            return Vec::new();
+        }
+
+        Self::sort_selected_connections(strategy, selected);
+        let recommended_connection_id = selected[0].connection_id;
+
+        selected
+            .iter()
+            .skip(1)
+            .filter_map(|connection| {
+                let reason = format!(
+                    "lower-priority-than-connection-{}",
+                    recommended_connection_id
+                );
+                let active_stream_count = active_stream_counts
+                    .get(&connection.connection_id)
+                    .copied()
+                    .unwrap_or(0);
+                let current_governance = governance_info.get(&connection.connection_id);
+
+                let action =
+                    next_governance_action(current_governance, &reason, active_stream_count, now)?;
+
+                Some(ConnectionClosurePlan {
+                    connection_id: connection.connection_id,
+                    recommended_connection_id,
+                    action,
+                })
+            })
+            .collect()
+    }
+
     // TODO impl handshake
     async fn _handshake(&self, peer_id: PeerId) -> Result<()> {
         let mut stream = self
@@ -676,6 +738,45 @@ impl SwarmControl {
     }
 }
 
+fn next_governance_action(
+    current_governance: Option<&ConnectionGovernanceInfo>,
+    reason: &str,
+    active_stream_count: usize,
+    now: std::time::SystemTime,
+) -> Option<GovernanceAction> {
+    if active_stream_count > 0 {
+        return Some(GovernanceAction::MarkDeprecated);
+    }
+
+    let Some(current_governance) = current_governance else {
+        return Some(GovernanceAction::MarkDeprecated);
+    };
+
+    if current_governance.reason.as_deref() != Some(reason) {
+        return Some(GovernanceAction::MarkDeprecated);
+    }
+
+    match current_governance.state {
+        ConnectionGovernanceState::Unknown | ConnectionGovernanceState::Recommended => {
+            Some(GovernanceAction::MarkDeprecated)
+        }
+        ConnectionGovernanceState::Deprecated => {
+            let Some(changed_at) = current_governance.changed_at else {
+                return Some(GovernanceAction::MarkDeprecated);
+            };
+
+            if now.duration_since(changed_at).unwrap_or(Duration::ZERO)
+                >= CONNECTION_GOVERNANCE_GRACE_PERIOD
+            {
+                Some(GovernanceAction::MarkClosing)
+            } else {
+                None
+            }
+        }
+        ConnectionGovernanceState::Closing => Some(GovernanceAction::CloseNow),
+    }
+}
+
 pub struct FungiSwarm;
 
 impl FungiSwarm {
@@ -730,6 +831,7 @@ impl FungiSwarm {
         let event_handle_fut = handle_swarm_event(swarm_control.clone(), swarm_event_rx);
         let ping_handle_fut = handle_ping_event(swarm_control.clone(), ping_event_rx);
         let relay_health_fut = relay_management_loop(swarm_control.clone());
+        let connection_governance_fut = connection_governance_loop(swarm_control.clone());
 
         let join_handle = tokio::spawn(async move {
             tokio::select! {
@@ -737,6 +839,7 @@ impl FungiSwarm {
                 _ = event_handle_fut => {},
                 _ = ping_handle_fut => {},
                 _ = relay_health_fut => {},
+                _ = connection_governance_fut => {},
             }
         });
 
@@ -1112,6 +1215,147 @@ async fn relay_management_loop(swarm_control: SwarmControl) {
     }
 }
 
+async fn connection_governance_loop(swarm_control: SwarmControl) {
+    let mut interval = tokio::time::interval(CONNECTION_GOVERNANCE_INTERVAL);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+    loop {
+        interval.tick().await;
+        let now = std::time::SystemTime::now();
+
+        let peer_ids = {
+            let peer_connections = swarm_control.state().peer_connections();
+            peer_connections.lock().keys().copied().collect::<Vec<_>>()
+        };
+
+        for peer_id in peer_ids {
+            let mut selected = swarm_control.collect_selected_connections(peer_id);
+            if selected.is_empty() {
+                continue;
+            }
+
+            SwarmControl::sort_selected_connections(
+                ConnectionSelectionStrategy::PreferDirect,
+                &mut selected,
+            );
+
+            let recommended_connection_id = selected[0].connection_id;
+            swarm_control.state().update_connection_governance(
+                &recommended_connection_id,
+                ConnectionGovernanceState::Recommended,
+                Some("selected-by-prefer-direct-baseline".to_string()),
+            );
+
+            if selected.len() <= 1 {
+                continue;
+            }
+
+            let active_stream_counts = selected
+                .iter()
+                .map(|connection| {
+                    (
+                        connection.connection_id,
+                        swarm_control
+                            .state()
+                            .active_streams_by_connection(&connection.connection_id)
+                            .len(),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
+
+            let governance_info = selected
+                .iter()
+                .map(|connection| {
+                    (
+                        connection.connection_id,
+                        swarm_control
+                            .state()
+                            .connection_governance_info(&connection.connection_id)
+                            .unwrap_or_default(),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
+
+            let closure_plan = SwarmControl::build_connection_closure_plan(
+                ConnectionSelectionStrategy::PreferDirect,
+                &mut selected,
+                &active_stream_counts,
+                &governance_info,
+                now,
+            );
+
+            for plan in closure_plan {
+                let active_stream_count = active_stream_counts
+                    .get(&plan.connection_id)
+                    .copied()
+                    .unwrap_or(0);
+                let reason = format!(
+                    "lower-priority-than-connection-{}",
+                    plan.recommended_connection_id
+                );
+
+                match plan.action {
+                    GovernanceAction::MarkDeprecated => {
+                        swarm_control.state().update_connection_governance(
+                            &plan.connection_id,
+                            ConnectionGovernanceState::Deprecated,
+                            Some(reason),
+                        );
+                    }
+                    GovernanceAction::MarkClosing => {
+                        log::info!(
+                            "Marking deprecated idle connection {} for peer {} as closing in favor of recommended connection {} (active_streams={})",
+                            plan.connection_id,
+                            peer_id,
+                            plan.recommended_connection_id,
+                            active_stream_count
+                        );
+                        swarm_control.state().update_connection_governance(
+                            &plan.connection_id,
+                            ConnectionGovernanceState::Closing,
+                            Some(reason),
+                        );
+                    }
+                    GovernanceAction::CloseNow => {
+                        log::warn!(
+                            "Closing deprecated idle connection {} for peer {} in favor of recommended connection {} (active_streams={})",
+                            plan.connection_id,
+                            peer_id,
+                            plan.recommended_connection_id,
+                            active_stream_count
+                        );
+
+                        match swarm_control.close_connection(plan.connection_id).await {
+                            Ok(true) => {
+                                log::info!(
+                                    "Closed deprecated idle connection {} for peer {}",
+                                    plan.connection_id,
+                                    peer_id
+                                );
+                            }
+                            Ok(false) => {
+                                log::debug!(
+                                    "Connection {} for peer {} was already gone before governance close",
+                                    plan.connection_id,
+                                    peer_id
+                                );
+                            }
+                            Err(error) => {
+                                log::warn!(
+                                    "Failed to close deprecated idle connection {} for peer {}: {}",
+                                    plan.connection_id,
+                                    peer_id,
+                                    error
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 async fn handle_ping_event(
     swarm_control: SwarmControl,
     mut ping_event_rx: UnboundedReceiver<PingRttEvent>,
@@ -1475,7 +1719,17 @@ pub fn peer_addr_with_relay(peer_id: PeerId, relay: Multiaddr) -> Multiaddr {
 
 #[cfg(test)]
 mod tests {
-    use super::{RelayEndpoint, RelayTransportKind, multiaddr_starts_with, relay_transport_kind};
+    use super::{
+        CONNECTION_GOVERNANCE_GRACE_PERIOD, ConnectionSelectionStrategy, GovernanceAction,
+        RelayEndpoint, RelayTransportKind, SelectedConnection, SwarmControl, multiaddr_starts_with,
+        next_governance_action, relay_transport_kind,
+    };
+    use crate::{ConnectionDirection, ConnectionGovernanceInfo, ConnectionGovernanceState};
+    use libp2p::{Multiaddr, swarm::ConnectionId};
+    use std::{
+        collections::HashMap,
+        time::{Duration, SystemTime},
+    };
 
     #[test]
     fn relay_listener_match_accepts_confirmed_listener_addr() {
@@ -1528,5 +1782,151 @@ mod tests {
 
         assert!(relay_endpoint.matches_transport(&tcp_remote));
         assert!(!relay_endpoint.matches_transport(&udp_remote));
+    }
+
+    fn selected_connection(
+        connection_id: usize,
+        remote_addr: &str,
+        is_relay: bool,
+        last_rtt_ms: Option<u64>,
+    ) -> SelectedConnection {
+        SelectedConnection {
+            connection_id: ConnectionId::new_unchecked(connection_id),
+            direction: ConnectionDirection::Outbound,
+            remote_addr: remote_addr.parse::<Multiaddr>().unwrap(),
+            is_relay,
+            last_rtt: last_rtt_ms.map(Duration::from_millis),
+        }
+    }
+
+    #[test]
+    fn closure_plan_prefers_direct_and_closes_idle_relay() {
+        let mut selected = vec![
+            selected_connection(9, "/ip4/1.1.1.1/tcp/4001/p2p-circuit", true, Some(20)),
+            selected_connection(4, "/ip4/1.1.1.1/tcp/4001", false, Some(50)),
+        ];
+        let active_stream_counts = HashMap::from([
+            (ConnectionId::new_unchecked(9), 0usize),
+            (ConnectionId::new_unchecked(4), 0usize),
+        ]);
+        let governance_info = HashMap::from([
+            (
+                ConnectionId::new_unchecked(9),
+                ConnectionGovernanceInfo {
+                    state: ConnectionGovernanceState::Closing,
+                    reason: Some("lower-priority-than-connection-4".to_string()),
+                    changed_at: Some(SystemTime::now()),
+                },
+            ),
+            (
+                ConnectionId::new_unchecked(4),
+                ConnectionGovernanceInfo {
+                    state: ConnectionGovernanceState::Recommended,
+                    reason: Some("selected-by-prefer-direct-baseline".to_string()),
+                    changed_at: Some(SystemTime::now()),
+                },
+            ),
+        ]);
+
+        let plan = SwarmControl::build_connection_closure_plan(
+            ConnectionSelectionStrategy::PreferDirect,
+            &mut selected,
+            &active_stream_counts,
+            &governance_info,
+            SystemTime::now(),
+        );
+
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].connection_id, ConnectionId::new_unchecked(9));
+        assert_eq!(
+            plan[0].recommended_connection_id,
+            ConnectionId::new_unchecked(4)
+        );
+        assert_eq!(plan[0].action, GovernanceAction::CloseNow);
+    }
+
+    #[test]
+    fn closure_plan_keeps_deprecated_connection_when_stream_is_active() {
+        let mut selected = vec![
+            selected_connection(8, "/ip4/1.1.1.1/tcp/4002", false, Some(90)),
+            selected_connection(6, "/ip4/1.1.1.1/tcp/4001", false, Some(15)),
+        ];
+        let active_stream_counts = HashMap::from([
+            (ConnectionId::new_unchecked(8), 2usize),
+            (ConnectionId::new_unchecked(6), 0usize),
+        ]);
+        let governance_info = HashMap::from([
+            (
+                ConnectionId::new_unchecked(8),
+                ConnectionGovernanceInfo {
+                    state: ConnectionGovernanceState::Closing,
+                    reason: Some("lower-priority-than-connection-6".to_string()),
+                    changed_at: Some(SystemTime::now()),
+                },
+            ),
+            (
+                ConnectionId::new_unchecked(6),
+                ConnectionGovernanceInfo {
+                    state: ConnectionGovernanceState::Recommended,
+                    reason: Some("selected-by-prefer-direct-baseline".to_string()),
+                    changed_at: Some(SystemTime::now()),
+                },
+            ),
+        ]);
+
+        let plan = SwarmControl::build_connection_closure_plan(
+            ConnectionSelectionStrategy::PreferDirect,
+            &mut selected,
+            &active_stream_counts,
+            &governance_info,
+            SystemTime::now(),
+        );
+
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].action, GovernanceAction::MarkDeprecated);
+    }
+
+    #[test]
+    fn next_governance_action_respects_grace_period_before_closing() {
+        let now = SystemTime::now();
+        let current = ConnectionGovernanceInfo {
+            state: ConnectionGovernanceState::Deprecated,
+            reason: Some("lower-priority-than-connection-4".to_string()),
+            changed_at: Some(now),
+        };
+
+        let action =
+            next_governance_action(Some(&current), "lower-priority-than-connection-4", 0, now);
+
+        assert_eq!(action, None);
+    }
+
+    #[test]
+    fn next_governance_action_transitions_to_closing_and_then_close() {
+        let now = SystemTime::now();
+        let deprecated = ConnectionGovernanceInfo {
+            state: ConnectionGovernanceState::Deprecated,
+            reason: Some("lower-priority-than-connection-4".to_string()),
+            changed_at: Some(now - CONNECTION_GOVERNANCE_GRACE_PERIOD),
+        };
+        let closing = ConnectionGovernanceInfo {
+            state: ConnectionGovernanceState::Closing,
+            reason: Some("lower-priority-than-connection-4".to_string()),
+            changed_at: Some(now),
+        };
+
+        assert_eq!(
+            next_governance_action(
+                Some(&deprecated),
+                "lower-priority-than-connection-4",
+                0,
+                now,
+            ),
+            Some(GovernanceAction::MarkClosing)
+        );
+        assert_eq!(
+            next_governance_action(Some(&closing), "lower-priority-than-connection-4", 0, now,),
+            Some(GovernanceAction::CloseNow)
+        );
     }
 }

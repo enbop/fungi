@@ -50,6 +50,38 @@ pub enum ConnectionDirection {
     Outbound,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum ConnectionGovernanceState {
+    Unknown,
+    Recommended,
+    Deprecated,
+    Closing,
+}
+
+impl ConnectionGovernanceState {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ConnectionGovernanceState::Unknown => "unknown",
+            ConnectionGovernanceState::Recommended => "recommended",
+            ConnectionGovernanceState::Deprecated => "deprecated",
+            ConnectionGovernanceState::Closing => "closing",
+        }
+    }
+}
+
+impl Default for ConnectionGovernanceState {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ConnectionGovernanceInfo {
+    pub state: ConnectionGovernanceState,
+    pub reason: Option<String>,
+    pub changed_at: Option<SystemTime>,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct PeerConnections {
     handshake: Option<PeerHandshakePayload>,
@@ -283,6 +315,32 @@ impl State {
             .lock()
             .get(connection_id)
             .map(|entry| entry.ping_info.clone())
+    }
+
+    pub fn connection_governance_info(
+        &self,
+        connection_id: &ConnectionId,
+    ) -> Option<ConnectionGovernanceInfo> {
+        self.connection_id_map
+            .lock()
+            .get(connection_id)
+            .map(|entry| entry.governance.clone())
+    }
+
+    pub fn update_connection_governance(
+        &self,
+        connection_id: &ConnectionId,
+        governance_state: ConnectionGovernanceState,
+        reason: Option<String>,
+    ) {
+        if let Some(entry) = self.connection_id_map.lock().get_mut(connection_id) {
+            let reason_changed = entry.governance.reason != reason;
+            if entry.governance.state != governance_state || reason_changed {
+                entry.governance.changed_at = Some(SystemTime::now());
+            }
+            entry.governance.state = governance_state;
+            entry.governance.reason = reason;
+        }
     }
 
     pub fn update_connection_ping(&self, connection_id: &ConnectionId, rtt: Duration) {
@@ -533,6 +591,7 @@ impl Drop for StreamObservationHandleInner {
 pub struct ConnectionEntry {
     pub peer_id: PeerId,
     pub ping_info: ConnectionPingInfo,
+    pub governance: ConnectionGovernanceInfo,
 }
 
 pub(crate) fn handle_connection_established(
@@ -562,6 +621,7 @@ pub(crate) fn handle_connection_established(
         ConnectionEntry {
             peer_id,
             ping_info: ConnectionPingInfo::default(),
+            governance: ConnectionGovernanceInfo::default(),
         },
     );
     state
