@@ -122,6 +122,8 @@ pub struct ConnectionSnapshot {
     pub last_ping_at: Option<SystemTime>,
     pub active_streams_total: usize,
     pub active_streams_by_protocol: Vec<ProtocolStreamCountSnapshot>,
+    pub policy_state: String,
+    pub policy_reason: String,
 }
 
 #[derive(Debug, Clone)]

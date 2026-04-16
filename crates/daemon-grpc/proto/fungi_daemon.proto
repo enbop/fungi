@@ -490,6 +490,8 @@ message ConnectionSnapshot {
   int64                                last_ping_unix_ms          = 7;
   uint64                               active_streams_total       = 8;
   repeated ProtocolStreamCountSnapshot active_streams_by_protocol = 9;
+  string                               policy_state               = 10;
+  string                               policy_reason              = 11;
 }
 
 message ProtocolStreamCountSnapshot {

@@ -135,8 +135,8 @@ async fn execute_connections(
                     .unwrap_or_default()
             );
             println!(
-                "{:<22} {:<6} {:<8} {:<5} {:<12} {:<7} ADDR",
-                "PEER", "CONN", "DIR", "RLY", "LAST_PING", "STREAMS"
+                "{:<22} {:<6} {:<8} {:<5} {:<12} {:<7} {:<12} ADDR",
+                "PEER", "CONN", "DIR", "RLY", "LAST_PING", "STREAMS", "POLICY"
             );
 
             let mut direct_streams_total = 0u64;
@@ -184,17 +184,21 @@ async fn execute_connections(
                     simplify_multiaddr_peer_ids(&conn.remote_addr)
                 };
                 println!(
-                    "{:<22} {:<6} {:<8} {:<5} {:<12} {:<7} {}",
+                    "{:<22} {:<6} {:<8} {:<5} {:<12} {:<7} {:<12} {}",
                     peer_display,
                     conn.connection_id,
                     conn.direction,
                     if conn.is_relay { "yes" } else { "no" },
                     ping,
                     stream_count_for_view,
+                    conn.policy_state,
                     addr_display,
                 );
 
                 if verbose {
+                    if !conn.policy_reason.is_empty() {
+                        println!("  - policy_reason={}", conn.policy_reason);
+                    }
                     for protocol in conn.active_streams_by_protocol {
                         println!(
                             "  - protocol={} streams={}",

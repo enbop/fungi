@@ -448,6 +448,10 @@ pub struct ConnectionSnapshot {
     pub active_streams_total: u64,
     #[prost(message, repeated, tag = "9")]
     pub active_streams_by_protocol: ::prost::alloc::vec::Vec<ProtocolStreamCountSnapshot>,
+    #[prost(string, tag = "10")]
+    pub policy_state: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub policy_reason: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ProtocolStreamCountSnapshot {

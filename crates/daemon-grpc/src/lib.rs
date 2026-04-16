@@ -972,6 +972,8 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                         stream_count: s.stream_count as u64,
                     })
                     .collect(),
+                policy_state: c.policy_state,
+                policy_reason: c.policy_reason,
             })
             .collect();
 

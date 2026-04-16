@@ -11,6 +11,73 @@ use super::types::{
     ProtocolStreamCountSnapshot, RelayEndpointStatusSnapshot,
 };
 
+fn connection_id_sort_key(connection_id: &str) -> u64 {
+    if let Ok(value) = connection_id.parse::<u64>() {
+        return value;
+    }
+
+    let digits: String = connection_id
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect();
+    digits.parse::<u64>().unwrap_or(u64::MAX)
+}
+
+fn connection_rtt_sort_key(last_rtt_ms: u64, last_ping_at: Option<std::time::SystemTime>) -> u64 {
+    if last_ping_at.is_some() {
+        last_rtt_ms
+    } else {
+        u64::MAX
+    }
+}
+
+fn apply_connection_policy(snapshots: &mut [ConnectionSnapshot]) {
+    snapshots.sort_by(|left, right| {
+        left.peer_id
+            .cmp(&right.peer_id)
+            .then(left.is_relay.cmp(&right.is_relay))
+            .then(
+                connection_rtt_sort_key(left.last_rtt_ms, left.last_ping_at).cmp(
+                    &connection_rtt_sort_key(right.last_rtt_ms, right.last_ping_at),
+                ),
+            )
+            .then(
+                connection_id_sort_key(&left.connection_id)
+                    .cmp(&connection_id_sort_key(&right.connection_id)),
+            )
+    });
+
+    let mut start = 0usize;
+    while start < snapshots.len() {
+        let peer_id = snapshots[start].peer_id.clone();
+        let mut end = start + 1;
+        while end < snapshots.len() && snapshots[end].peer_id == peer_id {
+            end += 1;
+        }
+
+        let recommended_id = snapshots[start].connection_id.clone();
+        for (offset, snapshot) in snapshots[start..end].iter_mut().enumerate() {
+            if offset == 0 {
+                snapshot.policy_state = "recommended".to_string();
+                snapshot.policy_reason = "selected-by-prefer-direct-baseline".to_string();
+            } else {
+                snapshot.policy_state = "deprecated".to_string();
+                snapshot.policy_reason =
+                    format!("lower-priority-than-connection-{}", recommended_id);
+            }
+        }
+
+        start = end;
+    }
+
+    snapshots.sort_by(|a, b| {
+        a.peer_id
+            .cmp(&b.peer_id)
+            .then(a.direction.cmp(&b.direction))
+            .then(a.connection_id.cmp(&b.connection_id))
+    });
+}
+
 impl FungiDaemon {
     fn build_connection_snapshot(
         state: &State,
@@ -55,6 +122,8 @@ impl FungiDaemon {
             last_ping_at,
             active_streams_total,
             active_streams_by_protocol,
+            policy_state: "unknown".to_string(),
+            policy_reason: String::new(),
         }
     }
 
@@ -173,7 +242,6 @@ impl FungiDaemon {
                     state, *pid, "inbound", conn,
                 ));
             }
-
             for conn in peer_conn.outbound() {
                 snapshots.push(Self::build_connection_snapshot(
                     state, *pid, "outbound", conn,
@@ -181,12 +249,7 @@ impl FungiDaemon {
             }
         }
 
-        snapshots.sort_by(|a, b| {
-            a.peer_id
-                .cmp(&b.peer_id)
-                .then(a.direction.cmp(&b.direction))
-                .then(a.connection_id.cmp(&b.connection_id))
-        });
+        apply_connection_policy(&mut snapshots);
 
         snapshots
     }
@@ -249,5 +312,82 @@ impl FungiDaemon {
         self.swarm_control()
             .ping_connection(peer_id, connection_id, timeout)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot(
+        peer_id: &str,
+        connection_id: &str,
+        is_relay: bool,
+        last_rtt_ms: u64,
+    ) -> ConnectionSnapshot {
+        ConnectionSnapshot {
+            peer_id: peer_id.to_string(),
+            connection_id: connection_id.to_string(),
+            direction: "outbound".to_string(),
+            remote_addr: if is_relay {
+                "/ip4/1.1.1.1/tcp/4001/p2p-circuit".to_string()
+            } else {
+                "/ip4/1.1.1.1/tcp/4001".to_string()
+            },
+            is_relay,
+            last_rtt_ms,
+            last_ping_at: if last_rtt_ms == 0 {
+                None
+            } else {
+                Some(std::time::SystemTime::now())
+            },
+            active_streams_total: 0,
+            active_streams_by_protocol: Vec::new(),
+            policy_state: String::new(),
+            policy_reason: String::new(),
+        }
+    }
+
+    #[test]
+    fn apply_connection_policy_prefers_direct_before_relay() {
+        let mut snapshots = vec![
+            snapshot("peer-a", "9", true, 20),
+            snapshot("peer-a", "4", false, 50),
+        ];
+
+        apply_connection_policy(&mut snapshots);
+
+        let direct = snapshots
+            .iter()
+            .find(|entry| entry.connection_id == "4")
+            .unwrap();
+        let relay = snapshots
+            .iter()
+            .find(|entry| entry.connection_id == "9")
+            .unwrap();
+        assert_eq!(direct.policy_state, "recommended");
+        assert_eq!(relay.policy_state, "deprecated");
+        assert_eq!(relay.policy_reason, "lower-priority-than-connection-4");
+    }
+
+    #[test]
+    fn apply_connection_policy_prefers_lower_rtt_within_same_class() {
+        let mut snapshots = vec![
+            snapshot("peer-a", "8", false, 90),
+            snapshot("peer-a", "6", false, 15),
+        ];
+
+        apply_connection_policy(&mut snapshots);
+
+        let preferred = snapshots
+            .iter()
+            .find(|entry| entry.connection_id == "6")
+            .unwrap();
+        let deprecated = snapshots
+            .iter()
+            .find(|entry| entry.connection_id == "8")
+            .unwrap();
+        assert_eq!(preferred.policy_state, "recommended");
+        assert_eq!(deprecated.policy_state, "deprecated");
     }
 }
