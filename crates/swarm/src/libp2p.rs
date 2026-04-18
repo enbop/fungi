@@ -42,7 +42,7 @@ use tokio::{
 // Relay connection retry constants
 const RELAY_RETRY_MAX_ATTEMPTS: u32 = 4;
 const RELAY_RETRY_BASE_DELAY_MS: u64 = 500;
-const RELAY_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(60);
+const RELAY_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(600);
 const CONNECTION_GOVERNANCE_INTERVAL: Duration = Duration::from_secs(60);
 const CONNECTION_GOVERNANCE_GRACE_PERIOD: Duration = Duration::from_secs(120);
 /// Simple RAII guard to ensure atomic bool is reset when task completes
@@ -991,6 +991,16 @@ async fn handle_swarm_event(
                 println!("[Swarm event] NewListenAddr {address:?}");
                 handle_new_listen_addr(&swarm_control, address);
             }
+            SwarmEvent::ExpiredListenAddr { address, .. } => {
+                handle_expired_listen_addr(&swarm_control, address);
+            }
+            SwarmEvent::ListenerClosed {
+                listener_id: _,
+                addresses,
+                reason,
+            } => {
+                handle_listener_closed(&swarm_control, addresses, reason);
+            }
             SwarmEvent::Behaviour(FungiBehavioursEvent::Mdns(event)) => {
                 handle_mdns_behaviour_event(&swarm_control, event);
             }
@@ -1260,6 +1270,10 @@ fn summarize_multiaddrs(addrs: &[Multiaddr]) -> String {
 }
 
 async fn relay_management_loop(swarm_control: SwarmControl) {
+    // libp2p renews relay reservations while the direct carrier connection is still healthy.
+    // It does not recreate the relay listener after the carrier or listener disappears, so this
+    // loop remains as a low-frequency safety net while the event-driven handlers below provide
+    // the fast recovery path.
     loop {
         tokio::time::sleep(RELAY_HEALTH_CHECK_INTERVAL).await;
 
@@ -1344,7 +1358,7 @@ async fn relay_management_loop(swarm_control: SwarmControl) {
                 .state()
                 .record_relay_management_action(relay_endpoint.addr(), action);
             log::info!(
-                "Relay health check re-establishing reservation for {} because listener_registered={} active_direct_connection={}",
+                "Relay audit re-establishing reservation for {} because listener_registered={} active_direct_connection={}",
                 relay_endpoint.addr(),
                 listener_registered,
                 has_active_direct_connection
@@ -1531,6 +1545,9 @@ fn handle_outgoing_connection_error(
 
 fn handle_new_listen_addr(swarm_control: &SwarmControl, new_addr: Multiaddr) {
     if new_addr.to_string().contains("p2p-circuit") {
+        // A relayed listen address means libp2p successfully (re)established the reservation.
+        // Mark the endpoint healthy and let libp2p keep owning steady-state renewal from here.
+        record_matching_relay_listener_state(swarm_control, &new_addr, true);
         return;
     }
     let mut new_addr_iter = new_addr.iter();
@@ -1574,6 +1591,121 @@ fn handle_new_listen_addr(swarm_control: &SwarmControl, new_addr: Multiaddr) {
             _ => {}
         }
     }
+}
+
+fn handle_expired_listen_addr(swarm_control: &SwarmControl, expired_addr: Multiaddr) {
+    // Relay listen-address expiry is an early signal that the reservation is no longer externally
+    // usable. Reconcile immediately instead of waiting for the periodic audit loop.
+    let matched_endpoints =
+        record_matching_relay_listener_state(swarm_control, &expired_addr, false);
+    for relay_endpoint in matched_endpoints {
+        trigger_relay_reconcile(
+            swarm_control,
+            &relay_endpoint,
+            crate::RelayManagementAction::ListenerMissingReconcile,
+            format!("relay listen addr expired: {expired_addr}"),
+        );
+    }
+}
+
+fn handle_listener_closed(
+    swarm_control: &SwarmControl,
+    addresses: Vec<Multiaddr>,
+    reason: Result<(), std::io::Error>,
+) {
+    // `ListenerClosed` is emitted when the relay transport listener shuts down entirely, for
+    // example after a relay restart or failed reservation recreation. Treat it as a direct
+    // request to recreate the listener on the configured relay endpoint.
+    let reason_text = match reason {
+        Ok(()) => "listener closed".to_string(),
+        Err(error) => error.to_string(),
+    };
+
+    for address in addresses {
+        let matched_endpoints =
+            record_matching_relay_listener_state(swarm_control, &address, false);
+        for relay_endpoint in matched_endpoints {
+            swarm_control
+                .state()
+                .record_relay_management_error(relay_endpoint.addr(), reason_text.clone());
+            trigger_relay_reconcile(
+                swarm_control,
+                &relay_endpoint,
+                crate::RelayManagementAction::ListenerMissingReconcile,
+                format!("relay listener closed at {address}: {reason_text}"),
+            );
+        }
+    }
+}
+
+fn record_matching_relay_listener_state(
+    swarm_control: &SwarmControl,
+    listener_addr: &Multiaddr,
+    listener_registered: bool,
+) -> Vec<RelayEndpoint> {
+    let matched_endpoints = swarm_control
+        .relay_endpoints
+        .iter()
+        .filter(|relay_endpoint| relay_endpoint.matches_listener(listener_addr))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    for relay_endpoint in &matched_endpoints {
+        swarm_control
+            .state()
+            .record_relay_listener_check(relay_endpoint.addr(), listener_registered);
+    }
+
+    matched_endpoints
+}
+
+fn trigger_relay_reconcile(
+    swarm_control: &SwarmControl,
+    relay_endpoint: &RelayEndpoint,
+    action: crate::RelayManagementAction,
+    reason: String,
+) {
+    // Multiple transport addresses for the same relay peer act as fallback carriers. If one is
+    // still healthy, keep relying on libp2p renewal there instead of re-establishing another
+    // redundant reservation on a sibling endpoint.
+    if relay_peer_has_healthy_sibling_endpoint(swarm_control, relay_endpoint) {
+        log::debug!(
+            "Skipping relay reconcile for {} because another endpoint for the same relay peer is already healthy ({})",
+            relay_endpoint.addr(),
+            reason
+        );
+        return;
+    }
+
+    swarm_control
+        .state()
+        .record_relay_management_action(relay_endpoint.addr(), action);
+    log::info!(
+        "Triggering relay reconcile for {}: {}",
+        relay_endpoint.addr(),
+        reason
+    );
+    spawn_relay_listen_task(swarm_control, relay_endpoint);
+}
+
+fn relay_peer_has_healthy_sibling_endpoint(
+    swarm_control: &SwarmControl,
+    relay_endpoint: &RelayEndpoint,
+) -> bool {
+    let Some(relay_peer_id) = relay_endpoint.peer_id() else {
+        return false;
+    };
+
+    swarm_control
+        .state()
+        .list_relay_endpoint_statuses()
+        .into_iter()
+        .any(|status| {
+            status.relay_addr != *relay_endpoint.addr()
+                && status.relay_peer_id == Some(relay_peer_id)
+                && status.listener_registered
+                && status.current_direct_connection_id.is_some()
+        })
 }
 
 fn spawn_relay_listen_task(swarm_control: &SwarmControl, relay_endpoint: &RelayEndpoint) {
@@ -1714,6 +1846,8 @@ fn record_relay_connection_closed(
                 remote_addr,
             );
             if closed_active_connection {
+                // Once the direct carrier is gone, libp2p can no longer renew the reservation on
+                // this relay endpoint. Kick off immediate recovery instead of waiting for audit.
                 log::warn!(
                     "Relay carrier connection closed peer={} transport={} connection_id={} addr={} cause={}",
                     peer_id,
@@ -1733,9 +1867,16 @@ fn record_relay_connection_closed(
                         .state()
                         .record_relay_management_error(relay_endpoint.addr(), cause.to_string());
                 }
-                swarm_control.state().record_relay_management_action(
-                    relay_endpoint.addr(),
-                    crate::RelayManagementAction::DirectConnectionClosedAwaitingManagementLoop,
+                trigger_relay_reconcile(
+                    swarm_control,
+                    relay_endpoint,
+                    crate::RelayManagementAction::DirectConnectionMissingReconcile,
+                    format!(
+                        "relay carrier connection closed peer={} connection_id={} cause={}",
+                        peer_id,
+                        connection_id,
+                        cause.as_deref().unwrap_or("unknown")
+                    ),
                 );
             }
         }
@@ -1754,7 +1895,9 @@ async fn listen_relay_by_addr(swarm_control: SwarmControl, relay_addr: Multiaddr
         })
         .ok_or_else(|| anyhow::anyhow!("Invalid relay address"))?;
 
-    // Dialing the relay also lets libp2p refresh our observed external address state.
+    // Dialing the relay restores the direct carrier connection required for relay reservation
+    // renewal. Without this carrier, libp2p will expire the relay address but will not recreate
+    // the listener by itself.
     dial_relay_by_addr(&swarm_control, relay_peer, relay_addr.clone(), false).await?;
 
     if let Err(error) = perform_relay_handshake(&swarm_control, relay_peer).await {
@@ -1773,7 +1916,8 @@ async fn listen_relay_by_addr(swarm_control: SwarmControl, relay_addr: Multiaddr
         return Ok(());
     };
 
-    // 3. listen on relay
+    // Re-issuing `listen_on(.../p2p-circuit)` is the application-level resurrection step. After
+    // this succeeds, libp2p takes back over for steady-state reservation renewal.
     println!("Listening on relay address: {relay_addr:?}");
     swarm_control
         .invoke_swarm(move |swarm| swarm.listen_on(relay_addr.with(Protocol::P2pCircuit)))

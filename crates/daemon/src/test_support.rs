@@ -91,6 +91,7 @@ fn minimal_test_config(dir: &TempDir, tcp_port: u16) -> FungiConfig {
 pub struct TestDaemonBuilder {
     keypair: Option<Keypair>,
     allowed_peers: Vec<PeerId>,
+    custom_relay_addresses: Vec<Multiaddr>,
     config_mutators: Vec<ConfigMutator>,
 }
 
@@ -108,6 +109,18 @@ impl TestDaemonBuilder {
     /// Allow an additional incoming peer on this daemon.
     pub fn with_allowed_peer(mut self, peer_id: PeerId) -> Self {
         self.allowed_peers.push(peer_id);
+        self
+    }
+
+    /// Configure explicit relay addresses for this daemon.
+    ///
+    /// This keeps the shared in-process daemon path useful for relay-aware tests without forcing
+    /// each test to hand-edit config files.
+    pub fn with_custom_relay_addresses<I>(mut self, relay_addresses: I) -> Self
+    where
+        I: IntoIterator<Item = Multiaddr>,
+    {
+        self.custom_relay_addresses = relay_addresses.into_iter().collect();
         self
     }
 
@@ -133,6 +146,11 @@ impl TestDaemonBuilder {
         cfg.network
             .incoming_allowed_peers
             .extend(self.allowed_peers);
+        if !self.custom_relay_addresses.is_empty() {
+            cfg.network.relay_enabled = true;
+            cfg.network.use_community_relays = false;
+            cfg.network.custom_relay_addresses = self.custom_relay_addresses.clone();
+        }
         for configure in self.config_mutators {
             configure(&mut cfg);
         }
@@ -358,5 +376,24 @@ mod tests {
             .unwrap();
 
         assert!(d.daemon().config().lock().file_transfer.server.enabled);
+    }
+
+    #[tokio::test]
+    async fn builder_can_set_custom_relay_addresses() {
+        let relay_peer_id = Keypair::generate_ed25519().public().to_peer_id();
+        let relay_addr: Multiaddr = format!("/ip4/127.0.0.1/tcp/30001/p2p/{relay_peer_id}")
+            .parse()
+            .unwrap();
+        let d = TestDaemonBuilder::new()
+            .with_custom_relay_addresses([relay_addr.clone()])
+            .build()
+            .await
+            .unwrap();
+
+        let config_handle = d.daemon().config();
+        let config = config_handle.lock();
+        assert!(config.network.relay_enabled);
+        assert!(!config.network.use_community_relays);
+        assert_eq!(config.network.custom_relay_addresses, vec![relay_addr]);
     }
 }

@@ -1,10 +1,11 @@
 use anyhow::{Context, Result, bail};
+use fungi_tests::{
+    DaemonProcess, assert_contains, get_fungi_binary_path, patch_rpc_port, reserve_tcp_port,
+};
 use std::fs;
-use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::process::Command;
+use std::time::Duration;
 use tempfile::TempDir;
 
 const CUSTOM_RELAY: &str =
@@ -25,11 +26,11 @@ fn main() -> Result<()> {
     let config_text = fs::read_to_string(ctx.config_file())?;
     assert_contains(&config_text, "relay_enabled = false")?;
 
-    let rpc_port = find_free_port()?;
+    let rpc_port = reserve_tcp_port()?;
     ctx.set_rpc_port(rpc_port)?;
 
     println!("=== Start daemon ===");
-    let daemon = DaemonProcess::start(ctx.fungi_dir())?;
+    let daemon = DaemonProcess::start(ctx.fungi_dir(), Duration::from_secs(20))?;
 
     println!("=== Online relay config via daemon ===");
     let output = ctx.run_cli(["relay", "enable"])?;
@@ -89,16 +90,7 @@ impl RelayTestContext {
     }
 
     fn set_rpc_port(&self, port: u16) -> Result<()> {
-        let config_file = self.config_file();
-        let content = fs::read_to_string(&config_file)
-            .with_context(|| format!("failed to read {}", config_file.display()))?;
-        let updated = content.replace(
-            "listen_address = \"127.0.0.1:5405\"",
-            &format!("listen_address = \"127.0.0.1:{port}\""),
-        );
-        fs::write(&config_file, updated)
-            .with_context(|| format!("failed to write {}", config_file.display()))?;
-        Ok(())
+        patch_rpc_port(&self.config_file(), port)
     }
 
     fn run_cli<I, S>(&self, args: I) -> Result<String>
@@ -130,85 +122,4 @@ impl RelayTestContext {
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
-}
-
-struct DaemonProcess {
-    child: Child,
-}
-
-impl DaemonProcess {
-    fn start(fungi_dir: &Path) -> Result<Self> {
-        let fungi_bin = get_fungi_binary_path()?;
-        let child = Command::new(&fungi_bin)
-            .arg("--fungi-dir")
-            .arg(fungi_dir)
-            .arg("daemon")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .context("failed to start daemon")?;
-
-        wait_ready(fungi_dir, Duration::from_secs(20))?;
-        Ok(Self { child })
-    }
-}
-
-impl Drop for DaemonProcess {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-}
-
-fn wait_ready(fungi_dir: &Path, timeout: Duration) -> Result<()> {
-    let fungi_bin = get_fungi_binary_path()?;
-    let started = Instant::now();
-
-    while started.elapsed() < timeout {
-        let output = Command::new(&fungi_bin)
-            .arg("--fungi-dir")
-            .arg(fungi_dir)
-            .arg("info")
-            .arg("version")
-            .output()
-            .context("failed to probe daemon readiness")?;
-
-        if output.status.success() {
-            return Ok(());
-        }
-
-        thread::sleep(Duration::from_millis(300));
-    }
-
-    bail!("daemon did not become ready within {:?}", timeout)
-}
-
-fn get_fungi_binary_path() -> Result<PathBuf> {
-    let current_exe = std::env::current_exe().context("failed to get current executable")?;
-    let target_dir = current_exe
-        .parent()
-        .context("failed to get current executable directory")?;
-    let fungi_bin = target_dir.join("fungi");
-
-    if !fungi_bin.exists() {
-        bail!(
-            "fungi binary not found at {}. Build it first with `cargo build --bin fungi`.",
-            fungi_bin.display()
-        );
-    }
-
-    Ok(fungi_bin)
-}
-
-fn assert_contains(haystack: &str, needle: &str) -> Result<()> {
-    if haystack.contains(needle) {
-        return Ok(());
-    }
-
-    bail!("expected to find `{needle}` in:\n{haystack}")
-}
-
-fn find_free_port() -> Result<u16> {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).context("failed to bind probe port")?;
-    Ok(listener.local_addr()?.port())
 }
