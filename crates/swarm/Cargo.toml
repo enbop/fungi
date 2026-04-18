@@ -11,7 +11,7 @@ once_cell = { workspace = true }
 anyhow = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 libp2p = { workspace = true }
-libp2p-stream = { workspace = true }
+fungi-stream = { workspace = true }
 fungi-util = { path = "../util" }
 void = "1"
 async-result = "0.1.0"

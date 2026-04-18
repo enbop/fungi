@@ -15,7 +15,7 @@ fn identify_user_agent() -> String {
 
 #[derive(NetworkBehaviour)]
 pub struct FungiBehaviours {
-    pub stream: libp2p_stream::Behaviour,
+    pub stream: fungi_stream::Behaviour,
     pub mdns: mdns::tokio::Behaviour,
     identify: identify::Behaviour,
     relay: relay::client::Behaviour,
@@ -40,6 +40,7 @@ impl FungiBehaviours {
         state: State,
     ) -> Self {
         let peer_id = keypair.public().to_peer_id();
+        let global_allow_list = state.incoming_allowed_peers();
 
         // Create a identify behaviour.
         let user_agent = identify_user_agent();
@@ -49,7 +50,7 @@ impl FungiBehaviours {
         );
 
         Self {
-            stream: libp2p_stream::Behaviour::default(),
+            stream: fungi_stream::Behaviour::new(global_allow_list),
             mdns,
             identify,
             relay,

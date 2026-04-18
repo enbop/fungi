@@ -308,6 +308,12 @@ pub async fn spawn_connected_pair() -> Result<(TestDaemon, TestDaemon)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fungi_swarm::ConnectionSelectionStrategy;
+    use futures::StreamExt;
+    use libp2p::{StreamProtocol, futures::AsyncWriteExt, swarm::dial_opts::DialOpts};
+
+    const REVERSE_STREAM_TEST_PROTOCOL: StreamProtocol =
+        StreamProtocol::new("/fungi/test/reverse-stream-allowlist-gap/1.0.0");
 
     /// Smoke test: a single daemon starts up and exposes a non-trivial PeerId.
     #[tokio::test]
@@ -395,5 +401,91 @@ mod tests {
         assert!(config.network.relay_enabled);
         assert!(!config.network.use_community_relays);
         assert_eq!(config.network.custom_relay_addresses, vec![relay_addr]);
+    }
+
+    #[tokio::test]
+    async fn disallowed_peer_cannot_open_reverse_stream_on_existing_outbound_connection() {
+        let victim_kp = Keypair::generate_ed25519();
+        let victim_peer_id = victim_kp.public().to_peer_id();
+        let attacker_kp = Keypair::generate_ed25519();
+        let attacker_peer_id = attacker_kp.public().to_peer_id();
+
+        let victim = TestDaemonBuilder::new()
+            .with_keypair(victim_kp)
+            .build()
+            .await
+            .unwrap();
+        let attacker = TestDaemonBuilder::new()
+            .with_keypair(attacker_kp)
+            .with_allowed_peer(victim_peer_id)
+            .build()
+            .await
+            .unwrap();
+
+        assert!(
+            !victim
+                .daemon()
+                .config()
+                .lock()
+                .network
+                .incoming_allowed_peers
+                .contains(&attacker_peer_id),
+            "victim must not allow attacker peer"
+        );
+
+        let mut incoming = victim
+            .swarm_control()
+            .accept_incoming_streams(REVERSE_STREAM_TEST_PROTOCOL)
+            .unwrap();
+
+        let attacker_peer_id_for_dial = attacker.peer_id();
+        let attacker_addr_for_dial = attacker.tcp_multiaddr();
+        victim
+            .swarm_control()
+            .invoke_swarm(move |swarm| {
+                swarm.dial(
+                    DialOpts::peer_id(attacker_peer_id_for_dial)
+                        .addresses(vec![attacker_addr_for_dial])
+                        .build(),
+                )
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        victim
+            .wait_connected(attacker.peer_id(), Duration::from_secs(5))
+            .await
+            .unwrap();
+        attacker
+            .wait_connected(victim.peer_id(), Duration::from_secs(5))
+            .await
+            .unwrap();
+
+        let open_result = attacker
+            .swarm_control()
+            .open_stream_with_strategy(
+                victim.peer_id(),
+                REVERSE_STREAM_TEST_PROTOCOL,
+                ConnectionSelectionStrategy::PreferDirect,
+                Duration::ZERO,
+            )
+            .await;
+
+        match open_result {
+            Ok((mut stream, _handle, _connection_id)) => {
+                let write_result = stream.write_all(b"ping").await;
+                assert!(
+                    write_result.is_err(),
+                    "reverse-opened stream should be rejected before payload is delivered"
+                );
+            }
+            Err(_) => {}
+        }
+
+        let next = tokio::time::timeout(Duration::from_millis(500), incoming.next()).await;
+        assert!(
+            next.is_err(),
+            "victim should not receive an inbound stream from the disallowed peer"
+        );
     }
 }

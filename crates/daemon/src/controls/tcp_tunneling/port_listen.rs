@@ -1,6 +1,6 @@
+use fungi_stream::IncomingStreams;
 use futures::StreamExt;
 use libp2p::Stream;
-use libp2p_stream::IncomingStreams;
 use parking_lot::Mutex;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -36,7 +36,9 @@ pub async fn listen_p2p_to_port(
         tokio::select! {
             stream_result = incomings.next() => {
                 match stream_result {
-                    Some((peer_id, stream)) => {
+                        Some(incoming_stream) => {
+                            let peer_id = incoming_stream.peer_id;
+                            let stream = incoming_stream.stream;
                         log::debug!("Received stream from {peer_id:?}");
 
                         let task = tokio::spawn(handle_incoming_stream(stream, target_addr));

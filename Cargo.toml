@@ -6,10 +6,10 @@ members = [
     "crates/config",
     "crates/daemon",
     "crates/docker-agent",
+    "crates/stream",
     "crates/swarm",
     "crates/util",
     "crates/fs",
-    # "crates/wasi",
     "crates/daemon-grpc",
     "crates/tests",
 ]
@@ -46,7 +46,7 @@ libp2p = { version = "0.56", features = [
     "secp256k1",
     "ed25519",
 ] }
-libp2p-stream = { path = "crates/libp2p-stream" }
+fungi-stream = { path = "crates/stream" }
 libp2p-identity = { version = "0.2", features = ["secp256k1", "serde", "rand"] }
 libp2p-swarm = "0.47"
 parking_lot = "0.12"

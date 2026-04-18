@@ -2,6 +2,7 @@ use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use crate::{CatalogService, RuntimeControl};
 use anyhow::Result;
+use fungi_stream::IncomingStreams;
 use fungi_swarm::{ConnectionSelectionStrategy, SwarmControl};
 use fungi_util::protocols::FUNGI_SERVICE_DISCOVERY_PROTOCOL;
 use futures::StreamExt;
@@ -9,7 +10,6 @@ use libp2p::{
     PeerId,
     futures::{AsyncReadExt, AsyncWriteExt},
 };
-use libp2p_stream::IncomingStreams;
 use parking_lot::RwLock;
 
 #[derive(Clone)]
@@ -41,7 +41,7 @@ impl ServiceDiscoveryControl {
             .map_err(anyhow::Error::from)?;
         let this = self.clone();
         tokio::spawn(async move {
-            this.listen_from_libp2p_stream(incoming_streams).await;
+            this.listen_from_incoming_streams(incoming_streams).await;
         });
         Ok(())
     }
@@ -71,8 +71,10 @@ impl ServiceDiscoveryControl {
         Ok(services)
     }
 
-    async fn listen_from_libp2p_stream(self, mut incoming_streams: IncomingStreams) {
-        while let Some((peer_id, mut stream)) = incoming_streams.next().await {
+    async fn listen_from_incoming_streams(self, mut incoming_streams: IncomingStreams) {
+        while let Some(incoming_stream) = incoming_streams.next().await {
+            let peer_id = incoming_stream.peer_id;
+            let mut stream = incoming_stream.stream;
             if !self.incoming_allowed_peers.read().contains(&peer_id) {
                 log::warn!("Deny service discovery from disallowed peer: {peer_id}");
                 continue;

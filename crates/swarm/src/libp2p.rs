@@ -192,7 +192,7 @@ impl Deref for SwarmControl {
 pub struct SwarmControl {
     local_peer_id: Arc<PeerId>,
     swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
-    stream_control: libp2p_stream::Control,
+    stream_control: fungi_stream::Control,
 
     /// Relay server addresses with connection state tracking
     ///
@@ -247,7 +247,7 @@ impl SwarmControl {
     pub fn new(
         local_peer_id: Arc<PeerId>,
         swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
-        stream_control: libp2p_stream::Control,
+        stream_control: fungi_stream::Control,
         relay_addresses: Vec<Multiaddr>,
         ping_state: Arc<PingState>,
         state: State,
@@ -286,9 +286,9 @@ impl SwarmControl {
     pub fn accept_incoming_streams(
         &self,
         protocol: StreamProtocol,
-    ) -> std::result::Result<libp2p_stream::IncomingStreams, libp2p_stream::AlreadyRegistered> {
+    ) -> std::result::Result<fungi_stream::IncomingStreams, fungi_stream::AlreadyRegistered> {
         let mut stream_control = self.stream_control.clone();
-        stream_control.accept(protocol)
+        stream_control.listen(protocol)
     }
 
     /// Ensure peer is connected and collect currently active connections,
@@ -441,11 +441,7 @@ impl SwarmControl {
 
             for selected in &candidates {
                 match stream_control
-                    .open_stream_on_connection(
-                        target_peer,
-                        selected.connection_id,
-                        target_protocol.clone(),
-                    )
+                    .open_stream(selected.connection_id, target_protocol.clone())
                     .await
                 {
                     Ok(stream) => {
@@ -693,10 +689,13 @@ impl SwarmControl {
 
     // TODO impl handshake
     async fn _handshake(&self, peer_id: PeerId) -> Result<()> {
-        let mut stream = self
-            .stream_control
-            .clone()
-            .open_stream(peer_id, FUNGI_PEER_HANDSHAKE_PROTOCOL)
+        let (mut stream, _handle, _connection_id) = self
+            .open_stream_with_strategy(
+                peer_id,
+                FUNGI_PEER_HANDSHAKE_PROTOCOL,
+                ConnectionSelectionStrategy::PreferLowLatency,
+                Duration::ZERO,
+            )
             .await
             .map_err(|e| ConnectError::HandshakeFailed(anyhow::anyhow!(e)))?;
         stream
@@ -1960,17 +1959,19 @@ async fn dial_relay_by_addr(
 async fn perform_relay_handshake(swarm_control: &SwarmControl, relay_peer: PeerId) -> Result<()> {
     let Ok(stream_result) = tokio::time::timeout(
         Duration::from_secs(5),
-        swarm_control
-            .stream_control
-            .clone()
-            .open_stream(relay_peer, FUNGI_RELAY_HANDSHAKE_PROTOCOL),
+        swarm_control.open_stream_with_strategy(
+            relay_peer,
+            FUNGI_RELAY_HANDSHAKE_PROTOCOL,
+            ConnectionSelectionStrategy::PreferLowLatency,
+            Duration::ZERO,
+        ),
     )
     .await
     else {
         bail!("Handshake timeout")
     };
 
-    let mut stream = match stream_result {
+    let (mut stream, _handle, _connection_id) = match stream_result {
         Ok(stream) => stream,
         Err(error) => bail!("Handshake failed: {:?}", error),
     };

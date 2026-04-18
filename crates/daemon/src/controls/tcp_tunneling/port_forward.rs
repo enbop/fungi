@@ -114,7 +114,7 @@ async fn handle_tcp_connection(
     target_peer: PeerId,
     target_protocol: StreamProtocol,
 ) -> Result<()> {
-    let (libp2p_stream, _stream_observation_handle, _connection_id) = swarm_control
+    let (p2p_stream, _stream_observation_handle, _connection_id) = swarm_control
         .open_stream_with_strategy(
             target_peer,
             target_protocol,
@@ -133,7 +133,7 @@ async fn handle_tcp_connection(
     log::debug!("Established tunnel from {tcp_peer_addr} to peer {target_peer}");
 
     // Bidirectional copy
-    tokio::io::copy_bidirectional(&mut libp2p_stream.compat(), &mut tcp_stream)
+    tokio::io::copy_bidirectional(&mut p2p_stream.compat(), &mut tcp_stream)
         .await
         .map_err(PortForwardError::AcceptTcp)?;
 

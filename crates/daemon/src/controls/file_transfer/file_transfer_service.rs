@@ -7,11 +7,11 @@ use std::{
 
 use fungi_config::file_transfer::FileTransferService as FileTransferServiceConfig;
 use fungi_fs::{FileSystem, Result};
+use fungi_stream::IncomingStreams;
 use fungi_swarm::SwarmControl;
 use fungi_util::protocols::FUNGI_FILE_TRANSFER_PROTOCOL;
 use futures::StreamExt;
 use libp2p::PeerId;
-use libp2p_stream::IncomingStreams;
 use parking_lot::{Mutex, RwLock};
 use tarpc::{
     context::Context,
@@ -109,7 +109,7 @@ impl FileTransferRpcService {
         })
     }
 
-    pub async fn listen_from_libp2p_stream(
+    pub async fn listen_from_incoming_streams(
         self,
         mut incoming_streams: IncomingStreams,
         cancellation_token: CancellationToken,
@@ -124,7 +124,9 @@ impl FileTransferRpcService {
             tokio::select! {
                 stream_result = incoming_streams.next() => {
                     match stream_result {
-                        Some((peer_id, stream)) => {
+                        Some(incoming_stream) => {
+                            let peer_id = incoming_stream.peer_id;
+                            let stream = incoming_stream.stream;
                             if !self.allowed_peers.read().contains(&peer_id) {
                                 log::warn!("Deny connection from disallowed peer: {peer_id}.");
                                 continue;
@@ -225,7 +227,9 @@ impl FileTransferServiceControl {
             .map_err(io::Error::other)?;
         log::info!("File Transfer Service listening on protocol: {FUNGI_FILE_TRANSFER_PROTOCOL}");
 
-        tokio::spawn(service.listen_from_libp2p_stream(incoming_streams, cancellation_token_clone));
+        tokio::spawn(
+            service.listen_from_incoming_streams(incoming_streams, cancellation_token_clone),
+        );
 
         services.insert(service_path, cancellation_token);
         Ok(())

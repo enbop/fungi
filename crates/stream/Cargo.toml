@@ -1,0 +1,17 @@
+[package]
+name = "fungi-stream"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+futures = { workspace = true }
+libp2p-core = "0.43.1"
+libp2p-identity = { workspace = true }
+libp2p-swarm = { workspace = true }
+log = { workspace = true }
+parking_lot = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+libp2p-swarm-test = "0.6.0"
+tokio = { version = "1.38", features = ["full"] }

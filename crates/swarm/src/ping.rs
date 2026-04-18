@@ -14,7 +14,7 @@ use tokio::sync::mpsc;
 pub(crate) const PING_PROTOCOL: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0");
 
 pub struct PingState {
-    stream_control: Option<libp2p_stream::Control>,
+    stream_control: Option<fungi_stream::Control>,
     outbound_interval: Duration,
     outbound: Arc<Mutex<HashMap<ConnectionId, OutboundPingState>>>,
     event_tx: mpsc::UnboundedSender<PingRttEvent>,
@@ -37,13 +37,13 @@ impl PingState {
         }
     }
 
-    pub fn init(&mut self, mut stream_control: libp2p_stream::Control) {
+    pub fn init(&mut self, mut stream_control: fungi_stream::Control) {
         assert!(
             self.stream_control.is_none(),
             "PingState already initialized"
         );
         let incoming = stream_control
-            .accept(PING_PROTOCOL)
+            .listen(PING_PROTOCOL)
             .expect("Listening on ping protocol should be only once");
         start_pong_loop(incoming);
         self.stream_control = Some(stream_control);
@@ -91,7 +91,7 @@ impl PingState {
             .clone();
 
         let mut stream = stream_control
-            .open_stream_on_connection(peer_id, connection_id, PING_PROTOCOL)
+            .open_stream(connection_id, PING_PROTOCOL)
             .await
             .with_context(|| format!("Failed to open ping stream to {}", peer_id))?;
         stream.ignore_for_keep_alive();
@@ -108,7 +108,7 @@ impl OutboundPingState {
     fn new(
         peer_id: PeerId,
         connection_id: ConnectionId,
-        mut stream_control: libp2p_stream::Control,
+        mut stream_control: fungi_stream::Control,
         interval: Duration,
         event_tx: mpsc::UnboundedSender<PingRttEvent>,
     ) -> Self {
@@ -154,12 +154,12 @@ impl OutboundPingState {
 async fn run_outbound_ping_task(
     peer_id: PeerId,
     connection_id: ConnectionId,
-    stream_control: &mut libp2p_stream::Control,
+    stream_control: &mut fungi_stream::Control,
     interval: Duration,
     event_tx: mpsc::UnboundedSender<PingRttEvent>,
 ) -> anyhow::Result<()> {
     let mut stream = stream_control
-        .open_stream_on_connection(peer_id, connection_id, PING_PROTOCOL)
+        .open_stream(connection_id, PING_PROTOCOL)
         .await
         .with_context(|| format!("Failed to open ping stream to {}", peer_id))?;
     stream.ignore_for_keep_alive();
@@ -208,18 +208,25 @@ async fn send_ping(stream: &mut Stream) -> Result<Duration, std::io::Error> {
     Ok(start.elapsed())
 }
 
-fn start_pong_loop(mut incoming: libp2p_stream::IncomingStreams) {
+fn start_pong_loop(mut incoming: fungi_stream::IncomingStreams) {
     tokio::spawn(async move {
         log::debug!("Ping pong loop started");
         loop {
             // TODO check connection count limit for each peer
             // https://github.com/libp2p/specs/blob/master/ping/ping.md#protocol
-            let Some((peer_id, mut stream)) = incoming.next().await else {
+            let Some(incoming_stream) = incoming.next().await else {
                 log::error!("Ping incoming stream ended unexpectedly");
                 break;
             };
+            let peer_id = incoming_stream.peer_id;
+            let connection_id = incoming_stream.connection_id;
+            let mut stream = incoming_stream.stream;
             stream.ignore_for_keep_alive();
-            log::debug!("Received ping stream from {}", peer_id);
+            log::debug!(
+                "Received ping stream from {} on connection {:?}",
+                peer_id,
+                connection_id
+            );
             tokio::spawn(async move {
                 loop {
                     // The dialing peer sends a 32-byte payload of random binary data on an open stream.

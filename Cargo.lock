@@ -1660,13 +1660,13 @@ dependencies = [
  "fungi-config",
  "fungi-daemon",
  "fungi-daemon-grpc",
+ "fungi-stream",
  "fungi-swarm",
  "fungi-util",
  "futures",
  "home",
  "interprocess",
  "libp2p",
- "libp2p-stream",
  "log",
  "rand 0.8.5",
  "serde",
@@ -1709,6 +1709,7 @@ dependencies = [
  "fungi-config",
  "fungi-docker-agent",
  "fungi-fs",
+ "fungi-stream",
  "fungi-swarm",
  "fungi-util",
  "futures",
@@ -1717,7 +1718,6 @@ dependencies = [
  "hyper-util",
  "interprocess",
  "libp2p",
- "libp2p-stream",
  "libunftp",
  "log",
  "mdns-sd",
@@ -1785,15 +1785,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "fungi-stream"
+version = "0.6.1"
+dependencies = [
+ "futures",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-swarm",
+ "libp2p-swarm-test",
+ "log",
+ "parking_lot",
+ "thiserror 2.0.12",
+ "tokio",
+]
+
+[[package]]
 name = "fungi-swarm"
 version = "0.6.1"
 dependencies = [
  "anyhow",
  "async-result",
  "bincode",
+ "fungi-stream",
  "fungi-util",
  "libp2p",
- "libp2p-stream",
  "log",
  "once_cell",
  "parking_lot",
@@ -3220,21 +3235,6 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "web-time",
-]
-
-[[package]]
-name = "libp2p-stream"
-version = "0.4.0-alpha"
-dependencies = [
- "futures",
- "libp2p-core",
- "libp2p-identity",
- "libp2p-swarm",
- "libp2p-swarm-test",
- "rand 0.8.5",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

@@ -60,7 +60,7 @@ struct Behaviour {
     relay: relay::Behaviour,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
-    stream: libp2p_stream::Behaviour,
+    stream: fungi_stream::Behaviour,
 }
 
 pub async fn run(args: RelayArgs) -> Result<()> {
@@ -92,7 +92,7 @@ pub async fn run(args: RelayArgs) -> Result<()> {
                 "/fungi-relay/0.1.0".to_string(),
                 key.public(),
             )),
-            stream: libp2p_stream::Behaviour::default(),
+            stream: fungi_stream::Behaviour::new_allow_all(),
         })?
         .build();
 
@@ -177,15 +177,17 @@ fn add_external_address(
     Ok(())
 }
 
-fn listen_relay_handshake_protocol(mut stream_control: libp2p_stream::Control) {
+fn listen_relay_handshake_protocol(mut stream_control: fungi_stream::Control) {
     let mut listener = stream_control
-        .accept(FUNGI_RELAY_HANDSHAKE_PROTOCOL)
+        .listen(FUNGI_RELAY_HANDSHAKE_PROTOCOL)
         .unwrap();
     tokio::spawn(async move {
         loop {
-            let Some((peer_id, mut stream)) = listener.next().await else {
+            let Some(incoming_stream) = listener.next().await else {
                 break;
             };
+            let peer_id = incoming_stream.peer_id;
+            let mut stream = incoming_stream.stream;
             log::info!("Accepted stream: {:?}", peer_id);
             // TODO: fungi relay handshake logic
             stream.write_all(b"ok").await.ok();

@@ -27,8 +27,8 @@ fungi-config = { path = "../crates/config" }
 fungi-daemon = { path = "../crates/daemon" }
 fungi-daemon-grpc = { path = "../crates/daemon-grpc" }
 fungi-swarm = { path = "../crates/swarm" }
+fungi-stream = { workspace = true }
 fungi-util = { path = "../crates/util" }
-# fungi-wasi = { path = "../crates/wasi" }
 wasmtime-cli = { version = "37", optional = true }
 libp2p = { workspace = true }
 futures = { workspace = true }
@@ -37,4 +37,3 @@ interprocess = { workspace = true }
 rand = { workspace = true }
 anyhow = { workspace = true }
 tarpc = { workspace = true }
-libp2p-stream = { workspace = true }

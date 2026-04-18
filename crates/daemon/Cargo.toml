@@ -25,7 +25,7 @@ bincode = { workspace = true }
 interprocess = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
-libp2p-stream = { workspace = true }
+fungi-stream = { workspace = true }
 tokio-util = { version = "0.7", features = ["compat", "io"] }
 anyhow = { workspace = true }
 tarpc = { workspace = true }

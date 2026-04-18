@@ -2,6 +2,7 @@ use std::{collections::HashSet, path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use fungi_config::FungiConfig;
+use fungi_stream::IncomingStreams;
 use fungi_swarm::{ConnectionSelectionStrategy, SwarmControl};
 use fungi_util::protocols::FUNGI_SERVICE_CONTROL_PROTOCOL;
 use futures::StreamExt;
@@ -10,7 +11,6 @@ use libp2p::{
     PeerId,
     futures::{AsyncReadExt, AsyncWriteExt},
 };
-use libp2p_stream::IncomingStreams;
 use parking_lot::{Mutex, RwLock};
 use serde::{Serialize, de::DeserializeOwned};
 
@@ -60,7 +60,7 @@ impl ServiceControlProtocolControl {
             .map_err(anyhow::Error::from)?;
         let this = self.clone();
         tokio::spawn(async move {
-            this.listen_from_libp2p_stream(incoming_streams).await;
+            this.listen_from_incoming_streams(incoming_streams).await;
         });
         Ok(())
     }
@@ -163,8 +163,10 @@ impl ServiceControlProtocolControl {
             .into_result()
     }
 
-    async fn listen_from_libp2p_stream(self, mut incoming_streams: IncomingStreams) {
-        while let Some((peer_id, mut stream)) = incoming_streams.next().await {
+    async fn listen_from_incoming_streams(self, mut incoming_streams: IncomingStreams) {
+        while let Some(incoming_stream) = incoming_streams.next().await {
+            let peer_id = incoming_stream.peer_id;
+            let mut stream = incoming_stream.stream;
             let this = self.clone();
             tokio::spawn(async move {
                 let request = match read_frame::<_, ServiceControlRequest>(&mut stream).await {
@@ -180,6 +182,8 @@ impl ServiceControlProtocolControl {
                     }
                 };
 
+                // TODO(fungi-stream-auth-cleanup): remove this duplicate handler-layer guard
+                // once service control relies exclusively on fungi-stream authorization.
                 let response = if !this.incoming_allowed_peers.read().contains(&peer_id) {
                     log::warn!("Deny service control from disallowed peer: {peer_id}");
                     ServiceControlResponse::error(
