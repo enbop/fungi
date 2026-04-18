@@ -2,7 +2,7 @@ use std::{path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use fungi_swarm::{ConnectionInfo, PeerConnections, State};
-use libp2p::{PeerId, swarm::ConnectionId};
+use libp2p::{Multiaddr, PeerId, multiaddr::Protocol, swarm::ConnectionId};
 
 use crate::FungiDaemon;
 
@@ -44,13 +44,14 @@ impl FungiDaemon {
             .map(|entry| entry.stream_count)
             .sum();
 
+        let is_relay = is_relay_connection(conn.multiaddr());
         let remote_addr = conn.multiaddr().to_string();
         let governance = state.connection_governance_info(&conn.connection_id());
         ConnectionSnapshot {
             peer_id: peer_id.to_string(),
             connection_id: conn.connection_id().to_string(),
             direction: direction.to_string(),
-            is_relay: remote_addr.contains("/p2p-circuit"),
+            is_relay,
             remote_addr,
             last_rtt_ms,
             last_ping_at,
@@ -254,5 +255,35 @@ impl FungiDaemon {
         self.swarm_control()
             .ping_connection(peer_id, connection_id, timeout)
             .await
+    }
+}
+
+fn is_relay_connection(remote_addr: &Multiaddr) -> bool {
+    remote_addr
+        .iter()
+        .any(|protocol| matches!(protocol, Protocol::P2pCircuit))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_relay_connection;
+
+    #[test]
+    fn classifies_direct_connection_multiaddr() {
+        let direct_addr =
+            "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWQjN7A4xA7bP9g4fC1Qm2nG1k5eYvG8K2Qw4p1D6sZ7Qx"
+                .parse()
+                .unwrap();
+
+        assert!(!is_relay_connection(&direct_addr));
+    }
+
+    #[test]
+    fn classifies_relay_connection_multiaddr() {
+        let relay_addr = "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWQjN7A4xA7bP9g4fC1Qm2nG1k5eYvG8K2Qw4p1D6sZ7Qx/p2p-circuit/p2p/12D3KooWKv7kT3rB6uP8a6cS1Lh2dF5mN9qR4xC8vY2pJ7sH3wQz"
+            .parse()
+            .unwrap();
+
+        assert!(is_relay_connection(&relay_addr));
     }
 }

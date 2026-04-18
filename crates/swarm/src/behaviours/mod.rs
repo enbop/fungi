@@ -1,8 +1,11 @@
 pub mod ext;
+pub mod relay_refresh;
+
+use std::collections::HashSet;
 
 use std::ops::Deref;
 
-use libp2p::{dcutr, identify, identity::Keypair, mdns, relay, swarm::NetworkBehaviour};
+use libp2p::{PeerId, dcutr, identify, identity::Keypair, mdns, relay, swarm::NetworkBehaviour};
 
 use crate::State;
 
@@ -16,6 +19,7 @@ fn identify_user_agent() -> String {
 #[derive(NetworkBehaviour)]
 pub struct FungiBehaviours {
     pub stream: fungi_stream::Behaviour,
+    relay_refresh: relay_refresh::Behaviour,
     pub mdns: mdns::tokio::Behaviour,
     identify: identify::Behaviour,
     relay: relay::client::Behaviour,
@@ -38,9 +42,11 @@ impl FungiBehaviours {
         relay: relay::client::Behaviour,
         mdns: mdns::tokio::Behaviour,
         state: State,
+        trusted_relay_peer_ids: Vec<PeerId>,
     ) -> Self {
         let peer_id = keypair.public().to_peer_id();
         let global_allow_list = state.incoming_allowed_peers();
+        let trusted_relay_peer_ids = trusted_relay_peer_ids.into_iter().collect::<HashSet<_>>();
 
         // Create a identify behaviour.
         let user_agent = identify_user_agent();
@@ -51,11 +57,16 @@ impl FungiBehaviours {
 
         Self {
             stream: fungi_stream::Behaviour::new(global_allow_list),
+            relay_refresh: relay_refresh::Behaviour::new_trusted_relays(trusted_relay_peer_ids),
             mdns,
             identify,
             relay,
             dcutr: dcutr::Behaviour::new(peer_id),
             fungi_ext: ext::Behaviour::new(state),
         }
+    }
+
+    pub fn send_relay_refresh(&mut self, peer_id: &PeerId, announced_peer_id: PeerId) {
+        self.relay_refresh.send(peer_id, announced_peer_id)
     }
 }
