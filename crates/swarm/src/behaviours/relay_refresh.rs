@@ -1,8 +1,7 @@
 use std::{
     collections::{HashSet, VecDeque},
     future::Future,
-    io,
-    iter,
+    io, iter,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -15,11 +14,11 @@ use libp2p::{
     futures::{AsyncReadExt, AsyncWriteExt},
     swarm::{
         ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, FromSwarm,
-        NetworkBehaviour, NotifyHandler, SubstreamProtocol, THandler,
-        THandlerInEvent, THandlerOutEvent, ToSwarm,
+        NetworkBehaviour, NotifyHandler, SubstreamProtocol, THandler, THandlerInEvent,
+        THandlerOutEvent, ToSwarm,
         handler::{
-            ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound,
-            FullyNegotiatedOutbound, ListenUpgradeError,
+            ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+            ListenUpgradeError,
         },
     },
 };
