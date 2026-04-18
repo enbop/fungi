@@ -4,10 +4,11 @@ use super::{
 };
 use crate::{
     ConnectionDirection, State, StreamObservationHandle,
-    ping::{PING_PROTOCOL, PingState, send_ping_with_timeout},
+    ping::{PingState, send_ping_with_timeout},
 };
 use anyhow::{Result, bail};
 use async_result::{AsyncResult, Completer};
+use fungi_util::protocols::FUNGI_PROBE_PROTOCOL;
 use libp2p::{
     Multiaddr, PeerId, Stream, StreamProtocol,
     swarm::{
@@ -172,7 +173,7 @@ impl SwarmControl {
                 let (mut stream, _stream_observation_handle, recovered_connection_id) = self
                     .open_stream_with_strategy(
                         peer_id,
-                        PING_PROTOCOL,
+                        FUNGI_PROBE_PROTOCOL,
                         ConnectionSelectionStrategy::PreferLowLatency,
                         Duration::from_millis(300),
                     )

@@ -666,6 +666,4 @@ pub(crate) fn handle_connection_closed(
             peers.remove(&peer_id);
         }
     }
-
-    swarm_control.ping_state.stop_outbound_ping(connection_id);
 }

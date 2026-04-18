@@ -1,39 +1,25 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::time::Duration;
 
 use anyhow::Context as _;
+use fungi_util::protocols::FUNGI_PROBE_PROTOCOL;
 
 use libp2p::{
-    PeerId, Stream, StreamProtocol,
+    PeerId, Stream,
     futures::{AsyncReadExt as _, AsyncWriteExt as _, StreamExt},
     swarm::ConnectionId,
 };
-use parking_lot::Mutex;
-use tokio::sync::mpsc;
 
-// https://github.com/libp2p/specs/blob/master/ping/ping.md#protocol
-pub(crate) const PING_PROTOCOL: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0");
+// Keep the standard libp2p ping behaviour free to own /ipfs/ping/1.0.0. This stream-based
+// variant is reserved for fungi's explicit connection probes.
 
 pub struct PingState {
     stream_control: Option<fungi_stream::Control>,
-    outbound_interval: Duration,
-    outbound: Arc<Mutex<HashMap<ConnectionId, OutboundPingState>>>,
-    event_tx: mpsc::UnboundedSender<PingRttEvent>,
-}
-
-#[derive(Debug, Clone)]
-pub struct PingRttEvent {
-    pub peer_id: PeerId,
-    pub connection_id: ConnectionId,
-    pub rtt: Duration,
 }
 
 impl PingState {
-    pub fn new(outbound_interval: Duration, event_tx: mpsc::UnboundedSender<PingRttEvent>) -> Self {
+    pub fn new() -> Self {
         Self {
-            outbound_interval,
             stream_control: None,
-            outbound: Arc::new(Mutex::new(HashMap::new())),
-            event_tx,
         }
     }
 
@@ -43,39 +29,10 @@ impl PingState {
             "PingState already initialized"
         );
         let incoming = stream_control
-            .listen(PING_PROTOCOL)
-            .expect("Listening on ping protocol should be only once");
+            .listen(FUNGI_PROBE_PROTOCOL)
+            .expect("Listening on probe protocol should be only once");
         start_pong_loop(incoming);
         self.stream_control = Some(stream_control);
-    }
-
-    pub fn start_outbound_ping(&self, peer_id: PeerId, connection_id: ConnectionId) {
-        assert!(
-            self.stream_control.is_some(),
-            "PingState not initialized with stream control"
-        );
-        let mut lock = self.outbound.lock();
-        if let Some(state) = lock.get(&connection_id)
-            && !state.is_finished()
-        {
-            // previous ping task is still running
-            log::debug!("Outbound ping to {} is already running", peer_id);
-            return;
-        }
-        lock.insert(
-            connection_id,
-            OutboundPingState::new(
-                peer_id,
-                connection_id,
-                self.stream_control.as_ref().unwrap().clone(),
-                self.outbound_interval,
-                self.event_tx.clone(),
-            ),
-        );
-    }
-
-    pub fn stop_outbound_ping(&self, connection_id: ConnectionId) {
-        self.outbound.lock().remove(&connection_id);
     }
 
     pub async fn ping_now(
@@ -91,88 +48,12 @@ impl PingState {
             .clone();
 
         let mut stream = stream_control
-            .open_stream(connection_id, PING_PROTOCOL)
+            .open_stream(connection_id, FUNGI_PROBE_PROTOCOL)
             .await
-            .with_context(|| format!("Failed to open ping stream to {}", peer_id))?;
+            .with_context(|| format!("Failed to open probe stream to {}", peer_id))?;
         stream.ignore_for_keep_alive();
 
         send_ping_with_timeout(&mut stream, peer_id, timeout).await
-    }
-}
-
-struct OutboundPingState {
-    task_alive: Arc<()>,
-}
-
-impl OutboundPingState {
-    fn new(
-        peer_id: PeerId,
-        connection_id: ConnectionId,
-        mut stream_control: fungi_stream::Control,
-        interval: Duration,
-        event_tx: mpsc::UnboundedSender<PingRttEvent>,
-    ) -> Self {
-        let task_alive = Arc::new(());
-        let task_alive_guard = task_alive.clone();
-
-        tokio::spawn(async move {
-            log::debug!(
-                "Starting outbound ping to {}, connection {:?}",
-                peer_id,
-                connection_id
-            );
-
-            let _task_alive_guard = task_alive_guard;
-
-            if let Err(e) = run_outbound_ping_task(
-                peer_id,
-                connection_id,
-                &mut stream_control,
-                interval,
-                event_tx,
-            )
-            .await
-            {
-                log::warn!("{:#}", e);
-            }
-
-            log::debug!(
-                "Outbound ping task ended for {}, connection {:?}",
-                peer_id,
-                connection_id
-            );
-        });
-
-        Self { task_alive }
-    }
-
-    fn is_finished(&self) -> bool {
-        Arc::strong_count(&self.task_alive) == 1
-    }
-}
-
-async fn run_outbound_ping_task(
-    peer_id: PeerId,
-    connection_id: ConnectionId,
-    stream_control: &mut fungi_stream::Control,
-    interval: Duration,
-    event_tx: mpsc::UnboundedSender<PingRttEvent>,
-) -> anyhow::Result<()> {
-    let mut stream = stream_control
-        .open_stream(connection_id, PING_PROTOCOL)
-        .await
-        .with_context(|| format!("Failed to open ping stream to {}", peer_id))?;
-    stream.ignore_for_keep_alive();
-
-    loop {
-        tokio::time::sleep(interval).await;
-
-        let rtt = send_ping_with_timeout(&mut stream, peer_id, interval).await?;
-        let _ = event_tx.send(PingRttEvent {
-            peer_id,
-            connection_id,
-            rtt,
-        });
     }
 }
 
@@ -210,7 +91,7 @@ async fn send_ping(stream: &mut Stream) -> Result<Duration, std::io::Error> {
 
 fn start_pong_loop(mut incoming: fungi_stream::IncomingStreams) {
     tokio::spawn(async move {
-        log::debug!("Ping pong loop started");
+        log::debug!("Probe pong loop started");
         loop {
             // TODO check connection count limit for each peer
             // https://github.com/libp2p/specs/blob/master/ping/ping.md#protocol
@@ -223,7 +104,7 @@ fn start_pong_loop(mut incoming: fungi_stream::IncomingStreams) {
             let mut stream = incoming_stream.stream;
             stream.ignore_for_keep_alive();
             log::debug!(
-                "Received ping stream from {} on connection {:?}",
+                "Received probe stream from {} on connection {:?}",
                 peer_id,
                 connection_id
             );

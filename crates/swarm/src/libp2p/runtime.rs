@@ -10,7 +10,7 @@ use super::{
 use crate::{
     ExternalAddressSource, State,
     behaviours::{FungiBehaviours, FungiBehavioursEvent},
-    ping::{PingRttEvent, PingState},
+    ping::PingState,
     state,
 };
 use anyhow::Result;
@@ -19,7 +19,7 @@ use libp2p::{
     futures::StreamExt,
     identify,
     identity::Keypair,
-    mdns, noise,
+    mdns, noise, ping as libp2p_ping,
     swarm::{DialError, SwarmEvent},
     tcp, yamux,
 };
@@ -71,8 +71,7 @@ impl FungiSwarm {
         let stream_control = swarm.behaviour().stream.new_control();
         let refresh_throttle = RefreshThrottle::default();
 
-        let (ping_event_tx, ping_event_rx) = mpsc::unbounded_channel::<PingRttEvent>();
-        let mut ping_state = PingState::new(Duration::from_secs(15), ping_event_tx);
+        let mut ping_state = PingState::new();
         ping_state.init(stream_control.clone());
         let ping_state = Arc::new(ping_state);
 
@@ -93,7 +92,6 @@ impl FungiSwarm {
             state,
         );
         let event_handle_future = handle_swarm_event(swarm_control.clone(), swarm_event_rx);
-        let ping_handle_future = handle_ping_event(swarm_control.clone(), ping_event_rx);
         let relay_health_future = relay_management_loop(swarm_control.clone());
         let connection_governance_future = connection_governance_loop(swarm_control.clone());
 
@@ -101,7 +99,6 @@ impl FungiSwarm {
             tokio::select! {
                 _ = swarm_future => {},
                 _ = event_handle_future => {},
-                _ = ping_handle_future => {},
                 _ = relay_health_future => {},
                 _ = connection_governance_future => {},
             }
@@ -163,6 +160,9 @@ async fn handle_swarm_event(
             }
             SwarmEvent::Behaviour(FungiBehavioursEvent::Mdns(event)) => {
                 handle_mdns_behaviour_event(&swarm_control, event);
+            }
+            SwarmEvent::Behaviour(FungiBehavioursEvent::Ping(event)) => {
+                handle_ping_behaviour_event(&swarm_control, event);
             }
             SwarmEvent::Behaviour(FungiBehavioursEvent::Identify(event)) => {
                 handle_identify_behaviour_event(&swarm_control, event);
@@ -309,6 +309,24 @@ fn handle_mdns_behaviour_event(swarm_control: &SwarmControl, event: mdns::Event)
     }
 }
 
+fn handle_ping_behaviour_event(swarm_control: &SwarmControl, event: libp2p_ping::Event) {
+    match event.result {
+        Ok(rtt) => {
+            swarm_control
+                .state()
+                .update_connection_ping(&event.connection, rtt);
+        }
+        Err(error) => {
+            log::debug!(
+                "libp2p ping failed for peer {} on connection {}: {:?}",
+                event.peer,
+                event.connection,
+                error
+            );
+        }
+    }
+}
+
 fn handle_identify_behaviour_event(swarm_control: &SwarmControl, event: identify::Event) {
     match event {
         identify::Event::Received { peer_id, info, .. } => {
@@ -413,20 +431,5 @@ fn handle_outgoing_connection_error(
         .remove(&peer_id)
     {
         completer.complete(Err(error));
-    }
-}
-
-async fn handle_ping_event(
-    swarm_control: SwarmControl,
-    mut ping_event_rx: UnboundedReceiver<PingRttEvent>,
-) {
-    loop {
-        let Some(event) = ping_event_rx.recv().await else {
-            log::debug!("Ping event channel closed");
-            break;
-        };
-        swarm_control
-            .state()
-            .update_connection_ping(&event.connection_id, event.rtt);
     }
 }

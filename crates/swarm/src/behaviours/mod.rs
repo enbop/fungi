@@ -5,7 +5,10 @@ use std::collections::HashSet;
 
 use std::ops::Deref;
 
-use libp2p::{PeerId, dcutr, identify, identity::Keypair, mdns, relay, swarm::NetworkBehaviour};
+use libp2p::{
+    PeerId, dcutr, identify, identity::Keypair, mdns, ping as libp2p_ping, relay,
+    swarm::NetworkBehaviour,
+};
 
 use crate::State;
 
@@ -21,6 +24,7 @@ pub struct FungiBehaviours {
     pub stream: fungi_stream::Behaviour,
     relay_refresh: relay_refresh::Behaviour,
     pub mdns: mdns::tokio::Behaviour,
+    ping: libp2p_ping::Behaviour,
     identify: identify::Behaviour,
     relay: relay::client::Behaviour,
     dcutr: dcutr::Behaviour,
@@ -59,6 +63,7 @@ impl FungiBehaviours {
             stream: fungi_stream::Behaviour::new(global_allow_list),
             relay_refresh: relay_refresh::Behaviour::new_trusted_relays(trusted_relay_peer_ids),
             mdns,
+            ping: libp2p_ping::Behaviour::new(libp2p_ping::Config::new()),
             identify,
             relay,
             dcutr: dcutr::Behaviour::new(peer_id),
