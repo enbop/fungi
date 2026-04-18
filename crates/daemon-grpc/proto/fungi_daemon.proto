@@ -567,6 +567,8 @@ message PeerAddressSnapshot {
   int64  first_observed_at_unix_ms = 5;
   int64  last_observed_at_unix_ms  = 6;
   uint64 observation_count         = 7;
+  string freshness                 = 8;
+  int64  expired_at_unix_ms        = 9;
 }
 
 message ListPeerAddressesResponse { repeated PeerAddressSnapshot addresses = 1; }

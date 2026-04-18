@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use std::sync::Once;
 
 static PANIC_HOOK_INIT: Once = Once::new();
+const DEFAULT_LOG_SPEC: &str = "info,libp2p_mdns::behaviour=warn";
 
 pub fn init_logging(fungi_args: &FungiArgs) -> Result<()> {
     #[cfg(feature = "wasi")]
@@ -20,14 +21,13 @@ pub fn init_logging(fungi_args: &FungiArgs) -> Result<()> {
         return init_daemon_file_logging(fungi_args.common.fungi_dir());
     }
 
-    let _ = env_logger::Builder::from_env(Env::default())
+    let _ = env_logger::Builder::from_env(Env::default().default_filter_or(DEFAULT_LOG_SPEC))
         .format_timestamp_millis()
         .try_init();
     Ok(())
 }
 
 fn init_daemon_file_logging(fungi_dir: PathBuf) -> Result<()> {
-    const DEFAULT_LOG_SPEC: &str = "info";
     const MAX_LOG_FILE_SIZE_BYTES: u64 = 5 * 1024 * 1024;
     const MAX_LOG_FILES: usize = 5;
 

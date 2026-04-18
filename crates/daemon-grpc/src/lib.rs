@@ -1113,6 +1113,8 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 first_observed_at_unix_ms: system_time_to_unix_ms(address.first_observed_at),
                 last_observed_at_unix_ms: system_time_to_unix_ms(address.last_observed_at),
                 observation_count: address.observation_count,
+                freshness: address.freshness,
+                expired_at_unix_ms: system_time_to_unix_ms_optional(address.expired_at),
             })
             .collect();
 

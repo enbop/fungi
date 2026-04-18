@@ -992,7 +992,7 @@ async fn handle_swarm_event(
                 handle_new_listen_addr(&swarm_control, address);
             }
             SwarmEvent::Behaviour(FungiBehavioursEvent::Mdns(event)) => {
-                handle_mdns_behaviour_event(event);
+                handle_mdns_behaviour_event(&swarm_control, event);
             }
             SwarmEvent::Behaviour(FungiBehavioursEvent::Identify(event)) => {
                 handle_identify_behaviour_event(&swarm_control, event);
@@ -1086,16 +1086,52 @@ async fn handle_swarm_event(
     }
 }
 
-fn handle_mdns_behaviour_event(event: mdns::Event) {
+fn handle_mdns_behaviour_event(swarm_control: &SwarmControl, event: mdns::Event) {
     match event {
         mdns::Event::Discovered(entries) => {
+            let mut new_count = 0usize;
+            let mut refreshed_count = 0usize;
+            let mut ignored_count = 0usize;
+
             for (peer_id, addr) in entries {
-                log::info!("libp2p mDNS discovered peer {} at {}", peer_id, addr);
+                match swarm_control.state().record_peer_address(
+                    peer_id,
+                    addr,
+                    crate::PeerAddressSource::Mdns,
+                ) {
+                    crate::PeerAddressObservation::New => new_count += 1,
+                    crate::PeerAddressObservation::Refreshed => refreshed_count += 1,
+                    crate::PeerAddressObservation::Ignored => ignored_count += 1,
+                }
+            }
+
+            if new_count > 0 || refreshed_count > 0 || ignored_count > 0 {
+                log::debug!(
+                    "mDNS discovery updated peer address state: new={} refreshed={} ignored={}",
+                    new_count,
+                    refreshed_count,
+                    ignored_count
+                );
             }
         }
         mdns::Event::Expired(entries) => {
+            let mut expired_count = 0usize;
+            let mut missing_count = 0usize;
+
             for (peer_id, addr) in entries {
-                log::info!("libp2p mDNS expired peer {} at {}", peer_id, addr);
+                if swarm_control.state().expire_peer_address(peer_id, addr) {
+                    expired_count += 1;
+                } else {
+                    missing_count += 1;
+                }
+            }
+
+            if expired_count > 0 || missing_count > 0 {
+                log::debug!(
+                    "mDNS expiry updated peer address state: expired={} missing={}",
+                    expired_count,
+                    missing_count
+                );
             }
         }
     }

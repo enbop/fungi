@@ -45,8 +45,10 @@ pub struct PeerAddressSnapshot {
     pub address: String,
     pub transport: String,
     pub source: String,
+    pub freshness: String,
     pub first_observed_at: SystemTime,
     pub last_observed_at: SystemTime,
+    pub expired_at: Option<SystemTime>,
     pub observation_count: u64,
 }
 
@@ -99,13 +101,16 @@ impl From<RelayEndpointStatusRecord> for RelayEndpointStatusSnapshot {
 
 impl From<PeerAddressRecord> for PeerAddressSnapshot {
     fn from(record: PeerAddressRecord) -> Self {
+        let now = SystemTime::now();
         Self {
             peer_id: record.peer_id.to_string(),
             address: record.address.to_string(),
             transport: record.transport_kind.as_str().to_string(),
             source: record.source.as_str().to_string(),
+            freshness: record.freshness(now).as_str().to_string(),
             first_observed_at: record.first_observed_at,
             last_observed_at: record.last_observed_at,
+            expired_at: record.expired_at,
             observation_count: record.observation_count,
         }
     }

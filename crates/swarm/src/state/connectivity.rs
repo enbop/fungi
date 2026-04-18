@@ -186,7 +186,29 @@ pub struct PeerAddressRecord {
     pub source: PeerAddressSource,
     pub first_observed_at: SystemTime,
     pub last_observed_at: SystemTime,
+    pub expired_at: Option<SystemTime>,
     pub observation_count: u64,
+}
+
+impl PeerAddressRecord {
+    pub fn freshness(&self, now: SystemTime) -> AddressFreshness {
+        if self.expired_at.is_some() {
+            return AddressFreshness::Expired;
+        }
+
+        let age = now
+            .duration_since(self.last_observed_at)
+            .unwrap_or(Duration::ZERO);
+        let (fresh_window, aging_window) = freshness_windows(self.transport_kind);
+
+        if age <= fresh_window {
+            AddressFreshness::Fresh
+        } else if age <= aging_window {
+            AddressFreshness::Aging
+        } else {
+            AddressFreshness::Stale
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -420,6 +442,7 @@ impl ConnectivityState {
         match self.peer_address_records.get_mut(&key) {
             Some(record) => {
                 record.last_observed_at = now;
+                record.expired_at = None;
                 record.observation_count += 1;
                 record.source = source;
                 PeerAddressObservation::Refreshed
@@ -434,6 +457,7 @@ impl ConnectivityState {
                         source,
                         first_observed_at: now,
                         last_observed_at: now,
+                        expired_at: None,
                         observation_count: 1,
                     },
                 );
@@ -441,6 +465,23 @@ impl ConnectivityState {
                 PeerAddressObservation::New
             }
         }
+    }
+
+    pub fn expire_peer_address(&mut self, peer_id: PeerId, address: Multiaddr) -> bool {
+        let Some(normalized) = normalize_peer_address(&address, peer_id) else {
+            return false;
+        };
+
+        let key = (peer_id, normalized);
+        let Some(record) = self.peer_address_records.get_mut(&key) else {
+            return false;
+        };
+
+        if record.expired_at.is_none() {
+            record.expired_at = Some(SystemTime::now());
+        }
+
+        true
     }
 
     pub fn list_peer_addresses(&self) -> Vec<PeerAddressRecord> {
@@ -697,6 +738,7 @@ mod tests {
         let records = state.list_peer_addresses();
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].observation_count, 2);
+        assert!(records[0].expired_at.is_none());
     }
 
     #[test]
@@ -718,6 +760,36 @@ mod tests {
             PeerAddressObservation::Refreshed
         );
         assert_eq!(state.peer_address_revision(), 1);
+    }
+
+    #[test]
+    fn peer_address_expire_marks_record_expired_until_refreshed() {
+        let peer_id = PeerId::random();
+        let address: Multiaddr = format!("/ip4/192.168.1.7/tcp/4001/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let mut state = ConnectivityState::default();
+
+        assert_eq!(
+            state.record_peer_address(peer_id, address.clone(), PeerAddressSource::Mdns),
+            PeerAddressObservation::New
+        );
+        assert!(state.expire_peer_address(peer_id, address.clone()));
+        assert_eq!(
+            state.list_peer_addresses()[0].freshness(SystemTime::now()),
+            AddressFreshness::Expired
+        );
+
+        assert_eq!(
+            state.record_peer_address(peer_id, address, PeerAddressSource::Mdns),
+            PeerAddressObservation::Refreshed
+        );
+        let records = state.list_peer_addresses();
+        assert!(records[0].expired_at.is_none());
+        assert_ne!(
+            records[0].freshness(SystemTime::now()),
+            AddressFreshness::Expired
+        );
     }
 
     #[test]

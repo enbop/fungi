@@ -477,8 +477,8 @@ async fn execute_peer_addresses(args: CommonArgs, peer_id: Option<String>, verbo
 
             println!("Learned peer addresses");
             println!(
-                "{:<22} {:<8} {:<10} {:<5} ADDR",
-                "PEER", "TRANSP", "SOURCE", "OBS"
+                "{:<22} {:<8} {:<10} {:<8} {:<5} ADDR",
+                "PEER", "TRANSP", "SOURCE", "FRESH", "OBS"
             );
 
             for entry in addresses {
@@ -494,18 +494,21 @@ async fn execute_peer_addresses(args: CommonArgs, peer_id: Option<String>, verbo
                 };
 
                 println!(
-                    "{:<22} {:<8} {:<10} {:<5} {}",
+                    "{:<22} {:<8} {:<10} {:<8} {:<5} {}",
                     peer_display,
                     entry.transport,
                     entry.source,
+                    entry.freshness,
                     entry.observation_count,
                     addr_display,
                 );
 
                 if verbose {
                     println!(
-                        "  first_seen={} last_seen={}",
-                        entry.first_observed_at_unix_ms, entry.last_observed_at_unix_ms,
+                        "  first_seen={} last_seen={} expired_at={}",
+                        entry.first_observed_at_unix_ms,
+                        entry.last_observed_at_unix_ms,
+                        entry.expired_at_unix_ms,
                     );
                 }
             }

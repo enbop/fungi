@@ -573,6 +573,10 @@ pub struct PeerAddressSnapshot {
     pub last_observed_at_unix_ms: i64,
     #[prost(uint64, tag = "7")]
     pub observation_count: u64,
+    #[prost(string, tag = "8")]
+    pub freshness: ::prost::alloc::string::String,
+    #[prost(int64, tag = "9")]
+    pub expired_at_unix_ms: i64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListPeerAddressesResponse {

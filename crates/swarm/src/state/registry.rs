@@ -291,6 +291,12 @@ impl State {
             .record_peer_address(peer_id, address, source)
     }
 
+    pub fn expire_peer_address(&self, peer_id: PeerId, address: Multiaddr) -> bool {
+        self.connectivity_state
+            .lock()
+            .expire_peer_address(peer_id, address)
+    }
+
     pub fn list_peer_addresses(&self) -> Vec<PeerAddressRecord> {
         self.connectivity_state.lock().list_peer_addresses()
     }
