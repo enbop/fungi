@@ -9,7 +9,8 @@ use std::{
 use super::{
     governance::{CONNECTION_GOVERNANCE_GRACE_PERIOD, GovernanceAction, next_governance_action},
     relay::{
-        RelayEndpoint, RelayPeers, RelayTransportKind, multiaddr_starts_with, relay_transport_kind,
+        RelayEndpoint, RelayPeers, RelayTransportKind, multiaddr_starts_with, relay_retry_delay,
+        relay_transport_kind,
     },
 };
 
@@ -127,6 +128,16 @@ fn relay_circuit_addresses_only_use_tcp_relay_endpoints() {
         relay_peers.circuit_addresses_for_target(target_peer),
         vec![super::relay::peer_addr_with_relay(target_peer, tcp_addr)]
     );
+}
+
+#[test]
+fn relay_retry_delay_switches_from_fast_backoff_to_persistent_cap() {
+    assert_eq!(relay_retry_delay(1), Duration::from_millis(500));
+    assert_eq!(relay_retry_delay(2), Duration::from_secs(1));
+    assert_eq!(relay_retry_delay(3), Duration::from_secs(2));
+    assert_eq!(relay_retry_delay(4), Duration::from_secs(4));
+    assert_eq!(relay_retry_delay(5), Duration::from_secs(60));
+    assert_eq!(relay_retry_delay(u32::MAX), Duration::from_secs(60));
 }
 
 fn selected_connection(

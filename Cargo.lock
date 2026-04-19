@@ -1660,7 +1660,6 @@ dependencies = [
  "fungi-config",
  "fungi-daemon",
  "fungi-daemon-grpc",
- "fungi-stream",
  "fungi-swarm",
  "fungi-util",
  "futures",

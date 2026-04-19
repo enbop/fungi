@@ -503,6 +503,8 @@ message ConnectionSnapshot {
   repeated ProtocolStreamCountSnapshot active_streams_by_protocol = 9;
   string                               policy_state               = 10;
   string                               policy_reason              = 11;
+  string                               peer_alias                 = 12;
+  string                               peer_role                  = 13;
 }
 
 message ProtocolStreamCountSnapshot {

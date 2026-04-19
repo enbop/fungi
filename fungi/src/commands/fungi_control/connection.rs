@@ -101,12 +101,17 @@ async fn execute_connections(
 
     match client.list_connections(Request::new(req)).await {
         Ok(resp) => {
-            let mut connections = resp.into_inner().connections;
+            let mut connections = resp
+                .into_inner()
+                .connections
+                .into_iter()
+                .filter(|conn| conn.peer_role != "relay-carrier")
+                .collect::<Vec<_>>();
             if connections.is_empty() {
                 if let Some(pid) = peer_id {
                     println!("No active connections for peer {}", pid);
                 } else {
-                    println!("No active connections");
+                    println!("No active peer connections");
                 }
                 return;
             }
@@ -135,8 +140,8 @@ async fn execute_connections(
                     .unwrap_or_default()
             );
             println!(
-                "{:<22} {:<6} {:<8} {:<5} {:<12} {:<7} {:<12} ADDR",
-                "PEER", "CONN", "DIR", "RLY", "LAST_PING", "STREAMS", "POLICY"
+                "{:<16} {:<22} {:<6} {:<8} {:<5} {:<12} {:<7} ADDR",
+                "NAME", "PEER", "CONN", "DIR", "RLY", "LAST_PING", "STREAMS"
             );
 
             let mut direct_streams_total = 0u64;
@@ -173,8 +178,10 @@ async fn execute_connections(
                 }
                 matched_protocol_streams_total += stream_count_for_view;
 
+                let name_display =
+                    connection_display_name(&conn.peer_id, &conn.peer_alias, verbose);
                 let peer_display = if verbose {
-                    conn.peer_id
+                    conn.peer_id.clone()
                 } else {
                     shorten_peer_id(&conn.peer_id)
                 };
@@ -183,15 +190,16 @@ async fn execute_connections(
                 } else {
                     simplify_multiaddr_peer_ids(&conn.remote_addr)
                 };
+                let relay_display = if conn.is_relay { "yes" } else { "no" };
                 println!(
-                    "{:<22} {:<6} {:<8} {:<5} {:<12} {:<7} {:<12} {}",
+                    "{:<16} {:<22} {:<6} {:<8} {:<5} {:<12} {:<7} {}",
+                    name_display,
                     peer_display,
                     conn.connection_id,
                     conn.direction,
-                    if conn.is_relay { "yes" } else { "no" },
+                    relay_display,
                     ping,
                     stream_count_for_view,
-                    conn.policy_state,
                     addr_display,
                 );
 
@@ -216,6 +224,18 @@ async fn execute_connections(
             }
         }
         Err(e) => fatal_grpc(e),
+    }
+}
+
+fn connection_display_name(peer_id: &str, peer_alias: &str, verbose: bool) -> String {
+    if !peer_alias.trim().is_empty() {
+        return peer_alias.to_string();
+    }
+
+    if verbose {
+        peer_id.to_string()
+    } else {
+        shorten_peer_id(peer_id)
     }
 }
 

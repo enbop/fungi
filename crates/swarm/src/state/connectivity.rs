@@ -44,6 +44,7 @@ impl ExternalAddressSource {
 pub enum PeerAddressSource {
     Identify,
     Mdns,
+    AddressBook,
     Manual,
     RelayDerived,
     AutoNat,
@@ -55,6 +56,7 @@ impl PeerAddressSource {
         match self {
             PeerAddressSource::Identify => "identify",
             PeerAddressSource::Mdns => "mdns",
+            PeerAddressSource::AddressBook => "address-book",
             PeerAddressSource::Manual => "manual",
             PeerAddressSource::RelayDerived => "relay-derived",
             PeerAddressSource::AutoNat => "autonat",
@@ -86,7 +88,6 @@ impl AddressFreshness {
 pub enum RelayManagementAction {
     ListenTaskStarted,
     ListenTaskSucceeded,
-    ListenTaskExhausted,
     ListenerMissingReconcile,
     DirectConnectionMissingReconcile,
     ReservationEstablished,
@@ -100,7 +101,6 @@ impl RelayManagementAction {
         match self {
             RelayManagementAction::ListenTaskStarted => "listen-task-started",
             RelayManagementAction::ListenTaskSucceeded => "listen-task-succeeded",
-            RelayManagementAction::ListenTaskExhausted => "listen-task-exhausted",
             RelayManagementAction::ListenerMissingReconcile => "listener-missing-reconcile",
             RelayManagementAction::DirectConnectionMissingReconcile => {
                 "direct-connection-missing-reconcile"
@@ -382,14 +382,14 @@ impl ConnectivityState {
         closed_active_connection
     }
 
-    pub fn relay_endpoint_has_active_direct_connection(&self, relay_addr: &Multiaddr) -> bool {
+    pub fn relay_endpoint_active(&self, relay_addr: &Multiaddr) -> bool {
         self.relay_endpoint_statuses
             .get(relay_addr)
             .and_then(|status| status.current_direct_connection_id)
             .is_some()
     }
 
-    pub fn relay_peer_has_healthy_tcp_reservation(&self, relay_peer_id: PeerId) -> bool {
+    pub fn relay_tcp_ready(&self, relay_peer_id: PeerId) -> bool {
         // UDP/QUIC relay endpoints are observer-only. A UDP refresh is allowed
         // only when the same relay peer already has an active TCP reservation
         // carrier and a registered relay listener.
@@ -822,14 +822,14 @@ mod tests {
         state.record_relay_connection_established(relay_peer_id, current_connection, &relay_addr);
 
         assert!(!state.record_relay_connection_closed(relay_peer_id, old_connection, &relay_addr));
-        assert!(state.relay_endpoint_has_active_direct_connection(&relay_addr));
+        assert!(state.relay_endpoint_active(&relay_addr));
 
         assert!(state.record_relay_connection_closed(
             relay_peer_id,
             current_connection,
             &relay_addr
         ));
-        assert!(!state.relay_endpoint_has_active_direct_connection(&relay_addr));
+        assert!(!state.relay_endpoint_active(&relay_addr));
     }
 
     #[test]
@@ -852,24 +852,24 @@ mod tests {
             &udp_addr,
         );
         state.record_relay_listener_check(&udp_addr, true);
-        assert!(!state.relay_peer_has_healthy_tcp_reservation(relay_peer_id));
+        assert!(!state.relay_tcp_ready(relay_peer_id));
 
         state.record_relay_connection_established(
             relay_peer_id,
             ConnectionId::new_unchecked(8),
             &tcp_addr,
         );
-        assert!(!state.relay_peer_has_healthy_tcp_reservation(relay_peer_id));
+        assert!(!state.relay_tcp_ready(relay_peer_id));
 
         state.record_relay_listener_check(&tcp_addr, true);
-        assert!(state.relay_peer_has_healthy_tcp_reservation(relay_peer_id));
+        assert!(state.relay_tcp_ready(relay_peer_id));
 
         assert!(state.record_relay_connection_closed(
             relay_peer_id,
             ConnectionId::new_unchecked(8),
             &tcp_addr
         ));
-        assert!(!state.relay_peer_has_healthy_tcp_reservation(relay_peer_id));
+        assert!(!state.relay_tcp_ready(relay_peer_id));
     }
 
     #[test]

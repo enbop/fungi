@@ -236,16 +236,16 @@ impl State {
             .record_relay_connection_established(relay_peer_id, connection_id, remote_addr);
     }
 
-    pub fn relay_endpoint_has_active_direct_connection(&self, relay_addr: &Multiaddr) -> bool {
+    pub fn relay_endpoint_active(&self, relay_addr: &Multiaddr) -> bool {
         self.connectivity_state
             .lock()
-            .relay_endpoint_has_active_direct_connection(relay_addr)
+            .relay_endpoint_active(relay_addr)
     }
 
-    pub fn relay_peer_has_healthy_tcp_reservation(&self, relay_peer_id: PeerId) -> bool {
+    pub fn relay_tcp_ready(&self, relay_peer_id: PeerId) -> bool {
         self.connectivity_state
             .lock()
-            .relay_peer_has_healthy_tcp_reservation(relay_peer_id)
+            .relay_tcp_ready(relay_peer_id)
     }
 
     pub fn record_external_address_candidate(

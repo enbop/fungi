@@ -1,4 +1,5 @@
 mod control;
+mod dial_plan;
 mod governance;
 mod relay;
 mod runtime;

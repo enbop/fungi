@@ -835,13 +835,24 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             )))
             .await?;
 
-            if let Err(e) = daemon.dial_peer_once(peer_id).await {
-                tx.send(Ok(PingPeerError::reason(e.to_string()).event(
-                    &peer_id_str,
-                    tick_seq,
-                    now_unix_ms(),
-                )))
-                .await?;
+            match daemon.probe_peer_once(peer_id, per_ping_timeout).await {
+                Ok((_rtt, _connection_id)) => {
+                    tx.send(Ok(ping_event(
+                        &peer_id_str,
+                        tick_seq,
+                        now_unix_ms(),
+                        ping_peer_event::Event::Connected(PingPeerConnected {}),
+                    )))
+                    .await?;
+                }
+                Err(e) => {
+                    tx.send(Ok(PingPeerError::reason(e.to_string()).event(
+                        &peer_id_str,
+                        tick_seq,
+                        now_unix_ms(),
+                    )))
+                    .await?;
+                }
             }
 
             loop {
@@ -974,6 +985,8 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                     .collect(),
                 policy_state: c.policy_state,
                 policy_reason: c.policy_reason,
+                peer_alias: c.peer_alias,
+                peer_role: c.peer_role,
             })
             .collect();
 

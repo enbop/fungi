@@ -4,17 +4,15 @@
 // circuit traffic. UDP/QUIC relay addresses are observer endpoints only; they
 // are dialed briefly to refresh externally observed UDP addresses before hole
 // punching, but they must not become the active relay reservation carrier.
-use super::{ConnectionSelectionStrategy, SwarmControl};
+use super::SwarmControl;
 use crate::{AddressTransportKind, State, behaviours::relay_refresh};
 use anyhow::{Result, bail};
-use fungi_util::protocols::FUNGI_RELAY_HANDSHAKE_PROTOCOL;
 use libp2p::{
     Multiaddr, PeerId,
-    futures::AsyncReadExt,
     multiaddr::Protocol,
     relay,
     swarm::{
-        ConnectionId,
+        ConnectionId, DialError,
         dial_opts::{DialOpts, PeerCondition},
     },
 };
@@ -29,8 +27,9 @@ use std::{
 };
 use tokio::time::Instant;
 
-const RELAY_RETRY_MAX_ATTEMPTS: u32 = 4;
+const RELAY_RETRY_FAST_ATTEMPTS: u32 = 4;
 const RELAY_RETRY_BASE_DELAY_MS: u64 = 500;
+const RELAY_RETRY_MAX_DELAY: Duration = Duration::from_secs(60);
 const RELAY_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(600);
 const RELAY_PREPARE_REFRESH_GRACE_WINDOW: Duration = Duration::from_millis(800);
 const RELAY_REFRESH_MIN_INTERVAL: Duration = Duration::from_secs(2);
@@ -223,16 +222,16 @@ impl RelayPeers {
         self.relay_endpoints.is_empty()
     }
 
-    pub(super) fn len(&self) -> usize {
-        self.relay_endpoints.len()
-    }
-
     pub(super) fn peer_ids(&self) -> &[PeerId] {
         self.tcp_peer_ids.as_slice()
     }
 
     pub(super) fn addresses_for_peer(&self, peer_id: PeerId) -> Option<Vec<Multiaddr>> {
         self.tcp_addresses_by_peer.get(&peer_id).cloned()
+    }
+
+    pub(super) fn is_relay_peer(&self, peer_id: PeerId) -> bool {
+        self.tcp_addresses_by_peer.contains_key(&peer_id)
     }
 
     pub(super) fn circuit_addresses_for_target(&self, target_peer: PeerId) -> Vec<Multiaddr> {
@@ -343,61 +342,6 @@ pub(super) fn is_circuit_addr(addr: &Multiaddr) -> bool {
 }
 
 impl SwarmControl {
-    pub(super) async fn force_redial_relay_peer(&self, relay_peer: PeerId) -> Result<()> {
-        let Some(relay_addresses) = self.relay_peers.addresses_for_peer(relay_peer) else {
-            bail!("Relay peer {relay_peer} is not present in the configured relay list");
-        };
-
-        if self
-            .state()
-            .dial_callback()
-            .lock()
-            .contains_key(&relay_peer)
-        {
-            log::debug!(
-                "Relay peer {} is already dialing; skipping refresh redial",
-                relay_peer
-            );
-            return Ok(());
-        }
-
-        let (completer, result) = async_result::AsyncResult::new_split::<
-            std::result::Result<(), libp2p::swarm::DialError>,
-        >();
-        self.state()
-            .dial_callback()
-            .lock()
-            .insert(relay_peer, completer);
-
-        let dial_result = self
-            .invoke_swarm(move |swarm| {
-                let dial_opts = DialOpts::peer_id(relay_peer)
-                    .addresses(relay_addresses)
-                    .condition(PeerCondition::Always)
-                    .build();
-                swarm.dial(dial_opts)
-            })
-            .await;
-
-        match dial_result {
-            Ok(Ok(())) => {}
-            Ok(Err(error)) => {
-                self.state().dial_callback().lock().remove(&relay_peer);
-                bail!("Failed to redial relay peer {relay_peer}: {error}");
-            }
-            Err(error) => {
-                self.state().dial_callback().lock().remove(&relay_peer);
-                bail!("Failed to redial relay peer {relay_peer}: {error}");
-            }
-        }
-
-        result
-            .await
-            .map_err(|_| anyhow::anyhow!("Relay refresh dial to {relay_peer} was cancelled"))??;
-
-        Ok(())
-    }
-
     async fn refresh_external_addresses_via_relays(&self, preferred_relay: Option<PeerId>) -> bool {
         let plan = self.relay_peers.udp_refresh_plan(preferred_relay);
         let target_addr_count = plan
@@ -441,10 +385,7 @@ impl SwarmControl {
             // connection to the relay peer. libp2p-relay may reuse the first
             // direct connection for reservation work, so only probe UDP after a
             // healthy TCP reservation carrier is already present.
-            if !self
-                .state()
-                .relay_peer_has_healthy_tcp_reservation(relay_peer)
-            {
+            if !self.state().relay_tcp_ready(relay_peer) {
                 skipped_unhealthy_tcp_reservation += 1;
                 log::debug!(
                     "Skipping relay UDP refresh dial to {} because no healthy TCP relay reservation is active; candidate address(es): {}",
@@ -458,7 +399,7 @@ impl SwarmControl {
                 .invoke_swarm(move |swarm| {
                     let dial_opts = DialOpts::peer_id(relay_peer)
                         .addresses(addresses)
-                        .condition(PeerCondition::Always)
+                        .condition(PeerCondition::NotDialing)
                         .build();
                     swarm.dial(dial_opts)
                 })
@@ -537,22 +478,14 @@ impl SwarmControl {
         let mut remote_refresh_requested = false;
 
         for relay_peer in self.relay_peers.peer_ids().iter().copied() {
-            let relay_connected = match self
-                .invoke_swarm(move |swarm| swarm.is_connected(&relay_peer))
-                .await
-            {
-                Ok(value) => value,
-                Err(error) => {
-                    log::debug!(
-                        "Failed to inspect relay connection state for {} before prepare-refresh: {}",
-                        relay_peer,
-                        error
-                    );
-                    false
-                }
-            };
-
-            if !relay_connected && self.force_redial_relay_peer(relay_peer).await.is_err() {
+            // prepare-refresh rides on the existing TCP relay reservation. If
+            // that carrier is down, the relay management loop is responsible
+            // for rebuilding it; this path should not create extra relay dials.
+            if !self.state().relay_tcp_ready(relay_peer) {
+                log::debug!(
+                    "Skipping prepare-refresh via relay {} because no healthy TCP reservation is active",
+                    relay_peer
+                );
                 continue;
             }
 
@@ -576,6 +509,8 @@ impl SwarmControl {
         }
 
         if local_refresh_started || remote_refresh_requested {
+            // TODO: Replace this fixed grace window with an event-driven wait for a new or
+            // refreshed UDP external address candidate.
             tokio::time::sleep(RELAY_PREPARE_REFRESH_GRACE_WINDOW).await;
         }
     }
@@ -646,8 +581,6 @@ pub(super) async fn relay_management_loop(swarm_control: SwarmControl) {
             continue;
         }
 
-        let mut endpoint_health = Vec::with_capacity(swarm_control.relay_peers.len());
-
         for relay_endpoint in swarm_control.relay_peers.relay_endpoints() {
             let listener_registered =
                 match relay_listener_registered(&swarm_control, relay_endpoint).await {
@@ -668,45 +601,20 @@ pub(super) async fn relay_management_loop(swarm_control: SwarmControl) {
 
             let has_active_direct_connection = swarm_control
                 .state()
-                .relay_endpoint_has_active_direct_connection(relay_endpoint.addr());
+                .relay_endpoint_active(relay_endpoint.addr());
 
             swarm_control
                 .state()
                 .record_relay_listener_check(relay_endpoint.addr(), listener_registered);
 
-            endpoint_health.push((
-                relay_endpoint.clone(),
-                listener_registered,
-                has_active_direct_connection,
-            ));
-        }
-
-        let mut relay_peer_has_healthy_endpoint = HashMap::<PeerId, bool>::new();
-        for (relay_endpoint, listener_registered, has_active_direct_connection) in &endpoint_health
-        {
-            let Some(relay_peer_id) = relay_endpoint.peer_id() else {
-                continue;
-            };
-
-            let entry = relay_peer_has_healthy_endpoint
-                .entry(relay_peer_id)
-                .or_insert(false);
-            *entry |= *listener_registered && *has_active_direct_connection;
-        }
-
-        for (relay_endpoint, listener_registered, has_active_direct_connection) in endpoint_health {
             if listener_registered && has_active_direct_connection {
                 continue;
             }
 
-            let sibling_endpoint_healthy = relay_endpoint
+            if relay_endpoint
                 .peer_id()
-                .and_then(|relay_peer_id| {
-                    relay_peer_has_healthy_endpoint.get(&relay_peer_id).copied()
-                })
-                .unwrap_or(false);
-
-            if sibling_endpoint_healthy {
+                .is_some_and(|relay_peer_id| swarm_control.state().relay_tcp_ready(relay_peer_id))
+            {
                 log::debug!(
                     "Skipping relay reconcile for {} because another endpoint for the same relay peer is already healthy",
                     relay_endpoint.addr()
@@ -822,7 +730,10 @@ fn trigger_relay_reconcile(
     action: crate::RelayManagementAction,
     reason: String,
 ) {
-    if relay_peer_has_healthy_sibling_endpoint(swarm_control, relay_endpoint) {
+    if relay_endpoint
+        .peer_id()
+        .is_some_and(|relay_peer_id| swarm_control.state().relay_tcp_ready(relay_peer_id))
+    {
         log::debug!(
             "Skipping relay reconcile for {} because another endpoint for the same relay peer is already healthy ({})",
             relay_endpoint.addr(),
@@ -840,27 +751,6 @@ fn trigger_relay_reconcile(
         reason
     );
     spawn_relay_listen_task(swarm_control, relay_endpoint);
-}
-
-fn relay_peer_has_healthy_sibling_endpoint(
-    swarm_control: &SwarmControl,
-    relay_endpoint: &RelayEndpoint,
-) -> bool {
-    let Some(relay_peer_id) = relay_endpoint.peer_id() else {
-        return false;
-    };
-
-    swarm_control
-        .state()
-        .list_relay_endpoint_statuses()
-        .into_iter()
-        .any(|status| {
-            status.relay_addr != *relay_endpoint.addr()
-                && status.relay_peer_id == Some(relay_peer_id)
-                && status.transport_kind == AddressTransportKind::Tcp
-                && status.listener_registered
-                && status.current_direct_connection_id.is_some()
-        })
 }
 
 fn spawn_relay_listen_task(swarm_control: &SwarmControl, relay_endpoint: &RelayEndpoint) {
@@ -890,7 +780,8 @@ fn spawn_relay_listen_task(swarm_control: &SwarmControl, relay_endpoint: &RelayE
     tokio::spawn(async move {
         let _guard = _guard;
 
-        for attempt in 1..=RELAY_RETRY_MAX_ATTEMPTS {
+        let mut attempt = 1u32;
+        loop {
             match listen_relay_by_addr(swarm_control_cl.clone(), relay_addr_cl.clone()).await {
                 Ok(()) => {
                     swarm_control_cl.state().record_relay_management_action(
@@ -906,32 +797,36 @@ fn spawn_relay_listen_task(swarm_control: &SwarmControl, relay_endpoint: &RelayE
                     return;
                 }
                 Err(error) => {
+                    let delay = relay_retry_delay(attempt);
                     swarm_control_cl
                         .state()
                         .record_relay_management_error(&relay_addr_cl, error.to_string());
-                    log::warn!(
-                        "Failed to connect to relay {relay_addr_cl:?} on attempt {attempt}: {error}"
-                    );
-                    if attempt < RELAY_RETRY_MAX_ATTEMPTS {
-                        let delay =
-                            Duration::from_millis(RELAY_RETRY_BASE_DELAY_MS * (1 << (attempt - 1)));
-                        tokio::time::sleep(delay).await;
+                    if attempt <= RELAY_RETRY_FAST_ATTEMPTS {
+                        log::warn!(
+                            "Failed to connect to relay {relay_addr_cl:?} on attempt {attempt}: {error}; retrying in {delay:?}"
+                        );
+                    } else {
+                        log::warn!(
+                            "Relay {relay_addr_cl:?} is still unavailable on attempt {attempt}: {error}; continuing background retry in {delay:?}"
+                        );
                     }
+
+                    tokio::time::sleep(delay).await;
+                    attempt = attempt.saturating_add(1);
                 }
             }
         }
-
-        swarm_control_cl.state().record_relay_management_action(
-            &relay_addr_cl,
-            crate::RelayManagementAction::ListenTaskExhausted,
-        );
-        swarm_control_cl
-            .state()
-            .set_relay_task_running(&relay_addr_cl, false);
-        log::error!(
-            "Failed to connect to relay {relay_addr_cl:?} after {RELAY_RETRY_MAX_ATTEMPTS} attempts"
-        );
     });
+}
+
+pub(super) fn relay_retry_delay(attempt: u32) -> Duration {
+    if attempt > RELAY_RETRY_FAST_ATTEMPTS {
+        return RELAY_RETRY_MAX_DELAY;
+    }
+
+    let shift = attempt.saturating_sub(1);
+    let delay_ms = RELAY_RETRY_BASE_DELAY_MS.saturating_mul(1u64 << shift);
+    Duration::from_millis(delay_ms).min(RELAY_RETRY_MAX_DELAY)
 }
 
 async fn relay_listener_registered(
@@ -1045,29 +940,8 @@ async fn listen_relay_by_addr(swarm_control: SwarmControl, relay_addr: Multiaddr
     // Reserve through the configured TCP relay endpoint even if a UDP observer
     // connection to the same peer already exists. This keeps the durable relay
     // reservation and circuit traffic on TCP.
-    let tcp_connection_active = swarm_control
-        .state()
-        .relay_endpoint_has_active_direct_connection(&relay_addr);
-    dial_relay_by_addr(
-        &swarm_control,
-        relay_peer,
-        relay_addr.clone(),
-        !tcp_connection_active,
-    )
-    .await?;
+    ensure_relay_tcp_carrier(&swarm_control, relay_peer, relay_addr.clone()).await?;
     close_observer_connections_for_relay_peer(&swarm_control, relay_peer).await;
-
-    if let Err(error) = perform_relay_handshake(&swarm_control, relay_peer).await {
-        log::warn!(
-            "Relay handshake to {} via {} failed: {}. Forcing redial.",
-            relay_peer,
-            relay_addr,
-            error
-        );
-        dial_relay_by_addr(&swarm_control, relay_peer, relay_addr.clone(), true).await?;
-        close_observer_connections_for_relay_peer(&swarm_control, relay_peer).await;
-        perform_relay_handshake(&swarm_control, relay_peer).await?;
-    }
 
     if relay_listener_registered(&swarm_control, &relay_endpoint).await? {
         log::debug!("Relay listener already active for {relay_addr}");
@@ -1136,67 +1010,51 @@ async fn close_observer_connections_for_relay_peer(
     tokio::time::sleep(Duration::from_millis(100)).await;
 }
 
-async fn dial_relay_by_addr(
+async fn ensure_relay_tcp_carrier(
     swarm_control: &SwarmControl,
     relay_peer: PeerId,
     relay_addr: Multiaddr,
-    force_redial: bool,
 ) -> Result<()> {
+    if swarm_control.state().relay_endpoint_active(&relay_addr) {
+        return Ok(());
+    }
+
     let dial_result = swarm_control
-        .invoke_swarm(move |swarm| -> std::result::Result<(), String> {
-            if force_redial {
-                let dial_opts = DialOpts::peer_id(relay_peer)
-                    .addresses(vec![relay_addr.clone()])
-                    .condition(PeerCondition::Always)
-                    .build();
-                return swarm.dial(dial_opts).map_err(|error| {
-                    format!("Failed to force redial relay {relay_peer} via {relay_addr}: {error}")
-                });
+        .invoke_swarm({
+            let relay_addr = relay_addr.clone();
+            move |swarm| {
+                swarm.dial(
+                    DialOpts::peer_id(relay_peer)
+                        .addresses(vec![relay_addr])
+                        .condition(PeerCondition::NotDialing)
+                        .build(),
+                )
             }
-
-            if !swarm.is_connected(&relay_peer) {
-                swarm.dial(relay_addr.clone()).map_err(|error| {
-                    format!("Failed to dial relay address {relay_peer} via {relay_addr}: {error}")
-                })?;
-            }
-
-            Ok(())
         })
         .await?;
 
-    dial_result.map_err(|error| anyhow::anyhow!(error))
-}
-
-async fn perform_relay_handshake(swarm_control: &SwarmControl, relay_peer: PeerId) -> Result<()> {
-    let Ok(stream_result) = tokio::time::timeout(
-        Duration::from_secs(5),
-        swarm_control.open_stream_with_strategy(
-            relay_peer,
-            FUNGI_RELAY_HANDSHAKE_PROTOCOL,
-            ConnectionSelectionStrategy::PreferLowLatency,
-            Duration::ZERO,
-        ),
-    )
-    .await
-    else {
-        bail!("Handshake timeout")
-    };
-
-    let (mut stream, _handle, _connection_id) = match stream_result {
-        Ok(stream) => stream,
-        Err(error) => bail!("Handshake failed: {error:?}"),
-    };
-    let mut buf = [0u8; 32];
-    let Ok(read_result) = tokio::time::timeout(Duration::from_secs(5), stream.read(&mut buf)).await
-    else {
-        bail!("Handshake read timeout")
-    };
-    let n = read_result?;
-    if n < 1 {
-        bail!("Handshake failed: empty response");
+    match dial_result {
+        Ok(()) => {}
+        Err(DialError::DialPeerConditionFalse(PeerCondition::NotDialing)) => {
+            log::debug!(
+                "Relay peer {relay_peer} already has an in-flight dial; waiting for TCP carrier"
+            );
+        }
+        Err(error) => bail!("Failed to dial relay {relay_peer} via {relay_addr}: {error}"),
     }
 
-    Ok(())
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if swarm_control.state().relay_endpoint_active(&relay_addr) {
+            return Ok(());
+        }
+
+        if Instant::now() >= deadline {
+            bail!("Timed out waiting for relay TCP carrier {relay_peer} via {relay_addr}");
+        }
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }
 
 pub fn get_default_relay_addrs() -> Vec<Multiaddr> {

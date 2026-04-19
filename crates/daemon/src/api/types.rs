@@ -129,6 +129,8 @@ pub struct ConnectionSnapshot {
     pub active_streams_by_protocol: Vec<ProtocolStreamCountSnapshot>,
     pub policy_state: String,
     pub policy_reason: String,
+    pub peer_alias: String,
+    pub peer_role: String,
 }
 
 #[derive(Debug, Clone)]

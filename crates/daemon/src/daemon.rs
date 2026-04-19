@@ -22,7 +22,7 @@ use fungi_config::{
     address_book::{AddressBookConfig, PeerInfo},
     file_transfer::{FileTransferClient as FTCConfig, FileTransferService as FTSConfig},
 };
-use fungi_swarm::{FungiSwarm, State, SwarmControl, TSwarm};
+use fungi_swarm::{FungiSwarm, PeerAddressSource, State, SwarmControl, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
 use libp2p::{Multiaddr, identity::Keypair, multiaddr::Protocol};
 use parking_lot::Mutex;
@@ -132,6 +132,7 @@ impl FungiDaemon {
                 .into_iter()
                 .collect(),
         );
+        hydrate_address_book_peer_addresses(&state, &address_book_config);
 
         let relay_addrs = config
             .network
@@ -505,6 +506,46 @@ impl FungiDaemon {
         // Update the cached config
         *self.config.lock() = updated_config;
         Ok(())
+    }
+}
+
+fn hydrate_address_book_peer_addresses(state: &State, address_book_config: &AddressBookConfig) {
+    let mut loaded = 0usize;
+    let mut ignored = 0usize;
+
+    for peer in &address_book_config.peers {
+        for address in &peer.multiaddrs {
+            match address.parse::<Multiaddr>() {
+                Ok(multiaddr) => {
+                    match state.record_peer_address(
+                        peer.peer_id,
+                        multiaddr,
+                        PeerAddressSource::AddressBook,
+                    ) {
+                        fungi_swarm::PeerAddressObservation::New
+                        | fungi_swarm::PeerAddressObservation::Refreshed => loaded += 1,
+                        fungi_swarm::PeerAddressObservation::Ignored => ignored += 1,
+                    }
+                }
+                Err(error) => {
+                    ignored += 1;
+                    log::debug!(
+                        "Ignoring invalid address book multiaddr for peer {}: {} ({})",
+                        peer.peer_id,
+                        address,
+                        error
+                    );
+                }
+            }
+        }
+    }
+
+    if loaded > 0 || ignored > 0 {
+        log::info!(
+            "Loaded {} peer address(es) from address book into dial planner state (ignored={})",
+            loaded,
+            ignored
+        );
     }
 }
 

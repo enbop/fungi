@@ -1,11 +1,10 @@
 use anyhow::Result;
 use clap::Parser;
 use fungi_swarm::behaviours::relay_refresh;
-use fungi_util::protocols::FUNGI_RELAY_HANDSHAKE_PROTOCOL;
 use libp2p::{
     Swarm,
     core::{Multiaddr, multiaddr::Protocol},
-    futures::{AsyncWriteExt, StreamExt},
+    futures::StreamExt,
     identify,
     identity::Keypair,
     noise, ping, relay,
@@ -64,7 +63,6 @@ struct Behaviour {
     ping: ping::Behaviour,
     identify: identify::Behaviour,
     relay_refresh: relay_refresh::Behaviour,
-    stream: fungi_stream::Behaviour,
 }
 
 pub async fn run(args: RelayArgs) -> Result<()> {
@@ -97,7 +95,6 @@ pub async fn run(args: RelayArgs) -> Result<()> {
                 key.public(),
             )),
             relay_refresh: relay_refresh::Behaviour::new_allow_all(),
-            stream: fungi_stream::Behaviour::new_allow_all(),
         })?
         .build();
 
@@ -128,8 +125,6 @@ pub async fn run(args: RelayArgs) -> Result<()> {
     println!("{tcp_listen_addr}");
     println!("{udp_listen_addr}");
 
-    let stream_control = swarm.behaviour().stream.new_control();
-    listen_relay_handshake_protocol(stream_control);
     let mut last_refresh_at = None;
 
     loop {
@@ -187,26 +182,6 @@ fn add_external_address(
     swarm.add_external_address(tcp_listen_addr);
     swarm.add_external_address(udp_listen_addr);
     Ok(())
-}
-
-fn listen_relay_handshake_protocol(mut stream_control: fungi_stream::Control) {
-    let mut listener = stream_control
-        .listen(FUNGI_RELAY_HANDSHAKE_PROTOCOL)
-        .unwrap();
-    tokio::spawn(async move {
-        loop {
-            let Some(incoming_stream) = listener.next().await else {
-                break;
-            };
-            let peer_id = incoming_stream.peer_id;
-            let mut stream = incoming_stream.stream;
-            log::info!("Accepted stream: {:?}", peer_id);
-            // TODO: fungi relay handshake logic
-            stream.write_all(b"ok").await.ok();
-            stream.flush().await.ok();
-            stream.close().await.ok();
-        }
-    });
 }
 
 fn relay_refresh_is_rate_limited(last_refresh_at: &mut Option<Instant>) -> bool {

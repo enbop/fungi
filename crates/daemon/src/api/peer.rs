@@ -13,6 +13,7 @@ use super::types::{
 
 impl FungiDaemon {
     fn build_connection_snapshot(
+        &self,
         state: &State,
         peer_id: PeerId,
         direction: &str,
@@ -47,6 +48,18 @@ impl FungiDaemon {
         let is_relay = is_relay_connection(conn.multiaddr());
         let remote_addr = conn.multiaddr().to_string();
         let governance = state.connection_governance_info(&conn.connection_id());
+        let peer_alias = self
+            .address_book_get_peer(peer_id)
+            .and_then(|peer| peer.alias)
+            .unwrap_or_default();
+        let peer_role = if self.is_configured_relay_peer(peer_id) {
+            "relay-carrier"
+        } else if is_relay {
+            "relayed-peer"
+        } else {
+            "peer"
+        }
+        .to_string();
         ConnectionSnapshot {
             peer_id: peer_id.to_string(),
             connection_id: conn.connection_id().to_string(),
@@ -62,7 +75,17 @@ impl FungiDaemon {
                 .map(|info| info.state.as_str().to_string())
                 .unwrap_or_else(|| "unknown".to_string()),
             policy_reason: governance.and_then(|info| info.reason).unwrap_or_default(),
+            peer_alias,
+            peer_role,
         }
+    }
+
+    fn is_configured_relay_peer(&self, peer_id: PeerId) -> bool {
+        self.swarm_control()
+            .state()
+            .list_relay_endpoint_statuses()
+            .into_iter()
+            .any(|status| status.relay_peer_id == Some(peer_id))
     }
 
     pub fn host_name(&self) -> Option<String> {
@@ -176,14 +199,10 @@ impl FungiDaemon {
             }
 
             for conn in peer_conn.inbound() {
-                snapshots.push(Self::build_connection_snapshot(
-                    state, *pid, "inbound", conn,
-                ));
+                snapshots.push(self.build_connection_snapshot(state, *pid, "inbound", conn));
             }
             for conn in peer_conn.outbound() {
-                snapshots.push(Self::build_connection_snapshot(
-                    state, *pid, "outbound", conn,
-                ));
+                snapshots.push(self.build_connection_snapshot(state, *pid, "outbound", conn));
             }
         }
 
@@ -238,14 +257,6 @@ impl FungiDaemon {
         streams
     }
 
-    pub async fn dial_peer_once(&self, peer_id: PeerId) -> Result<()> {
-        self.swarm_control()
-            .connect(peer_id)
-            .await
-            .map_err(|e| anyhow::anyhow!("Dial failed: {e}"))?;
-        Ok(())
-    }
-
     pub async fn ping_peer_connection(
         &self,
         peer_id: PeerId,
@@ -255,6 +266,14 @@ impl FungiDaemon {
         self.swarm_control()
             .ping_connection(peer_id, connection_id, timeout)
             .await
+    }
+
+    pub async fn probe_peer_once(
+        &self,
+        peer_id: PeerId,
+        timeout: Duration,
+    ) -> Result<(std::time::Duration, ConnectionId)> {
+        self.swarm_control().probe_peer(peer_id, timeout).await
     }
 }
 

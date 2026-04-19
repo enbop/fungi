@@ -458,6 +458,10 @@ pub struct ConnectionSnapshot {
     pub policy_state: ::prost::alloc::string::String,
     #[prost(string, tag = "11")]
     pub policy_reason: ::prost::alloc::string::String,
+    #[prost(string, tag = "12")]
+    pub peer_alias: ::prost::alloc::string::String,
+    #[prost(string, tag = "13")]
+    pub peer_role: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ProtocolStreamCountSnapshot {

@@ -335,3 +335,150 @@ async fn send_message(mut socket: Stream, message: &Message) -> Result<(), io::E
     socket.close().await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::{Result, anyhow};
+    use libp2p::{
+        Swarm, SwarmBuilder,
+        core::{Multiaddr, multiaddr::Protocol},
+        futures::StreamExt as _,
+        identity::Keypair,
+        noise,
+        swarm::{NetworkBehaviour, SwarmEvent},
+        tcp, yamux,
+    };
+    use std::net::Ipv4Addr;
+    use std::time::Duration;
+
+    #[derive(NetworkBehaviour)]
+    struct TestBehaviour {
+        relay_refresh: Behaviour,
+    }
+
+    fn build_swarm(relay_refresh: Behaviour) -> Result<Swarm<TestBehaviour>> {
+        let keypair = Keypair::generate_ed25519();
+        Ok(SwarmBuilder::with_existing_identity(keypair)
+            .with_tokio()
+            .with_tcp(
+                tcp::Config::default(),
+                noise::Config::new,
+                yamux::Config::default,
+            )?
+            .with_behaviour(|_| TestBehaviour { relay_refresh })?
+            .build())
+    }
+
+    async fn next_listen_addr(swarm: &mut Swarm<TestBehaviour>) -> Result<Multiaddr> {
+        loop {
+            let event = swarm
+                .next()
+                .await
+                .ok_or_else(|| anyhow!("swarm ended while waiting for listen address"))?;
+            if let SwarmEvent::NewListenAddr { address, .. } = event {
+                return Ok(address);
+            }
+        }
+    }
+
+    async fn wait_all_connected(
+        source: &mut Swarm<TestBehaviour>,
+        relay: &mut Swarm<TestBehaviour>,
+        target: &mut Swarm<TestBehaviour>,
+        source_peer_id: PeerId,
+        relay_peer_id: PeerId,
+        target_peer_id: PeerId,
+    ) -> Result<()> {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if source.is_connected(&relay_peer_id)
+                    && relay.is_connected(&source_peer_id)
+                    && target.is_connected(&relay_peer_id)
+                    && relay.is_connected(&target_peer_id)
+                {
+                    return Ok(());
+                }
+
+                tokio::select! {
+                    event = source.next() => event.ok_or_else(|| anyhow!("source swarm ended"))?,
+                    event = relay.next() => event.ok_or_else(|| anyhow!("relay swarm ended"))?,
+                    event = target.next() => event.ok_or_else(|| anyhow!("target swarm ended"))?,
+                };
+            }
+        })
+        .await
+        .map_err(|_| anyhow!("timed out waiting for relay refresh smoke connections"))?
+    }
+
+    #[tokio::test]
+    async fn relay_refresh_prepare_is_forwarded_to_target() -> Result<()> {
+        let mut relay = build_swarm(Behaviour::new_allow_all())?;
+        let relay_peer_id = *relay.local_peer_id();
+        let mut source = build_swarm(Behaviour::new_allow_all())?;
+        let source_peer_id = *source.local_peer_id();
+        let mut target = build_swarm(Behaviour::new_trusted_relays([relay_peer_id]))?;
+        let target_peer_id = *target.local_peer_id();
+
+        relay.listen_on(
+            Multiaddr::empty()
+                .with(Protocol::from(Ipv4Addr::LOCALHOST))
+                .with(Protocol::Tcp(0)),
+        )?;
+        let relay_addr = next_listen_addr(&mut relay).await?;
+        let relay_addr = relay_addr
+            .with_p2p(relay_peer_id)
+            .map_err(|addr| anyhow!("failed to append relay peer id to {addr}"))?;
+
+        source.dial(relay_addr.clone())?;
+        target.dial(relay_addr)?;
+
+        wait_all_connected(
+            &mut source,
+            &mut relay,
+            &mut target,
+            source_peer_id,
+            relay_peer_id,
+            target_peer_id,
+        )
+        .await?;
+
+        source
+            .behaviour_mut()
+            .relay_refresh
+            .send(&relay_peer_id, target_peer_id);
+
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                tokio::select! {
+                    event = source.next() => {
+                        event.ok_or_else(|| anyhow!("source swarm ended"))?;
+                    }
+                    event = relay.next() => {
+                        if let Some(SwarmEvent::Behaviour(TestBehaviourEvent::RelayRefresh(event))) = event {
+                            assert_eq!(event.peer, source_peer_id);
+                            assert_eq!(event.announced_peer_id, target_peer_id);
+                            relay
+                                .behaviour_mut()
+                                .relay_refresh
+                                .send(&event.announced_peer_id, event.peer);
+                        } else if event.is_none() {
+                            return Err(anyhow!("relay swarm ended"));
+                        }
+                    }
+                    event = target.next() => {
+                        if let Some(SwarmEvent::Behaviour(TestBehaviourEvent::RelayRefresh(event))) = event {
+                            assert_eq!(event.peer, relay_peer_id);
+                            assert_eq!(event.announced_peer_id, source_peer_id);
+                            return Ok(());
+                        } else if event.is_none() {
+                            return Err(anyhow!("target swarm ended"));
+                        }
+                    }
+                }
+            }
+        })
+        .await
+        .map_err(|_| anyhow!("timed out waiting for forwarded relay refresh notification"))?
+    }
+}
