@@ -1,6 +1,7 @@
 use clap::Subcommand;
 use fungi_config::{FungiConfig, FungiDir};
 use fungi_daemon_grpc::{Request, fungi_daemon_grpc::Empty};
+use serde_json::json;
 
 use crate::commands::CommonArgs;
 
@@ -13,6 +14,12 @@ use super::{
 pub enum InfoCommands {
     /// Show daemon version
     Version,
+    /// Show local binary build information
+    Build {
+        /// Print build information as JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Show peer ID of this daemon
     Id,
     /// Show hostname of this device
@@ -26,6 +33,11 @@ pub enum InfoCommands {
 }
 
 pub async fn execute_info(args: CommonArgs, cmd: InfoCommands) {
+    if let InfoCommands::Build { json } = cmd {
+        print_build_info(json);
+        return;
+    }
+
     if matches!(cmd, InfoCommands::RpcAddress) {
         let fungi_config = FungiConfig::try_read_from_dir(&args.fungi_dir())
             .unwrap_or_else(|error| fatal(format!("Failed to read configuration: {error}")));
@@ -72,8 +84,38 @@ pub async fn execute_info(args: CommonArgs, cmd: InfoCommands) {
             Ok(resp) => print_runtime_status(&resp.into_inner()),
             Err(e) => fatal_grpc(e),
         },
-        InfoCommands::ConfigPath | InfoCommands::RpcAddress => {}
+        InfoCommands::ConfigPath | InfoCommands::RpcAddress | InfoCommands::Build { .. } => {}
     }
+}
+
+fn print_build_info(json_output: bool) {
+    if json_output {
+        println!(
+            "{}",
+            json!({
+                "version": env!("CARGO_PKG_VERSION"),
+                "channel": fungi_config::dist_channel(),
+                "commit": fungi_config::build_commit(),
+                "build_time": fungi_config::build_time(),
+                "default_fungi_dir": fungi_config::default_fungi_dir_name(),
+                "default_rpc_address": fungi_config::default_rpc_address(),
+            })
+        );
+        return;
+    }
+
+    println!("version: {}", env!("CARGO_PKG_VERSION"));
+    println!("channel: {}", fungi_config::dist_channel());
+    println!("commit: {}", fungi_config::build_commit());
+    println!("build_time: {}", fungi_config::build_time());
+    println!(
+        "default_fungi_dir: {}",
+        fungi_config::default_fungi_dir_name()
+    );
+    println!(
+        "default_rpc_address: {}",
+        fungi_config::default_rpc_address()
+    );
 }
 
 fn print_runtime_status(status: &fungi_daemon_grpc::fungi_daemon_grpc::LocalRuntimeStatusResponse) {

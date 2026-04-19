@@ -16,6 +16,9 @@ CARGO_GIT_VOLUME="${CARGO_GIT_VOLUME:-fungi-android-cargo-git}"
 TARGET_VOLUME="${TARGET_VOLUME:-fungi-android-target}"
 RUSTFLAGS_STAMP_FILE=".android-rustflags"
 RUSTFLAGS_VALUE="${RUSTFLAGS:-}"
+FUNGI_DIST_CHANNEL_VALUE="${FUNGI_DIST_CHANNEL:-nightly}"
+FUNGI_BUILD_COMMIT_VALUE="${FUNGI_BUILD_COMMIT:-unknown}"
+FUNGI_BUILD_TIME_VALUE="${FUNGI_BUILD_TIME:-unknown}"
 
 if ! docker image inspect "$ANDROID_BUILD_REF" >/dev/null 2>&1; then
   docker build \
@@ -43,6 +46,9 @@ docker run --rm \
   -e RUST_TOOLCHAIN="$RUST_TOOLCHAIN" \
   -e OUTPUT_TAR="$OUTPUT_TAR" \
   -e RUSTFLAGS="$RUSTFLAGS_VALUE" \
+  -e FUNGI_DIST_CHANNEL="$FUNGI_DIST_CHANNEL_VALUE" \
+  -e FUNGI_BUILD_COMMIT="$FUNGI_BUILD_COMMIT_VALUE" \
+  -e FUNGI_BUILD_TIME="$FUNGI_BUILD_TIME_VALUE" \
   -e RUSTFLAGS_STAMP_FILE="$RUSTFLAGS_STAMP_FILE" \
   "$ANDROID_BUILD_REF" \
   bash -lc '
@@ -59,18 +65,19 @@ docker run --rm \
     if [ -f "$stamp_path" ]; then
       previous_rustflags="$(cat "$stamp_path")"
     fi
-    if [ "$previous_rustflags" != "$RUSTFLAGS" ]; then
-      echo "Android RUSTFLAGS changed; cleaning cached aarch64-linux-android artifacts"
+    build_env_stamp="$RUSTFLAGS|$FUNGI_DIST_CHANNEL|$FUNGI_BUILD_COMMIT|$FUNGI_BUILD_TIME"
+    if [ "$previous_rustflags" != "$build_env_stamp" ]; then
+      echo "Android build environment changed; cleaning cached aarch64-linux-android artifacts"
       rm -rf target/aarch64-linux-android
       rm -f libfungi.so "$OUTPUT_TAR"
     fi
 
     cargo ndk -P "$ANDROID_PLATFORM" -t arm64-v8a build --bin fungi -r
 
-    printf "%s" "$RUSTFLAGS" > "$stamp_path"
+    printf "%s" "$build_env_stamp" > "$stamp_path"
 
     cp target/aarch64-linux-android/release/fungi libfungi.so
     tar -czf "$OUTPUT_TAR" libfungi.so
 
-    printf "Built artifacts:\n  %s/libfungi.so\n  %s/%s\nRust flags: %s\n" "/workspace" "/workspace" "$OUTPUT_TAR" "$RUSTFLAGS"
+    printf "Built artifacts:\n  %s/libfungi.so\n  %s/%s\nChannel: %s\nCommit: %s\nBuild time: %s\nRust flags: %s\n" "/workspace" "/workspace" "$OUTPUT_TAR" "$FUNGI_DIST_CHANNEL" "$FUNGI_BUILD_COMMIT" "$FUNGI_BUILD_TIME" "$RUSTFLAGS"
   '

@@ -1,4 +1,5 @@
 pub mod address_book;
+mod build_info;
 pub mod file_transfer;
 mod init;
 mod libp2p;
@@ -7,6 +8,11 @@ pub mod runtime;
 pub mod tcp_tunneling;
 
 pub use crate::libp2p::*;
+pub use build_info::{
+    NIGHTLY_CHANNEL, NIGHTLY_FUNGI_DIR, NIGHTLY_RPC_ADDRESS, STABLE_CHANNEL, STABLE_FUNGI_DIR,
+    STABLE_RPC_ADDRESS, build_commit, build_time, default_fungi_dir_name, default_rpc_address,
+    dist_channel,
+};
 pub use init::init;
 
 use anyhow::{Context as _, Result};
@@ -25,8 +31,8 @@ use crate::{
 };
 
 pub const DEFAULT_CONFIG_FILE: &str = "config.toml";
-pub const DEFAULT_FUNGI_DIR: &str = ".fungi";
-pub const DEFAULT_RPC_ADDRESS: &str = "127.0.0.1:5405";
+pub const DEFAULT_FUNGI_DIR: &str = NIGHTLY_FUNGI_DIR;
+pub const DEFAULT_RPC_ADDRESS: &str = NIGHTLY_RPC_ADDRESS;
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct FungiConfig {

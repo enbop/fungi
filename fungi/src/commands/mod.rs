@@ -6,7 +6,7 @@ pub mod fungi_relay;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use fungi_config::{DEFAULT_FUNGI_DIR, FungiDir};
+use fungi_config::{FungiDir, default_fungi_dir_name};
 
 /// A platform built for seamless multi-device integration
 #[derive(Parser)]
@@ -23,7 +23,7 @@ pub struct CommonArgs {
     #[clap(
         short,
         long,
-        help = "Path to the Fungi config directory, defaults to ~/.fungi"
+        help = "Path to the Fungi config directory, defaults to the channel-specific directory"
     )]
     pub fungi_dir: Option<String>,
 
@@ -48,7 +48,7 @@ impl FungiDir for CommonArgs {
                             "Unable to determine home directory. Please provide --fungi-dir explicitly."
                         )
                     })
-                    .join(DEFAULT_FUNGI_DIR)
+                    .join(default_fungi_dir_name())
             })
     }
 }

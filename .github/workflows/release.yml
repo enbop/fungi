@@ -71,7 +71,17 @@ jobs:
       - name: Build Rust CLI
         shell: bash
         run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.ref_name }}" = "nightly" ]; then
+            export FUNGI_DIST_CHANNEL="nightly"
+          else
+            export FUNGI_DIST_CHANNEL="stable"
+          fi
+          export FUNGI_BUILD_COMMIT="${GITHUB_SHA::12}"
+          export FUNGI_BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "Building fungi channel=$FUNGI_DIST_CHANNEL commit=$FUNGI_BUILD_COMMIT time=$FUNGI_BUILD_TIME"
+
           if [ "${{ matrix.cross }}" = "true" ]; then
+            export CROSS_CONTAINER_OPTS="${CROSS_CONTAINER_OPTS:-} -e FUNGI_DIST_CHANNEL=$FUNGI_DIST_CHANNEL -e FUNGI_BUILD_COMMIT=$FUNGI_BUILD_COMMIT -e FUNGI_BUILD_TIME=$FUNGI_BUILD_TIME"
             cross build --release --bin fungi --target ${{ matrix.rust-target }}
           else
             cargo build --release --bin fungi --target ${{ matrix.rust-target }}

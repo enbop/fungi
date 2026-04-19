@@ -238,7 +238,14 @@ service FungiDaemon {
 
 message Empty {}
 
-message VersionResponse { string version = 1; }
+message VersionResponse {
+  string version = 1;
+  string channel = 2;
+  string commit = 3;
+  string build_time = 4;
+  string default_fungi_dir = 5;
+  string default_rpc_address = 6;
+}
 
 message HostnameResponse { string hostname = 1; }
 

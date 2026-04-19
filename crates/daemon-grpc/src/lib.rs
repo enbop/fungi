@@ -129,6 +129,11 @@ impl FungiDaemon for FungiDaemonRpcImpl {
     async fn version(&self, _request: Request<Empty>) -> Result<Response<VersionResponse>, Status> {
         Ok(Response::new(VersionResponse {
             version: env!("CARGO_PKG_VERSION").to_string(),
+            channel: fungi_config::dist_channel().to_string(),
+            commit: fungi_config::build_commit().to_string(),
+            build_time: fungi_config::build_time().to_string(),
+            default_fungi_dir: fungi_config::default_fungi_dir_name().to_string(),
+            default_rpc_address: fungi_config::default_rpc_address().to_string(),
         }))
     }
 

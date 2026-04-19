@@ -5,6 +5,16 @@ pub struct Empty {}
 pub struct VersionResponse {
     #[prost(string, tag = "1")]
     pub version: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub channel: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub commit: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub build_time: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub default_fungi_dir: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub default_rpc_address: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HostnameResponse {
