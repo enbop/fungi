@@ -38,7 +38,7 @@ pub struct RelayArgs {
     #[clap(
         short,
         long,
-        help = "Udp listen port for the relay server, defaults to 30001",
+        help = "Udp listen port for QUIC observer traffic, defaults to 30001",
         default_value_t = DEFAULT_LISTEN_PORT
     )]
     pub udp_listen_port: u16,
@@ -113,6 +113,8 @@ pub async fn run(args: RelayArgs) -> Result<()> {
     let tcp_listen_addr = Multiaddr::empty()
         .with(Protocol::from(public_ip))
         .with(Protocol::Tcp(tcp_listen_port));
+    // Clients use the TCP address for relay reservations/circuits and the
+    // UDP/QUIC address as an observer for external UDP address discovery.
     let udp_listen_addr = Multiaddr::empty()
         .with(Protocol::from(public_ip))
         .with(Protocol::Udp(udp_listen_port))

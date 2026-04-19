@@ -48,6 +48,8 @@ pub struct UseCommunityRelaysRequest {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RelayAddressRequest {
+    /// One relay multiaddr. TCP entries carry relay reservations/circuits; UDP/QUIC
+    /// entries are observer-only for pre-hole-punch UDP address discovery.
     #[prost(string, tag = "1")]
     pub address: ::prost::alloc::string::String,
 }
@@ -64,8 +66,12 @@ pub struct RelayConfigResponse {
     pub relay_enabled: bool,
     #[prost(bool, tag = "2")]
     pub use_community_relays: bool,
+    /// User-facing relay list. The daemon keeps one list in config and separates
+    /// TCP relay carriers from UDP/QUIC observers internally.
     #[prost(string, repeated, tag = "3")]
     pub custom_relay_addresses: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// Community plus custom relay addresses after config resolution, with the
+    /// same TCP-carrier / UDP-observer semantics as custom_relay_addresses.
     #[prost(message, repeated, tag = "4")]
     pub effective_relay_addresses: ::prost::alloc::vec::Vec<EffectiveRelayAddress>,
 }
@@ -1001,6 +1007,9 @@ pub mod fungi_daemon_client {
             self.inner.unary(req, path, codec).await
         }
         /// Adds a custom relay address to the persisted configuration.
+        ///
+        /// TCP relay addresses maintain reservations and relay circuits. UDP/QUIC
+        /// relay addresses are observer-only endpoints for UDP address refresh.
         pub async fn add_custom_relay_address(
             &mut self,
             request: impl tonic::IntoRequest<super::RelayAddressRequest>,
@@ -2124,6 +2133,9 @@ pub mod fungi_daemon_server {
             request: tonic::Request<super::UseCommunityRelaysRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
         /// Adds a custom relay address to the persisted configuration.
+        ///
+        /// TCP relay addresses maintain reservations and relay circuits. UDP/QUIC
+        /// relay addresses are observer-only endpoints for UDP address refresh.
         async fn add_custom_relay_address(
             &self,
             request: tonic::Request<super::RelayAddressRequest>,

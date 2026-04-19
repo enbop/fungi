@@ -41,6 +41,9 @@ service FungiDaemon {
   rpc SetUseCommunityRelays(UseCommunityRelaysRequest) returns (Empty) {}
 
   // Adds a custom relay address to the persisted configuration.
+  //
+  // TCP relay addresses maintain reservations and relay circuits. UDP/QUIC
+  // relay addresses are observer-only endpoints for UDP address refresh.
   rpc AddCustomRelayAddress(RelayAddressRequest) returns (Empty) {}
 
   // Removes a custom relay address from the persisted configuration.
@@ -253,7 +256,11 @@ message RelayEnabledRequest { bool enabled = 1; }
 
 message UseCommunityRelaysRequest { bool enabled = 1; }
 
-message RelayAddressRequest { string address = 1; }
+message RelayAddressRequest {
+  // One relay multiaddr. TCP entries carry relay reservations/circuits; UDP/QUIC
+  // entries are observer-only for pre-hole-punch UDP address discovery.
+  string address = 1;
+}
 
 message EffectiveRelayAddress {
   string address = 1;
@@ -263,7 +270,11 @@ message EffectiveRelayAddress {
 message RelayConfigResponse {
   bool                           relay_enabled             = 1;
   bool                           use_community_relays      = 2;
+  // User-facing relay list. The daemon keeps one list in config and separates
+  // TCP relay carriers from UDP/QUIC observers internally.
   repeated string                custom_relay_addresses    = 3;
+  // Community plus custom relay addresses after config resolution, with the
+  // same TCP-carrier / UDP-observer semantics as custom_relay_addresses.
   repeated EffectiveRelayAddress effective_relay_addresses = 4;
 }
 

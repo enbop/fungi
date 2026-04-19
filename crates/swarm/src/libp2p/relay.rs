@@ -1,5 +1,11 @@
+// Relay management policy for fungi:
+//
+// TCP relay addresses are the durable carrier for libp2p relay reservations and
+// circuit traffic. UDP/QUIC relay addresses are observer endpoints only; they
+// are dialed briefly to refresh externally observed UDP addresses before hole
+// punching, but they must not become the active relay reservation carrier.
 use super::{ConnectionSelectionStrategy, SwarmControl};
-use crate::{State, behaviours::relay_refresh};
+use crate::{AddressTransportKind, State, behaviours::relay_refresh};
 use anyhow::{Result, bail};
 use fungi_util::protocols::FUNGI_RELAY_HANDSHAKE_PROTOCOL;
 use libp2p::{
@@ -14,7 +20,7 @@ use libp2p::{
 };
 use parking_lot::Mutex;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -129,69 +135,178 @@ impl RelayEndpoint {
 
 #[derive(Clone)]
 pub(super) struct RelayPeers {
-    endpoints: Arc<Vec<RelayEndpoint>>,
-    addresses_by_peer: Arc<HashMap<PeerId, Vec<Multiaddr>>>,
-    peer_ids: Arc<Vec<PeerId>>,
+    relay_endpoints: Arc<Vec<RelayEndpoint>>,
+    observer_endpoints: Arc<Vec<RelayEndpoint>>,
+    all_endpoints: Arc<Vec<RelayEndpoint>>,
+    tcp_addresses_by_peer: Arc<HashMap<PeerId, Vec<Multiaddr>>>,
+    tcp_peer_ids: Arc<Vec<PeerId>>,
+}
+
+#[derive(Debug)]
+pub(super) struct RelayUdpRefreshTarget {
+    pub(super) peer_id: PeerId,
+    pub(super) addresses: Vec<Multiaddr>,
+}
+
+#[derive(Debug, Default)]
+pub(super) struct RelayUdpRefreshPlan {
+    pub(super) targets: Vec<RelayUdpRefreshTarget>,
+    pub(super) skipped_circuit: usize,
+    pub(super) skipped_missing_peer: usize,
+    pub(super) skipped_duplicate_addr: usize,
+    pub(super) preferred_relay_matched: bool,
 }
 
 impl RelayPeers {
     pub(super) fn new(relay_addresses: Vec<Multiaddr>) -> Self {
-        let endpoints = relay_addresses
+        let all_endpoints = relay_addresses
             .into_iter()
             .map(RelayEndpoint::new)
             .collect::<Vec<_>>();
-        let mut addresses_by_peer = HashMap::<PeerId, Vec<Multiaddr>>::new();
-        let mut peer_ids = Vec::new();
 
-        for relay_endpoint in &endpoints {
+        // User configuration stays as one ordered relay address list. Internally
+        // we split it by transport so libp2p relay reservations are always
+        // driven by TCP, while UDP/QUIC entries remain address observers.
+        let relay_endpoints = all_endpoints
+            .iter()
+            .filter(|endpoint| endpoint.transport_kind() == Some(RelayTransportKind::Tcp))
+            .cloned()
+            .collect::<Vec<_>>();
+        let observer_endpoints = all_endpoints
+            .iter()
+            .filter(|endpoint| endpoint.transport_kind() == Some(RelayTransportKind::Udp))
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut tcp_addresses_by_peer = HashMap::<PeerId, Vec<Multiaddr>>::new();
+        let mut tcp_peer_ids = Vec::new();
+
+        for relay_endpoint in &relay_endpoints {
             let Some(peer_id) = relay_endpoint.peer_id() else {
                 continue;
             };
 
-            let entry = addresses_by_peer.entry(peer_id).or_insert_with(|| {
-                peer_ids.push(peer_id);
+            let entry = tcp_addresses_by_peer.entry(peer_id).or_insert_with(|| {
+                tcp_peer_ids.push(peer_id);
                 Vec::new()
             });
             entry.push(relay_endpoint.addr().clone());
         }
 
         Self {
-            endpoints: Arc::new(endpoints),
-            addresses_by_peer: Arc::new(addresses_by_peer),
-            peer_ids: Arc::new(peer_ids),
+            relay_endpoints: Arc::new(relay_endpoints),
+            observer_endpoints: Arc::new(observer_endpoints),
+            all_endpoints: Arc::new(all_endpoints),
+            tcp_addresses_by_peer: Arc::new(tcp_addresses_by_peer),
+            tcp_peer_ids: Arc::new(tcp_peer_ids),
         }
     }
 
     pub(super) fn register_with_state(&self, state: &State) {
-        for relay_endpoint in self.iter() {
+        for relay_endpoint in self.all_endpoints() {
             state.register_relay_endpoint(relay_endpoint.addr().clone());
         }
     }
 
-    pub(super) fn iter(&self) -> std::slice::Iter<'_, RelayEndpoint> {
-        self.endpoints.iter()
+    pub(super) fn relay_endpoints(&self) -> std::slice::Iter<'_, RelayEndpoint> {
+        self.relay_endpoints.iter()
+    }
+
+    pub(super) fn observer_endpoints(&self) -> std::slice::Iter<'_, RelayEndpoint> {
+        self.observer_endpoints.iter()
+    }
+
+    pub(super) fn all_endpoints(&self) -> std::slice::Iter<'_, RelayEndpoint> {
+        self.all_endpoints.iter()
     }
 
     pub(super) fn is_empty(&self) -> bool {
-        self.endpoints.is_empty()
+        self.relay_endpoints.is_empty()
     }
 
     pub(super) fn len(&self) -> usize {
-        self.endpoints.len()
+        self.relay_endpoints.len()
     }
 
     pub(super) fn peer_ids(&self) -> &[PeerId] {
-        self.peer_ids.as_slice()
+        self.tcp_peer_ids.as_slice()
     }
 
     pub(super) fn addresses_for_peer(&self, peer_id: PeerId) -> Option<Vec<Multiaddr>> {
-        self.addresses_by_peer.get(&peer_id).cloned()
+        self.tcp_addresses_by_peer.get(&peer_id).cloned()
     }
 
     pub(super) fn circuit_addresses_for_target(&self, target_peer: PeerId) -> Vec<Multiaddr> {
-        self.iter()
+        self.relay_endpoints()
             .map(|relay_endpoint| peer_addr_with_relay(target_peer, relay_endpoint.addr().clone()))
             .collect()
+    }
+
+    pub(super) fn udp_refresh_plan(&self, preferred_relay: Option<PeerId>) -> RelayUdpRefreshPlan {
+        // The refresh plan is intentionally observer-only. It never falls back
+        // to TCP because this path exists to refresh observed UDP addresses for
+        // direct QUIC hole punching.
+        let mut plan = RelayUdpRefreshPlan::default();
+        let mut seen_addrs = HashSet::<String>::new();
+        let mut addresses_by_peer = HashMap::<PeerId, Vec<Multiaddr>>::new();
+        let mut peer_order = Vec::<PeerId>::new();
+
+        for relay_endpoint in self.observer_endpoints() {
+            let addr = relay_endpoint.addr();
+            if is_circuit_addr(addr) {
+                plan.skipped_circuit += 1;
+                log::debug!(
+                    "Skipping relay UDP refresh target {} because it is a relayed address",
+                    addr
+                );
+                continue;
+            }
+
+            let Some(peer_id) = relay_endpoint.peer_id() else {
+                plan.skipped_missing_peer += 1;
+                log::debug!(
+                    "Skipping relay UDP refresh target {} because it has no relay peer id",
+                    addr
+                );
+                continue;
+            };
+
+            if !seen_addrs.insert(addr.to_string()) {
+                plan.skipped_duplicate_addr += 1;
+                log::debug!(
+                    "Skipping duplicate relay UDP refresh target {} for peer {}",
+                    addr,
+                    peer_id
+                );
+                continue;
+            }
+
+            let entry = addresses_by_peer.entry(peer_id).or_insert_with(|| {
+                peer_order.push(peer_id);
+                Vec::new()
+            });
+            entry.push(addr.clone());
+        }
+
+        if let Some(preferred_relay) = preferred_relay
+            && let Some(position) = peer_order
+                .iter()
+                .position(|peer_id| *peer_id == preferred_relay)
+        {
+            plan.preferred_relay_matched = true;
+            let peer_id = peer_order.remove(position);
+            peer_order.insert(0, peer_id);
+        }
+
+        plan.targets = peer_order
+            .into_iter()
+            .filter_map(|peer_id| {
+                addresses_by_peer
+                    .remove(&peer_id)
+                    .map(|addresses| RelayUdpRefreshTarget { peer_id, addresses })
+            })
+            .collect();
+
+        plan
     }
 }
 
@@ -284,12 +399,110 @@ impl SwarmControl {
     }
 
     async fn refresh_external_addresses_via_relays(&self, preferred_relay: Option<PeerId>) -> bool {
-        let _ = preferred_relay;
+        let plan = self.relay_peers.udp_refresh_plan(preferred_relay);
+        let target_addr_count = plan
+            .targets
+            .iter()
+            .map(|target| target.addresses.len())
+            .sum::<usize>();
 
-        // TODO: Actively dial every deduplicated relay UDP address here to refresh observed
-        // external addresses. The new one-way relay-refresh protocol is wired first, while the
-        // concrete UDP refresh strategy stays intentionally simple and deferred.
-        false
+        if plan.targets.is_empty() {
+            log::debug!(
+                "No relay UDP refresh targets available (preferred_relay={:?}, skipped_circuit={}, skipped_missing_peer={}, skipped_duplicate_addr={})",
+                preferred_relay,
+                plan.skipped_circuit,
+                plan.skipped_missing_peer,
+                plan.skipped_duplicate_addr
+            );
+            return false;
+        }
+
+        log::info!(
+            "Starting relay UDP external address refresh via {} peer(s), {} address(es) (preferred_relay={:?}, preferred_matched={}, skipped_circuit={}, skipped_missing_peer={}, skipped_duplicate_addr={})",
+            plan.targets.len(),
+            target_addr_count,
+            preferred_relay,
+            plan.preferred_relay_matched,
+            plan.skipped_circuit,
+            plan.skipped_missing_peer,
+            plan.skipped_duplicate_addr
+        );
+
+        let mut refresh_started = false;
+        let mut skipped_unhealthy_tcp_reservation = 0usize;
+
+        for target in plan.targets {
+            let relay_peer = target.peer_id;
+            let address_count = target.addresses.len();
+            let address_summary = summarize_multiaddrs(&target.addresses);
+            let addresses = target.addresses;
+
+            // A UDP observer dial can create or become the first direct
+            // connection to the relay peer. libp2p-relay may reuse the first
+            // direct connection for reservation work, so only probe UDP after a
+            // healthy TCP reservation carrier is already present.
+            if !self
+                .state()
+                .relay_peer_has_healthy_tcp_reservation(relay_peer)
+            {
+                skipped_unhealthy_tcp_reservation += 1;
+                log::debug!(
+                    "Skipping relay UDP refresh dial to {} because no healthy TCP relay reservation is active; candidate address(es): {}",
+                    relay_peer,
+                    address_summary
+                );
+                continue;
+            }
+
+            let dial_result = self
+                .invoke_swarm(move |swarm| {
+                    let dial_opts = DialOpts::peer_id(relay_peer)
+                        .addresses(addresses)
+                        .condition(PeerCondition::Always)
+                        .build();
+                    swarm.dial(dial_opts)
+                })
+                .await;
+
+            match dial_result {
+                Ok(Ok(())) => {
+                    refresh_started = true;
+                    log::debug!(
+                        "Started relay UDP refresh dial to {} using {} address(es): {}",
+                        relay_peer,
+                        address_count,
+                        address_summary
+                    );
+                }
+                Ok(Err(error)) => {
+                    log::debug!(
+                        "Relay UDP refresh dial to {} failed before start using {} address(es): {} ({})",
+                        relay_peer,
+                        address_count,
+                        address_summary,
+                        error
+                    );
+                }
+                Err(error) => {
+                    log::debug!(
+                        "Failed to invoke relay UDP refresh dial to {} using {} address(es): {} ({})",
+                        relay_peer,
+                        address_count,
+                        address_summary,
+                        error
+                    );
+                }
+            }
+        }
+
+        if skipped_unhealthy_tcp_reservation > 0 {
+            log::debug!(
+                "Skipped {} relay UDP refresh target peer(s) because their TCP relay reservation was not healthy",
+                skipped_unhealthy_tcp_reservation
+            );
+        }
+
+        refresh_started
     }
 
     pub(super) async fn trigger_external_address_refresh(
@@ -435,7 +648,7 @@ pub(super) async fn relay_management_loop(swarm_control: SwarmControl) {
 
         let mut endpoint_health = Vec::with_capacity(swarm_control.relay_peers.len());
 
-        for relay_endpoint in swarm_control.relay_peers.iter() {
+        for relay_endpoint in swarm_control.relay_peers.relay_endpoints() {
             let listener_registered =
                 match relay_listener_registered(&swarm_control, relay_endpoint).await {
                     Ok(value) => value,
@@ -534,7 +747,7 @@ pub(super) fn handle_new_listen_addr(swarm_control: &SwarmControl, new_addr: Mul
         return;
     };
 
-    for relay_endpoint in swarm_control.relay_peers.iter() {
+    for relay_endpoint in swarm_control.relay_peers.relay_endpoints() {
         if relay_endpoint.transport_kind() != Some(transport_kind) {
             continue;
         }
@@ -589,7 +802,7 @@ fn record_matching_relay_listener_state(
 ) -> Vec<RelayEndpoint> {
     let matched_endpoints = swarm_control
         .relay_peers
-        .iter()
+        .relay_endpoints()
         .filter(|relay_endpoint| relay_endpoint.matches_listener(listener_addr))
         .cloned()
         .collect::<Vec<_>>();
@@ -644,12 +857,21 @@ fn relay_peer_has_healthy_sibling_endpoint(
         .any(|status| {
             status.relay_addr != *relay_endpoint.addr()
                 && status.relay_peer_id == Some(relay_peer_id)
+                && status.transport_kind == AddressTransportKind::Tcp
                 && status.listener_registered
                 && status.current_direct_connection_id.is_some()
         })
 }
 
 fn spawn_relay_listen_task(swarm_control: &SwarmControl, relay_endpoint: &RelayEndpoint) {
+    if relay_endpoint.transport_kind() != Some(RelayTransportKind::Tcp) {
+        log::debug!(
+            "Skipping relay listen task for non-TCP endpoint {}; UDP endpoints are observer-only",
+            relay_endpoint.addr()
+        );
+        return;
+    }
+
     let Some(_guard) = TaskGuard::try_acquire(relay_endpoint.task_flag().clone()) else {
         return;
     };
@@ -736,7 +958,7 @@ pub(super) fn record_relay_connection_established(
         return;
     }
 
-    for relay_endpoint in swarm_control.relay_peers.iter() {
+    for relay_endpoint in swarm_control.relay_peers.all_endpoints() {
         let Some(relay_peer_id) = relay_endpoint.peer_id() else {
             continue;
         };
@@ -754,6 +976,7 @@ pub(super) fn record_relay_connection_established(
                 connection_id,
                 remote_addr
             );
+            return;
         }
     }
 }
@@ -769,7 +992,7 @@ pub(super) fn record_relay_connection_closed(
         return;
     }
 
-    for relay_endpoint in swarm_control.relay_peers.iter() {
+    for relay_endpoint in swarm_control.relay_peers.all_endpoints() {
         let Some(relay_peer_id) = relay_endpoint.peer_id() else {
             continue;
         };
@@ -806,6 +1029,7 @@ pub(super) fn record_relay_connection_closed(
                     ),
                 );
             }
+            return;
         }
     }
 }
@@ -813,8 +1037,25 @@ pub(super) fn record_relay_connection_closed(
 async fn listen_relay_by_addr(swarm_control: SwarmControl, relay_addr: Multiaddr) -> Result<()> {
     let relay_peer =
         peer_id_from_addr(&relay_addr).ok_or_else(|| anyhow::anyhow!("Invalid relay address"))?;
+    let relay_endpoint = RelayEndpoint::new(relay_addr.clone());
+    if relay_endpoint.transport_kind() != Some(RelayTransportKind::Tcp) {
+        bail!("Only TCP relay endpoints may create relay reservations: {relay_addr}");
+    }
 
-    dial_relay_by_addr(&swarm_control, relay_peer, relay_addr.clone(), false).await?;
+    // Reserve through the configured TCP relay endpoint even if a UDP observer
+    // connection to the same peer already exists. This keeps the durable relay
+    // reservation and circuit traffic on TCP.
+    let tcp_connection_active = swarm_control
+        .state()
+        .relay_endpoint_has_active_direct_connection(&relay_addr);
+    dial_relay_by_addr(
+        &swarm_control,
+        relay_peer,
+        relay_addr.clone(),
+        !tcp_connection_active,
+    )
+    .await?;
+    close_observer_connections_for_relay_peer(&swarm_control, relay_peer).await;
 
     if let Err(error) = perform_relay_handshake(&swarm_control, relay_peer).await {
         log::warn!(
@@ -824,20 +1065,75 @@ async fn listen_relay_by_addr(swarm_control: SwarmControl, relay_addr: Multiaddr
             error
         );
         dial_relay_by_addr(&swarm_control, relay_peer, relay_addr.clone(), true).await?;
+        close_observer_connections_for_relay_peer(&swarm_control, relay_peer).await;
         perform_relay_handshake(&swarm_control, relay_peer).await?;
     }
 
-    if relay_listener_registered(&swarm_control, &RelayEndpoint::new(relay_addr.clone())).await? {
+    if relay_listener_registered(&swarm_control, &relay_endpoint).await? {
         log::debug!("Relay listener already active for {relay_addr}");
         return Ok(());
     };
 
+    close_observer_connections_for_relay_peer(&swarm_control, relay_peer).await;
     println!("Listening on relay address: {relay_addr:?}");
     swarm_control
         .invoke_swarm(move |swarm| swarm.listen_on(relay_addr.with(Protocol::P2pCircuit)))
         .await??;
 
     Ok(())
+}
+
+async fn close_observer_connections_for_relay_peer(
+    swarm_control: &SwarmControl,
+    relay_peer: PeerId,
+) {
+    // libp2p-relay tracks reservations by relay peer rather than by our
+    // configured endpoint role. Closing observer-only carrier connections before
+    // reservation work prevents a temporary UDP refresh dial from becoming the
+    // preferred relay carrier.
+    let observer_connection_ids = swarm_control
+        .state()
+        .list_relay_endpoint_statuses()
+        .into_iter()
+        .filter(|status| {
+            status.relay_peer_id == Some(relay_peer)
+                && status.transport_kind != AddressTransportKind::Tcp
+        })
+        .filter_map(|status| status.current_direct_connection_id)
+        .collect::<Vec<_>>();
+
+    if observer_connection_ids.is_empty() {
+        return;
+    }
+
+    for connection_id in &observer_connection_ids {
+        match swarm_control.close_connection(*connection_id).await {
+            Ok(true) => {
+                log::debug!(
+                    "Closing observer-only relay carrier connection {} for peer {} before TCP reservation",
+                    connection_id,
+                    relay_peer
+                );
+            }
+            Ok(false) => {
+                log::debug!(
+                    "Observer-only relay carrier connection {} for peer {} was already closing or absent",
+                    connection_id,
+                    relay_peer
+                );
+            }
+            Err(error) => {
+                log::debug!(
+                    "Failed to close observer-only relay carrier connection {} for peer {} before TCP reservation: {}",
+                    connection_id,
+                    relay_peer,
+                    error
+                );
+            }
+        }
+    }
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
 }
 
 async fn dial_relay_by_addr(
@@ -948,5 +1244,22 @@ fn transport_name(kind: Option<RelayTransportKind>) -> &'static str {
         Some(RelayTransportKind::Tcp) => "tcp",
         Some(RelayTransportKind::Udp) => "udp",
         None => "unknown",
+    }
+}
+
+fn summarize_multiaddrs(addrs: &[Multiaddr]) -> String {
+    const PREVIEW_LIMIT: usize = 3;
+
+    let preview = addrs
+        .iter()
+        .take(PREVIEW_LIMIT)
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    if addrs.len() > PREVIEW_LIMIT {
+        format!("{preview}, ... (+{} more)", addrs.len() - PREVIEW_LIMIT)
+    } else {
+        preview
     }
 }

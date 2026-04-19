@@ -2,9 +2,10 @@ use super::{
     SwarmAsyncCall, SwarmControl, TSwarm,
     governance::connection_governance_loop,
     relay::{
-        RefreshThrottle, RelayPeers, handle_expired_listen_addr, handle_listener_closed,
-        handle_new_listen_addr, handle_relay_behaviour_event, handle_relay_refresh_behaviour_event,
-        record_relay_connection_closed, record_relay_connection_established, relay_management_loop,
+        RefreshThrottle, RelayPeers, RelayTransportKind, handle_expired_listen_addr,
+        handle_listener_closed, handle_new_listen_addr, handle_relay_behaviour_event,
+        handle_relay_refresh_behaviour_event, record_relay_connection_closed,
+        record_relay_connection_established, relay_management_loop, relay_transport_kind,
     },
 };
 use crate::{
@@ -145,7 +146,13 @@ async fn handle_swarm_event(
         };
         match event {
             SwarmEvent::NewListenAddr { address, .. } => {
-                println!("[Swarm event] NewListenAddr {address:?}");
+                if is_observer_only_relay_listen_addr(&address) {
+                    log::debug!(
+                        "[Swarm event] Ignoring observer-only relay listen addr {address:?}"
+                    );
+                } else {
+                    println!("[Swarm event] NewListenAddr {address:?}");
+                }
                 handle_new_listen_addr(&swarm_control, address);
             }
             SwarmEvent::ExpiredListenAddr { address, .. } => {
@@ -256,6 +263,11 @@ async fn handle_swarm_event(
             _ => {}
         }
     }
+}
+
+fn is_observer_only_relay_listen_addr(address: &Multiaddr) -> bool {
+    super::relay::is_circuit_addr(address)
+        && relay_transport_kind(address) == Some(RelayTransportKind::Udp)
 }
 
 fn handle_mdns_behaviour_event(swarm_control: &SwarmControl, event: mdns::Event) {

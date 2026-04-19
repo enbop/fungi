@@ -242,6 +242,12 @@ impl State {
             .relay_endpoint_has_active_direct_connection(relay_addr)
     }
 
+    pub fn relay_peer_has_healthy_tcp_reservation(&self, relay_peer_id: PeerId) -> bool {
+        self.connectivity_state
+            .lock()
+            .relay_peer_has_healthy_tcp_reservation(relay_peer_id)
+    }
+
     pub fn record_external_address_candidate(
         &self,
         address: Multiaddr,

@@ -314,7 +314,9 @@ impl ConnectivityState {
         let now = SystemTime::now();
 
         for status in self.relay_endpoint_statuses.values_mut() {
-            if status.relay_peer_id == Some(relay_peer_id) {
+            if status.relay_peer_id == Some(relay_peer_id)
+                && status.transport_kind == AddressTransportKind::Tcp
+            {
                 status.current_direct_connection_id = direct_connections
                     .iter()
                     .find(|snapshot| snapshot.transport_kind == status.transport_kind)
@@ -385,6 +387,18 @@ impl ConnectivityState {
             .get(relay_addr)
             .and_then(|status| status.current_direct_connection_id)
             .is_some()
+    }
+
+    pub fn relay_peer_has_healthy_tcp_reservation(&self, relay_peer_id: PeerId) -> bool {
+        // UDP/QUIC relay endpoints are observer-only. A UDP refresh is allowed
+        // only when the same relay peer already has an active TCP reservation
+        // carrier and a registered relay listener.
+        self.relay_endpoint_statuses.values().any(|status| {
+            status.relay_peer_id == Some(relay_peer_id)
+                && status.transport_kind == AddressTransportKind::Tcp
+                && status.listener_registered
+                && status.current_direct_connection_id.is_some()
+        })
     }
 
     pub fn record_external_address_candidate(
@@ -816,5 +830,102 @@ mod tests {
             &relay_addr
         ));
         assert!(!state.relay_endpoint_has_active_direct_connection(&relay_addr));
+    }
+
+    #[test]
+    fn relay_peer_tcp_health_requires_tcp_listener_and_direct_connection() {
+        let relay_peer_id = PeerId::random();
+        let tcp_addr: Multiaddr = format!("/ip4/160.16.206.21/tcp/30001/p2p/{relay_peer_id}")
+            .parse()
+            .unwrap();
+        let udp_addr: Multiaddr =
+            format!("/ip4/160.16.206.21/udp/30001/quic-v1/p2p/{relay_peer_id}")
+                .parse()
+                .unwrap();
+        let mut state = ConnectivityState::default();
+        state.register_relay_endpoint(tcp_addr.clone());
+        state.register_relay_endpoint(udp_addr.clone());
+
+        state.record_relay_connection_established(
+            relay_peer_id,
+            ConnectionId::new_unchecked(7),
+            &udp_addr,
+        );
+        state.record_relay_listener_check(&udp_addr, true);
+        assert!(!state.relay_peer_has_healthy_tcp_reservation(relay_peer_id));
+
+        state.record_relay_connection_established(
+            relay_peer_id,
+            ConnectionId::new_unchecked(8),
+            &tcp_addr,
+        );
+        assert!(!state.relay_peer_has_healthy_tcp_reservation(relay_peer_id));
+
+        state.record_relay_listener_check(&tcp_addr, true);
+        assert!(state.relay_peer_has_healthy_tcp_reservation(relay_peer_id));
+
+        assert!(state.record_relay_connection_closed(
+            relay_peer_id,
+            ConnectionId::new_unchecked(8),
+            &tcp_addr
+        ));
+        assert!(!state.relay_peer_has_healthy_tcp_reservation(relay_peer_id));
+    }
+
+    #[test]
+    fn relay_reservation_accept_updates_only_tcp_endpoint() {
+        let relay_peer_id = PeerId::random();
+        let tcp_addr: Multiaddr = format!("/ip4/160.16.206.21/tcp/30001/p2p/{relay_peer_id}")
+            .parse()
+            .unwrap();
+        let udp_addr: Multiaddr =
+            format!("/ip4/160.16.206.21/udp/30001/quic-v1/p2p/{relay_peer_id}")
+                .parse()
+                .unwrap();
+        let mut state = ConnectivityState::default();
+        state.register_relay_endpoint(tcp_addr.clone());
+        state.register_relay_endpoint(udp_addr.clone());
+
+        let tcp_connection_id = ConnectionId::new_unchecked(8);
+        let udp_connection_id = ConnectionId::new_unchecked(9);
+        let direct_connections = vec![
+            RelayDirectConnectionSnapshot {
+                transport_kind: AddressTransportKind::Tcp,
+                connection_id: tcp_connection_id,
+            },
+            RelayDirectConnectionSnapshot {
+                transport_kind: AddressTransportKind::Udp,
+                connection_id: udp_connection_id,
+            },
+        ];
+
+        state.record_relay_reservation_accepted(
+            relay_peer_id,
+            RelayManagementAction::ReservationEstablished,
+            &direct_connections,
+        );
+
+        let statuses = state.list_relay_endpoint_statuses();
+        let tcp_status = statuses
+            .iter()
+            .find(|status| status.relay_addr == tcp_addr)
+            .unwrap();
+        let udp_status = statuses
+            .iter()
+            .find(|status| status.relay_addr == udp_addr)
+            .unwrap();
+
+        assert_eq!(
+            tcp_status.last_management_action,
+            Some(RelayManagementAction::ReservationEstablished)
+        );
+        assert_eq!(
+            tcp_status.current_direct_connection_id,
+            Some(tcp_connection_id)
+        );
+        assert!(tcp_status.last_reservation_established_at.is_some());
+        assert_eq!(udp_status.last_management_action, None);
+        assert_eq!(udp_status.current_direct_connection_id, None);
+        assert!(udp_status.last_reservation_established_at.is_none());
     }
 }
