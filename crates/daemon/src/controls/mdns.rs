@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::Result;
 use fungi_config::address_book::PeerInfo;
+use fungi_swarm::{PeerAddressSource, State};
 use libp2p::PeerId;
 use mdns_sd::{ResolvedService, ServiceDaemon, ServiceEvent, ServiceInfo};
 use parking_lot::Mutex;
@@ -29,7 +30,7 @@ impl MdnsControl {
         }
     }
 
-    pub fn start(&self, peer_info: PeerInfo) -> Result<()> {
+    pub fn start(&self, peer_info: PeerInfo, state: State) -> Result<()> {
         self.stop();
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel();
@@ -39,7 +40,7 @@ impl MdnsControl {
         let task_handle = Arc::clone(&self.task);
 
         let handle = std::thread::spawn(move || {
-            if let Err(e) = Self::run_mdns_service(peer_info, local_devices, shutdown_rx) {
+            if let Err(e) = Self::run_mdns_service(peer_info, state, local_devices, shutdown_rx) {
                 log::error!("mDNS service error: {}", e);
             }
         });
@@ -81,6 +82,7 @@ impl MdnsControl {
 
     fn run_mdns_service(
         device_info: PeerInfo,
+        state: State,
         local_devices: Arc<Mutex<HashMap<PeerId, PeerInfo>>>,
         shutdown_rx: mpsc::Receiver<()>,
     ) -> Result<()> {
@@ -100,13 +102,16 @@ impl MdnsControl {
         if let Some(host_name) = device_info.hostname.as_ref() {
             properties.push(("hostname", host_name.to_string()));
         }
+        if !device_info.multiaddrs.is_empty() {
+            properties.push(("multiaddrs", device_info.multiaddrs.join(",")));
+        }
 
         let service_info = ServiceInfo::new(
             service_type,
             &instance_name,
             &format!("{}.local.", instance_name),
             device_info.private_ips.first().cloned().unwrap_or_default(),
-            port,
+            advertised_tcp_port(&device_info).unwrap_or(port),
             &properties[..],
         )?;
 
@@ -137,6 +142,7 @@ impl MdnsControl {
                             && remote_device.peer_id != current_peer_id
                         {
                             log::info!("Discovered device: {:?}", remote_device.peer_id);
+                            hydrate_mdns_peer_addresses(&state, &remote_device);
                             local_devices
                                 .lock()
                                 .insert(remote_device.peer_id.to_owned(), remote_device);
@@ -188,6 +194,57 @@ impl MdnsControl {
         {
             local_devices.lock().remove(&peer_id);
         }
+    }
+}
+
+fn advertised_tcp_port(peer_info: &PeerInfo) -> Option<u16> {
+    peer_info.multiaddrs.iter().find_map(|addr| {
+        addr.parse::<libp2p::Multiaddr>()
+            .ok()?
+            .iter()
+            .find_map(|protocol| match protocol {
+                libp2p::multiaddr::Protocol::Tcp(port) => Some(port),
+                _ => None,
+            })
+    })
+}
+
+fn hydrate_mdns_peer_addresses(state: &State, peer_info: &PeerInfo) {
+    let mut loaded = 0usize;
+    let mut ignored = 0usize;
+
+    for address in &peer_info.multiaddrs {
+        match address.parse() {
+            Ok(multiaddr) => {
+                match state.record_peer_address(
+                    peer_info.peer_id,
+                    multiaddr,
+                    PeerAddressSource::Mdns,
+                ) {
+                    fungi_swarm::PeerAddressObservation::New
+                    | fungi_swarm::PeerAddressObservation::Refreshed => loaded += 1,
+                    fungi_swarm::PeerAddressObservation::Ignored => ignored += 1,
+                }
+            }
+            Err(error) => {
+                ignored += 1;
+                log::debug!(
+                    "Ignoring invalid mDNS multiaddr for peer {}: {} ({})",
+                    peer_info.peer_id,
+                    address,
+                    error
+                );
+            }
+        }
+    }
+
+    if loaded > 0 || ignored > 0 {
+        log::debug!(
+            "mDNS hydrated peer address state for {}: loaded={} ignored={}",
+            peer_info.peer_id,
+            loaded,
+            ignored
+        );
     }
 }
 

@@ -308,7 +308,6 @@ pub async fn spawn_connected_pair() -> Result<(TestDaemon, TestDaemon)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fungi_swarm::ConnectionSelectionStrategy;
     use futures::StreamExt;
     use libp2p::{StreamProtocol, futures::AsyncWriteExt, swarm::dial_opts::DialOpts};
 
@@ -463,12 +462,7 @@ mod tests {
 
         let open_result = attacker
             .swarm_control()
-            .open_stream_with_strategy(
-                victim.peer_id(),
-                REVERSE_STREAM_TEST_PROTOCOL,
-                ConnectionSelectionStrategy::PreferDirect,
-                Duration::ZERO,
-            )
+            .open_stream(victim.peer_id(), REVERSE_STREAM_TEST_PROTOCOL)
             .await;
 
         match open_result {

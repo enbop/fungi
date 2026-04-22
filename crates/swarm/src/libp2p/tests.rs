@@ -1,8 +1,11 @@
-use super::{ConnectionSelectionStrategy, SelectedConnection, SwarmControl};
-use crate::{ConnectionDirection, ConnectionGovernanceInfo, ConnectionGovernanceState};
-use libp2p::{Multiaddr, swarm::ConnectionId};
+use super::{ConnectionRecordSliceExt, ConnectionSelectionStrategy, SwarmControl};
+use crate::{
+    ConnectionDirection, ConnectionGovernanceInfo, ConnectionGovernanceState, ConnectionPingInfo,
+    ConnectionRecord, State,
+};
+use libp2p::{Multiaddr, PeerId, StreamProtocol, identity::Keypair, swarm::ConnectionId};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     time::{Duration, SystemTime},
 };
 
@@ -143,37 +146,30 @@ fn relay_retry_delay_switches_from_fast_backoff_to_persistent_cap() {
 fn selected_connection(
     connection_id: usize,
     remote_addr: &str,
-    is_relay: bool,
     last_rtt_ms: Option<u64>,
-) -> SelectedConnection {
-    SelectedConnection {
+) -> ConnectionRecord {
+    ConnectionRecord {
+        peer_id: test_peer_id(),
         connection_id: ConnectionId::new_unchecked(connection_id),
         direction: ConnectionDirection::Outbound,
         remote_addr: remote_addr.parse::<Multiaddr>().unwrap(),
-        is_relay,
-        last_rtt: last_rtt_ms.map(Duration::from_millis),
-        active_stream_count: 0,
-        established_at: None,
+        established_at: SystemTime::UNIX_EPOCH,
+        ping_info: ConnectionPingInfo {
+            last_rtt: last_rtt_ms.map(Duration::from_millis),
+            last_rtt_at: None,
+        },
+        governance: ConnectionGovernanceInfo::default(),
     }
 }
 
 #[test]
-fn sort_selected_connections_prefers_active_streams_before_rtt() {
+fn sort_selected_connections_prefers_stable_order_when_relay_status_matches() {
     let mut selected = vec![
-        SelectedConnection {
-            active_stream_count: 0,
-            ..selected_connection(8, "/ip4/1.1.1.1/tcp/4002", false, Some(10))
-        },
-        SelectedConnection {
-            active_stream_count: 2,
-            ..selected_connection(6, "/ip4/1.1.1.1/tcp/4001", false, Some(30))
-        },
+        selected_connection(8, "/ip4/1.1.1.1/tcp/4002", Some(10)),
+        selected_connection(6, "/ip4/1.1.1.1/tcp/4001", Some(30)),
     ];
 
-    SwarmControl::sort_selected_connections(
-        ConnectionSelectionStrategy::PreferDirect,
-        &mut selected,
-    );
+    selected.sort_by_strategy(ConnectionSelectionStrategy::PreferDirect);
 
     assert_eq!(selected[0].connection_id, ConnectionId::new_unchecked(6));
 }
@@ -183,20 +179,17 @@ fn sort_selected_connections_prefers_earlier_established_when_other_signals_matc
     let earlier = SystemTime::UNIX_EPOCH + Duration::from_secs(10);
     let later = SystemTime::UNIX_EPOCH + Duration::from_secs(20);
     let mut selected = vec![
-        SelectedConnection {
-            established_at: Some(later),
-            ..selected_connection(8, "/ip4/1.1.1.1/tcp/4002", false, Some(30))
+        ConnectionRecord {
+            established_at: later,
+            ..selected_connection(8, "/ip4/1.1.1.1/tcp/4002", Some(30))
         },
-        SelectedConnection {
-            established_at: Some(earlier),
-            ..selected_connection(6, "/ip4/1.1.1.1/tcp/4001", false, Some(30))
+        ConnectionRecord {
+            established_at: earlier,
+            ..selected_connection(6, "/ip4/1.1.1.1/tcp/4001", Some(30))
         },
     ];
 
-    SwarmControl::sort_selected_connections(
-        ConnectionSelectionStrategy::PreferDirect,
-        &mut selected,
-    );
+    selected.sort_by_strategy(ConnectionSelectionStrategy::PreferDirect);
 
     assert_eq!(selected[0].connection_id, ConnectionId::new_unchecked(6));
 }
@@ -204,13 +197,9 @@ fn sort_selected_connections_prefers_earlier_established_when_other_signals_matc
 #[test]
 fn closure_plan_prefers_direct_and_closes_idle_relay() {
     let mut selected = vec![
-        selected_connection(9, "/ip4/1.1.1.1/tcp/4001/p2p-circuit", true, Some(20)),
-        selected_connection(4, "/ip4/1.1.1.1/tcp/4001", false, Some(50)),
+        selected_connection(9, "/ip4/1.1.1.1/tcp/4001/p2p-circuit", Some(20)),
+        selected_connection(4, "/ip4/1.1.1.1/tcp/4001", Some(50)),
     ];
-    let active_stream_counts = HashMap::from([
-        (ConnectionId::new_unchecked(9), 0usize),
-        (ConnectionId::new_unchecked(4), 0usize),
-    ]);
     let governance_info = HashMap::from([
         (
             ConnectionId::new_unchecked(9),
@@ -230,13 +219,9 @@ fn closure_plan_prefers_direct_and_closes_idle_relay() {
         ),
     ]);
 
-    let plan = SwarmControl::build_connection_closure_plan(
-        ConnectionSelectionStrategy::PreferDirect,
-        &mut selected,
-        &active_stream_counts,
-        &governance_info,
-        SystemTime::now(),
-    );
+    selected.sort_by_strategy(ConnectionSelectionStrategy::PreferDirect);
+    let state = State::new(HashSet::new());
+    let plan = SwarmControl::build_connection_closure_plan(&state, &selected, &governance_info);
 
     assert_eq!(plan.len(), 1);
     assert_eq!(plan[0].connection_id, ConnectionId::new_unchecked(9));
@@ -250,13 +235,9 @@ fn closure_plan_prefers_direct_and_closes_idle_relay() {
 #[test]
 fn closure_plan_keeps_deprecated_connection_when_stream_is_active() {
     let mut selected = vec![
-        selected_connection(8, "/ip4/1.1.1.1/tcp/4002", false, Some(90)),
-        selected_connection(6, "/ip4/1.1.1.1/tcp/4001", false, Some(15)),
+        selected_connection(8, "/ip4/1.1.1.1/tcp/4002", Some(90)),
+        selected_connection(6, "/ip4/1.1.1.1/tcp/4001", Some(15)),
     ];
-    let active_stream_counts = HashMap::from([
-        (ConnectionId::new_unchecked(8), 2usize),
-        (ConnectionId::new_unchecked(6), 0usize),
-    ]);
     let governance_info = HashMap::from([
         (
             ConnectionId::new_unchecked(8),
@@ -276,16 +257,21 @@ fn closure_plan_keeps_deprecated_connection_when_stream_is_active() {
         ),
     ]);
 
-    let plan = SwarmControl::build_connection_closure_plan(
-        ConnectionSelectionStrategy::PreferDirect,
-        &mut selected,
-        &active_stream_counts,
-        &governance_info,
-        SystemTime::now(),
+    selected.sort_by_strategy(ConnectionSelectionStrategy::PreferDirect);
+    let state = State::new(HashSet::new());
+    let _active_stream = state.track_outbound_stream_opened(
+        test_peer_id(),
+        ConnectionId::new_unchecked(8),
+        StreamProtocol::new("/test/protocol"),
     );
+    let plan = SwarmControl::build_connection_closure_plan(&state, &selected, &governance_info);
 
     assert_eq!(plan.len(), 1);
     assert_eq!(plan[0].action, GovernanceAction::MarkDeprecated);
+}
+
+fn test_peer_id() -> PeerId {
+    Keypair::generate_ed25519().public().to_peer_id()
 }
 
 #[test]
@@ -297,7 +283,7 @@ fn next_governance_action_respects_grace_period_before_closing() {
         changed_at: Some(now),
     };
 
-    let action = next_governance_action(Some(&current), "lower-priority-than-connection-4", 0, now);
+    let action = next_governance_action(Some(&current), "lower-priority-than-connection-4", 0);
 
     assert_eq!(action, None);
 }
@@ -317,16 +303,11 @@ fn next_governance_action_transitions_to_closing_and_then_close() {
     };
 
     assert_eq!(
-        next_governance_action(
-            Some(&deprecated),
-            "lower-priority-than-connection-4",
-            0,
-            now,
-        ),
+        next_governance_action(Some(&deprecated), "lower-priority-than-connection-4", 0,),
         Some(GovernanceAction::MarkClosing)
     );
     assert_eq!(
-        next_governance_action(Some(&closing), "lower-priority-than-connection-4", 0, now),
+        next_governance_action(Some(&closing), "lower-priority-than-connection-4", 0),
         Some(GovernanceAction::CloseNow)
     );
 }

@@ -11,7 +11,7 @@ use std::{
 use anyhow::bail;
 use dav_server::{DavHandler, fakels::FakeLs};
 use fungi_config::file_transfer::FileTransferClient as FileTransferClientConfig;
-use fungi_swarm::{ConnectionSelectionStrategy, StreamObservationHandle, SwarmControl};
+use fungi_swarm::{StreamObservationHandle, SwarmControl};
 use fungi_util::protocols::FUNGI_FILE_TRANSFER_PROTOCOL;
 use hyper::{server::conn::http1, service::service_fn};
 use hyper_util::rt::TokioIo;
@@ -89,7 +89,6 @@ impl std::fmt::Debug for FileTransferClientsControl {
 
 impl FileTransferClientsControl {
     const DEFAULT_WRITE_BUFFER_SIZE: usize = 1024 * 1024; // 1 MB
-    const CONNECT_SNIFF_WAIT: Duration = Duration::from_secs(3);
 
     pub fn new(swarm_control: SwarmControl) -> Self {
         Self::new_with_buffer_size(swarm_control, Self::DEFAULT_WRITE_BUFFER_SIZE)
@@ -113,24 +112,14 @@ impl FileTransferClientsControl {
     ) -> anyhow::Result<Option<String>> {
         let (_stream, _stream_observation_handle, _connection_id) = self
             .swarm_control
-            .open_stream_with_strategy(
-                peer_id,
-                FUNGI_FILE_TRANSFER_PROTOCOL,
-                ConnectionSelectionStrategy::PreferDirect,
-                Self::CONNECT_SNIFF_WAIT,
-            )
+            .open_stream(peer_id, FUNGI_FILE_TRANSFER_PROTOCOL)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to connect to peer {peer_id}: {e}"))?;
 
-        let host_name = self
-            .swarm_control
-            .state()
-            .peer_connections()
-            .lock()
-            .get(&peer_id)
-            .expect("Peer should be connected.")
-            .host_name();
-        Ok(host_name)
+        // TODO(connection-record-refactor): restore remote host-name propagation if the
+        // project decides to keep peer-handshake metadata in state again.
+        let _ = peer_id;
+        Ok(None)
     }
 
     pub fn has_client(&self, peer_id: &PeerId) -> bool {
@@ -168,12 +157,7 @@ impl FileTransferClientsControl {
     ) -> anyhow::Result<(FileTransferRpcClient, StreamObservationHandle)> {
         let (stream, stream_observation_handle, _connection_id) = self
             .swarm_control
-            .open_stream_with_strategy(
-                peer_id,
-                FUNGI_FILE_TRANSFER_PROTOCOL,
-                ConnectionSelectionStrategy::PreferDirect,
-                Self::CONNECT_SNIFF_WAIT,
-            )
+            .open_stream(peer_id, FUNGI_FILE_TRANSFER_PROTOCOL)
             .await
             .map_err(|e| {
                 anyhow::anyhow!("Failed to open file-transfer stream to peer {peer_id}: {e}")

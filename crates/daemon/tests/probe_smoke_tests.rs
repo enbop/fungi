@@ -14,7 +14,12 @@ async fn wait_for_outbound_connection(
     let deadline = Instant::now() + timeout;
     loop {
         if let Some(connections) = daemon.daemon().get_peer_connections(peer_id)
-            && let Some(connection) = connections.outbound().first()
+            && let Some(connection) = connections.iter().find(|connection| {
+                matches!(
+                    connection.direction,
+                    fungi_swarm::ConnectionDirection::Outbound
+                )
+            })
         {
             return Ok(connection.connection_id());
         }
@@ -57,7 +62,8 @@ async fn active_probe_ping_returns_rtt_and_updates_connection_state() -> Result<
 
     let rtt = client
         .daemon()
-        .ping_peer_connection(server.peer_id(), connection_id, Duration::from_secs(2))
+        .swarm_control()
+        .ping_connection(connection_id, Duration::from_secs(2))
         .await?;
 
     assert!(

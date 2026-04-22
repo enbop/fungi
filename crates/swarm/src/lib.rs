@@ -1,5 +1,4 @@
 mod libp2p;
-mod peer_handshake;
 mod ping;
 mod state;
 

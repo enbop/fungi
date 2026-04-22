@@ -173,12 +173,23 @@ impl TryFrom<&mdns_sd::TxtProperties> for PeerInfo {
             .get("private_ips")
             .map(|s| s.val_str().split(',').map(String::from).collect())
             .unwrap_or_default();
+        // TODO duplicate with libp2p-mdns?
+        let multiaddrs = properties
+            .get("multiaddrs")
+            .map(|s| {
+                s.val_str()
+                    .split(',')
+                    .filter(|value| !value.is_empty())
+                    .map(String::from)
+                    .collect()
+            })
+            .unwrap_or_default();
 
         Ok(PeerInfo {
             peer_id,
             alias: None,
             hostname,
-            multiaddrs: vec![],
+            multiaddrs,
             os,
             public_ip,
             private_ips,

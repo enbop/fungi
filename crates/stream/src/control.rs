@@ -43,7 +43,7 @@ impl Control {
         Registry::lock(&self.registry).register_listener(protocol, allow_list)
     }
 
-    pub async fn open_stream(
+    pub async fn open_stream_by_id(
         &mut self,
         connection_id: ConnectionId,
         protocol: StreamProtocol,

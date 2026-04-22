@@ -16,7 +16,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use fungi_config::RelayAddressSource;
 use fungi_daemon_grpc::fungi_daemon_server::FungiDaemon;
 use fungi_daemon_grpc::*;
+use fungi_swarm::ConnectionDirection;
 use libp2p_identity::PeerId;
+use libp2p_swarm::StreamProtocol;
 use multiaddr::Multiaddr;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
@@ -840,8 +842,8 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             )))
             .await?;
 
-            match daemon.probe_peer_once(peer_id, per_ping_timeout).await {
-                Ok((_rtt, _connection_id)) => {
+            match daemon.swarm_control().connect(peer_id).await {
+                Ok(connections) if !connections.is_empty() => {
                     tx.send(Ok(ping_event(
                         &peer_id_str,
                         tick_seq,
@@ -849,6 +851,13 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                         ping_peer_event::Event::Connected(PingPeerConnected {}),
                     )))
                     .await?;
+                }
+                Ok(_) => {
+                    tx.send(Ok(PingPeerError::reason(
+                        "connect attempt completed but no connections are available",
+                    )
+                    .event(&peer_id_str, tick_seq, now_unix_ms())))
+                        .await?;
                 }
                 Err(e) => {
                     tx.send(Ok(PingPeerError::reason(e.to_string()).event(
@@ -876,7 +885,10 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                     continue;
                 };
 
-                if peer_connections.outbound().is_empty() {
+                if !peer_connections
+                    .iter()
+                    .any(|conn| matches!(conn.direction, ConnectionDirection::Outbound))
+                {
                     tx.send(Ok(ping_event(
                         &peer_id_str,
                         tick_seq,
@@ -889,17 +901,20 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
                 let mut ping_set = JoinSet::new();
                 let mut seen_addrs = HashSet::new();
-                for conn in peer_connections.outbound().iter() {
+                for conn in peer_connections
+                    .iter()
+                    .filter(|conn| matches!(conn.direction, ConnectionDirection::Outbound))
+                {
                     let connection_id = conn.connection_id();
                     let remote_addr = conn.multiaddr().to_string();
                     if !seen_addrs.insert(remote_addr.clone()) {
                         continue;
                     }
                     let daemon = daemon.clone();
-                    let peer_id = peer_id;
                     ping_set.spawn(async move {
                         let res = daemon
-                            .ping_peer_connection(peer_id, connection_id, per_ping_timeout)
+                            .swarm_control()
+                            .ping_connection(connection_id, per_ping_timeout)
                             .await;
                         (connection_id, "outbound".to_string(), remote_addr, res)
                     });
@@ -1019,7 +1034,9 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         };
 
         let mut streams = if let Some(protocol_name) = protocol_filter {
-            self.inner.list_active_streams_by_protocol(protocol_name)
+            let protocol = StreamProtocol::try_from_owned(protocol_name)
+                .map_err(|e| Status::invalid_argument(format!("Invalid protocol_name: {}", e)))?;
+            self.inner.list_active_streams_by_protocol(protocol)
         } else {
             self.inner.list_active_streams()
         };

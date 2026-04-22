@@ -1,9 +1,9 @@
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{collections::HashSet, sync::Arc};
 
 use anyhow::Result;
 use fungi_config::FungiConfig;
 use fungi_stream::IncomingStreams;
-use fungi_swarm::{ConnectionSelectionStrategy, SwarmControl};
+use fungi_swarm::SwarmControl;
 use fungi_util::protocols::FUNGI_NODE_CAPABILITIES_PROTOCOL;
 use futures::StreamExt;
 use libp2p::{
@@ -23,8 +23,6 @@ pub struct NodeCapabilitiesControl {
 }
 
 impl NodeCapabilitiesControl {
-    const CONNECT_SNIFF_WAIT: Duration = Duration::from_secs(3);
-
     pub fn new(
         swarm_control: SwarmControl,
         config: Arc<Mutex<FungiConfig>>,
@@ -59,12 +57,7 @@ impl NodeCapabilitiesControl {
     pub async fn discover_peer_capabilities(&self, peer_id: PeerId) -> Result<NodeCapabilities> {
         let (mut stream, _handle, _connection_id) = self
             .swarm_control
-            .open_stream_with_strategy(
-                peer_id,
-                FUNGI_NODE_CAPABILITIES_PROTOCOL,
-                ConnectionSelectionStrategy::PreferDirect,
-                Self::CONNECT_SNIFF_WAIT,
-            )
+            .open_stream(peer_id, FUNGI_NODE_CAPABILITIES_PROTOCOL)
             .await
             .map_err(|e| {
                 anyhow::anyhow!("Failed to open node-capabilities stream to peer {peer_id}: {e}")

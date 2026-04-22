@@ -13,6 +13,7 @@ use libp2p::Swarm;
 pub use control::{ConnectError, SwarmAsyncCall, SwarmControl};
 pub use relay::{get_default_relay_addrs, peer_addr_with_relay};
 pub use runtime::FungiSwarm;
-pub use types::{ConnectionSelectionStrategy, SelectedConnection};
+pub(crate) use types::ConnectionRecordSliceExt;
+pub use types::ConnectionSelectionStrategy;
 
 pub type TSwarm = Swarm<FungiBehaviours>;

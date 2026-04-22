@@ -137,7 +137,6 @@ pub(super) struct RelayPeers {
     relay_endpoints: Arc<Vec<RelayEndpoint>>,
     observer_endpoints: Arc<Vec<RelayEndpoint>>,
     all_endpoints: Arc<Vec<RelayEndpoint>>,
-    tcp_addresses_by_peer: Arc<HashMap<PeerId, Vec<Multiaddr>>>,
     tcp_peer_ids: Arc<Vec<PeerId>>,
 }
 
@@ -176,7 +175,6 @@ impl RelayPeers {
             .filter(|endpoint| endpoint.transport_kind() == Some(RelayTransportKind::Udp))
             .cloned()
             .collect::<Vec<_>>();
-        let mut tcp_addresses_by_peer = HashMap::<PeerId, Vec<Multiaddr>>::new();
         let mut tcp_peer_ids = Vec::new();
 
         for relay_endpoint in &relay_endpoints {
@@ -184,18 +182,15 @@ impl RelayPeers {
                 continue;
             };
 
-            let entry = tcp_addresses_by_peer.entry(peer_id).or_insert_with(|| {
+            if !tcp_peer_ids.contains(&peer_id) {
                 tcp_peer_ids.push(peer_id);
-                Vec::new()
-            });
-            entry.push(relay_endpoint.addr().clone());
+            }
         }
 
         Self {
             relay_endpoints: Arc::new(relay_endpoints),
             observer_endpoints: Arc::new(observer_endpoints),
             all_endpoints: Arc::new(all_endpoints),
-            tcp_addresses_by_peer: Arc::new(tcp_addresses_by_peer),
             tcp_peer_ids: Arc::new(tcp_peer_ids),
         }
     }
@@ -224,14 +219,6 @@ impl RelayPeers {
 
     pub(super) fn peer_ids(&self) -> &[PeerId] {
         self.tcp_peer_ids.as_slice()
-    }
-
-    pub(super) fn addresses_for_peer(&self, peer_id: PeerId) -> Option<Vec<Multiaddr>> {
-        self.tcp_addresses_by_peer.get(&peer_id).cloned()
-    }
-
-    pub(super) fn is_relay_peer(&self, peer_id: PeerId) -> bool {
-        self.tcp_addresses_by_peer.contains_key(&peer_id)
     }
 
     pub(super) fn circuit_addresses_for_target(&self, target_peer: PeerId) -> Vec<Multiaddr> {
@@ -342,6 +329,7 @@ pub(super) fn is_circuit_addr(addr: &Multiaddr) -> bool {
 }
 
 impl SwarmControl {
+    // TODO add throttling for each peer id
     async fn refresh_external_addresses_via_relays(&self, preferred_relay: Option<PeerId>) -> bool {
         let plan = self.relay_peers.udp_refresh_plan(preferred_relay);
         let target_addr_count = plan

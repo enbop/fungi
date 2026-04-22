@@ -8,15 +8,6 @@ pub(super) enum DialCandidateKind {
     DirectUdp,
 }
 
-impl DialCandidateKind {
-    fn as_str(&self) -> &'static str {
-        match self {
-            DialCandidateKind::DirectTcp => "direct-tcp",
-            DialCandidateKind::DirectUdp => "direct-udp",
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub(super) struct DialCandidate {
     pub(super) addr: Multiaddr,
@@ -78,39 +69,6 @@ impl DialPlan {
             .iter()
             .map(|candidate| candidate.addr.clone())
             .collect()
-    }
-
-    pub(super) fn using_stale_direct_addresses(&self) -> bool {
-        self.direct_candidates.is_empty() && !self.stale_direct_candidates.is_empty()
-    }
-
-    pub(super) fn direct_summary(&self) -> String {
-        let candidates = if self.direct_candidates.is_empty() {
-            &self.stale_direct_candidates
-        } else {
-            &self.direct_candidates
-        };
-
-        if candidates.is_empty() {
-            return format!(
-                "none (skipped_expired={}, skipped_non_direct={})",
-                self.skipped_expired, self.skipped_non_direct
-            );
-        }
-
-        candidates
-            .iter()
-            .map(|candidate| {
-                format!(
-                    "{} source={} freshness={} addr={}",
-                    candidate.kind.as_str(),
-                    candidate.source.as_str(),
-                    candidate.freshness.as_str(),
-                    candidate.addr
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("; ")
     }
 }
 
@@ -237,7 +195,8 @@ mod tests {
             skipped_non_direct: 0,
         };
 
-        assert!(plan.using_stale_direct_addresses());
+        assert!(plan.direct_candidates.is_empty());
+        assert_eq!(plan.stale_direct_candidates.len(), 1);
         assert_eq!(plan.direct_addresses(), vec![stale_addr]);
     }
 }

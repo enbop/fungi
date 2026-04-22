@@ -162,8 +162,9 @@ impl FungiDaemon {
         )
         .await?;
         let mdns_control = MdnsControl::new();
-        let peer_info = PeerInfo::this_device(swarm_control.local_peer_id(), config.get_hostname());
-        mdns_control.start(peer_info)?;
+        // TODO duplicate with libp2p-mdns?
+        let peer_info = mdns_peer_info(&config, swarm_control.local_peer_id());
+        mdns_control.start(peer_info, state.clone())?;
 
         let fts_control = FileTransferServiceControl::new(
             swarm_control.clone(),
@@ -547,6 +548,29 @@ fn hydrate_address_book_peer_addresses(state: &State, address_book_config: &Addr
             ignored
         );
     }
+}
+
+fn mdns_peer_info(config: &FungiConfig, peer_id: libp2p::PeerId) -> PeerInfo {
+    let mut peer_info = PeerInfo::this_device(peer_id, config.get_hostname());
+
+    for ip in &peer_info.private_ips {
+        let ip_version = if ip.contains(':') { "6" } else { "4" };
+        if config.network.listen_tcp_port != 0 {
+            peer_info.multiaddrs.push(format!(
+                "/ip{ip_version}/{ip}/tcp/{}/p2p/{peer_id}",
+                config.network.listen_tcp_port
+            ));
+        }
+
+        if config.network.listen_udp_port != 0 {
+            peer_info.multiaddrs.push(format!(
+                "/ip{ip_version}/{ip}/udp/{}/quic-v1/p2p/{peer_id}",
+                config.network.listen_udp_port
+            ));
+        }
+    }
+
+    peer_info
 }
 
 fn spawn_peer_address_sync_task(

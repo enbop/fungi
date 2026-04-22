@@ -1,12 +1,13 @@
 use crate::{
     AddressTransportKind, ConnectivityState, ExternalAddressCandidateRecord, ExternalAddressSource,
     PeerAddressRecord, PeerAddressSource, RelayDirectConnectionSnapshot, RelayEndpointStatusRecord,
-    SwarmControl, peer_handshake::PeerHandshakePayload,
+    SwarmControl,
 };
 use async_result::Completer;
 use libp2p::{
-    Multiaddr, PeerId,
+    Multiaddr, PeerId, StreamProtocol,
     core::ConnectedPoint,
+    multiaddr::Protocol,
     swarm::{ConnectionId, DialError},
 };
 use parking_lot::{Mutex, RwLock};
@@ -20,29 +21,6 @@ use std::{
 };
 
 pub type DialCallback = Arc<Mutex<HashMap<PeerId, Completer<std::result::Result<(), DialError>>>>>;
-
-#[derive(Debug, Clone)]
-pub struct ConnectionInfo {
-    connection_id: ConnectionId,
-    multiaddr: Multiaddr,
-}
-
-impl ConnectionInfo {
-    pub fn new(connection_id: ConnectionId, multiaddr: Multiaddr) -> Self {
-        Self {
-            connection_id,
-            multiaddr,
-        }
-    }
-
-    pub fn connection_id(&self) -> ConnectionId {
-        self.connection_id
-    }
-
-    pub fn multiaddr(&self) -> &Multiaddr {
-        &self.multiaddr
-    }
-}
 
 #[derive(Debug, Clone, Copy)]
 pub enum ConnectionDirection {
@@ -82,48 +60,85 @@ pub struct ConnectionGovernanceInfo {
     pub changed_at: Option<SystemTime>,
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct PeerConnections {
-    handshake: Option<PeerHandshakePayload>,
-    inbound: Vec<ConnectionInfo>,
-    outbound: Vec<ConnectionInfo>,
+#[derive(Debug, Clone, Default)]
+pub struct ConnectionPingInfo {
+    pub last_rtt: Option<Duration>,
+    pub last_rtt_at: Option<SystemTime>,
 }
 
-impl PeerConnections {
-    pub fn update_handshake(&mut self, handshake: PeerHandshakePayload) {
-        self.handshake = Some(handshake);
+#[derive(Debug, Clone)]
+pub struct ConnectionRecord {
+    pub peer_id: PeerId,
+    pub connection_id: ConnectionId,
+    pub direction: ConnectionDirection,
+    pub remote_addr: Multiaddr,
+    pub established_at: SystemTime,
+    pub ping_info: ConnectionPingInfo,
+    pub governance: ConnectionGovernanceInfo,
+}
+
+impl ConnectionRecord {
+    pub fn connection_id(&self) -> ConnectionId {
+        self.connection_id
     }
 
-    pub fn host_name(&self) -> Option<String> {
-        self.handshake.as_ref().and_then(|h| h.host_name())
+    pub fn multiaddr(&self) -> &Multiaddr {
+        &self.remote_addr
     }
 
-    pub fn inbound(&self) -> &[ConnectionInfo] {
-        &self.inbound
+    pub fn is_relay(&self) -> bool {
+        self.remote_addr
+            .iter()
+            .any(|protocol| matches!(protocol, Protocol::P2pCircuit))
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct ConnectionIndexes {
+    pub by_id: HashMap<ConnectionId, ConnectionRecord>,
+    pub by_peer: HashMap<PeerId, Vec<ConnectionId>>,
+}
+
+impl ConnectionIndexes {
+    pub fn connection_len(&self) -> usize {
+        self.by_id.len()
     }
 
-    pub fn outbound(&self) -> &[ConnectionInfo] {
-        &self.outbound
+    pub fn peer_len(&self) -> usize {
+        self.by_peer.len()
     }
 
-    pub fn total_connections(&self) -> usize {
-        self.inbound.len() + self.outbound.len()
+    pub fn connection_len_for_peer(&self, peer_id: &PeerId) -> usize {
+        self.by_peer.get(peer_id).map_or(0, Vec::len)
     }
 
-    pub(crate) fn add_connection(&mut self, direction: ConnectionDirection, info: ConnectionInfo) {
-        match direction {
-            ConnectionDirection::Inbound => self.inbound.push(info),
-            ConnectionDirection::Outbound => self.outbound.push(info),
+    fn insert(&mut self, record: ConnectionRecord) {
+        let peer_id = record.peer_id;
+        let connection_id = record.connection_id;
+        self.by_id.insert(connection_id, record);
+        self.by_peer.entry(peer_id).or_default().push(connection_id);
+    }
+
+    fn remove(&mut self, connection_id: ConnectionId) -> Option<ConnectionRecord> {
+        let record = self.by_id.remove(&connection_id)?;
+
+        if let Some(connection_ids) = self.by_peer.get_mut(&record.peer_id) {
+            connection_ids.retain(|id| *id != connection_id);
+            if connection_ids.is_empty() {
+                self.by_peer.remove(&record.peer_id);
+            }
         }
+
+        Some(record)
     }
 
-    pub(crate) fn remove_connection(&mut self, connection_id: ConnectionId) -> bool {
-        let before = self.total_connections();
-        self.inbound
-            .retain(|info| info.connection_id() != connection_id);
-        self.outbound
-            .retain(|info| info.connection_id() != connection_id);
-        self.total_connections() != before
+    fn records_for_peer(&self, peer_id: &PeerId) -> Vec<ConnectionRecord> {
+        self.by_peer
+            .get(peer_id)
+            .into_iter()
+            .flat_map(|connection_ids| connection_ids.iter())
+            .filter_map(|connection_id| self.by_id.get(connection_id).cloned())
+            .collect()
     }
 }
 
@@ -132,8 +147,7 @@ impl PeerConnections {
 #[derive(Default, Clone)]
 pub struct State {
     dial_callback: DialCallback,
-    peer_connections: Arc<Mutex<HashMap<PeerId, PeerConnections>>>,
-    connection_id_map: Arc<Mutex<HashMap<ConnectionId, ConnectionEntry>>>,
+    connections: Arc<Mutex<ConnectionIndexes>>,
     incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
     next_stream_id: Arc<AtomicU64>,
     stream_state: Arc<Mutex<StreamObservationState>>,
@@ -144,8 +158,7 @@ impl State {
     pub fn new(incoming_allowed_peers: HashSet<PeerId>) -> Self {
         Self {
             dial_callback: Arc::new(Mutex::new(HashMap::new())),
-            peer_connections: Arc::new(Mutex::new(HashMap::new())),
-            connection_id_map: Arc::new(Mutex::new(HashMap::new())),
+            connections: Arc::new(Mutex::new(ConnectionIndexes::default())),
             incoming_allowed_peers: Arc::new(RwLock::new(incoming_allowed_peers)),
             next_stream_id: Arc::new(AtomicU64::new(0)),
             stream_state: Arc::new(Mutex::new(StreamObservationState::default())),
@@ -155,14 +168,6 @@ impl State {
 
     pub fn dial_callback(&self) -> DialCallback {
         self.dial_callback.clone()
-    }
-
-    pub fn peer_connections(&self) -> Arc<Mutex<HashMap<PeerId, PeerConnections>>> {
-        self.peer_connections.clone()
-    }
-
-    pub fn connection_id_map(&self) -> Arc<Mutex<HashMap<ConnectionId, ConnectionEntry>>> {
-        self.connection_id_map.clone()
     }
 
     pub fn incoming_allowed_peers(&self) -> Arc<RwLock<HashSet<PeerId>>> {
@@ -316,15 +321,17 @@ impl State {
     }
 
     pub fn peer_id_by_connection_id(&self, connection_id: &ConnectionId) -> Option<PeerId> {
-        self.connection_id_map
+        self.connections
             .lock()
+            .by_id
             .get(connection_id)
             .map(|entry| entry.peer_id)
     }
 
     pub fn connection_ping_info(&self, connection_id: &ConnectionId) -> Option<ConnectionPingInfo> {
-        self.connection_id_map
+        self.connections
             .lock()
+            .by_id
             .get(connection_id)
             .map(|entry| entry.ping_info.clone())
     }
@@ -333,8 +340,9 @@ impl State {
         &self,
         connection_id: &ConnectionId,
     ) -> Option<ConnectionGovernanceInfo> {
-        self.connection_id_map
+        self.connections
             .lock()
+            .by_id
             .get(connection_id)
             .map(|entry| entry.governance.clone())
     }
@@ -345,7 +353,7 @@ impl State {
         governance_state: ConnectionGovernanceState,
         reason: Option<String>,
     ) {
-        if let Some(entry) = self.connection_id_map.lock().get_mut(connection_id) {
+        if let Some(entry) = self.connections.lock().by_id.get_mut(connection_id) {
             let reason_changed = entry.governance.reason != reason;
             if entry.governance.state != governance_state || reason_changed {
                 entry.governance.changed_at = Some(SystemTime::now());
@@ -356,15 +364,16 @@ impl State {
     }
 
     pub fn update_connection_ping(&self, connection_id: &ConnectionId, rtt: Duration) {
-        if let Some(entry) = self.connection_id_map.lock().get_mut(connection_id) {
+        if let Some(entry) = self.connections.lock().by_id.get_mut(connection_id) {
             entry.ping_info.last_rtt = Some(rtt);
             entry.ping_info.last_rtt_at = Some(SystemTime::now());
         }
     }
 
     pub fn connection_established_at(&self, connection_id: &ConnectionId) -> Option<SystemTime> {
-        self.connection_id_map
+        self.connections
             .lock()
+            .by_id
             .get(connection_id)
             .map(|entry| entry.established_at)
     }
@@ -373,9 +382,9 @@ impl State {
         &self,
         peer_id: PeerId,
         connection_id: ConnectionId,
-        protocol_name: String,
+        protocol: StreamProtocol,
     ) -> StreamObservationHandle {
-        let stream_id = self.next_stream_id.fetch_add(1, Ordering::Relaxed) + 1;
+        let stream_id: u64 = self.next_stream_id.fetch_add(1, Ordering::Relaxed) + 1;
 
         let mut stream_state = self.stream_state.lock();
 
@@ -385,7 +394,7 @@ impl State {
                 stream_id,
                 peer_id,
                 connection_id,
-                protocol_name: protocol_name.clone(),
+                protocol: protocol.clone(),
                 opened_at: SystemTime::now(),
             },
         );
@@ -397,7 +406,7 @@ impl State {
             .insert(stream_id);
         stream_state
             .stream_ids_by_protocol
-            .entry(protocol_name)
+            .entry(protocol)
             .or_default()
             .insert(stream_id);
         stream_state
@@ -423,11 +432,14 @@ impl State {
             .collect()
     }
 
-    pub fn active_streams_by_protocol(&self, protocol_name: &str) -> Vec<ObservedStreamEntry> {
+    pub fn active_streams_by_protocol(
+        &self,
+        protocol: &StreamProtocol,
+    ) -> Vec<ObservedStreamEntry> {
         let stream_state = self.stream_state.lock();
         stream_state
             .stream_ids_by_protocol
-            .get(protocol_name)
+            .get(protocol)
             .into_iter()
             .flat_map(|ids| ids.iter())
             .filter_map(|stream_id| stream_state.streams_by_id.get(stream_id).cloned())
@@ -439,11 +451,11 @@ impl State {
         connection_id: &ConnectionId,
     ) -> Vec<(String, usize)> {
         let streams = self.active_streams_by_connection(connection_id);
-        let mut counts: HashMap<String, usize> = HashMap::new();
+        let mut counts = HashMap::new();
         for stream in streams {
-            *counts.entry(stream.protocol_name).or_insert(0) += 1;
+            *counts.entry(stream.protocol.to_string()).or_insert(0) += 1;
         }
-        let mut out: Vec<(String, usize)> = counts.into_iter().collect();
+        let mut out: Vec<(_, usize)> = counts.into_iter().collect();
         out.sort_by(|a, b| a.0.cmp(&b.0));
         out
     }
@@ -474,15 +486,10 @@ impl State {
             }
         }
 
-        if let Some(ids) = stream_state
-            .stream_ids_by_protocol
-            .get_mut(&entry.protocol_name)
-        {
+        if let Some(ids) = stream_state.stream_ids_by_protocol.get_mut(&entry.protocol) {
             ids.remove(&stream_id);
             if ids.is_empty() {
-                stream_state
-                    .stream_ids_by_protocol
-                    .remove(&entry.protocol_name);
+                stream_state.stream_ids_by_protocol.remove(&entry.protocol);
             }
         }
 
@@ -510,28 +517,29 @@ impl State {
         }
     }
 
-    pub fn get_peer_connections(&self, peer_id: &PeerId) -> Option<PeerConnections> {
-        self.peer_connections.lock().get(peer_id).cloned()
+    pub fn get_connections_by_peer_id(&self, peer_id: &PeerId) -> Vec<ConnectionRecord> {
+        self.connections.lock().records_for_peer(peer_id)
     }
 
-    pub fn has_active_connection(&self, peer_id: &PeerId) -> bool {
-        self.peer_connections
-            .lock()
-            .get(peer_id)
-            .is_some_and(|peers| peers.total_connections() > 0)
+    pub fn connected_peer_ids(&self) -> Vec<PeerId> {
+        self.connections.lock().by_peer.keys().copied().collect()
+    }
+
+    pub fn connection_len_for_peer(&self, peer_id: &PeerId) -> usize {
+        self.connections.lock().connection_len_for_peer(peer_id)
     }
 
     fn current_direct_relay_connections(
         &self,
         peer_id: PeerId,
     ) -> Vec<RelayDirectConnectionSnapshot> {
-        let Some(peer_connections) = self.peer_connections.lock().get(&peer_id).cloned() else {
-            return Vec::new();
-        };
-
         let mut direct_connections = Vec::new();
 
-        for connection in peer_connections.outbound() {
+        for connection in self.get_connections_by_peer_id(&peer_id) {
+            if !matches!(connection.direction, ConnectionDirection::Outbound) {
+                continue;
+            }
+
             let transport_kind = crate::address_transport_kind(connection.multiaddr());
             if matches!(
                 transport_kind,
@@ -544,19 +552,13 @@ impl State {
             {
                 direct_connections.push(RelayDirectConnectionSnapshot {
                     transport_kind,
-                    connection_id: connection.connection_id(),
+                    connection_id: connection.connection_id,
                 });
             }
         }
 
         direct_connections
     }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct ConnectionPingInfo {
-    pub last_rtt: Option<Duration>,
-    pub last_rtt_at: Option<SystemTime>,
 }
 
 pub type StreamId = u64;
@@ -566,15 +568,16 @@ pub struct ObservedStreamEntry {
     pub stream_id: StreamId,
     pub peer_id: PeerId,
     pub connection_id: ConnectionId,
-    pub protocol_name: String,
+    pub protocol: StreamProtocol,
     pub opened_at: SystemTime,
 }
 
+// TODO make it simple
 #[derive(Debug, Default)]
 struct StreamObservationState {
     streams_by_id: HashMap<StreamId, ObservedStreamEntry>,
     stream_ids_by_connection: HashMap<ConnectionId, HashSet<StreamId>>,
-    stream_ids_by_protocol: HashMap<String, HashSet<StreamId>>,
+    stream_ids_by_protocol: HashMap<StreamProtocol, HashSet<StreamId>>,
     stream_ids_by_peer: HashMap<PeerId, HashSet<StreamId>>,
 }
 
@@ -606,14 +609,6 @@ impl Drop for StreamObservationHandleInner {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ConnectionEntry {
-    pub peer_id: PeerId,
-    pub ping_info: ConnectionPingInfo,
-    pub governance: ConnectionGovernanceInfo,
-    pub established_at: SystemTime,
-}
-
 pub(crate) fn handle_connection_established(
     swarm_control: &SwarmControl,
     peer_id: PeerId,
@@ -633,24 +628,17 @@ pub(crate) fn handle_connection_established(
         ConnectedPoint::Dialer { .. } => ConnectionDirection::Outbound,
         ConnectedPoint::Listener { .. } => ConnectionDirection::Inbound,
     };
-    let connection_info = ConnectionInfo::new(connection_id, endpoint.get_remote_address().clone());
-
-    let state = swarm_control.state();
-    state.connection_id_map().lock().insert(
+    let record = ConnectionRecord {
+        peer_id,
         connection_id,
-        ConnectionEntry {
-            peer_id,
-            ping_info: ConnectionPingInfo::default(),
-            governance: ConnectionGovernanceInfo::default(),
-            established_at: SystemTime::now(),
-        },
-    );
-    state
-        .peer_connections()
-        .lock()
-        .entry(peer_id)
-        .or_default()
-        .add_connection(direction, connection_info);
+        direction,
+        remote_addr: endpoint.get_remote_address().clone(),
+        established_at: SystemTime::now(),
+        ping_info: ConnectionPingInfo::default(),
+        governance: ConnectionGovernanceInfo::default(),
+    };
+
+    swarm_control.state().connections.lock().insert(record);
 }
 
 pub(crate) fn handle_connection_closed(
@@ -661,15 +649,6 @@ pub(crate) fn handle_connection_closed(
     let state = swarm_control.state();
 
     state.close_all_streams_for_connection(connection_id);
-
-    state.connection_id_map().lock().remove(&connection_id);
-
-    let peers = state.peer_connections();
-    let mut peers = peers.lock();
-    if let Some(connections) = peers.get_mut(&peer_id) {
-        connections.remove_connection(connection_id);
-        if connections.total_connections() == 0 {
-            peers.remove(&peer_id);
-        }
-    }
+    let _ = peer_id;
+    state.connections.lock().remove(connection_id);
 }

@@ -1,9 +1,9 @@
-use std::{collections::HashSet, path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::HashSet, path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use fungi_config::FungiConfig;
 use fungi_stream::IncomingStreams;
-use fungi_swarm::{ConnectionSelectionStrategy, SwarmControl};
+use fungi_swarm::SwarmControl;
 use fungi_util::protocols::FUNGI_SERVICE_CONTROL_PROTOCOL;
 use futures::StreamExt;
 use futures::{AsyncRead, AsyncWrite};
@@ -33,8 +33,6 @@ pub struct ServiceControlProtocolControl {
 }
 
 impl ServiceControlProtocolControl {
-    const CONNECT_SNIFF_WAIT: Duration = Duration::from_secs(3);
-
     pub fn new(
         swarm_control: SwarmControl,
         config: Arc<Mutex<FungiConfig>>,
@@ -140,12 +138,7 @@ impl ServiceControlProtocolControl {
     ) -> Result<ServiceControlResponse> {
         let (mut stream, _handle, _connection_id) = self
             .swarm_control
-            .open_stream_with_strategy(
-                peer_id,
-                FUNGI_SERVICE_CONTROL_PROTOCOL,
-                ConnectionSelectionStrategy::PreferDirect,
-                Self::CONNECT_SNIFF_WAIT,
-            )
+            .open_stream(peer_id, FUNGI_SERVICE_CONTROL_PROTOCOL)
             .await
             .map_err(|e| {
                 anyhow::anyhow!("Failed to open service-control stream to peer {peer_id}: {e}")

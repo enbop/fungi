@@ -11,7 +11,7 @@ use super::{
 use crate::{
     ExternalAddressSource, State,
     behaviours::{FungiBehaviours, FungiBehavioursEvent},
-    ping::PingState,
+    ping::probe_pong_loop,
     state,
 };
 use anyhow::Result;
@@ -43,7 +43,6 @@ impl FungiSwarm {
         let mdns =
             mdns::tokio::Behaviour::new(mdns::Config::default(), keypair.public().to_peer_id())?;
         let relay_peers = RelayPeers::new(relay_addresses);
-        let trusted_relay_peer_ids = relay_peers.peer_ids().to_vec();
 
         let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
@@ -60,7 +59,7 @@ impl FungiSwarm {
                     relay,
                     mdns,
                     state.clone(),
-                    trusted_relay_peer_ids.clone(),
+                    relay_peers.peer_ids().to_vec(),
                 )
             })?
             .with_swarm_config(|config| {
@@ -71,10 +70,6 @@ impl FungiSwarm {
         let local_peer_id = *swarm.local_peer_id();
         let stream_control = swarm.behaviour().stream.new_control();
         let refresh_throttle = RefreshThrottle::default();
-
-        let mut ping_state = PingState::new();
-        ping_state.init(stream_control.clone());
-        let ping_state = Arc::new(ping_state);
 
         apply(&mut swarm);
 
@@ -89,12 +84,12 @@ impl FungiSwarm {
             stream_control,
             refresh_throttle,
             relay_peers,
-            ping_state,
             state,
         );
         let event_handle_future = handle_swarm_event(swarm_control.clone(), swarm_event_rx);
         let relay_health_future = relay_management_loop(swarm_control.clone());
         let connection_governance_future = connection_governance_loop(swarm_control.clone());
+        let probe_pong_future = probe_pong_loop(swarm_control.clone());
 
         let join_handle = tokio::spawn(async move {
             tokio::select! {
@@ -102,6 +97,7 @@ impl FungiSwarm {
                 _ = event_handle_future => {},
                 _ = relay_health_future => {},
                 _ = connection_governance_future => {},
+                _ = probe_pong_future => {},
             }
         });
 

@@ -1,15 +1,12 @@
-use fungi_swarm::{ConnectionSelectionStrategy, SwarmControl};
+use fungi_swarm::SwarmControl;
 use libp2p::{PeerId, StreamProtocol};
 use parking_lot::Mutex;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
 use thiserror::Error;
 use tokio::task::JoinHandle;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::sync::CancellationToken;
-
-const CONNECT_SNIFF_WAIT: Duration = Duration::from_secs(3);
 
 #[derive(Error, Debug)]
 pub enum PortForwardError {
@@ -115,12 +112,7 @@ async fn handle_tcp_connection(
     target_protocol: StreamProtocol,
 ) -> Result<()> {
     let (p2p_stream, _stream_observation_handle, _connection_id) = swarm_control
-        .open_stream_with_strategy(
-            target_peer,
-            target_protocol,
-            ConnectionSelectionStrategy::PreferDirect,
-            CONNECT_SNIFF_WAIT,
-        )
+        .open_stream(target_peer, target_protocol)
         .await
         .map_err(|source| PortForwardError::ConnectPeer {
             peer: target_peer,

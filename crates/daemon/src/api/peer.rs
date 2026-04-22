@@ -1,8 +1,8 @@
-use std::{path::PathBuf, time::Duration};
+use std::path::PathBuf;
 
 use anyhow::Result;
-use fungi_swarm::{ConnectionInfo, PeerConnections, State};
-use libp2p::{Multiaddr, PeerId, multiaddr::Protocol, swarm::ConnectionId};
+use fungi_swarm::{ConnectionDirection, ConnectionRecord};
+use libp2p::{Multiaddr, PeerId, StreamProtocol, multiaddr::Protocol};
 
 use crate::FungiDaemon;
 
@@ -14,23 +14,20 @@ use super::types::{
 impl FungiDaemon {
     fn build_connection_snapshot(
         &self,
-        state: &State,
         peer_id: PeerId,
-        direction: &str,
-        conn: &ConnectionInfo,
+        conn: &ConnectionRecord,
     ) -> ConnectionSnapshot {
-        let ping_info = state.connection_ping_info(&conn.connection_id());
-        let (last_rtt_ms, last_ping_at) = match ping_info {
-            Some(info) => match (info.last_rtt, info.last_rtt_at) {
+        let (last_rtt_ms, last_ping_at) =
+            match (conn.ping_info.last_rtt, conn.ping_info.last_rtt_at) {
                 (Some(last_rtt), Some(last_rtt_at)) => {
                     (last_rtt.as_millis() as u64, Some(last_rtt_at))
                 }
                 _ => (0, None),
-            },
-            None => (0, None),
-        };
+            };
 
-        let active_streams_by_protocol = state
+        let active_streams_by_protocol = self
+            .swarm_control()
+            .state()
             .connection_active_stream_protocol_counts(&conn.connection_id())
             .into_iter()
             .map(
@@ -47,7 +44,6 @@ impl FungiDaemon {
 
         let is_relay = is_relay_connection(conn.multiaddr());
         let remote_addr = conn.multiaddr().to_string();
-        let governance = state.connection_governance_info(&conn.connection_id());
         let peer_alias = self
             .address_book_get_peer(peer_id)
             .and_then(|peer| peer.alias)
@@ -63,18 +59,19 @@ impl FungiDaemon {
         ConnectionSnapshot {
             peer_id: peer_id.to_string(),
             connection_id: conn.connection_id().to_string(),
-            direction: direction.to_string(),
+            direction: match conn.direction {
+                ConnectionDirection::Inbound => "inbound",
+                ConnectionDirection::Outbound => "outbound",
+            }
+            .to_string(),
             is_relay,
             remote_addr,
             last_rtt_ms,
             last_ping_at,
             active_streams_total,
             active_streams_by_protocol,
-            policy_state: governance
-                .as_ref()
-                .map(|info| info.state.as_str().to_string())
-                .unwrap_or_else(|| "unknown".to_string()),
-            policy_reason: governance.and_then(|info| info.reason).unwrap_or_default(),
+            policy_state: conn.governance.state.as_str().to_string(),
+            policy_reason: conn.governance.reason.clone().unwrap_or_default(),
             peer_alias,
             peer_role,
         }
@@ -154,8 +151,16 @@ impl FungiDaemon {
             .clone()
     }
 
-    pub fn get_peer_connections(&self, peer_id: PeerId) -> Option<PeerConnections> {
-        self.swarm_control().state().get_peer_connections(&peer_id)
+    pub fn get_peer_connections(&self, peer_id: PeerId) -> Option<Vec<ConnectionRecord>> {
+        let connections = self
+            .swarm_control()
+            .state()
+            .get_connections_by_peer_id(&peer_id);
+        if connections.is_empty() {
+            None
+        } else {
+            Some(connections)
+        }
     }
 
     pub fn list_external_address_candidates(&self) -> Vec<ExternalAddressSnapshot> {
@@ -187,22 +192,17 @@ impl FungiDaemon {
 
     pub fn list_connections(&self, peer_id: Option<PeerId>) -> Vec<ConnectionSnapshot> {
         let state = self.swarm_control().state();
-        let peer_connections = state.peer_connections();
-        let peer_connections = peer_connections.lock();
 
         let mut snapshots = Vec::new();
-        for (pid, peer_conn) in peer_connections.iter() {
+        for pid in state.connected_peer_ids() {
             if let Some(filter_peer_id) = peer_id
-                && *pid != filter_peer_id
+                && pid != filter_peer_id
             {
                 continue;
             }
 
-            for conn in peer_conn.inbound() {
-                snapshots.push(self.build_connection_snapshot(state, *pid, "inbound", conn));
-            }
-            for conn in peer_conn.outbound() {
-                snapshots.push(self.build_connection_snapshot(state, *pid, "outbound", conn));
+            for conn in state.get_connections_by_peer_id(&pid) {
+                snapshots.push(self.build_connection_snapshot(pid, &conn));
             }
         }
 
@@ -226,7 +226,7 @@ impl FungiDaemon {
                 stream_id: stream.stream_id,
                 peer_id: stream.peer_id.to_string(),
                 connection_id: stream.connection_id.to_string(),
-                protocol_name: stream.protocol_name,
+                protocol_name: stream.protocol.to_string(),
                 opened_at: stream.opened_at,
             })
             .collect::<Vec<_>>();
@@ -237,43 +237,24 @@ impl FungiDaemon {
 
     pub fn list_active_streams_by_protocol(
         &self,
-        protocol_name: String,
+        protocol: StreamProtocol,
     ) -> Vec<ActiveStreamSnapshot> {
         let mut streams = self
             .swarm_control()
             .state()
-            .active_streams_by_protocol(&protocol_name)
+            .active_streams_by_protocol(&protocol)
             .into_iter()
             .map(|stream| ActiveStreamSnapshot {
                 stream_id: stream.stream_id,
                 peer_id: stream.peer_id.to_string(),
                 connection_id: stream.connection_id.to_string(),
-                protocol_name: stream.protocol_name,
+                protocol_name: stream.protocol.to_string(),
                 opened_at: stream.opened_at,
             })
             .collect::<Vec<_>>();
 
         streams.sort_by(|a, b| a.stream_id.cmp(&b.stream_id));
         streams
-    }
-
-    pub async fn ping_peer_connection(
-        &self,
-        peer_id: PeerId,
-        connection_id: ConnectionId,
-        timeout: Duration,
-    ) -> Result<std::time::Duration> {
-        self.swarm_control()
-            .ping_connection(peer_id, connection_id, timeout)
-            .await
-    }
-
-    pub async fn probe_peer_once(
-        &self,
-        peer_id: PeerId,
-        timeout: Duration,
-    ) -> Result<(std::time::Duration, ConnectionId)> {
-        self.swarm_control().probe_peer(peer_id, timeout).await
     }
 }
 
