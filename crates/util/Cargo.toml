@@ -10,9 +10,9 @@ edition.workspace = true
 [dependencies]
 log = { workspace = true }
 futures = { workspace = true }
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true, features = ["full"] }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 serde = { workspace = true }
 anyhow = { workspace = true }
-sysinfo = "0.35.2"
+sysinfo = { workspace = true }

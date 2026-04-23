@@ -7,13 +7,13 @@ edition.workspace = true
 
 [dependencies]
 serde = { workspace = true }
-toml = "0.8"
+toml = { workspace = true }
 libp2p-identity = { workspace = true }
-multiaddr = "0.18"
-fungi-util = { path = "../util" }
+multiaddr = { workspace = true }
+fungi-util = { workspace = true }
 anyhow = { workspace = true }
 log = { workspace = true }
-mdns-sd = "0.18"
+mdns-sd = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3.20.0"
+tempfile = { workspace = true }

@@ -8,9 +8,9 @@ default = []
 libunftp = []
 
 [dependencies]
-unftp-sbe-fs = "0.3.0"
-cap-std = "3.4"
-libunftp = "0.21"
+unftp-sbe-fs = { workspace = true }
+cap-std = { workspace = true }
+libunftp = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true, features = ["full"] }

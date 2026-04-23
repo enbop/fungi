@@ -12,23 +12,23 @@ wasi = ["dep:wasmtime-cli"]
 
 [dependencies]
 log = { workspace = true }
-env_logger = "0.11"
-flexi_logger = "0.31"
-chrono = { version = "0.4", default-features = true }
-tokio = { version = "1", features = ["full"] }
-clap = { version = "4", features = ["derive"] }
+env_logger = { workspace = true }
+flexi_logger = { workspace = true }
+chrono = { workspace = true, default-features = true }
+tokio = { workspace = true, features = ["full"] }
+clap = { workspace = true }
 serde = { workspace = true }
-serde_json = "1"
-serde_yaml = "0.9"
-home = "0.5"
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+home = { workspace = true }
 thiserror = { workspace = true }
-tonic = "0.14"
-fungi-config = { path = "../crates/config" }
-fungi-daemon = { path = "../crates/daemon" }
-fungi-daemon-grpc = { path = "../crates/daemon-grpc" }
-fungi-swarm = { path = "../crates/swarm" }
-fungi-util = { path = "../crates/util" }
-wasmtime-cli = { version = "44", optional = true }
+tonic = { workspace = true }
+fungi-config = { workspace = true }
+fungi-daemon = { workspace = true }
+fungi-daemon-grpc = { workspace = true }
+fungi-swarm = { workspace = true }
+fungi-util = { workspace = true }
+wasmtime-cli = { workspace = true, optional = true }
 libp2p = { workspace = true }
 futures = { workspace = true }
 bincode = { workspace = true }

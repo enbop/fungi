@@ -11,44 +11,44 @@ test-support = []
 
 
 [dependencies]
-fungi-config = { path = "../config" }
-fungi-docker-agent = { path = "../docker-agent" }
-fungi-swarm = { path = "../swarm" }
-fungi-util = { path = "../util" }
+fungi-config = { workspace = true }
+fungi-docker-agent = { workspace = true }
+fungi-swarm = { workspace = true }
+fungi-util = { workspace = true }
 log = { workspace = true }
 once_cell = { workspace = true }
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true, features = ["full"] }
 libp2p = { workspace = true }
-home = "0.5"
+home = { workspace = true }
 futures = { workspace = true }
 bincode = { workspace = true }
 interprocess = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 fungi-stream = { workspace = true }
-tokio-util = { version = "0.7", features = ["compat", "io"] }
+tokio-util = { workspace = true, features = ["compat", "io"] }
 anyhow = { workspace = true }
 tarpc = { workspace = true }
-fungi-fs = { path = "../fs", features = ["libunftp"] }
+fungi-fs = { workspace = true, features = ["libunftp"] }
 thiserror = { workspace = true }
-async-trait = "0.1"
-libunftp = "0.21"
-dav-server = { version = "0.8", default-features = false }
-hyper = { version = "1.1.0", features = ["http1", "server"] }
-hyper-util = { version = "0.1.2", features = ["tokio"] }
-clap = { version = "4", features = ["derive"] }
+async-trait = { workspace = true }
+libunftp = { workspace = true }
+dav-server = { workspace = true }
+hyper = { workspace = true, features = ["http1", "server"] }
+hyper-util = { workspace = true, features = ["tokio"] }
+clap = { workspace = true }
 parking_lot = { workspace = true }
-chrono = { version = "0.4", features = ["serde"] }
-tempfile = "3.20.0"
-env_logger = "0.11"
-mdns-sd = "0.18"
-flume = "0.11.1"
-typed-path = "0.11.0"
-reqwest = { version = "0.12", default-features = false, features = [
+chrono = { workspace = true, features = ["serde"] }
+tempfile = { workspace = true }
+env_logger = { workspace = true }
+mdns-sd = { workspace = true }
+flume = { workspace = true }
+typed-path = { workspace = true }
+reqwest = { workspace = true, features = [
     "rustls-tls",
 ] }
-serde_json = "1"
-serde_yaml = "0.9"
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 
 [dev-dependencies]
-toml = "0.8"
+toml = { workspace = true }
