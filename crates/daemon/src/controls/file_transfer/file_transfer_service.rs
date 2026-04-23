@@ -1,9 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    io,
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{collections::HashMap, io, path::PathBuf, sync::Arc};
 
 use fungi_config::file_transfer::FileTransferService as FileTransferServiceConfig;
 use fungi_fs::{FileSystem, Result};
@@ -11,8 +6,7 @@ use fungi_stream::IncomingStreams;
 use fungi_swarm::SwarmControl;
 use fungi_util::protocols::FUNGI_FILE_TRANSFER_PROTOCOL;
 use futures::StreamExt;
-use libp2p::PeerId;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 use tarpc::{
     context::Context,
     serde_transport,
@@ -27,7 +21,6 @@ use super::FileTransferRpc as _;
 
 #[derive(Clone)]
 pub struct FileTransferRpcService {
-    allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
     fs: Arc<FileSystem>,
 }
 
@@ -98,15 +91,9 @@ impl super::FileTransferRpc for FileTransferRpcService {
 }
 
 impl FileTransferRpcService {
-    pub fn new(
-        config: FileTransferServiceConfig,
-        allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
-    ) -> io::Result<Self> {
+    pub fn new(config: FileTransferServiceConfig) -> io::Result<Self> {
         let fs = FileSystem::new(config.shared_root_dir)?;
-        Ok(Self {
-            fs: Arc::new(fs),
-            allowed_peers,
-        })
+        Ok(Self { fs: Arc::new(fs) })
     }
 
     pub async fn listen_from_incoming_streams(
@@ -127,10 +114,6 @@ impl FileTransferRpcService {
                         Some(incoming_stream) => {
                             let peer_id = incoming_stream.peer_id;
                             let stream = incoming_stream.stream;
-                            if !self.allowed_peers.read().contains(&peer_id) {
-                                log::warn!("Deny connection from disallowed peer: {peer_id}.");
-                                continue;
-                            }
                             log::debug!("Accepted connection from peer: {peer_id}.");
 
                             let framed = codec_builder.new_framed(stream.compat());
@@ -191,18 +174,13 @@ impl FileTransferRpcService {
 pub struct FileTransferServiceControl {
     swarm_control: SwarmControl,
     services: Arc<Mutex<HashMap<PathBuf, CancellationToken>>>,
-    incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
 }
 
 impl FileTransferServiceControl {
-    pub fn new(
-        swarm_control: SwarmControl,
-        incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
-    ) -> Self {
+    pub fn new(swarm_control: SwarmControl) -> Self {
         Self {
             swarm_control,
             services: Arc::new(Mutex::new(HashMap::new())),
-            incoming_allowed_peers,
         }
     }
 
@@ -217,7 +195,7 @@ impl FileTransferServiceControl {
         }
 
         let service_path = config.shared_root_dir.clone();
-        let service = FileTransferRpcService::new(config, self.incoming_allowed_peers.clone())?;
+        let service = FileTransferRpcService::new(config)?;
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
 

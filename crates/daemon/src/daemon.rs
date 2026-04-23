@@ -166,10 +166,7 @@ impl FungiDaemon {
         let peer_info = mdns_peer_info(&config, swarm_control.local_peer_id());
         mdns_control.start(peer_info, state.clone())?;
 
-        let fts_control = FileTransferServiceControl::new(
-            swarm_control.clone(),
-            state.incoming_allowed_peers().clone(),
-        );
+        let fts_control = FileTransferServiceControl::new(swarm_control.clone());
         Self::init_fts(config.file_transfer.server.clone(), &fts_control).await;
 
         let ftc_control = FileTransferClientsControl::new(swarm_control.clone());
@@ -198,17 +195,13 @@ impl FungiDaemon {
             config.runtime.wasmtime_enabled() && wasmtime_runtime_supported(),
         )?;
         runtime_control.restore_persisted_state().await?;
-        let service_discovery_control = ServiceDiscoveryControl::new(
-            swarm_control.clone(),
-            runtime_control.clone(),
-            state.incoming_allowed_peers().clone(),
-        );
+        let service_discovery_control =
+            ServiceDiscoveryControl::new(swarm_control.clone(), runtime_control.clone());
         service_discovery_control.start()?;
         let node_capabilities_control = NodeCapabilitiesControl::new(
             swarm_control.clone(),
             shared_config.clone(),
             runtime_control.clone(),
-            state.incoming_allowed_peers().clone(),
         );
         node_capabilities_control.start()?;
 
@@ -223,7 +216,6 @@ impl FungiDaemon {
             fungi_home,
             runtime_control.clone(),
             tcp_tunneling_control.clone(),
-            state.incoming_allowed_peers().clone(),
         );
         service_control_protocol_control.start()?;
 

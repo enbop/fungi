@@ -885,38 +885,25 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                     continue;
                 };
 
-                if !peer_connections
-                    .iter()
-                    .any(|conn| matches!(conn.direction, ConnectionDirection::Outbound))
-                {
-                    tx.send(Ok(ping_event(
-                        &peer_id_str,
-                        tick_seq,
-                        ts_unix_ms,
-                        ping_peer_event::Event::Idle(PingPeerIdle {}),
-                    )))
-                    .await?;
-                    continue;
-                }
-
                 let mut ping_set = JoinSet::new();
                 let mut seen_addrs = HashSet::new();
-                for conn in peer_connections
-                    .iter()
-                    .filter(|conn| matches!(conn.direction, ConnectionDirection::Outbound))
-                {
+                for conn in peer_connections.iter() {
                     let connection_id = conn.connection_id();
                     let remote_addr = conn.multiaddr().to_string();
                     if !seen_addrs.insert(remote_addr.clone()) {
                         continue;
                     }
+                    let direction = match conn.direction {
+                        ConnectionDirection::Inbound => "inbound".to_string(),
+                        ConnectionDirection::Outbound => "outbound".to_string(),
+                    };
                     let daemon = daemon.clone();
                     ping_set.spawn(async move {
                         let res = daemon
                             .swarm_control()
                             .ping_connection(connection_id, per_ping_timeout)
                             .await;
-                        (connection_id, "outbound".to_string(), remote_addr, res)
+                        (connection_id, direction, remote_addr, res)
                     });
                 }
 

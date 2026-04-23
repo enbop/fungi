@@ -66,9 +66,11 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        // Do not enforce peer authorization at connection establishment. Existing fungi
-        // semantics allow broader connection graphs while stream access is enforced later,
-        // at the protocol boundary, by fungi-stream itself.
+        // Connection-level admission is handled one layer up by fungi's outer swarm behaviour,
+        // which still rejects unknown inbound peers early. This stream layer stays focused on
+        // per-protocol authorization so peers that already have an accepted connection (for
+        // example, because the local node dialed them first) can safely reuse that connection
+        // while inbound stream access remains checked at the protocol boundary.
         let receiver = Registry::lock(&self.registry).attach_connection(connection_id);
         Ok(Handler::new(
             peer,

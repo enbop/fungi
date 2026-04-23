@@ -1,4 +1,4 @@
-use std::{collections::HashSet, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use fungi_config::FungiConfig;
@@ -11,7 +11,7 @@ use libp2p::{
     PeerId,
     futures::{AsyncReadExt, AsyncWriteExt},
 };
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::controls::TcpTunnelingControl;
@@ -29,7 +29,6 @@ pub struct ServiceControlProtocolControl {
     fungi_home: PathBuf,
     runtime_control: RuntimeControl,
     tcp_tunneling_control: TcpTunnelingControl,
-    incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
 }
 
 impl ServiceControlProtocolControl {
@@ -39,7 +38,6 @@ impl ServiceControlProtocolControl {
         fungi_home: PathBuf,
         runtime_control: RuntimeControl,
         tcp_tunneling_control: TcpTunnelingControl,
-        incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
     ) -> Self {
         Self {
             swarm_control,
@@ -47,7 +45,6 @@ impl ServiceControlProtocolControl {
             fungi_home,
             runtime_control,
             tcp_tunneling_control,
-            incoming_allowed_peers,
         }
     }
 
@@ -175,18 +172,7 @@ impl ServiceControlProtocolControl {
                     }
                 };
 
-                // TODO(fungi-stream-auth-cleanup): remove this duplicate handler-layer guard
-                // once service control relies exclusively on fungi-stream authorization.
-                let response = if !this.incoming_allowed_peers.read().contains(&peer_id) {
-                    log::warn!("Deny service control from disallowed peer: {peer_id}");
-                    ServiceControlResponse::error(
-                        request.request_id().map(str::to_string),
-                        "permission_denied",
-                        format!("peer {peer_id} is not allowed to control this node"),
-                    )
-                } else {
-                    this.handle_request(request).await
-                };
+                let response = this.handle_request(request).await;
 
                 if let Err(error) = write_frame(&mut stream, &response).await {
                     log::warn!(

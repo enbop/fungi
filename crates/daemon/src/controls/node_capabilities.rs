@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 use fungi_config::FungiConfig;
@@ -10,7 +10,7 @@ use libp2p::{
     PeerId,
     futures::{AsyncReadExt, AsyncWriteExt},
 };
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 
 use crate::{NodeCapabilities, RuntimeControl, build_local_node_capabilities};
 
@@ -19,7 +19,6 @@ pub struct NodeCapabilitiesControl {
     swarm_control: SwarmControl,
     config: Arc<Mutex<FungiConfig>>,
     runtime_control: RuntimeControl,
-    incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
 }
 
 impl NodeCapabilitiesControl {
@@ -27,13 +26,11 @@ impl NodeCapabilitiesControl {
         swarm_control: SwarmControl,
         config: Arc<Mutex<FungiConfig>>,
         runtime_control: RuntimeControl,
-        incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
     ) -> Self {
         Self {
             swarm_control,
             config,
             runtime_control,
-            incoming_allowed_peers,
         }
     }
 
@@ -78,10 +75,6 @@ impl NodeCapabilitiesControl {
         while let Some(incoming_stream) = incoming_streams.next().await {
             let peer_id = incoming_stream.peer_id;
             let mut stream = incoming_stream.stream;
-            if !self.incoming_allowed_peers.read().contains(&peer_id) {
-                log::warn!("Deny node capability discovery from disallowed peer: {peer_id}");
-                continue;
-            }
 
             let this = self.clone();
             tokio::spawn(async move {

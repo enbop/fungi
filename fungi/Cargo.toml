@@ -28,7 +28,7 @@ fungi-daemon = { path = "../crates/daemon" }
 fungi-daemon-grpc = { path = "../crates/daemon-grpc" }
 fungi-swarm = { path = "../crates/swarm" }
 fungi-util = { path = "../crates/util" }
-wasmtime-cli = { version = "37", optional = true }
+wasmtime-cli = { version = "44", optional = true }
 libp2p = { workspace = true }
 futures = { workspace = true }
 bincode = { workspace = true }

@@ -1,5 +1,3 @@
-use std::{collections::HashSet, sync::Arc};
-
 use crate::{CatalogService, RuntimeControl};
 use anyhow::Result;
 use fungi_stream::IncomingStreams;
@@ -10,25 +8,18 @@ use libp2p::{
     PeerId,
     futures::{AsyncReadExt, AsyncWriteExt},
 };
-use parking_lot::RwLock;
 
 #[derive(Clone)]
 pub struct ServiceDiscoveryControl {
     swarm_control: SwarmControl,
     runtime_control: RuntimeControl,
-    incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
 }
 
 impl ServiceDiscoveryControl {
-    pub fn new(
-        swarm_control: SwarmControl,
-        runtime_control: RuntimeControl,
-        incoming_allowed_peers: Arc<RwLock<HashSet<PeerId>>>,
-    ) -> Self {
+    pub fn new(swarm_control: SwarmControl, runtime_control: RuntimeControl) -> Self {
         Self {
             swarm_control,
             runtime_control,
-            incoming_allowed_peers,
         }
     }
 
@@ -68,10 +59,6 @@ impl ServiceDiscoveryControl {
         while let Some(incoming_stream) = incoming_streams.next().await {
             let peer_id = incoming_stream.peer_id;
             let mut stream = incoming_stream.stream;
-            if !self.incoming_allowed_peers.read().contains(&peer_id) {
-                log::warn!("Deny service discovery from disallowed peer: {peer_id}");
-                continue;
-            }
 
             let this = self.clone();
             tokio::spawn(async move {
