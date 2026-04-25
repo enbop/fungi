@@ -1,4 +1,4 @@
-use clap::Subcommand;
+use clap::{Args, Subcommand};
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
@@ -16,44 +16,53 @@ use super::{
     shared::{fatal, fatal_grpc, resolve_peer_value},
 };
 
+#[derive(Args, Debug, Clone)]
+pub struct DeviceArgs {
+    #[command(subcommand)]
+    pub command: Option<DeviceCommands>,
+}
+
 #[derive(Subcommand, Debug, Clone)]
 pub enum DeviceCommands {
     /// List devices discovered via mDNS
     Mdns,
-    /// List all peers in the address book
+    /// List saved devices
     List,
-    /// Add a peer to the address book with a required alias
+    /// Add a device with a required device name
     Add {
-        /// Peer ID to add
+        /// Device ID to add
         peer_id: String,
-        /// Human-friendly unique alias
-        #[arg(long)]
+        /// Human-friendly unique device name
+        #[arg(long = "name", alias = "alias", value_name = "NAME")]
         alias: String,
     },
-    /// Rename an existing peer in the address book
+    /// Rename an existing device
     Rename {
-        /// Peer ID or alias to rename
+        /// Device ID or device name to rename
         peer: String,
-        /// New human-friendly unique alias
+        /// New human-friendly unique device name
+        #[arg(value_name = "NAME")]
         alias: String,
     },
-    /// Get information about a specific peer in the address book
+    /// Get information about a specific device
     Get {
-        /// Peer ID to query
+        /// Device ID to query
         peer_id: String,
     },
-    /// Remove a peer from the address book
+    /// Remove a device
     Remove {
-        /// Peer ID to remove
+        /// Device ID to remove
         peer_id: String,
     },
 }
 
-pub async fn execute_device(args: CommonArgs, cmd: DeviceCommands) {
+pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
         None => fatal("Cannot connect to Fungi daemon. Is it running?"),
     };
+
+    let cmd = device_args.command.unwrap_or(DeviceCommands::List);
 
     match cmd {
         DeviceCommands::Mdns => match client.list_mdns_devices(Request::new(Empty {})).await {
@@ -74,7 +83,7 @@ pub async fn execute_device(args: CommonArgs, cmd: DeviceCommands) {
                 Ok(resp) => {
                     let peers = resp.into_inner().peers;
                     if peers.is_empty() {
-                        println!("No peers in address book");
+                        println!("No devices saved");
                     } else {
                         for peer in peers {
                             print_peer_info(&peer);
@@ -114,7 +123,7 @@ pub async fn execute_device(args: CommonArgs, cmd: DeviceCommands) {
                 }))
                 .await
             {
-                Ok(_) => println!("Peer saved with alias"),
+                Ok(_) => println!("Device saved"),
                 Err(error) => fatal_grpc(error),
             }
         }
@@ -139,7 +148,7 @@ pub async fn execute_device(args: CommonArgs, cmd: DeviceCommands) {
                         peer.alias = alias;
                         peer
                     }
-                    None => fatal("Peer not found in address book"),
+                    None => fatal("Device not found"),
                 },
                 Err(error) => fatal_grpc(error),
             };
@@ -150,7 +159,7 @@ pub async fn execute_device(args: CommonArgs, cmd: DeviceCommands) {
                 }))
                 .await
             {
-                Ok(_) => println!("Peer alias updated"),
+                Ok(_) => println!("Device name updated"),
                 Err(error) => fatal_grpc(error),
             }
         }
@@ -161,7 +170,7 @@ pub async fn execute_device(args: CommonArgs, cmd: DeviceCommands) {
                     if let Some(peer) = resp.into_inner().peer_info {
                         print_peer_info_detailed(&peer);
                     } else {
-                        println!("Peer not found");
+                        println!("Device not found");
                     }
                 }
                 Err(e) => fatal_grpc(e),
@@ -170,7 +179,7 @@ pub async fn execute_device(args: CommonArgs, cmd: DeviceCommands) {
         DeviceCommands::Remove { peer_id } => {
             let req = RemoveAddressBookPeerRequest { peer_id };
             match client.remove_address_book_peer(Request::new(req)).await {
-                Ok(_) => println!("Peer removed successfully"),
+                Ok(_) => println!("Device removed successfully"),
                 Err(e) => fatal_grpc(e),
             }
         }
@@ -201,8 +210,8 @@ fn print_peer_info(peer: &PeerInfo) {
 }
 
 fn print_peer_info_detailed(peer: &PeerInfo) {
-    println!("Peer ID: {}", peer.peer_id);
-    println!("Alias: {}", peer.alias);
+    println!("Device ID: {}", peer.peer_id);
+    println!("Device name: {}", peer.alias);
     println!("Hostname: {}", peer.hostname);
     println!("OS: {}", peer.os);
     println!("Version: {}", peer.version);

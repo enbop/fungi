@@ -61,7 +61,7 @@ impl ServiceManifestDocument {
         self,
         base_dir: &Path,
         fungi_home: &Path,
-        policy: &ManifestResolutionPolicy,
+        _policy: &ManifestResolutionPolicy,
         used_host_ports: &BTreeSet<u16>,
     ) -> Result<ServiceManifest> {
         if self.kind != "ServiceManifest" {
@@ -107,14 +107,15 @@ impl ServiceManifestDocument {
             .ports
             .into_iter()
             .map(|port| {
+                let resolved_port = resolve_manifest_host_port(
+                    port.host_port,
+                    port.protocol,
+                    &mut reserved_host_ports,
+                )?;
                 Ok(ServicePort {
                     name: normalize_optional(port.name),
-                    host_port: resolve_manifest_host_port(
-                        port.host_port,
-                        port.protocol,
-                        policy,
-                        &mut reserved_host_ports,
-                    )?,
+                    host_port: resolved_port.port,
+                    host_port_allocation: resolved_port.allocation,
                     service_port: port.service_port,
                     protocol: port.protocol,
                 })
@@ -273,58 +274,66 @@ pub fn service_expose_endpoint_bindings(
     endpoints
 }
 
+struct ResolvedManifestHostPort {
+    port: u16,
+    allocation: ServicePortAllocation,
+}
+
 fn resolve_manifest_host_port(
-    host_port: ServiceManifestHostPort,
+    host_port: Option<ServiceManifestHostPort>,
     protocol: ServicePortProtocol,
-    policy: &ManifestResolutionPolicy,
     reserved_host_ports: &mut BTreeSet<u16>,
-) -> Result<u16> {
+) -> Result<ResolvedManifestHostPort> {
     match host_port {
-        ServiceManifestHostPort::Fixed(port) => {
+        Some(ServiceManifestHostPort::Fixed(port)) => {
             if !reserved_host_ports.insert(port) {
                 bail!("host port is already reserved in this manifest or node: {port}");
             }
-            Ok(port)
+            Ok(ResolvedManifestHostPort {
+                port,
+                allocation: ServicePortAllocation::Fixed,
+            })
         }
-        ServiceManifestHostPort::Keyword(value) => {
+        Some(ServiceManifestHostPort::Keyword(value)) => {
             let keyword = value.trim().to_ascii_lowercase();
             if keyword != "auto" {
                 bail!("hostPort must be a number or the keyword: auto");
             }
-
-            for port in iter_allowed_tcp_ports(policy) {
-                if reserved_host_ports.contains(&port) {
-                    continue;
-                }
-                if !is_host_port_available(port, protocol) {
-                    continue;
-                }
-                reserved_host_ports.insert(port);
-                return Ok(port);
-            }
-
-            bail!("failed to allocate host port automatically from allowed port policy")
+            allocate_auto_host_port(protocol, reserved_host_ports)
         }
+        None => allocate_auto_host_port(protocol, reserved_host_ports),
     }
 }
 
-fn iter_allowed_tcp_ports(policy: &ManifestResolutionPolicy) -> Vec<u16> {
-    let mut ports = BTreeSet::new();
-    for port in &policy.allowed_tcp_ports {
-        ports.insert(*port);
-    }
-    for range in &policy.allowed_tcp_port_ranges {
-        for port in range.start..=range.end {
-            ports.insert(port);
+fn allocate_auto_host_port(
+    protocol: ServicePortProtocol,
+    reserved_host_ports: &mut BTreeSet<u16>,
+) -> Result<ResolvedManifestHostPort> {
+    for _ in 0..64 {
+        let port = reserve_ephemeral_host_port(protocol)?;
+        if reserved_host_ports.insert(port) {
+            return Ok(ResolvedManifestHostPort {
+                port,
+                allocation: ServicePortAllocation::Auto,
+            });
         }
     }
-    ports.into_iter().collect()
+
+    bail!("failed to allocate host port automatically from the operating system")
 }
 
-fn is_host_port_available(port: u16, protocol: ServicePortProtocol) -> bool {
+fn reserve_ephemeral_host_port(protocol: ServicePortProtocol) -> Result<u16> {
     match protocol {
-        ServicePortProtocol::Tcp => StdTcpListener::bind(("0.0.0.0", port)).is_ok(),
-        ServicePortProtocol::Udp => StdUdpSocket::bind(("0.0.0.0", port)).is_ok(),
+        ServicePortProtocol::Tcp => {
+            let listener = StdTcpListener::bind(("127.0.0.1", 0))
+                .context("failed to reserve an automatic TCP host port")?;
+            Ok(listener.local_addr()?.port())
+        }
+        ServicePortProtocol::Udp => {
+            let socket = StdUdpSocket::bind(("127.0.0.1", 0))
+                .context("failed to reserve an automatic UDP host port")?;
+            Ok(socket.local_addr()?.port())
+        }
     }
 }
 

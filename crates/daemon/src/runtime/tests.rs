@@ -7,7 +7,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
-    net::SocketAddr,
+    net::{SocketAddr, TcpListener as StdTcpListener},
     path::{Path, PathBuf},
 };
 use tempfile::TempDir;
@@ -38,6 +38,7 @@ fn docker_manifest_maps_to_container_spec() {
         ports: vec![ServicePort {
             name: None,
             host_port: 8080,
+            host_port_allocation: ServicePortAllocation::Fixed,
             service_port: 80,
             protocol: ServicePortProtocol::Tcp,
         }],
@@ -150,6 +151,7 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
         ports: vec![ServicePort {
             name: None,
             host_port: 18081,
+            host_port_allocation: ServicePortAllocation::Fixed,
             service_port: 8081,
             protocol: ServicePortProtocol::Tcp,
         }],
@@ -219,13 +221,15 @@ spec:
           protocol: tcp
 "#;
 
+    let occupied_allowed_port = StdTcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let occupied_allowed_port_number = occupied_allowed_port.local_addr().unwrap().port();
     let fungi_home = PathBuf::from("/tmp/fungi-home");
     let manifest = parse_service_manifest_yaml_with_policy(
         yaml,
         Path::new("."),
         &fungi_home,
         &ManifestResolutionPolicy {
-            allowed_tcp_ports: vec![28080],
+            allowed_tcp_ports: vec![occupied_allowed_port_number],
             allowed_tcp_port_ranges: Vec::new(),
         },
         &BTreeSet::new(),
@@ -236,7 +240,36 @@ spec:
         manifest.mounts[0].host_path,
         fungi_home.join("services/filebrowser/data")
     );
-    assert_eq!(manifest.ports[0].host_port, 28080);
+    assert_ne!(manifest.ports[0].host_port, occupied_allowed_port_number);
+    assert_eq!(
+        manifest.ports[0].host_port_allocation,
+        ServicePortAllocation::Auto
+    );
+}
+
+#[test]
+fn manifest_document_defaults_missing_host_port_to_auto() {
+    let yaml = r#"
+apiVersion: fungi.rs/v1alpha1
+kind: ServiceManifest
+metadata:
+    name: filebrowser
+spec:
+    runtime: docker
+    source:
+        image: filebrowser/filebrowser:latest
+    ports:
+        - servicePort: 80
+          protocol: tcp
+"#;
+
+    let manifest = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
+
+    assert!(manifest.ports[0].host_port > 0);
+    assert_eq!(
+        manifest.ports[0].host_port_allocation,
+        ServicePortAllocation::Auto
+    );
 }
 
 #[tokio::test]

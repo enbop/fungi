@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use fungi_config::{FungiDir, default_fungi_dir_name};
+use fungi_control::DeviceInput;
 
 /// A platform built for seamless multi-device integration
 #[derive(Parser)]
@@ -26,6 +27,15 @@ pub struct CommonArgs {
         help = "Path to the Fungi config directory, defaults to the channel-specific directory"
     )]
     pub fungi_dir: Option<String>,
+
+    #[clap(
+        short = 'd',
+        long = "device",
+        visible_alias = "on",
+        value_name = "DEVICE",
+        help = "Device context for dynamic thing calls"
+    )]
+    pub dynamic_device: Option<DeviceInput>,
 
     #[cfg(target_os = "android")]
     #[clap(
@@ -70,30 +80,26 @@ pub enum Commands {
     /// Manage runtime safety boundary settings and incoming peer allowlists
     #[command(subcommand, visible_alias = "sec")]
     Security(fungi_control::SecurityCommands),
-    /// Manage TCP tunneling
-    #[command(subcommand, visible_alias = "tn")]
-    Tunnel(fungi_control::TunnelCommands),
-    /// Manage local runtime services from manifests or service handles
-    #[command(subcommand, visible_alias = "svc")]
-    Service(fungi_control::ServiceCommands),
+    /// Manage services on this node or your devices
+    #[command(visible_alias = "svc")]
+    Service(fungi_control::ServiceArgs),
     /// Browse published remote services
-    #[command(subcommand)]
+    #[command(subcommand, hide = true)]
     Catalog(fungi_control::CatalogCommands),
     /// Manage local access entries for remote services
-    #[command(subcommand)]
+    #[command(subcommand, hide = true)]
     Access(fungi_control::AccessCommands),
     /// Query and administer remote peers
-    #[command(subcommand)]
+    #[command(subcommand, hide = true)]
     Peer(fungi_control::PeerCommands),
     /// Device discovery and address book
-    #[command(subcommand)]
-    Device(fungi_control::DeviceCommands),
+    Device(fungi_control::DeviceArgs),
     /// Connection observability and diagnostics
     #[command(subcommand, visible_alias = "conn")]
     Connection(fungi_control::ConnectionCommands),
-    /// Continuously ping all active connections to a peer
+    /// Continuously ping all active connections to a device
     Ping {
-        /// Peer ID or alias to ping
+        /// Device name to ping
         peer: fungi_control::PeerInput,
         /// Ping interval in milliseconds
         #[arg(long, default_value_t = 2000)]
@@ -108,10 +114,16 @@ pub enum Commands {
     #[cfg(feature = "wasi")]
     /// [WASI runtime] Serve wasi-http requests (re-exported wasmtime command)
     Serve(wasmtime_cli::commands::ServeCommand),
+    /// Deprecated: manage raw TCP tunneling; prefer `service open/connect`
+    #[command(subcommand, visible_alias = "tn")]
+    Tunnel(fungi_control::TunnelCommands),
     /// Deprecated: manage legacy file transfer service; this command will be removed in a future release
     #[command(subcommand, visible_alias = "fs")]
     FtService(fungi_control::FtServiceCommands),
     /// Deprecated: manage legacy file transfer client config and FTP/WebDAV proxies; this command will be removed in a future release
     #[command(subcommand, visible_alias = "fc")]
     FtClient(fungi_control::FtClientCommands),
+    /// Invoke a service or tool by name
+    #[command(external_subcommand)]
+    Dynamic(Vec<String>),
 }

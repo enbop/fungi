@@ -26,8 +26,8 @@ pub use runtime::{
     ServiceExposeTransportKind, ServiceExposeUsage, ServiceExposeUsageKind, ServiceInstance,
     ServiceLogs, ServiceLogsOptions, ServiceManifest, ServiceManifestDocument,
     ServiceManifestExpose, ServiceManifestExposeTransport, ServiceManifestExposeUsage,
-    ServiceManifestHostPort, ServiceMount, ServicePort, ServicePortProtocol, ServiceSource,
-    ServiceStatus, load_service_manifest_yaml_file, parse_service_manifest_yaml,
+    ServiceManifestHostPort, ServiceMount, ServicePort, ServicePortAllocation, ServicePortProtocol,
+    ServiceSource, ServiceStatus, load_service_manifest_yaml_file, parse_service_manifest_yaml,
     service_expose_endpoint_bindings,
 };
 pub use service_control::{

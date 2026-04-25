@@ -19,7 +19,7 @@ pub use access::{AccessCommands, execute_access};
 pub use allowed_peers::AllowedPeerCommands;
 pub use catalog::{CatalogCommands, execute_catalog};
 pub use connection::{ConnectionCommands, execute_connection};
-pub use device::{DeviceCommands, execute_device};
+pub use device::{DeviceArgs, DeviceCommands, execute_device};
 pub use ft_client::{FtClientCommands, execute_ft_client};
 pub use ft_service::{FtServiceCommands, execute_ft_service};
 pub use info::{InfoCommands, execute_info};
@@ -27,6 +27,10 @@ pub use peer::{PeerCommands, execute_peer};
 pub use ping::execute_ping;
 pub use relay_config::{RelayCommands, execute_relay};
 pub use security::{SecurityCommands, execute_security};
-pub use service::{ServiceCommands, execute_service};
-pub use shared::PeerInput;
+pub use service::{
+    DynamicThingInvocation, DynamicThingTarget, ServiceArgs, ServiceCommands,
+    execute_dynamic_thing, execute_service, parse_dynamic_thing_invocation,
+    parse_dynamic_thing_target,
+};
+pub use shared::{DeviceInput, PeerInput};
 pub use tunnel::{TunnelCommands, execute_tunnel};

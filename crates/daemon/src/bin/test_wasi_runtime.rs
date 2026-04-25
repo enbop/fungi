@@ -79,6 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ports: vec![ServicePort {
             name: None,
             host_port: args.port,
+            host_port_allocation: fungi_daemon::ServicePortAllocation::Fixed,
             service_port: args.port,
             protocol: ServicePortProtocol::Tcp,
         }],

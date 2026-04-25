@@ -20,11 +20,27 @@ pub struct OptionalPeerTargetArg {
     pub peer: Option<PeerInput>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Args, Debug, Clone, Default)]
+pub struct OptionalDeviceTargetArg {
+    #[arg(
+        short = 'd',
+        long = "on",
+        visible_alias = "device",
+        alias = "peer",
+        short_alias = 'p',
+        value_name = "DEVICE",
+        help = "Device name"
+    )]
+    pub device: Option<DeviceInput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PeerInput {
     PeerId(PeerId),
     Alias(String),
 }
+
+pub use PeerInput as DeviceInput;
 
 impl FromStr for PeerInput {
     type Err = String;
@@ -90,6 +106,13 @@ pub fn resolve_optional_peer(
         Some(peer) => resolve_peer_input(args, peer).map(Some),
         None => Ok(None),
     }
+}
+
+pub fn resolve_optional_device(
+    args: &CommonArgs,
+    device: Option<&DeviceInput>,
+) -> Result<Option<ResolvedPeerTarget>, String> {
+    resolve_optional_peer(args, device)
 }
 
 pub fn get_current_peer(args: &CommonArgs) -> Result<Option<ResolvedPeerTarget>, String> {
@@ -180,6 +203,11 @@ pub fn print_target_peer(peer: &ResolvedPeerTarget) {
         }
         _ => eprintln!("Target peer: {alias} ({})", peer.peer_id),
     }
+}
+
+pub fn print_target_device(device: &ResolvedPeerTarget) {
+    let name = device.alias.as_deref().unwrap_or("<unnamed>");
+    eprintln!("Target device: {name}");
 }
 
 fn cli_context_path(args: &CommonArgs) -> std::path::PathBuf {

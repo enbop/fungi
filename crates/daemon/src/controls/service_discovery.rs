@@ -35,7 +35,7 @@ impl ServiceDiscoveryControl {
         Ok(())
     }
 
-    pub async fn list_peer_catalog(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
+    pub async fn list_peer_services(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
         let (mut stream, _handle, _connection_id) = self
             .swarm_control
             .open_stream(peer_id, FUNGI_SERVICE_DISCOVERY_PROTOCOL)
@@ -53,6 +53,10 @@ impl ServiceDiscoveryControl {
             anyhow::anyhow!("Failed to decode discovery response from peer {peer_id}: {e}")
         })?;
         Ok(services)
+    }
+
+    pub async fn list_peer_catalog(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
+        self.list_peer_services(peer_id).await
     }
 
     async fn listen_from_incoming_streams(self, mut incoming_streams: IncomingStreams) {

@@ -238,14 +238,22 @@ impl FungiDaemon {
         self.runtime_control().list_services().await
     }
 
-    pub async fn list_catalog_services(&self) -> Result<Vec<CatalogService>> {
+    pub async fn list_exposed_services(&self) -> Result<Vec<CatalogService>> {
         self.runtime_control().list_catalog_services().await
     }
 
-    pub async fn list_peer_catalog(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
+    pub async fn list_peer_services(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
         self.service_discovery_control()
-            .list_peer_catalog(peer_id)
+            .list_peer_services(peer_id)
             .await
+    }
+
+    pub async fn list_catalog_services(&self) -> Result<Vec<CatalogService>> {
+        self.list_exposed_services().await
+    }
+
+    pub async fn list_peer_catalog(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
+        self.list_peer_services(peer_id).await
     }
 
     pub fn local_node_capabilities(&self) -> NodeCapabilities {

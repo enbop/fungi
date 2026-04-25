@@ -78,8 +78,23 @@ pub struct ServiceMount {
 pub struct ServicePort {
     pub name: Option<String>,
     pub host_port: u16,
+    #[serde(default)]
+    pub host_port_allocation: ServicePortAllocation,
     pub service_port: u16,
     pub protocol: ServicePortProtocol,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ServicePortAllocation {
+    Auto,
+    Fixed,
+}
+
+impl Default for ServicePortAllocation {
+    fn default() -> Self {
+        Self::Fixed
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -210,7 +225,8 @@ pub struct ServiceManifestMount {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceManifestPort {
     #[serde(rename = "hostPort")]
-    pub host_port: ServiceManifestHostPort,
+    #[serde(default)]
+    pub host_port: Option<ServiceManifestHostPort>,
     #[serde(rename = "servicePort")]
     pub service_port: u16,
     #[serde(default)]

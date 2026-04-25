@@ -1305,11 +1305,11 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
         let services = self
             .inner
-            .list_peer_catalog(peer_id)
+            .list_peer_services(peer_id)
             .await
-            .map_err(|e| Status::internal(format!("Failed to list peer catalog: {e}")))?;
+            .map_err(|e| Status::internal(format!("Failed to list peer services: {e}")))?;
         let services_json = serde_json::to_string(&services)
-            .map_err(|e| Status::internal(format!("Failed to serialize peer catalog: {e}")))?;
+            .map_err(|e| Status::internal(format!("Failed to serialize peer services: {e}")))?;
         Ok(Response::new(ListPeerCatalogResponse { services_json }))
     }
 
