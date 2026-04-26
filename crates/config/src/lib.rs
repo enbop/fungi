@@ -5,6 +5,7 @@ mod init;
 mod libp2p;
 mod rpc;
 pub mod runtime;
+pub mod service_cache;
 pub mod tcp_tunneling;
 
 pub use crate::libp2p::*;
@@ -46,6 +47,8 @@ pub struct FungiConfig {
     pub file_transfer: FileTransfer,
     #[serde(default)]
     pub runtime: Runtime,
+    #[serde(default)]
+    pub service_cache: service_cache::ServiceCache,
 
     #[serde(default)]
     custom_hostname: Option<String>,

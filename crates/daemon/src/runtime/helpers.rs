@@ -70,6 +70,7 @@ fn ensure_wasmtime_manifest(manifest: &ServiceManifest) -> Result<()> {
             Ok(())
         }
         ServiceSource::Docker { .. } => bail!("wasmtime runtime requires a wasm component source"),
+        ServiceSource::TcpLink { .. } => bail!("wasmtime runtime requires a wasm component source"),
     }
 }
 
@@ -91,6 +92,13 @@ pub(crate) fn ensure_services_root_exists(fungi_home: &Path) -> Result<()> {
         format!(
             "Failed to create services root directory: {}",
             services_root.display()
+        )
+    })?;
+    let sandboxes_root = fungi_home.join("sandboxes");
+    fs::create_dir_all(&sandboxes_root).with_context(|| {
+        format!(
+            "Failed to create sandboxes root directory: {}",
+            sandboxes_root.display()
         )
     })?;
     Ok(())
@@ -160,7 +168,9 @@ async fn stage_wasmtime_component(
                 )
             })?;
         }
-        ServiceSource::Docker { .. } => bail!("invalid wasmtime source type"),
+        ServiceSource::Docker { .. } | ServiceSource::TcpLink { .. } => {
+            bail!("invalid wasmtime source type")
+        }
     }
     Ok(target_path)
 }
@@ -342,6 +352,7 @@ fn service_instance_id(runtime: RuntimeKind, name: &str) -> String {
     let runtime_name = match runtime {
         RuntimeKind::Docker => "docker",
         RuntimeKind::Wasmtime => "wasmtime",
+        RuntimeKind::Link => "link",
     };
     format!("{runtime_name}:{name}")
 }
@@ -351,6 +362,7 @@ fn source_display(source: &ServiceSource) -> String {
         ServiceSource::Docker { image } => image.clone(),
         ServiceSource::WasmtimeFile { component } => component.display().to_string(),
         ServiceSource::WasmtimeUrl { url } => url.clone(),
+        ServiceSource::TcpLink { host, port } => format!("{host}:{port}"),
     }
 }
 

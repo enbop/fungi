@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let runtime = RuntimeControl::with_wasmtime_provider(
         provider,
         None,
-        args.mount_dir.join("services-state.json"),
+        args.mount_dir.join("services"),
         true,
     )?;
 

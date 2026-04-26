@@ -210,6 +210,7 @@ async fn discover_services(
 ) -> Vec<CatalogService> {
     let req = ListPeerCatalogRequest {
         peer_id: peer_id.to_string(),
+        cached: false,
     };
     match client.list_peer_catalog(Request::new(req)).await {
         Ok(resp) => {

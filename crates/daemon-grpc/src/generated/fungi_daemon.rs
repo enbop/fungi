@@ -647,6 +647,8 @@ pub struct ListServicesResponse {
 pub struct ListPeerCatalogRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
+    #[prost(bool, tag = "2")]
+    pub cached: bool,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListPeerCatalogResponse {
@@ -693,6 +695,10 @@ pub struct AttachServiceAccessRequest {
     pub peer_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub service_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub entry: ::prost::alloc::string::String,
+    #[prost(int32, tag = "4")]
+    pub local_port: i32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DetachServiceAccessRequest {

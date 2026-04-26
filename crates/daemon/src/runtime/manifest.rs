@@ -43,6 +43,79 @@ pub fn parse_service_manifest_yaml_with_policy(
     document.into_service_manifest_for_node(base_dir, fungi_home, policy, used_host_ports)
 }
 
+pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
+    let source = match &manifest.source {
+        ServiceSource::Docker { image } => ServiceManifestSource {
+            image: Some(image.clone()),
+            ..ServiceManifestSource::default()
+        },
+        ServiceSource::WasmtimeFile { component } => ServiceManifestSource {
+            file: Some(component.display().to_string()),
+            ..ServiceManifestSource::default()
+        },
+        ServiceSource::WasmtimeUrl { url } => ServiceManifestSource {
+            url: Some(url.clone()),
+            ..ServiceManifestSource::default()
+        },
+        ServiceSource::TcpLink { host, port } => ServiceManifestSource {
+            host: Some(host.clone()),
+            port: Some(*port),
+            ..ServiceManifestSource::default()
+        },
+    };
+
+    let document = ServiceManifestDocument {
+        api_version: "fungi.rs/v1alpha1".to_string(),
+        kind: "ServiceManifest".to_string(),
+        metadata: ServiceManifestMetadata {
+            name: manifest.name.clone(),
+            labels: manifest.labels.clone(),
+        },
+        spec: ServiceManifestSpec {
+            runtime: manifest.runtime,
+            source,
+            expose: manifest.expose.clone().map(|expose| ServiceManifestExpose {
+                enabled: true,
+                service_id: Some(expose.service_id),
+                display_name: Some(expose.display_name),
+                transport: Some(ServiceManifestExposeTransport {
+                    kind: expose.transport.kind,
+                }),
+                usage: expose.usage.map(|usage| ServiceManifestExposeUsage {
+                    kind: usage.kind,
+                    path: usage.path,
+                }),
+                icon_url: expose.icon_url,
+                catalog_id: expose.catalog_id,
+            }),
+            env: manifest.env.clone(),
+            mounts: manifest
+                .mounts
+                .iter()
+                .map(|mount| ServiceManifestMount {
+                    host_path: mount.host_path.display().to_string(),
+                    runtime_path: mount.runtime_path.clone(),
+                })
+                .collect(),
+            ports: manifest
+                .ports
+                .iter()
+                .map(|port| ServiceManifestPort {
+                    host_port: Some(ServiceManifestHostPort::Fixed(port.host_port)),
+                    service_port: port.service_port,
+                    name: port.name.clone(),
+                    protocol: port.protocol,
+                })
+                .collect(),
+            command: manifest.command.clone(),
+            entrypoint: manifest.entrypoint.clone(),
+            working_dir: manifest.working_dir.clone(),
+        },
+    };
+
+    serde_yaml::to_string(&document).context("Failed to encode service manifest YAML")
+}
+
 impl ServiceManifestDocument {
     pub fn into_service_manifest(
         self,
@@ -76,7 +149,7 @@ impl ServiceManifestDocument {
         } = self;
         let service_name = metadata.name;
         let metadata_labels = metadata.labels;
-        let app_home = fungi_home.join("services").join(&service_name);
+        let service_sandbox = fungi_home.join("sandboxes").join(&service_name);
         let mut reserved_host_ports = used_host_ports.clone();
 
         let runtime = spec.runtime;
@@ -89,7 +162,7 @@ impl ServiceManifestDocument {
             }
             RuntimeKind::Wasmtime => match (spec.source.file, spec.source.url) {
                 (Some(file), None) => ServiceSource::WasmtimeFile {
-                    component: resolve_manifest_path(&file, base_dir, fungi_home, &app_home),
+                    component: resolve_manifest_path(&file, base_dir, fungi_home, &service_sandbox),
                 },
                 (None, Some(url)) => ServiceSource::WasmtimeUrl { url },
                 (Some(_), Some(_)) => {
@@ -101,6 +174,19 @@ impl ServiceManifestDocument {
                     bail!("wasmtime service manifest requires spec.source.file or spec.source.url")
                 }
             },
+            RuntimeKind::Link => {
+                let host = normalize_non_empty(
+                    spec.source.host.as_deref().unwrap_or("127.0.0.1"),
+                    "spec.source.host",
+                )?;
+                let Some(port) = spec.source.port else {
+                    bail!("link service manifest requires spec.source.port");
+                };
+                if port == 0 {
+                    bail!("link service source port must be greater than 0");
+                }
+                ServiceSource::TcpLink { host, port }
+            }
         };
 
         let ports = spec
@@ -139,7 +225,7 @@ impl ServiceManifestDocument {
                         &mount.host_path,
                         base_dir,
                         fungi_home,
-                        &app_home,
+                        &service_sandbox,
                     ),
                     runtime_path: mount.runtime_path,
                 })
@@ -147,9 +233,9 @@ impl ServiceManifestDocument {
             ports,
             command: spec.command,
             entrypoint: spec.entrypoint,
-            working_dir: spec
-                .working_dir
-                .map(|value| resolve_manifest_path_string(&value, base_dir, fungi_home, &app_home)),
+            working_dir: spec.working_dir.map(|value| {
+                resolve_manifest_path_string(value.as_str(), base_dir, fungi_home, &service_sandbox)
+            }),
             labels: metadata_labels,
         })
     }
@@ -341,9 +427,9 @@ fn resolve_manifest_path(
     path: &str,
     base_dir: &Path,
     fungi_home: &Path,
-    app_home: &Path,
+    service_sandbox: &Path,
 ) -> PathBuf {
-    let expanded = resolve_manifest_path_string(path, base_dir, fungi_home, app_home);
+    let expanded = resolve_manifest_path_string(path, base_dir, fungi_home, service_sandbox);
     PathBuf::from(expanded)
 }
 
@@ -351,19 +437,25 @@ fn resolve_manifest_path_string(
     path: &str,
     base_dir: &Path,
     fungi_home: &Path,
-    app_home: &Path,
+    service_sandbox: &Path,
 ) -> String {
     let fungi_home_value = fungi_home.to_string_lossy();
-    let app_home_value = app_home.to_string_lossy();
+    let service_sandbox_value = service_sandbox.to_string_lossy();
+    let service_data = service_sandbox.join("data");
+    let service_data_value = service_data.to_string_lossy();
     let expanded = path
         .replace("${FUNGI_HOME}", &fungi_home_value)
         .replace("$FUNGI_HOME", &fungi_home_value)
         .replace("${fungi_home}", &fungi_home_value)
         .replace("$fungi_home", &fungi_home_value)
-        .replace("${APP_HOME}", &app_home_value)
-        .replace("$APP_HOME", &app_home_value)
-        .replace("${app_home}", &app_home_value)
-        .replace("$app_home", &app_home_value);
+        .replace("${SERVICE_DATA}", &service_data_value)
+        .replace("$SERVICE_DATA", &service_data_value)
+        .replace("${service_data}", &service_data_value)
+        .replace("$service_data", &service_data_value)
+        .replace("${APP_HOME}", &service_sandbox_value)
+        .replace("$APP_HOME", &service_sandbox_value)
+        .replace("${app_home}", &service_sandbox_value)
+        .replace("$app_home", &service_sandbox_value);
     let resolved = PathBuf::from(&expanded);
     if resolved.is_absolute() {
         resolved.to_string_lossy().to_string()

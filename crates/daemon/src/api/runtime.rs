@@ -253,7 +253,39 @@ impl FungiDaemon {
     }
 
     pub async fn list_peer_catalog(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
-        self.list_peer_services(peer_id).await
+        self.refresh_peer_services(peer_id).await
+    }
+
+    pub fn list_cached_peer_services(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
+        let peer_id = peer_id.to_string();
+        let config = self.config().lock().clone();
+        let Some(services_json) = config.service_cache.get_peer_services_json(&peer_id) else {
+            return Ok(Vec::new());
+        };
+        serde_json::from_str(services_json)
+            .map_err(|error| anyhow::anyhow!("failed to decode cached peer services: {}", error))
+    }
+
+    pub async fn refresh_peer_services(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
+        let services = self.list_peer_services(peer_id).await?;
+        self.save_cached_peer_services(peer_id, &services)?;
+        Ok(services)
+    }
+
+    fn save_cached_peer_services(
+        &self,
+        peer_id: PeerId,
+        services: &[CatalogService],
+    ) -> Result<()> {
+        let services_json = serde_json::to_string(services)?;
+        let current_config = self.config().lock().clone();
+        let mut updated_config = current_config.clone();
+        updated_config
+            .service_cache
+            .set_peer_services_json(peer_id.to_string(), services_json);
+        updated_config.save_to_file()?;
+        *self.config().lock() = updated_config;
+        Ok(())
     }
 
     pub fn local_node_capabilities(&self) -> NodeCapabilities {

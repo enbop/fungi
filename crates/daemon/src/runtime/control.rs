@@ -78,6 +78,7 @@ impl RuntimeControl {
         match runtime {
             RuntimeKind::Docker => self.docker.is_some(),
             RuntimeKind::Wasmtime => self.wasmtime_enabled,
+            RuntimeKind::Link => true,
         }
     }
 
@@ -97,6 +98,7 @@ impl RuntimeControl {
         let instance = match manifest.runtime {
             RuntimeKind::Docker => self.docker_provider()?.pull(manifest).await,
             RuntimeKind::Wasmtime => self.wasmtime.pull(manifest).await,
+            RuntimeKind::Link => Ok(self.link_instance_from_manifest(manifest, false)),
         }?;
 
         self.service_index
@@ -143,6 +145,7 @@ impl RuntimeControl {
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.start(name).await,
             RuntimeKind::Wasmtime => self.wasmtime.start(name).await,
+            RuntimeKind::Link => Ok(()),
         }?;
         self.set_desired_state(name, DesiredServiceState::Running)
     }
@@ -152,6 +155,7 @@ impl RuntimeControl {
         let stop_result = match runtime {
             RuntimeKind::Docker => self.docker_provider()?.stop(name).await,
             RuntimeKind::Wasmtime => self.wasmtime.stop(name).await,
+            RuntimeKind::Link => Ok(()),
         };
 
         match stop_result {
@@ -174,6 +178,7 @@ impl RuntimeControl {
         let remove_result = match runtime {
             RuntimeKind::Docker => self.docker_provider()?.remove(name).await,
             RuntimeKind::Wasmtime => self.wasmtime.remove(name).await,
+            RuntimeKind::Link => Ok(()),
         };
 
         match remove_result {
@@ -327,6 +332,17 @@ impl RuntimeControl {
         let inspect_result = match runtime {
             RuntimeKind::Docker => self.docker_provider()?.inspect(name).await,
             RuntimeKind::Wasmtime => self.wasmtime.inspect(name).await,
+            RuntimeKind::Link => {
+                let manifest = self
+                    .get_service_manifest(name)
+                    .ok_or_else(|| anyhow::anyhow!("service not found: {name}"))?;
+                let running = self
+                    .service_state
+                    .lock()
+                    .desired_state(name)
+                    .is_some_and(|state| state == DesiredServiceState::Running);
+                return Ok(self.link_instance_from_manifest(&manifest, running));
+            }
         };
 
         let instance = match inspect_result {
@@ -364,6 +380,7 @@ impl RuntimeControl {
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.logs(name, options).await,
             RuntimeKind::Wasmtime => self.wasmtime.logs(name, options).await,
+            RuntimeKind::Link => bail!("link services do not have runtime logs"),
         }
     }
 
@@ -425,6 +442,7 @@ impl RuntimeControl {
                     bail!("wasmtime runtime is disabled in config");
                 }
             }
+            RuntimeKind::Link => {}
         }
         Ok(())
     }
@@ -473,5 +491,28 @@ impl RuntimeControl {
             .values()
             .flat_map(|manifest| manifest.ports.iter().map(|port| port.host_port))
             .collect()
+    }
+
+    fn link_instance_from_manifest(
+        &self,
+        manifest: &ServiceManifest,
+        running: bool,
+    ) -> ServiceInstance {
+        ServiceInstance {
+            id: format!("link:{}", manifest.name),
+            runtime: RuntimeKind::Link,
+            name: manifest.name.clone(),
+            source: match &manifest.source {
+                ServiceSource::TcpLink { host, port } => format!("{host}:{port}"),
+                _ => "link".to_string(),
+            },
+            labels: manifest.labels.clone(),
+            ports: manifest.ports.clone(),
+            exposed_endpoints: service_expose_endpoint_bindings(manifest),
+            status: ServiceStatus {
+                state: if running { "running" } else { "stopped" }.to_string(),
+                running,
+            },
+        }
     }
 }

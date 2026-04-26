@@ -31,7 +31,6 @@ pub struct CommonArgs {
     #[clap(
         short = 'd',
         long = "device",
-        visible_alias = "on",
         value_name = "DEVICE",
         help = "Device context for dynamic thing calls"
     )]

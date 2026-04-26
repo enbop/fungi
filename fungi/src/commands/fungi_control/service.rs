@@ -1,18 +1,26 @@
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use std::process::Command;
+use std::{
+    collections::BTreeMap,
+    io::{self, Write},
+};
 
 use clap::{Args, Subcommand};
 use fungi_daemon::{
-    CatalogService, RuntimeKind, ServiceAccess, ServiceExposeUsageKind, ServiceInstance,
+    CatalogService, RuntimeKind, ServiceAccess, ServiceExposeTransportKind, ServiceExposeUsageKind,
+    ServiceInstance, ServiceManifestDocument, ServiceManifestExpose,
+    ServiceManifestExposeTransport, ServiceManifestExposeUsage, ServiceManifestHostPort,
+    ServiceManifestMetadata, ServiceManifestPort, ServiceManifestSource, ServiceManifestSpec,
     ServicePortProtocol,
 };
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
-        AttachServiceAccessRequest, Empty, GetServiceLogsRequest, ListPeerCatalogRequest,
-        ListServiceAccessesRequest, ListServicesResponse, PeerInfo, PullServiceRequest,
-        RemotePeerRequest, RemotePullServiceRequest, RemoteServiceControlResponse,
-        RemoteServiceNameRequest, ServiceInstanceResponse, ServiceNameRequest,
+        AttachServiceAccessRequest, DetachServiceAccessRequest, Empty, GetServiceLogsRequest,
+        ListPeerCatalogRequest, ListServiceAccessesRequest, ListServicesResponse, PeerInfo,
+        PullServiceRequest, RemotePeerRequest, RemotePullServiceRequest,
+        RemoteServiceControlResponse, RemoteServiceNameRequest, ServiceInstanceResponse,
+        ServiceNameRequest,
     },
 };
 use serde::Serialize;
@@ -54,10 +62,10 @@ pub enum ServiceCommands {
         #[arg(long, default_value_t = false)]
         refresh: bool,
     },
-    /// Add a service manifest to this node or another device
+    /// Add a service to this node or another device
     Add {
-        /// Path to a service manifest YAML file
-        manifest: String,
+        /// Path to a service manifest YAML file; omit to open the interactive creator
+        manifest: Option<String>,
     },
     /// Open a service in the default local app when possible
     Open {
@@ -68,7 +76,14 @@ pub enum ServiceCommands {
     Connect {
         service: String,
         entry: Option<String>,
+        /// Pin or move the local forwarding port for this service entry
+        #[arg(long)]
+        local_port: Option<u16>,
     },
+    /// Remove the local persistent access for a remote service
+    Disconnect { service: String },
+    /// Change a service setting
+    Set { service: String, setting: String },
     /// Start a service by name on this node or another device
     Start { name: String },
     /// Stop a service by name on this node or another device
@@ -128,33 +143,74 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             }
         }
         ServiceCommands::Add { manifest } => {
-            let (manifest_yaml, manifest_base_dir) = read_manifest_yaml_file(&manifest);
+            let target_device_name = device.as_ref().map(resolved_device_display_name);
+            let created = match manifest {
+                Some(manifest) => read_manifest_yaml_file(&manifest),
+                None => create_service_manifest_interactively(target_device_name.as_deref()),
+            };
             if let Some(device) = device {
                 print_target_device(&device);
                 let req = RemotePullServiceRequest {
-                    peer_id: device.peer_id,
-                    manifest_yaml,
+                    peer_id: device.peer_id.clone(),
+                    manifest_yaml: created.manifest_yaml,
                 };
                 match client.remote_pull_service(Request::new(req)).await {
-                    Ok(resp) => print_remote_service_added(resp.into_inner()),
+                    Ok(resp) => {
+                        let response = resp.into_inner();
+                        let service_name = response_service_name(&response);
+                        print_remote_service_added(response);
+                        if created.start_now {
+                            let req = RemoteServiceNameRequest {
+                                peer_id: device.peer_id.clone(),
+                                name: service_name.clone(),
+                            };
+                            match client.remote_start_service(Request::new(req)).await {
+                                Ok(resp) => {
+                                    print_remote_service_result("started", resp.into_inner())
+                                }
+                                Err(error) => fatal_grpc(error),
+                            }
+                        }
+                        refresh_remote_device_services(&mut client, &device.peer_id).await;
+                        println!("Use it:");
+                        println!(
+                            "  fungi {}@{}",
+                            service_name,
+                            resolved_device_display_name(&device)
+                        );
+                    }
                     Err(error) => fatal_grpc(error),
                 }
             } else {
                 let req = PullServiceRequest {
-                    manifest_yaml,
-                    manifest_base_dir,
+                    manifest_yaml: created.manifest_yaml,
+                    manifest_base_dir: created.manifest_base_dir,
                 };
                 match client.pull_service(Request::new(req)).await {
-                    Ok(resp) => print_service_instance(resp.into_inner(), false),
+                    Ok(resp) => {
+                        let instance = decode_service_instance(resp.into_inner());
+                        let name = instance.name.clone();
+                        print_service_instance_value(instance, false);
+                        if created.start_now {
+                            let req = ServiceNameRequest {
+                                runtime: 0,
+                                name: name.clone(),
+                            };
+                            match client.start_service(Request::new(req)).await {
+                                Ok(_) => println!("Service started"),
+                                Err(e) => fatal_grpc(e),
+                            }
+                        }
+                    }
                     Err(e) => fatal_grpc(e),
                 }
             }
         }
         ServiceCommands::Pull { manifest } => {
-            let (manifest_yaml, manifest_base_dir) = read_manifest_yaml_file(&manifest);
+            let created = read_manifest_yaml_file(&manifest);
             let req = PullServiceRequest {
-                manifest_yaml,
-                manifest_base_dir,
+                manifest_yaml: created.manifest_yaml,
+                manifest_base_dir: created.manifest_base_dir,
             };
             match client.pull_service(Request::new(req)).await {
                 Ok(resp) => print_service_instance(resp.into_inner(), false),
@@ -165,11 +221,14 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             if let Some(device) = device {
                 print_target_device(&device);
                 let req = RemoteServiceNameRequest {
-                    peer_id: device.peer_id,
+                    peer_id: device.peer_id.clone(),
                     name,
                 };
                 match client.remote_start_service(Request::new(req)).await {
-                    Ok(resp) => print_remote_service_result("started", resp.into_inner()),
+                    Ok(resp) => {
+                        print_remote_service_result("started", resp.into_inner());
+                        refresh_remote_device_services(&mut client, &device.peer_id).await;
+                    }
                     Err(error) => fatal_grpc(error),
                 }
             } else {
@@ -214,11 +273,14 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             if let Some(device) = device {
                 print_target_device(&device);
                 let req = RemoteServiceNameRequest {
-                    peer_id: device.peer_id,
+                    peer_id: device.peer_id.clone(),
                     name,
                 };
                 match client.remote_stop_service(Request::new(req)).await {
-                    Ok(resp) => print_remote_service_result("stopped", resp.into_inner()),
+                    Ok(resp) => {
+                        print_remote_service_result("stopped", resp.into_inner());
+                        refresh_remote_device_services(&mut client, &device.peer_id).await;
+                    }
                     Err(error) => fatal_grpc(error),
                 }
             } else {
@@ -233,11 +295,14 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             if let Some(device) = device {
                 print_target_device(&device);
                 let req = RemoteServiceNameRequest {
-                    peer_id: device.peer_id,
+                    peer_id: device.peer_id.clone(),
                     name,
                 };
                 match client.remote_remove_service(Request::new(req)).await {
-                    Ok(resp) => print_remote_service_result("removed", resp.into_inner()),
+                    Ok(resp) => {
+                        print_remote_service_result("removed", resp.into_inner());
+                        refresh_remote_device_services(&mut client, &device.peer_id).await;
+                    }
                     Err(error) => fatal_grpc(error),
                 }
             } else {
@@ -249,32 +314,48 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             }
         }
         ServiceCommands::Open { service, entry } => {
-            let url = if let Some(device) = device {
+            if let Some(device) = device {
                 print_target_device(&device);
                 let remote_service =
                     discover_remote_service(&mut client, &device.peer_id, &service).await;
                 let access =
-                    existing_or_attach_access(&mut client, &device.peer_id, &service).await;
-                build_web_url(&remote_service, &access, entry.as_deref())
+                    existing_or_attach_access(&mut client, &device.peer_id, &service, None, None)
+                        .await;
+                let device_name = resolved_device_display_name(&device);
+                open_or_print_remote_service(
+                    &remote_service,
+                    &access,
+                    &device_name,
+                    entry.as_deref(),
+                );
             } else {
                 let instance = inspect_local_service(&mut client, service).await;
-                build_local_web_url(&instance, entry.as_deref())
-            };
-
-            let Some(url) = url else {
-                fatal("No web entry is available for this service")
-            };
-            open_url(&url);
-            println!("Opened {url}");
+                open_or_print_local_service(&instance, entry.as_deref());
+            }
         }
-        ServiceCommands::Connect { service, entry } => {
+        ServiceCommands::Connect {
+            service,
+            entry,
+            local_port,
+        } => {
             let address = if let Some(device) = device {
                 print_target_device(&device);
-                let access =
-                    existing_or_attach_access(&mut client, &device.peer_id, &service).await;
+                let access = existing_or_attach_access(
+                    &mut client,
+                    &device.peer_id,
+                    &service,
+                    entry.as_deref(),
+                    local_port,
+                )
+                .await;
                 select_access_endpoint(&access, entry.as_deref())
                     .map(|endpoint| format!("{}:{}", endpoint.local_host, endpoint.local_port))
             } else {
+                if local_port.is_some() {
+                    fatal(
+                        "--local-port can only be used when connecting to a service on another device",
+                    )
+                }
                 let instance = inspect_local_service(&mut client, service).await;
                 select_local_port(&instance, entry.as_deref())
                     .map(|port| format!("127.0.0.1:{}", port.host_port))
@@ -284,6 +365,45 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                 fatal("No connectable entry is available for this service")
             };
             println!("{address}");
+        }
+        ServiceCommands::Disconnect { service } => {
+            let (service, _entry, device) =
+                resolve_remote_service_reference(&args, device, service, false, "disconnect");
+
+            let req = DetachServiceAccessRequest {
+                peer_id: device.peer_id,
+                service_id: service,
+            };
+            match client.detach_service_access(Request::new(req)).await {
+                Ok(_) => println!("Local access disconnected"),
+                Err(error) => fatal_grpc(error),
+            }
+        }
+        ServiceCommands::Set { service, setting } => {
+            let local_port = parse_local_port_setting(&setting);
+            let (service, entry, device) =
+                resolve_remote_service_reference(&args, device, service, true, "set");
+            print_target_device(&device);
+            let remote_service =
+                discover_remote_service(&mut client, &device.peer_id, &service).await;
+            let access = existing_or_attach_access(
+                &mut client,
+                &device.peer_id,
+                &service,
+                entry.as_deref(),
+                Some(local_port),
+            )
+            .await;
+            let Some(endpoint) = select_access_endpoint(&access, entry.as_deref()) else {
+                fatal("No connectable entry is available for this service")
+            };
+            let device_name = resolved_device_display_name(&device);
+            print_access_details(
+                &access,
+                endpoint,
+                &device_name,
+                remote_service.usage.as_ref(),
+            );
         }
     }
 }
@@ -400,24 +520,82 @@ pub fn parse_dynamic_thing_target(value: String) -> Result<DynamicThingTarget, S
     })
 }
 
-fn print_remote_service_added(
-    resp: fungi_daemon_grpc::fungi_daemon_grpc::RemoteServiceControlResponse,
-) {
+fn parse_service_reference(value: String) -> DynamicThingTarget {
+    let target = parse_dynamic_thing_target(value).unwrap_or_else(|error| fatal(error));
+    target
+}
+
+fn resolve_remote_service_reference(
+    args: &CommonArgs,
+    scoped_device: Option<super::shared::ResolvedPeerTarget>,
+    value: String,
+    allow_entry: bool,
+    action: &str,
+) -> (String, Option<String>, super::shared::ResolvedPeerTarget) {
+    let target = parse_service_reference(value);
+    if target.entry.is_some() && !allow_entry {
+        fatal(format!("Entry-specific {action} is not implemented yet"))
+    }
+
+    let device = match (scoped_device, target.device) {
+        (Some(_), Some(_)) => {
+            fatal("Device specified twice. Use either --device <device> or service@device.")
+        }
+        (Some(device), None) => device,
+        (None, Some(device_input)) => match resolve_optional_device(args, Some(&device_input)) {
+            Ok(Some(device)) => device,
+            Ok(None) => fatal(format!("Device is required for {action}")),
+            Err(error) => fatal(error),
+        },
+        (None, None) => fatal(format!(
+            "Device is required. Use `fungi service {action} <service>@<device>`."
+        )),
+    };
+
+    (target.name, target.entry, device)
+}
+
+fn parse_local_port_setting(setting: &str) -> u16 {
+    let Some((key, value)) = setting.split_once('=') else {
+        fatal("Setting must look like local.port=2222")
+    };
+    if key.trim() != "local.port" {
+        fatal("Unknown setting. Supported settings: local.port")
+    }
+
+    let port = value
+        .trim()
+        .parse::<u16>()
+        .unwrap_or_else(|_| fatal("local.port must be a number between 1 and 65535"));
+    if port == 0 {
+        fatal("local.port must be greater than 0")
+    }
+    port
+}
+
+fn response_service_name(resp: &RemoteServiceControlResponse) -> String {
     let service_name = if resp.service_name.trim().is_empty() {
         "<unknown>"
     } else {
         resp.service_name.as_str()
     };
+    service_name.to_string()
+}
+
+fn print_remote_service_added(resp: RemoteServiceControlResponse) {
+    let service_name = response_service_name(&resp);
     println!("Remote service added: {service_name}");
 }
 
 fn print_remote_service_result(action: &str, resp: RemoteServiceControlResponse) {
-    let service_name = if resp.service_name.trim().is_empty() {
-        "<unknown>"
-    } else {
-        resp.service_name.as_str()
-    };
+    let service_name = response_service_name(&resp);
     println!("Remote service {action}: {service_name}");
+}
+
+async fn refresh_remote_device_services(client: &mut RpcClient, peer_id: &str) {
+    if let Err(error) = fetch_remote_services(client, peer_id).await {
+        eprintln!("Warning: failed to refresh remote service cache: {error}");
+    }
 }
 
 async fn inspect_local_service(client: &mut RpcClient, name: String) -> ServiceInstance {
@@ -496,11 +674,16 @@ async fn print_service_overview(client: &mut RpcClient, verbose: bool, refresh: 
     } else {
         for device in devices {
             let accesses = list_accesses(client, &device.peer_id).await;
-            rows.extend(
-                accesses
-                    .into_iter()
-                    .map(|access| ServiceOverviewRow::from_cached_access(access, &device, verbose)),
-            );
+            let cached_services = fetch_cached_remote_services(client, &device.peer_id).await;
+            if cached_services.is_empty() {
+                rows.extend(accesses.into_iter().map(|access| {
+                    ServiceOverviewRow::from_cached_access(access, &device, verbose)
+                }));
+            } else {
+                rows.extend(cached_services.into_iter().map(|service| {
+                    ServiceOverviewRow::from_remote_service(service, &device, &accesses, verbose)
+                }));
+            }
         }
     }
 
@@ -546,11 +729,28 @@ async fn fetch_remote_services(
 ) -> Result<Vec<RemoteService>, String> {
     let req = ListPeerCatalogRequest {
         peer_id: peer_id.to_string(),
+        cached: false,
     };
     match client.list_peer_catalog(Request::new(req)).await {
         Ok(resp) => serde_json::from_str::<Vec<RemoteService>>(&resp.into_inner().services_json)
             .map_err(|error| format!("Failed to decode remote services: {error}")),
         Err(error) => Err(error.message().to_string()),
+    }
+}
+
+async fn fetch_cached_remote_services(client: &mut RpcClient, peer_id: &str) -> Vec<RemoteService> {
+    let req = ListPeerCatalogRequest {
+        peer_id: peer_id.to_string(),
+        cached: true,
+    };
+    match client.list_peer_catalog(Request::new(req)).await {
+        Ok(resp) => {
+            match serde_json::from_str::<Vec<RemoteService>>(&resp.into_inner().services_json) {
+                Ok(services) => services,
+                Err(error) => fatal(format!("Failed to decode cached remote services: {error}")),
+            }
+        }
+        Err(error) => fatal_grpc(error),
     }
 }
 
@@ -585,14 +785,8 @@ async fn open_unique_cached_remote_service(
             let matched = matches.remove(0);
             let device_name = device_display_name(&matched.device);
             let reference = format!("{}@{}", matched.access.service_id, device_name);
-            let Some(url) = build_cached_access_web_url(&matched.access, entry) else {
-                fatal(format!(
-                    "Matched {reference}, but it has no cached web entry"
-                ))
-            };
             println!("Matched {reference}");
-            open_url(&url);
-            println!("Opened {url}");
+            open_or_print_cached_access(&matched.access, &device_name, entry);
             true
         }
         _ => {
@@ -610,6 +804,9 @@ fn service_matches(service_id: &str, service_name: &str, value: &str) -> bool {
 
 fn build_cached_access_web_url(access: &ServiceAccess, entry: Option<&str>) -> Option<String> {
     let endpoint = if let Some(entry) = entry {
+        if is_non_web_entry_name(entry) {
+            return None;
+        }
         access
             .endpoints
             .iter()
@@ -625,6 +822,19 @@ fn build_cached_access_web_url(access: &ServiceAccess, entry: Option<&str>) -> O
         "http://{}:{}",
         endpoint.local_host, endpoint.local_port
     ))
+}
+
+fn open_or_print_cached_access(access: &ServiceAccess, device_name: &str, entry: Option<&str>) {
+    if let Some(url) = build_cached_access_web_url(access, entry) {
+        open_url(&url);
+        println!("Opened {url}");
+        return;
+    }
+
+    let Some(endpoint) = select_access_endpoint(access, entry) else {
+        fatal("No connectable entry is available for this service")
+    };
+    print_access_details(access, endpoint, device_name, None);
 }
 
 fn format_cached_remote_candidates(matches: &[CachedRemoteServiceMatch]) -> String {
@@ -668,10 +878,18 @@ async fn list_accesses(client: &mut RpcClient, peer_id: &str) -> Vec<ServiceAcce
     }
 }
 
-async fn attach_access(client: &mut RpcClient, peer_id: &str, service_id: &str) -> ServiceAccess {
+async fn attach_access_with_options(
+    client: &mut RpcClient,
+    peer_id: &str,
+    service_id: &str,
+    entry: Option<&str>,
+    local_port: Option<u16>,
+) -> ServiceAccess {
     let req = AttachServiceAccessRequest {
         peer_id: peer_id.to_string(),
         service_id: service_id.to_string(),
+        entry: entry.unwrap_or_default().to_string(),
+        local_port: local_port.unwrap_or_default() as i32,
     };
     match client.attach_service_access(Request::new(req)).await {
         Ok(resp) => {
@@ -688,16 +906,26 @@ async fn existing_or_attach_access(
     client: &mut RpcClient,
     peer_id: &str,
     service_id: &str,
+    entry: Option<&str>,
+    local_port: Option<u16>,
 ) -> ServiceAccess {
     let existing = list_accesses(client, peer_id).await;
-    if let Some(access) = existing
-        .into_iter()
-        .find(|access| access.service_id == service_id)
-    {
+    if let Some(access) = existing.into_iter().find(|access| {
+        access.service_id == service_id
+            && local_port.is_none()
+            && entry
+                .map(|entry| {
+                    access
+                        .endpoints
+                        .iter()
+                        .any(|endpoint| endpoint.name == entry)
+                })
+                .unwrap_or(true)
+    }) {
         return access;
     }
 
-    attach_access(client, peer_id, service_id).await
+    attach_access_with_options(client, peer_id, service_id, entry, local_port).await
 }
 
 async fn discover_remote_service(
@@ -705,6 +933,14 @@ async fn discover_remote_service(
     peer_id: &str,
     service_id: &str,
 ) -> RemoteService {
+    if let Some(service) = fetch_cached_remote_services(client, peer_id)
+        .await
+        .into_iter()
+        .find(|service| service.service_id == service_id)
+    {
+        return service;
+    }
+
     let services = match fetch_remote_services(client, peer_id).await {
         Ok(services) => services,
         Err(error) => fatal(error),
@@ -746,9 +982,68 @@ fn build_web_url(
     Some(value)
 }
 
+fn open_or_print_remote_service(
+    service: &RemoteService,
+    access: &ServiceAccess,
+    device_name: &str,
+    entry: Option<&str>,
+) {
+    if matches!(
+        service.usage.as_ref().map(|usage| usage.kind),
+        Some(ServiceExposeUsageKind::Web)
+    ) {
+        let Some(url) = build_web_url(service, access, entry) else {
+            fatal("No web entry is available for this service")
+        };
+        open_url(&url);
+        println!("Opened {url}");
+        return;
+    }
+
+    let Some(endpoint) = select_access_endpoint(access, entry) else {
+        fatal("No connectable entry is available for this service")
+    };
+    print_access_details(access, endpoint, device_name, service.usage.as_ref());
+}
+
+fn print_access_details(
+    access: &ServiceAccess,
+    endpoint: &fungi_daemon::ServiceAccessEndpoint,
+    device_name: &str,
+    usage: Option<&fungi_daemon::ServiceExposeUsage>,
+) {
+    let usage = service_usage_label(usage);
+    let remote_port = format_remote_port(endpoint.remote_port);
+    println!("{}@{}", access.service_id, device_name);
+    println!("type: {usage}");
+    println!("state: connected");
+    println!();
+    println!("forward:");
+    println!(
+        "  {}  {}:{} -> {}:{}",
+        endpoint.name, endpoint.local_host, endpoint.local_port, device_name, remote_port
+    );
+    println!();
+    println!("local address:");
+    println!("  {}:{}", endpoint.local_host, endpoint.local_port);
+}
+
 fn build_local_web_url(instance: &ServiceInstance, entry: Option<&str>) -> Option<String> {
     select_local_web_port(instance, entry)
         .map(|port| format!("http://127.0.0.1:{}", port.host_port))
+}
+
+fn open_or_print_local_service(instance: &ServiceInstance, entry: Option<&str>) {
+    if let Some(url) = build_local_web_url(instance, entry) {
+        open_url(&url);
+        println!("Opened {url}");
+        return;
+    }
+
+    let Some(port) = select_local_port(instance, entry) else {
+        fatal("No connectable entry is available for this service")
+    };
+    println!("127.0.0.1:{}", port.host_port);
 }
 
 fn select_access_endpoint<'a>(
@@ -804,6 +1099,9 @@ fn select_local_web_port<'a>(
     entry: Option<&str>,
 ) -> Option<&'a fungi_daemon::ServicePort> {
     if let Some(entry) = entry {
+        if is_non_web_entry_name(entry) {
+            return None;
+        }
         return select_local_port(instance, Some(entry));
     }
 
@@ -817,6 +1115,13 @@ fn is_web_entry_name(name: Option<&str>) -> bool {
     matches!(
         name.map(|value| value.trim().to_ascii_lowercase()),
         Some(value) if matches!(value.as_str(), "web" | "http" | "https")
+    )
+}
+
+fn is_non_web_entry_name(name: &str) -> bool {
+    matches!(
+        name.trim().to_ascii_lowercase().as_str(),
+        "ssh" | "tcp" | "raw" | "api" | "mcp"
     )
 }
 
@@ -855,7 +1160,14 @@ fn open_url(_url: &str) {
     fatal("Opening URLs is not supported on this platform")
 }
 
-pub(crate) fn read_manifest_yaml_file(path: &str) -> (String, String) {
+#[derive(Debug, Clone)]
+pub(crate) struct CreatedServiceManifest {
+    pub(crate) manifest_yaml: String,
+    pub(crate) manifest_base_dir: String,
+    start_now: bool,
+}
+
+pub(crate) fn read_manifest_yaml_file(path: &str) -> CreatedServiceManifest {
     let manifest_path = std::path::PathBuf::from(path);
     let absolute_manifest_path = match std::fs::canonicalize(&manifest_path) {
         Ok(path) => path,
@@ -869,7 +1181,224 @@ pub(crate) fn read_manifest_yaml_file(path: &str) -> (String, String) {
         .parent()
         .map(|path| path.to_string_lossy().to_string())
         .unwrap_or_default();
-    (manifest_yaml, manifest_base_dir)
+    CreatedServiceManifest {
+        manifest_yaml,
+        manifest_base_dir,
+        start_now: false,
+    }
+}
+
+fn create_service_manifest_interactively(
+    target_device_name: Option<&str>,
+) -> CreatedServiceManifest {
+    println!("Create a service");
+    println!("Press Ctrl+C to cancel.\n");
+
+    let service_type = prompt_with_default("Step 1/4 - Service type [tcp-tunnel]", "tcp-tunnel");
+    let normalized_type = service_type.trim().to_ascii_lowercase();
+    if !matches!(
+        normalized_type.as_str(),
+        "tcp-tunnel" | "tunnel" | "tcp" | "tcp-link" | "link" | "existing-tcp"
+    ) {
+        fatal("Only TCP tunnel services are supported by the creator for now")
+    }
+
+    let name = prompt_required("Step 2/4 - Service name");
+    let target_label = target_device_name
+        .map(|device| format!("Step 3/4 - TCP address on {device}, for example 127.0.0.1:22"))
+        .unwrap_or_else(|| {
+            "Step 3/4 - TCP address on this device, for example 127.0.0.1:22".to_string()
+        });
+    let target = prompt_required(&target_label);
+    let (host, port) = parse_tcp_target(&target);
+    if !matches!(host.as_str(), "127.0.0.1" | "localhost") {
+        fatal("The first creator version only supports 127.0.0.1 or localhost targets")
+    }
+
+    let usage = prompt_with_default("Step 4/4 - Usage [ssh|web|tcp]", "tcp");
+    let (usage_kind, entry_name) = match usage.trim().to_ascii_lowercase().as_str() {
+        "ssh" => (ServiceExposeUsageKind::Ssh, "ssh"),
+        "web" | "http" | "https" => (ServiceExposeUsageKind::Web, "web"),
+        "tcp" | "raw" | "api" | "mcp" => (ServiceExposeUsageKind::Raw, "main"),
+        _ => fatal("Usage must be one of: ssh, web, tcp"),
+    };
+
+    println!("\nService summary:");
+    println!("  name: {name}");
+    println!("  type: TCP tunnel");
+    if let Some(device) = target_device_name {
+        println!("  target: {host}:{port} on {device}");
+    } else {
+        println!("  target: {host}:{port} on this device");
+    }
+    println!("  usage: {}", usage_kind_label(usage_kind));
+    let confirm = prompt_with_default("Save this service? [Y/n]", "y");
+    if matches!(confirm.trim().to_ascii_lowercase().as_str(), "n" | "no") {
+        fatal("Canceled")
+    }
+    let start_now = prompt_yes_no_default("Start this service now? [Y/n]", true);
+
+    let document = ServiceManifestDocument {
+        api_version: "fungi.rs/v1alpha1".to_string(),
+        kind: "ServiceManifest".to_string(),
+        metadata: ServiceManifestMetadata {
+            name: name.clone(),
+            labels: BTreeMap::new(),
+        },
+        spec: ServiceManifestSpec {
+            runtime: RuntimeKind::Link,
+            source: ServiceManifestSource {
+                host: Some(host),
+                port: Some(port),
+                ..ServiceManifestSource::default()
+            },
+            expose: Some(ServiceManifestExpose {
+                enabled: true,
+                service_id: Some(name.clone()),
+                display_name: Some(name),
+                transport: Some(ServiceManifestExposeTransport {
+                    kind: ServiceExposeTransportKind::Tcp,
+                }),
+                usage: Some(ServiceManifestExposeUsage {
+                    kind: usage_kind,
+                    path: None,
+                }),
+                icon_url: None,
+                catalog_id: None,
+            }),
+            env: BTreeMap::new(),
+            mounts: Vec::new(),
+            ports: vec![ServiceManifestPort {
+                host_port: Some(ServiceManifestHostPort::Fixed(port)),
+                service_port: port,
+                name: Some(entry_name.to_string()),
+                protocol: ServicePortProtocol::Tcp,
+            }],
+            command: Vec::new(),
+            entrypoint: Vec::new(),
+            working_dir: None,
+        },
+    };
+
+    let manifest_yaml = serde_yaml::to_string(&document)
+        .unwrap_or_else(|error| fatal(format!("Failed to encode service manifest: {error}")));
+    CreatedServiceManifest {
+        manifest_yaml,
+        manifest_base_dir: String::new(),
+        start_now,
+    }
+}
+
+fn prompt_required(label: &str) -> String {
+    loop {
+        let value = prompt(label);
+        if !value.trim().is_empty() {
+            return value.trim().to_string();
+        }
+        println!("Value is required.");
+    }
+}
+
+fn prompt_with_default(label: &str, default: &str) -> String {
+    let value = prompt(label);
+    if value.trim().is_empty() {
+        default.to_string()
+    } else {
+        value.trim().to_string()
+    }
+}
+
+fn prompt_yes_no_default(label: &str, default: bool) -> bool {
+    let default_value = if default { "y" } else { "n" };
+    let value = prompt_with_default(label, default_value);
+    match value.trim().to_ascii_lowercase().as_str() {
+        "y" | "yes" => true,
+        "n" | "no" => false,
+        _ => fatal("Please answer y or n"),
+    }
+}
+
+fn prompt(label: &str) -> String {
+    print!("{label}: ");
+    let _ = io::stdout().flush();
+    let mut value = String::new();
+    io::stdin()
+        .read_line(&mut value)
+        .unwrap_or_else(|error| fatal(format!("Failed to read input: {error}")));
+    value
+}
+
+fn parse_tcp_target(value: &str) -> (String, u16) {
+    let Some((host, port)) = value.trim().rsplit_once(':') else {
+        fatal("Target address must look like host:port")
+    };
+    let host = host.trim();
+    if host.is_empty() {
+        fatal("Target host cannot be empty")
+    }
+    let port = port
+        .trim()
+        .parse::<u16>()
+        .unwrap_or_else(|_| fatal("Target port must be a number between 1 and 65535"));
+    if port == 0 {
+        fatal("Target port must be greater than 0")
+    }
+    (host.to_string(), port)
+}
+
+fn usage_kind_label(kind: ServiceExposeUsageKind) -> &'static str {
+    match kind {
+        ServiceExposeUsageKind::Web => "web",
+        ServiceExposeUsageKind::Ssh => "ssh",
+        ServiceExposeUsageKind::Raw => "tcp",
+    }
+}
+
+fn service_usage_label(usage: Option<&fungi_daemon::ServiceExposeUsage>) -> &'static str {
+    usage
+        .map(|usage| usage_kind_label(usage.kind))
+        .unwrap_or("tcp")
+}
+
+fn local_service_usage_label(service: &ServiceInstance) -> String {
+    let mut labels = service
+        .ports
+        .iter()
+        .map(|port| entry_usage_label(port.name.as_deref()))
+        .collect::<Vec<_>>();
+    labels.sort_unstable();
+    labels.dedup();
+
+    match labels.as_slice() {
+        [] => "-".to_string(),
+        [label] => (*label).to_string(),
+        labels if labels.contains(&"web") && labels.len() == 1 => "web".to_string(),
+        _ => "mixed".to_string(),
+    }
+}
+
+fn access_usage_label(access: &ServiceAccess) -> String {
+    let mut labels = access
+        .endpoints
+        .iter()
+        .map(|endpoint| entry_usage_label(Some(endpoint.name.as_str())))
+        .collect::<Vec<_>>();
+    labels.sort_unstable();
+    labels.dedup();
+
+    match labels.as_slice() {
+        [] => "-".to_string(),
+        [label] => (*label).to_string(),
+        _ => "mixed".to_string(),
+    }
+}
+
+fn entry_usage_label(name: Option<&str>) -> &'static str {
+    match name.map(|value| value.trim().to_ascii_lowercase()) {
+        Some(value) if matches!(value.as_str(), "web" | "http" | "https") => "web",
+        Some(value) if value == "ssh" => "ssh",
+        _ => "tcp",
+    }
 }
 
 pub(crate) fn print_service_instance(resp: ServiceInstanceResponse, verbose: bool) {
@@ -902,6 +1431,13 @@ fn print_service_instance_value(instance: ServiceInstance, verbose: bool) {
     }
 }
 
+fn decode_service_instance(resp: ServiceInstanceResponse) -> ServiceInstance {
+    match serde_json::from_str::<ServiceInstance>(&resp.instance_json) {
+        Ok(instance) => instance,
+        Err(error) => fatal(format!("Failed to decode service instance: {error}")),
+    }
+}
+
 fn print_service_instances_value(services: Vec<ServiceInstance>, verbose: bool) {
     let pretty = if verbose {
         let views = services
@@ -927,6 +1463,7 @@ struct ServiceOverviewRow {
     reference: String,
     device: String,
     kind: String,
+    usage: String,
     state: String,
     entries: Vec<String>,
     note: Option<String>,
@@ -934,27 +1471,28 @@ struct ServiceOverviewRow {
 
 impl ServiceOverviewRow {
     fn from_local(service: ServiceInstance, verbose: bool) -> Self {
-        let entries = if verbose {
-            service
-                .ports
-                .iter()
-                .map(|port| {
-                    let name = port.name.clone().unwrap_or_else(|| "main".to_string());
-                    format!("{name}:127.0.0.1:{}", port.host_port)
-                })
-                .collect()
-        } else {
-            service
-                .ports
-                .iter()
-                .map(|port| port.name.clone().unwrap_or_else(|| "main".to_string()))
-                .collect()
-        };
+        let usage = local_service_usage_label(&service);
+        let entries = service
+            .ports
+            .iter()
+            .map(|port| {
+                let name = port.name.clone().unwrap_or_else(|| "main".to_string());
+                if verbose {
+                    format!(
+                        "{name} 127.0.0.1:{} -> this:{}",
+                        port.host_port, port.service_port
+                    )
+                } else {
+                    format!("{name} 127.0.0.1:{}", port.host_port)
+                }
+            })
+            .collect();
 
         Self {
             reference: service.name.clone(),
             device: "this".to_string(),
             kind: "local".to_string(),
+            usage,
             state: service.status.state,
             entries,
             note: None,
@@ -963,29 +1501,38 @@ impl ServiceOverviewRow {
 
     fn from_cached_access(access: ServiceAccess, device: &PeerInfo, verbose: bool) -> Self {
         let device_name = device_display_name(device);
-        let entries = if verbose {
-            access
-                .endpoints
-                .iter()
-                .map(|endpoint| {
+        let entries = access
+            .endpoints
+            .iter()
+            .map(|endpoint| {
+                let remote_port = format_remote_port(endpoint.remote_port);
+                if verbose {
                     format!(
-                        "{}:{}:{}",
-                        endpoint.name, endpoint.local_host, endpoint.local_port
+                        "{} {}:{} -> {}:{}",
+                        endpoint.name,
+                        endpoint.local_host,
+                        endpoint.local_port,
+                        device_name,
+                        remote_port
                     )
-                })
-                .collect()
-        } else {
-            access
-                .endpoints
-                .iter()
-                .map(|endpoint| endpoint.name.clone())
-                .collect()
-        };
+                } else {
+                    format!(
+                        "{} {}:{} -> {}:{}",
+                        endpoint.name,
+                        endpoint.local_host,
+                        endpoint.local_port,
+                        device_name,
+                        remote_port
+                    )
+                }
+            })
+            .collect();
 
         Self {
             reference: format!("{}@{}", access.service_id, device_name),
             device: device_name,
-            kind: "cached-access".to_string(),
+            kind: "remote".to_string(),
+            usage: access_usage_label(&access),
             state: "connected".to_string(),
             entries,
             note: None,
@@ -1002,36 +1549,50 @@ impl ServiceOverviewRow {
         let attached_access = attached
             .iter()
             .find(|access| access.service_id == service.service_id);
-        let entries = if verbose {
-            match attached_access {
-                Some(access) => access
-                    .endpoints
-                    .iter()
-                    .map(|endpoint| {
-                        format!(
-                            "{}:{}:{}",
-                            endpoint.name, endpoint.local_host, endpoint.local_port
-                        )
-                    })
-                    .collect(),
-                None => service
-                    .endpoints
-                    .iter()
-                    .map(|endpoint| format!("{}:{}", endpoint.name, endpoint.service_port))
-                    .collect(),
-            }
-        } else {
-            service
+        let entries = match attached_access {
+            Some(access) => access
                 .endpoints
                 .iter()
-                .map(|endpoint| endpoint.name.clone())
-                .collect()
+                .map(|endpoint| {
+                    let remote_port = format_remote_port(endpoint.remote_port);
+                    if verbose {
+                        format!(
+                            "{} {}:{} -> {}:{}",
+                            endpoint.name,
+                            endpoint.local_host,
+                            endpoint.local_port,
+                            device_name,
+                            remote_port
+                        )
+                    } else {
+                        format!(
+                            "{} {}:{} -> {}:{}",
+                            endpoint.name,
+                            endpoint.local_host,
+                            endpoint.local_port,
+                            device_name,
+                            remote_port
+                        )
+                    }
+                })
+                .collect(),
+            None => service
+                .endpoints
+                .iter()
+                .map(|endpoint| {
+                    format!(
+                        "{} remote:{}:{}",
+                        endpoint.name, device_name, endpoint.service_port
+                    )
+                })
+                .collect(),
         };
 
         Self {
             reference: format!("{}@{}", service.service_id, device_name),
             device: device_name,
             kind: "remote".to_string(),
+            usage: service_usage_label(service.usage.as_ref()).to_string(),
             state: service.status.state,
             entries,
             note: attached_access.map(|_| "attached".to_string()),
@@ -1044,6 +1605,7 @@ impl ServiceOverviewRow {
             reference: format!("@{device_name}"),
             device: device_name,
             kind: "remote".to_string(),
+            usage: "-".to_string(),
             state: "unavailable".to_string(),
             entries: Vec::new(),
             note: Some(error),
@@ -1075,6 +1637,12 @@ fn print_service_overview_rows(rows: &[ServiceOverviewRow]) {
         .max()
         .unwrap_or("KIND".len())
         .max("KIND".len());
+    let usage_width = rows
+        .iter()
+        .map(|row| row.usage.len())
+        .max()
+        .unwrap_or("TYPE".len())
+        .max("TYPE".len());
     let state_width = rows
         .iter()
         .map(|row| row.state.len())
@@ -1083,8 +1651,8 @@ fn print_service_overview_rows(rows: &[ServiceOverviewRow]) {
         .max("STATE".len());
 
     println!(
-        "{:<ref_width$}  {:<device_width$}  {:<kind_width$}  {:<state_width$}  ENTRIES",
-        "SERVICE", "DEVICE", "KIND", "STATE"
+        "{:<ref_width$}  {:<device_width$}  {:<kind_width$}  {:<usage_width$}  {:<state_width$}  ACCESS",
+        "SERVICE", "DEVICE", "KIND", "TYPE", "STATE"
     );
     for row in rows {
         let entries = if row.entries.is_empty() {
@@ -1098,8 +1666,8 @@ fn print_service_overview_rows(rows: &[ServiceOverviewRow]) {
             .map(|note| format!("  {note}"))
             .unwrap_or_default();
         println!(
-            "{:<ref_width$}  {:<device_width$}  {:<kind_width$}  {:<state_width$}  {}{}",
-            row.reference, row.device, row.kind, row.state, entries, suffix
+            "{:<ref_width$}  {:<device_width$}  {:<kind_width$}  {:<usage_width$}  {:<state_width$}  {}{}",
+            row.reference, row.device, row.kind, row.usage, row.state, entries, suffix
         );
     }
 }
@@ -1111,6 +1679,30 @@ fn device_display_name(device: &PeerInfo) -> String {
         device.hostname.clone()
     } else {
         device.peer_id.clone()
+    }
+}
+
+fn resolved_device_display_name(device: &super::shared::ResolvedPeerTarget) -> String {
+    device
+        .alias
+        .as_ref()
+        .filter(|alias| !alias.trim().is_empty())
+        .cloned()
+        .or_else(|| {
+            device
+                .hostname
+                .as_ref()
+                .filter(|hostname| !hostname.trim().is_empty())
+                .cloned()
+        })
+        .unwrap_or_else(|| device.peer_id.clone())
+}
+
+fn format_remote_port(port: u16) -> String {
+    if port == 0 {
+        "?".to_string()
+    } else {
+        port.to_string()
     }
 }
 
@@ -1375,6 +1967,15 @@ mod tests {
     }
 
     #[test]
+    fn build_local_web_url_rejects_explicit_tcp_entry() {
+        let instance = service_instance(vec![service_port("ssh", 28022)]);
+
+        let url = build_local_web_url(&instance, Some("ssh"));
+
+        assert!(url.is_none());
+    }
+
+    #[test]
     fn build_cached_access_web_url_defaults_to_web_endpoint() {
         let access = service_access(vec![
             access_endpoint("ssh", 28022),
@@ -1394,6 +1995,15 @@ mod tests {
         ]);
 
         let url = build_cached_access_web_url(&access, None);
+
+        assert!(url.is_none());
+    }
+
+    #[test]
+    fn build_cached_access_web_url_rejects_explicit_tcp_entry() {
+        let access = service_access(vec![access_endpoint("ssh", 28022)]);
+
+        let url = build_cached_access_web_url(&access, Some("ssh"));
 
         assert!(url.is_none());
     }
@@ -1503,6 +2113,7 @@ mod tests {
             protocol: format!("/fungi/service/demo/{name}/0.2.0"),
             local_host: "127.0.0.1".to_string(),
             local_port,
+            remote_port: local_port,
         }
     }
 

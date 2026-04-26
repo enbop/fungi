@@ -86,20 +86,21 @@ fn runtime_control_new_creates_services_root() {
     let temp_dir = TempDir::new().unwrap();
     let fungi_home = temp_dir.path().join("fungi-home");
     let runtime_root = fungi_home.join("runtime");
-    let service_state_file = fungi_home.join("services-state.json");
+    let services_root = fungi_home.join("services");
 
     RuntimeControl::new(
         runtime_root,
         PathBuf::from("/bin/echo"),
         fungi_home.clone(),
         None,
-        service_state_file,
+        services_root,
         Vec::new(),
         false,
     )
     .unwrap();
 
     assert!(fungi_home.join("services").is_dir());
+    assert!(fungi_home.join("sandboxes").is_dir());
 }
 
 #[test]
@@ -238,7 +239,7 @@ spec:
 
     assert_eq!(
         manifest.mounts[0].host_path,
-        fungi_home.join("services/filebrowser/data")
+        fungi_home.join("sandboxes/filebrowser/data")
     );
     assert_ne!(manifest.ports[0].host_port, occupied_allowed_port_number);
     assert_eq!(
@@ -270,6 +271,44 @@ spec:
         manifest.ports[0].host_port_allocation,
         ServicePortAllocation::Auto
     );
+}
+
+#[test]
+fn manifest_document_supports_link_service() {
+    let yaml = r#"
+apiVersion: fungi.rs/v1alpha1
+kind: ServiceManifest
+metadata:
+    name: home-ssh
+spec:
+    runtime: link
+    source:
+        host: 127.0.0.1
+        port: 22
+    expose:
+        enabled: true
+        serviceId: home-ssh
+        displayName: Home SSH
+        transport:
+            kind: tcp
+        usage:
+            kind: ssh
+    ports:
+        - hostPort: 22
+          servicePort: 22
+          name: ssh
+          protocol: tcp
+"#;
+
+    let manifest =
+        parse_service_manifest_yaml(yaml, Path::new("."), Path::new("/tmp/fungi-home")).unwrap();
+
+    assert_eq!(manifest.runtime, RuntimeKind::Link);
+    assert!(matches!(
+        manifest.source,
+        ServiceSource::TcpLink { ref host, port } if host == "127.0.0.1" && port == 22
+    ));
+    assert_eq!(manifest.ports[0].name.as_deref(), Some("ssh"));
 }
 
 #[tokio::test]

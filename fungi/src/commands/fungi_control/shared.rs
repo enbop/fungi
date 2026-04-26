@@ -24,10 +24,7 @@ pub struct OptionalPeerTargetArg {
 pub struct OptionalDeviceTargetArg {
     #[arg(
         short = 'd',
-        long = "on",
-        visible_alias = "device",
-        alias = "peer",
-        short_alias = 'p',
+        long = "device",
         value_name = "DEVICE",
         help = "Device name"
     )]
@@ -170,7 +167,7 @@ pub fn resolve_peer_input(
                     hostname: entry.hostname.clone(),
                 }),
                 None => Err(format!(
-                    "Unknown peer or alias: {alias}. Use --peer/-p with a peer ID, or set an address book alias first."
+                    "Unknown device name: {alias}. Add or rename the device first."
                 )),
             }
         }

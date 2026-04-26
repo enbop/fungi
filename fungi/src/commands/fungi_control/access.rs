@@ -165,6 +165,8 @@ async fn attach_access(
     let req = AttachServiceAccessRequest {
         peer_id: peer_id.to_string(),
         service_id: service_id.to_string(),
+        entry: String::new(),
+        local_port: 0,
     };
     match client.attach_service_access(Request::new(req)).await {
         Ok(resp) => {
@@ -204,6 +206,7 @@ async fn discover_catalog_service(
 ) -> CatalogService {
     let req = ListPeerCatalogRequest {
         peer_id: peer_id.to_string(),
+        cached: false,
     };
     let services = match client.list_peer_catalog(Request::new(req)).await {
         Ok(resp) => {

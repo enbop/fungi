@@ -1303,11 +1303,16 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         let req = request.into_inner();
         let peer_id = PeerId::from_str(&req.peer_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
-        let services = self
-            .inner
-            .list_peer_services(peer_id)
-            .await
-            .map_err(|e| Status::internal(format!("Failed to list peer services: {e}")))?;
+        let services = if req.cached {
+            self.inner.list_cached_peer_services(peer_id).map_err(|e| {
+                Status::internal(format!("Failed to list cached peer services: {e}"))
+            })?
+        } else {
+            self.inner
+                .refresh_peer_services(peer_id)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to list peer services: {e}")))?
+        };
         let services_json = serde_json::to_string(&services)
             .map_err(|e| Status::internal(format!("Failed to serialize peer services: {e}")))?;
         Ok(Response::new(ListPeerCatalogResponse { services_json }))
@@ -1450,7 +1455,16 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
         let service_access = self
             .inner
-            .attach_service_access(peer_id, req.service_id)
+            .attach_service_access(
+                peer_id,
+                req.service_id,
+                empty_to_none(req.entry),
+                if req.local_port > 0 {
+                    Some(req.local_port as u16)
+                } else {
+                    None
+                },
+            )
             .await
             .map_err(|e| Status::internal(format!("Failed to attach service access: {e}")))?;
 

@@ -52,9 +52,9 @@ impl Runtime {
         let normalized = normalize_absolute_path(path)?;
         if is_sensitive_fungi_path(&normalized, fungi_dir)? {
             bail!(
-                "refusing to allow fungi home secrets path: {}. Use {}/services or a directory outside fungi home",
+                "refusing to allow fungi home secrets path: {}. Use {}/sandboxes or a directory outside fungi home",
                 normalized.display(),
-                normalize_absolute_path(fungi_dir.join("services").as_path())?.display()
+                normalize_absolute_path(fungi_dir.join("sandboxes").as_path())?.display()
             );
         }
         Ok(normalized)
@@ -62,14 +62,14 @@ impl Runtime {
 }
 
 fn default_allowed_host_paths(fungi_dir: &Path) -> Vec<PathBuf> {
-    vec![fungi_dir.join("services")]
+    vec![fungi_dir.join("sandboxes")]
 }
 
 fn is_sensitive_fungi_path(path: &Path, fungi_dir: &Path) -> Result<bool> {
     let fungi_home = normalize_absolute_path(fungi_dir)?;
-    let services_root = normalize_absolute_path(&fungi_home.join("services"))?;
+    let sandboxes_root = normalize_absolute_path(&fungi_home.join("sandboxes"))?;
 
-    Ok(path.starts_with(&fungi_home) && !path.starts_with(&services_root))
+    Ok(path.starts_with(&fungi_home) && !path.starts_with(&sandboxes_root))
 }
 
 fn normalize_absolute_path(path: &Path) -> Result<PathBuf> {
@@ -130,7 +130,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_defaults_only_allow_services_subdir() {
+    fn runtime_defaults_only_allow_sandboxes_subdir() {
         let fungi_home = test_fungi_home();
         let mut runtime = Runtime::default();
 
@@ -138,7 +138,7 @@ mod tests {
 
         assert_eq!(
             runtime.allowed_host_paths,
-            vec![fungi_home.join("services")]
+            vec![fungi_home.join("sandboxes")]
         );
     }
 
@@ -148,8 +148,8 @@ mod tests {
         let mut runtime = Runtime {
             allowed_host_paths: vec![
                 fungi_home.clone(),
-                fungi_home.join("services"),
-                fungi_home.join("services/demo"),
+                fungi_home.join("sandboxes"),
+                fungi_home.join("sandboxes/demo"),
             ],
             ..Runtime::default()
         };
@@ -160,8 +160,8 @@ mod tests {
             runtime.allowed_host_paths,
             vec![
                 fungi_home,
-                test_fungi_home().join("services"),
-                test_fungi_home().join("services/demo")
+                test_fungi_home().join("sandboxes"),
+                test_fungi_home().join("sandboxes/demo")
             ]
         );
     }

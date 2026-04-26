@@ -5,11 +5,11 @@ use fungi::commands::{
 };
 
 #[test]
-fn parses_service_add_with_on_device() {
+fn parses_service_add_with_device() {
     let args = FungiArgs::try_parse_from([
         "fungi",
         "service",
-        "--on",
+        "--device",
         "laptop",
         "add",
         "demo.service.yaml",
@@ -25,16 +25,34 @@ fn parses_service_add_with_on_device() {
         panic!("expected service add command");
     };
 
-    assert_eq!(manifest, "demo.service.yaml");
+    assert_eq!(manifest.as_deref(), Some("demo.service.yaml"));
     assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "laptop"));
 }
 
 #[test]
-fn parses_service_open_with_named_entry_and_on_device() {
+fn parses_interactive_service_add() {
+    let args =
+        FungiArgs::try_parse_from(["fungi", "service", "--device", "laptop", "add"]).unwrap();
+
+    let Commands::Service(ServiceArgs {
+        device,
+        command: Some(ServiceCommands::Add { manifest }),
+        ..
+    }) = args.command
+    else {
+        panic!("expected service add command");
+    };
+
+    assert!(manifest.is_none());
+    assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "laptop"));
+}
+
+#[test]
+fn parses_service_open_with_named_entry_and_device() {
     let args = FungiArgs::try_parse_from([
         "fungi",
         "service",
-        "--on",
+        "--device",
         "laptop",
         "open",
         "filebrowser",
@@ -57,14 +75,20 @@ fn parses_service_open_with_named_entry_and_on_device() {
 }
 
 #[test]
-fn parses_service_connect_with_on_device() {
-    let args =
-        FungiArgs::try_parse_from(["fungi", "service", "--on", "home", "connect", "home-ssh"])
-            .unwrap();
+fn parses_service_connect_with_device() {
+    let args = FungiArgs::try_parse_from([
+        "fungi", "service", "--device", "home", "connect", "home-ssh",
+    ])
+    .unwrap();
 
     let Commands::Service(ServiceArgs {
         device,
-        command: Some(ServiceCommands::Connect { service, entry }),
+        command:
+            Some(ServiceCommands::Connect {
+                service,
+                entry,
+                local_port,
+            }),
         ..
     }) = args.command
     else {
@@ -73,12 +97,80 @@ fn parses_service_connect_with_on_device() {
 
     assert_eq!(service, "home-ssh");
     assert!(entry.is_none());
+    assert!(local_port.is_none());
     assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "home"));
 }
 
 #[test]
-fn parses_service_list_with_on_device() {
-    let args = FungiArgs::try_parse_from(["fungi", "service", "--on", "home", "list"]).unwrap();
+fn parses_service_connect_with_fixed_local_port() {
+    let args = FungiArgs::try_parse_from([
+        "fungi",
+        "service",
+        "--device",
+        "home",
+        "connect",
+        "home-ssh",
+        "ssh",
+        "--local-port",
+        "2222",
+    ])
+    .unwrap();
+
+    let Commands::Service(ServiceArgs {
+        command:
+            Some(ServiceCommands::Connect {
+                service,
+                entry,
+                local_port,
+            }),
+        ..
+    }) = args.command
+    else {
+        panic!("expected service connect command");
+    };
+
+    assert_eq!(service, "home-ssh");
+    assert_eq!(entry.as_deref(), Some("ssh"));
+    assert_eq!(local_port, Some(2222));
+}
+
+#[test]
+fn parses_service_disconnect_reference() {
+    let args =
+        FungiArgs::try_parse_from(["fungi", "service", "disconnect", "home-ssh@nas"]).unwrap();
+
+    let Commands::Service(ServiceArgs {
+        command: Some(ServiceCommands::Disconnect { service }),
+        ..
+    }) = args.command
+    else {
+        panic!("expected service disconnect command");
+    };
+
+    assert_eq!(service, "home-ssh@nas");
+}
+
+#[test]
+fn parses_service_set_local_port() {
+    let args =
+        FungiArgs::try_parse_from(["fungi", "service", "set", "home-ssh@nas", "local.port=2222"])
+            .unwrap();
+
+    let Commands::Service(ServiceArgs {
+        command: Some(ServiceCommands::Set { service, setting }),
+        ..
+    }) = args.command
+    else {
+        panic!("expected service set command");
+    };
+
+    assert_eq!(service, "home-ssh@nas");
+    assert_eq!(setting, "local.port=2222");
+}
+
+#[test]
+fn parses_service_list_with_device() {
+    let args = FungiArgs::try_parse_from(["fungi", "service", "--device", "home", "list"]).unwrap();
 
     let Commands::Service(ServiceArgs {
         device,
@@ -95,10 +187,16 @@ fn parses_service_list_with_on_device() {
 }
 
 #[test]
-fn parses_service_start_with_on_device() {
-    let args =
-        FungiArgs::try_parse_from(["fungi", "service", "--on", "home", "start", "filebrowser"])
-            .unwrap();
+fn parses_service_start_with_device() {
+    let args = FungiArgs::try_parse_from([
+        "fungi",
+        "service",
+        "--device",
+        "home",
+        "start",
+        "filebrowser",
+    ])
+    .unwrap();
 
     let Commands::Service(ServiceArgs {
         device,
@@ -114,10 +212,16 @@ fn parses_service_start_with_on_device() {
 }
 
 #[test]
-fn parses_service_stop_with_on_device() {
-    let args =
-        FungiArgs::try_parse_from(["fungi", "service", "--on", "home", "stop", "filebrowser"])
-            .unwrap();
+fn parses_service_stop_with_device() {
+    let args = FungiArgs::try_parse_from([
+        "fungi",
+        "service",
+        "--device",
+        "home",
+        "stop",
+        "filebrowser",
+    ])
+    .unwrap();
 
     let Commands::Service(ServiceArgs {
         device,
@@ -133,10 +237,16 @@ fn parses_service_stop_with_on_device() {
 }
 
 #[test]
-fn parses_service_remove_with_on_device() {
-    let args =
-        FungiArgs::try_parse_from(["fungi", "service", "--on", "home", "remove", "filebrowser"])
-            .unwrap();
+fn parses_service_remove_with_device() {
+    let args = FungiArgs::try_parse_from([
+        "fungi",
+        "service",
+        "--device",
+        "home",
+        "remove",
+        "filebrowser",
+    ])
+    .unwrap();
 
     let Commands::Service(ServiceArgs {
         device,
@@ -152,10 +262,16 @@ fn parses_service_remove_with_on_device() {
 }
 
 #[test]
-fn parses_service_inspect_with_on_device() {
-    let args =
-        FungiArgs::try_parse_from(["fungi", "service", "--on", "home", "inspect", "filebrowser"])
-            .unwrap();
+fn parses_service_inspect_with_device() {
+    let args = FungiArgs::try_parse_from([
+        "fungi",
+        "service",
+        "--device",
+        "home",
+        "inspect",
+        "filebrowser",
+    ])
+    .unwrap();
 
     let Commands::Service(ServiceArgs {
         device,
@@ -185,17 +301,6 @@ fn parses_service_target_device_aliases() {
         panic!("expected service list command");
     };
     assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "nas"));
-}
-
-#[test]
-fn parses_hidden_service_peer_compatibility_flag() {
-    let args = FungiArgs::try_parse_from(["fungi", "service", "--peer", "home", "list"]).unwrap();
-
-    let Commands::Service(ServiceArgs { device, .. }) = args.command else {
-        panic!("expected service list command");
-    };
-
-    assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "home"));
 }
 
 #[test]
@@ -307,8 +412,9 @@ fn parses_dynamic_tool_style_args() {
 }
 
 #[test]
-fn rejects_service_subcommand_scoped_on_device() {
-    let result = FungiArgs::try_parse_from(["fungi", "service", "open", "home-ssh", "--on", "nas"]);
+fn rejects_service_subcommand_scoped_device() {
+    let result =
+        FungiArgs::try_parse_from(["fungi", "service", "open", "home-ssh", "--device", "nas"]);
 
     assert!(result.is_err());
 }
@@ -347,9 +453,9 @@ fn service_command_help_prefers_device_language() {
         .expect("service command exists");
     let help = service.render_long_help().to_string();
 
-    assert!(help.contains("--on <DEVICE>"));
+    assert!(help.contains("--device <DEVICE>"));
     assert!(help.contains("-d"));
-    assert!(help.contains("--device"));
+    assert!(!help.contains("--on"));
     assert!(!help.contains("--peer"));
     assert!(!help.contains("Peer ID"));
 }

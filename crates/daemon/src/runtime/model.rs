@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub enum RuntimeKind {
     Docker,
     Wasmtime,
+    Link,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +31,7 @@ pub enum ServiceSource {
     Docker { image: String },
     WasmtimeFile { component: PathBuf },
     WasmtimeUrl { url: String },
+    TcpLink { host: String, port: u16 },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -209,9 +211,16 @@ pub struct ServiceManifestSpec {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ServiceManifestSource {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub image: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -226,10 +235,12 @@ pub struct ServiceManifestMount {
 pub struct ServiceManifestPort {
     #[serde(rename = "hostPort")]
     #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub host_port: Option<ServiceManifestHostPort>,
     #[serde(rename = "servicePort")]
     pub service_port: u16,
     #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub protocol: ServicePortProtocol,
 }
@@ -246,14 +257,20 @@ pub struct ServiceManifestExpose {
     #[serde(default)]
     pub enabled: bool,
     #[serde(rename = "serviceId")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub service_id: Option<String>,
     #[serde(rename = "displayName")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub transport: Option<ServiceManifestExposeTransport>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<ServiceManifestExposeUsage>,
     #[serde(rename = "iconUrl")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub icon_url: Option<String>,
     #[serde(rename = "catalogId")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub catalog_id: Option<String>,
 }
 
@@ -265,5 +282,6 @@ pub struct ServiceManifestExposeTransport {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceManifestExposeUsage {
     pub kind: ServiceExposeUsageKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
 }

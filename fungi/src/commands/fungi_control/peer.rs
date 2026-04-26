@@ -172,10 +172,10 @@ pub async fn execute_peer(args: CommonArgs, cmd: PeerCommands) {
                         Some(c) => c,
                         None => fatal("Cannot connect to Fungi daemon. Is it running?"),
                     };
-                    let (manifest_yaml, _) = read_manifest_yaml_file(&manifest);
+                    let created = read_manifest_yaml_file(&manifest);
                     let req = RemotePullServiceRequest {
                         peer_id: peer.peer_id,
-                        manifest_yaml,
+                        manifest_yaml: created.manifest_yaml,
                     };
                     match client.remote_pull_service(Request::new(req)).await {
                         Ok(resp) => print_remote_service_result("pulled", resp.into_inner()),
