@@ -145,6 +145,7 @@ impl WasmtimeRuntimeProvider {
         fungi_home: PathBuf,
         allowed_host_paths: Vec<PathBuf>,
     ) -> Self {
+        let allowed_host_paths = with_default_service_data_root(&fungi_home, allowed_host_paths);
         Self {
             runtime_root,
             launcher_path,
@@ -155,7 +156,8 @@ impl WasmtimeRuntimeProvider {
     }
 
     pub fn update_allowed_host_paths(&self, allowed_host_paths: Vec<PathBuf>) {
-        *self.allowed_host_paths.lock() = allowed_host_paths;
+        *self.allowed_host_paths.lock() =
+            with_default_service_data_root(&self.fungi_home, allowed_host_paths);
     }
 
     pub fn has_service(&self, handle: &str) -> bool {
@@ -170,6 +172,13 @@ impl WasmtimeRuntimeProvider {
         services.entry(manifest.name.clone()).or_insert(state);
         Ok(())
     }
+}
+
+fn with_default_service_data_root(fungi_home: &Path, mut paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    paths.push(fungi_home.join("data"));
+    paths.sort();
+    paths.dedup();
+    paths
 }
 
 #[async_trait]

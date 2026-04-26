@@ -91,7 +91,7 @@ pub enum Commands {
     /// Query and administer remote peers
     #[command(subcommand, hide = true)]
     Peer(fungi_control::PeerCommands),
-    /// Device discovery and address book
+    /// Device discovery and saved devices
     Device(fungi_control::DeviceArgs),
     /// Connection observability and diagnostics
     #[command(subcommand, visible_alias = "conn")]

@@ -2,8 +2,7 @@ use clap::{Args, Subcommand};
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
-        Empty, GetAddressBookPeerRequest, PeerInfo, RemoveAddressBookPeerRequest,
-        UpdateAddressBookPeerRequest,
+        DeviceInfo, Empty, GetDeviceRequest, RemoveDeviceRequest, UpdateDeviceRequest,
     },
 };
 use libp2p::PeerId;
@@ -33,8 +32,8 @@ pub enum DeviceCommands {
         /// Device ID to add
         peer_id: String,
         /// Human-friendly unique device name
-        #[arg(long = "name", alias = "alias", value_name = "NAME")]
-        alias: String,
+        #[arg(long = "name", value_name = "NAME")]
+        name: String,
         /// User-managed direct multiaddr for this device
         #[arg(long = "addr", alias = "address", value_name = "MULTIADDR")]
         addresses: Vec<String>,
@@ -48,7 +47,7 @@ pub enum DeviceCommands {
         peer: String,
         /// New human-friendly unique device name
         #[arg(value_name = "NAME")]
-        alias: String,
+        name: String,
     },
     /// Get information about a specific device
     Get {
@@ -96,35 +95,33 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
     match cmd {
         DeviceCommands::Mdns => match client.list_mdns_devices(Request::new(Empty {})).await {
             Ok(resp) => {
-                let peers = resp.into_inner().peers;
-                if peers.is_empty() {
+                let devices = resp.into_inner().devices;
+                if devices.is_empty() {
                     println!("No devices discovered");
                 } else {
-                    for peer in peers {
-                        print_peer_info(&peer);
+                    for device in devices {
+                        print_device_info(&device);
                     }
                 }
             }
             Err(e) => fatal_grpc(e),
         },
-        DeviceCommands::List => {
-            match client.list_address_book_peers(Request::new(Empty {})).await {
-                Ok(resp) => {
-                    let peers = resp.into_inner().peers;
-                    if peers.is_empty() {
-                        println!("No devices saved");
-                    } else {
-                        for peer in peers {
-                            print_peer_info(&peer);
-                        }
+        DeviceCommands::List => match client.list_devices(Request::new(Empty {})).await {
+            Ok(resp) => {
+                let devices = resp.into_inner().devices;
+                if devices.is_empty() {
+                    println!("No devices saved");
+                } else {
+                    for device in devices {
+                        print_device_info(&device);
                     }
                 }
-                Err(e) => fatal_grpc(e),
             }
-        }
+            Err(e) => fatal_grpc(e),
+        },
         DeviceCommands::Add {
             peer_id,
-            alias,
+            name,
             addresses,
         } => {
             let peer_id = match peer_id.parse::<PeerId>() {
@@ -134,27 +131,27 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
             let addresses = normalize_multiaddrs(addresses);
 
             let existing = match client
-                .get_address_book_peer(Request::new(GetAddressBookPeerRequest {
+                .get_device(Request::new(GetDeviceRequest {
                     peer_id: peer_id.to_string(),
                 }))
                 .await
             {
-                Ok(resp) => resp.into_inner().peer_info,
+                Ok(resp) => resp.into_inner().device,
                 Err(error) => fatal_grpc(error),
             };
 
-            let peer_info = match existing {
-                Some(mut peer) => {
-                    peer.alias = alias;
-                    peer.multiaddrs = merge_multiaddrs(peer.multiaddrs, addresses);
-                    peer
+            let device_info = match existing {
+                Some(mut device) => {
+                    device.name = name;
+                    device.multiaddrs = merge_multiaddrs(device.multiaddrs, addresses);
+                    device
                 }
-                None => new_minimal_peer_info(peer_id.to_string(), alias, addresses),
+                None => new_minimal_device_info(peer_id.to_string(), name, addresses),
             };
 
             match client
-                .update_address_book_peer(Request::new(UpdateAddressBookPeerRequest {
-                    peer_info: Some(peer_info),
+                .update_device(Request::new(UpdateDeviceRequest {
+                    device: Some(device_info),
                 }))
                 .await
             {
@@ -190,7 +187,7 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
                 save_device(&mut client, peer, "Device address removed").await;
             }
         },
-        DeviceCommands::Rename { peer, alias } => {
+        DeviceCommands::Rename { peer, name } => {
             let target_peer_id = if let Ok(value) = peer.parse::<PeerId>() {
                 value.to_string()
             } else {
@@ -200,16 +197,16 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
                 }
             };
 
-            let peer_info = match client
-                .get_address_book_peer(Request::new(GetAddressBookPeerRequest {
+            let device_info = match client
+                .get_device(Request::new(GetDeviceRequest {
                     peer_id: target_peer_id,
                 }))
                 .await
             {
-                Ok(resp) => match resp.into_inner().peer_info {
-                    Some(mut peer) => {
-                        peer.alias = alias;
-                        peer
+                Ok(resp) => match resp.into_inner().device {
+                    Some(mut device) => {
+                        device.name = name;
+                        device
                     }
                     None => fatal("Device not found"),
                 },
@@ -217,8 +214,8 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
             };
 
             match client
-                .update_address_book_peer(Request::new(UpdateAddressBookPeerRequest {
-                    peer_info: Some(peer_info),
+                .update_device(Request::new(UpdateDeviceRequest {
+                    device: Some(device_info),
                 }))
                 .await
             {
@@ -227,11 +224,11 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
             }
         }
         DeviceCommands::Get { peer_id } => {
-            let req = GetAddressBookPeerRequest { peer_id };
-            match client.get_address_book_peer(Request::new(req)).await {
+            let req = GetDeviceRequest { peer_id };
+            match client.get_device(Request::new(req)).await {
                 Ok(resp) => {
-                    if let Some(peer) = resp.into_inner().peer_info {
-                        print_peer_info_detailed(&peer);
+                    if let Some(device) = resp.into_inner().device {
+                        print_device_info_detailed(&device);
                     } else {
                         println!("Device not found");
                     }
@@ -240,8 +237,8 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
             }
         }
         DeviceCommands::Remove { peer_id } => {
-            let req = RemoveAddressBookPeerRequest { peer_id };
-            match client.remove_address_book_peer(Request::new(req)).await {
+            let req = RemoveDeviceRequest { peer_id };
+            match client.remove_device(Request::new(req)).await {
                 Ok(_) => println!("Device removed successfully"),
                 Err(e) => fatal_grpc(e),
             }
@@ -255,19 +252,19 @@ async fn get_saved_device(
         tonic::transport::Channel,
     >,
     device: &str,
-) -> PeerInfo {
+) -> DeviceInfo {
     let peer_id = match resolve_peer_value(args, device) {
         Ok(peer) => peer.peer_id,
         Err(error) => fatal(error),
     };
 
     match client
-        .get_address_book_peer(Request::new(GetAddressBookPeerRequest { peer_id }))
+        .get_device(Request::new(GetDeviceRequest { peer_id }))
         .await
     {
         Ok(resp) => resp
             .into_inner()
-            .peer_info
+            .device
             .unwrap_or_else(|| fatal("Device not found")),
         Err(error) => fatal_grpc(error),
     }
@@ -277,12 +274,12 @@ async fn save_device(
     client: &mut fungi_daemon_grpc::fungi_daemon_grpc::fungi_daemon_client::FungiDaemonClient<
         tonic::transport::Channel,
     >,
-    peer_info: PeerInfo,
+    device_info: DeviceInfo,
     message: &str,
 ) {
     match client
-        .update_address_book_peer(Request::new(UpdateAddressBookPeerRequest {
-            peer_info: Some(peer_info),
+        .update_device(Request::new(UpdateDeviceRequest {
+            device: Some(device_info),
         }))
         .await
     {
@@ -291,15 +288,15 @@ async fn save_device(
     }
 }
 
-fn new_minimal_peer_info(peer_id: String, alias: String, multiaddrs: Vec<String>) -> PeerInfo {
+fn new_minimal_device_info(peer_id: String, name: String, multiaddrs: Vec<String>) -> DeviceInfo {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as i64;
 
-    PeerInfo {
+    DeviceInfo {
         peer_id,
-        alias,
+        name,
         hostname: String::new(),
         os: "Unknown".to_string(),
         public_ip: String::new(),
@@ -343,25 +340,25 @@ fn merge_multiaddrs(existing: Vec<String>, added: Vec<String>) -> Vec<String> {
     merged
 }
 
-fn print_peer_info(peer: &PeerInfo) {
-    println!("{} - {} ({})", peer.peer_id, peer.alias, peer.hostname);
+fn print_device_info(device: &DeviceInfo) {
+    println!("{} - {} ({})", device.peer_id, device.name, device.hostname);
 }
 
-fn print_peer_info_detailed(peer: &PeerInfo) {
-    println!("Device ID: {}", peer.peer_id);
-    println!("Device name: {}", peer.alias);
-    println!("Hostname: {}", peer.hostname);
-    println!("OS: {}", peer.os);
-    println!("Version: {}", peer.version);
-    if !peer.public_ip.is_empty() {
-        println!("Public IP: {}", peer.public_ip);
+fn print_device_info_detailed(device: &DeviceInfo) {
+    println!("Device ID: {}", device.peer_id);
+    println!("Device name: {}", device.name);
+    println!("Hostname: {}", device.hostname);
+    println!("OS: {}", device.os);
+    println!("Version: {}", device.version);
+    if !device.public_ip.is_empty() {
+        println!("Public IP: {}", device.public_ip);
     }
-    if !peer.private_ips.is_empty() {
-        println!("Private IPs: {}", peer.private_ips.join(", "));
+    if !device.private_ips.is_empty() {
+        println!("Private IPs: {}", device.private_ips.join(", "));
     }
-    if !peer.multiaddrs.is_empty() {
+    if !device.multiaddrs.is_empty() {
         println!("Manual addresses:");
-        for address in &peer.multiaddrs {
+        for address in &device.multiaddrs {
             println!("  {address}");
         }
     }

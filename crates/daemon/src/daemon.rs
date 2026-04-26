@@ -19,8 +19,9 @@ use crate::{
 use anyhow::{Result, bail};
 use fungi_config::{
     FungiConfig,
-    address_book::{AddressBookConfig, PeerInfo},
+    devices::{DeviceInfo, DevicesConfig},
     file_transfer::{FileTransferClient as FTCConfig, FileTransferService as FTSConfig},
+    local_access::LocalAccessConfig,
 };
 use fungi_swarm::{FungiSwarm, PeerAddressSource, State, SwarmControl, TSwarm};
 use fungi_util::keypair::get_keypair_from_dir;
@@ -41,7 +42,7 @@ struct TaskHandles {
 #[allow(dead_code)]
 pub struct FungiDaemon {
     config: Arc<Mutex<FungiConfig>>,
-    address_book_config: Arc<Mutex<AddressBookConfig>>,
+    devices_config: Arc<Mutex<DevicesConfig>>,
     args: DaemonArgs,
 
     swarm_control: SwarmControl,
@@ -63,8 +64,8 @@ impl FungiDaemon {
         self.config.clone()
     }
 
-    pub fn address_book(&self) -> Arc<Mutex<AddressBookConfig>> {
-        self.address_book_config.clone()
+    pub fn devices(&self) -> Arc<Mutex<DevicesConfig>> {
+        self.devices_config.clone()
     }
 
     pub fn swarm_control(&self) -> &SwarmControl {
@@ -113,16 +114,16 @@ impl FungiDaemon {
         let config = FungiConfig::apply_from_dir(&fungi_dir)?;
         let keypair = get_keypair_from_dir(&fungi_dir)?;
 
-        let address_book_config = AddressBookConfig::apply_from_dir(&fungi_dir)?;
+        let devices_config = DevicesConfig::apply_from_dir(&fungi_dir)?;
 
-        Self::start_with(args, config, keypair, address_book_config).await
+        Self::start_with(args, config, keypair, devices_config).await
     }
 
     pub async fn start_with(
         args: DaemonArgs,
         config: FungiConfig,
         keypair: Keypair,
-        address_book_config: AddressBookConfig,
+        devices_config: DevicesConfig,
     ) -> Result<Self> {
         let state = State::new(
             config
@@ -132,7 +133,7 @@ impl FungiDaemon {
                 .into_iter()
                 .collect(),
         );
-        hydrate_address_book_peer_addresses(&state, &address_book_config);
+        hydrate_device_addresses(&state, &devices_config);
 
         let relay_addrs = config
             .network
@@ -163,8 +164,8 @@ impl FungiDaemon {
         .await?;
         let mdns_control = MdnsControl::new();
         // TODO duplicate with libp2p-mdns?
-        let peer_info = mdns_peer_info(&config, swarm_control.local_peer_id());
-        mdns_control.start(peer_info, state.clone())?;
+        let device_info = mdns_device_info(&config, swarm_control.local_peer_id());
+        mdns_control.start(device_info, state.clone())?;
 
         let fts_control = FileTransferServiceControl::new(swarm_control.clone());
         Self::init_fts(config.file_transfer.server.clone(), &fts_control).await;
@@ -172,13 +173,13 @@ impl FungiDaemon {
         let ftc_control = FileTransferClientsControl::new(swarm_control.clone());
         Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
 
-        let docker_control = DockerControl::from_config(&config.runtime)?;
-        let shared_config = Arc::new(Mutex::new(config.clone()));
         let fungi_home = config
             .config_file_path()
             .parent()
             .unwrap_or_else(|| std::path::Path::new("."))
             .to_path_buf();
+        let docker_control = DockerControl::from_config(&config.runtime, &fungi_home)?;
+        let shared_config = Arc::new(Mutex::new(config.clone()));
         let runtime_root = config
             .config_file_path()
             .parent()
@@ -206,13 +207,18 @@ impl FungiDaemon {
         node_capabilities_control.start()?;
 
         let tcp_tunneling_control = TcpTunnelingControl::new(swarm_control.clone());
+        let local_access_config = LocalAccessConfig::apply_from_dir(&fungi_home)?;
+        let mut tcp_tunneling_config = config.tcp_tunneling.clone();
+        tcp_tunneling_config
+            .forwarding
+            .rules
+            .extend(local_access_config.rules.clone());
         tcp_tunneling_control
-            .init_from_config(&config.tcp_tunneling)
+            .init_from_config(&tcp_tunneling_config)
             .await;
 
         let service_control_protocol_control = ServiceControlProtocolControl::new(
             swarm_control.clone(),
-            shared_config.clone(),
             fungi_home,
             runtime_control.clone(),
             tcp_tunneling_control.clone(),
@@ -239,7 +245,7 @@ impl FungiDaemon {
             None
         };
 
-        let address_book_config = Arc::new(Mutex::new(address_book_config));
+        let devices_config = Arc::new(Mutex::new(devices_config));
 
         let task_handles = TaskHandles {
             swarm_task,
@@ -247,12 +253,12 @@ impl FungiDaemon {
             proxy_webdav_task: Arc::new(Mutex::new(proxy_webdav_task)),
             peer_address_sync_task: spawn_peer_address_sync_task(
                 swarm_control.clone(),
-                address_book_config.clone(),
+                devices_config.clone(),
             ),
         };
         let daemon = Self {
             config: shared_config,
-            address_book_config,
+            devices_config,
             args,
             swarm_control,
             mdns_control,
@@ -472,6 +478,17 @@ impl FungiDaemon {
         rule: fungi_config::tcp_tunneling::ForwardingRule,
         add: bool,
     ) -> Result<()> {
+        if rule.remote_service_id.is_some() {
+            let fungi_dir = self.config_fungi_dir()?;
+            let current_access = LocalAccessConfig::apply_from_dir(&fungi_dir)?;
+            if add {
+                current_access.add_forwarding_rule(rule)?;
+            } else {
+                current_access.remove_forwarding_rule(&rule)?;
+            }
+            return Ok(());
+        }
+
         let current_config = self.config.lock().clone();
         let updated_config = if add {
             current_config.add_tcp_forwarding_rule(rule)?
@@ -482,6 +499,15 @@ impl FungiDaemon {
         // Update the cached config
         *self.config.lock() = updated_config;
         Ok(())
+    }
+
+    pub(crate) fn config_fungi_dir(&self) -> Result<PathBuf> {
+        self.config
+            .lock()
+            .config_file_path()
+            .parent()
+            .map(std::path::Path::to_path_buf)
+            .ok_or_else(|| anyhow::anyhow!("config file has no parent directory"))
     }
 
     fn update_config_with_listening_rule(
@@ -502,18 +528,18 @@ impl FungiDaemon {
     }
 }
 
-fn hydrate_address_book_peer_addresses(state: &State, address_book_config: &AddressBookConfig) {
+fn hydrate_device_addresses(state: &State, devices_config: &DevicesConfig) {
     let mut loaded = 0usize;
     let mut ignored = 0usize;
 
-    for peer in &address_book_config.peers {
-        for address in &peer.multiaddrs {
+    for device in &devices_config.devices {
+        for address in &device.multiaddrs {
             match address.parse::<Multiaddr>() {
                 Ok(multiaddr) => {
                     match state.record_peer_address(
-                        peer.peer_id,
+                        device.peer_id,
                         multiaddr,
-                        PeerAddressSource::AddressBook,
+                        PeerAddressSource::DeviceConfig,
                     ) {
                         fungi_swarm::PeerAddressObservation::New
                         | fungi_swarm::PeerAddressObservation::Refreshed => loaded += 1,
@@ -523,8 +549,8 @@ fn hydrate_address_book_peer_addresses(state: &State, address_book_config: &Addr
                 Err(error) => {
                     ignored += 1;
                     log::debug!(
-                        "Ignoring invalid address book multiaddr for peer {}: {} ({})",
-                        peer.peer_id,
+                        "Ignoring invalid device multiaddr for peer {}: {} ({})",
+                        device.peer_id,
                         address,
                         error
                     );
@@ -535,39 +561,39 @@ fn hydrate_address_book_peer_addresses(state: &State, address_book_config: &Addr
 
     if loaded > 0 || ignored > 0 {
         log::info!(
-            "Loaded {} peer address(es) from address book into dial planner state (ignored={})",
+            "Loaded {} device address(es) into dial planner state (ignored={})",
             loaded,
             ignored
         );
     }
 }
 
-fn mdns_peer_info(config: &FungiConfig, peer_id: libp2p::PeerId) -> PeerInfo {
-    let mut peer_info = PeerInfo::this_device(peer_id, config.get_hostname());
+fn mdns_device_info(config: &FungiConfig, peer_id: libp2p::PeerId) -> DeviceInfo {
+    let mut device_info = DeviceInfo::this_device(peer_id, config.get_hostname());
 
-    for ip in &peer_info.private_ips {
+    for ip in &device_info.private_ips {
         let ip_version = if ip.contains(':') { "6" } else { "4" };
         if config.network.listen_tcp_port != 0 {
-            peer_info.multiaddrs.push(format!(
+            device_info.multiaddrs.push(format!(
                 "/ip{ip_version}/{ip}/tcp/{}/p2p/{peer_id}",
                 config.network.listen_tcp_port
             ));
         }
 
         if config.network.listen_udp_port != 0 {
-            peer_info.multiaddrs.push(format!(
+            device_info.multiaddrs.push(format!(
                 "/ip{ip_version}/{ip}/udp/{}/quic-v1/p2p/{peer_id}",
                 config.network.listen_udp_port
             ));
         }
     }
 
-    peer_info
+    device_info
 }
 
 fn spawn_peer_address_sync_task(
     swarm_control: SwarmControl,
-    address_book_config: Arc<Mutex<AddressBookConfig>>,
+    devices_config: Arc<Mutex<DevicesConfig>>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(PEER_ADDRESS_SYNC_INTERVAL);
@@ -594,14 +620,14 @@ fn spawn_peer_address_sync_task(
                 continue;
             }
 
-            let current = address_book_config.lock().clone();
-            match current.sync_peer_multiaddrs(grouped) {
+            let current = devices_config.lock().clone();
+            match current.sync_device_multiaddrs(grouped) {
                 Ok(updated) => {
-                    *address_book_config.lock() = updated;
+                    *devices_config.lock() = updated;
                     last_synced_revision = revision_before_sync;
                 }
                 Err(error) => {
-                    log::warn!("Failed to sync learned peer addresses into address book: {error}");
+                    log::warn!("Failed to sync learned peer addresses into devices: {error}");
                 }
             }
         }

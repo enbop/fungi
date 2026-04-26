@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
-use fungi_config::runtime::AllowedPortRange;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -107,10 +106,7 @@ pub enum ServicePortProtocol {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct ManifestResolutionPolicy {
-    pub allowed_tcp_ports: Vec<u16>,
-    pub allowed_tcp_port_ranges: Vec<AllowedPortRange>,
-}
+pub struct ManifestResolutionPolicy;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceInstance {

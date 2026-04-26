@@ -175,7 +175,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 .inner
                 .get_incoming_allowed_peers()
                 .into_iter()
-                .map(peer_info_to_proto)
+                .map(device_info_to_proto)
                 .collect(),
         };
         Ok(Response::new(response))
@@ -307,15 +307,6 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 .into_iter()
                 .map(|path| path.to_string_lossy().to_string())
                 .collect(),
-            allowed_ports: config.allowed_ports.into_iter().map(i32::from).collect(),
-            allowed_port_ranges: config
-                .allowed_port_ranges
-                .into_iter()
-                .map(|range| RuntimeAllowedPortRange {
-                    start: i32::from(range.start),
-                    end: i32::from(range.end),
-                })
-                .collect(),
         }))
     }
 
@@ -362,67 +353,6 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .remove_runtime_allowed_host_path(&path)
             .map_err(|e| {
                 Status::internal(format!("Failed to remove runtime allowed host path: {}", e))
-            })?;
-        Ok(Response::new(Empty {}))
-    }
-
-    async fn add_runtime_allowed_port(
-        &self,
-        request: Request<RuntimeAllowedPortRequest>,
-    ) -> Result<Response<Empty>, Status> {
-        let port = u16::try_from(request.into_inner().port)
-            .map_err(|_| Status::invalid_argument("Invalid port"))?;
-        self.inner
-            .add_runtime_allowed_port(port)
-            .map_err(|e| Status::internal(format!("Failed to add runtime allowed port: {}", e)))?;
-        Ok(Response::new(Empty {}))
-    }
-
-    async fn remove_runtime_allowed_port(
-        &self,
-        request: Request<RuntimeAllowedPortRequest>,
-    ) -> Result<Response<Empty>, Status> {
-        let port = u16::try_from(request.into_inner().port)
-            .map_err(|_| Status::invalid_argument("Invalid port"))?;
-        self.inner.remove_runtime_allowed_port(port).map_err(|e| {
-            Status::internal(format!("Failed to remove runtime allowed port: {}", e))
-        })?;
-        Ok(Response::new(Empty {}))
-    }
-
-    async fn add_runtime_allowed_port_range(
-        &self,
-        request: Request<RuntimeAllowedPortRangeRequest>,
-    ) -> Result<Response<Empty>, Status> {
-        let req = request.into_inner();
-        let start = u16::try_from(req.start)
-            .map_err(|_| Status::invalid_argument("Invalid range start"))?;
-        let end =
-            u16::try_from(req.end).map_err(|_| Status::invalid_argument("Invalid range end"))?;
-        self.inner
-            .add_runtime_allowed_port_range(start, end)
-            .map_err(|e| {
-                Status::internal(format!("Failed to add runtime allowed port range: {}", e))
-            })?;
-        Ok(Response::new(Empty {}))
-    }
-
-    async fn remove_runtime_allowed_port_range(
-        &self,
-        request: Request<RuntimeAllowedPortRangeRequest>,
-    ) -> Result<Response<Empty>, Status> {
-        let req = request.into_inner();
-        let start = u16::try_from(req.start)
-            .map_err(|_| Status::invalid_argument("Invalid range start"))?;
-        let end =
-            u16::try_from(req.end).map_err(|_| Status::invalid_argument("Invalid range end"))?;
-        self.inner
-            .remove_runtime_allowed_port_range(start, end)
-            .map_err(|e| {
-                Status::internal(format!(
-                    "Failed to remove runtime allowed port range: {}",
-                    e
-                ))
             })?;
         Ok(Response::new(Empty {}))
     }
@@ -732,80 +662,80 @@ impl FungiDaemon for FungiDaemonRpcImpl {
     async fn list_mdns_devices(
         &self,
         _request: Request<Empty>,
-    ) -> Result<Response<PeerInfoListResponse>, Status> {
-        let peers = self
+    ) -> Result<Response<DeviceInfoListResponse>, Status> {
+        let devices = self
             .inner
             .mdns_get_local_devices()
             .await
             .map_err(|e| Status::internal(format!("Failed to get local devices: {}", e)))?
             .into_iter()
-            .map(peer_info_to_proto)
+            .map(device_info_to_proto)
             .collect();
 
-        let response = PeerInfoListResponse { peers };
+        let response = DeviceInfoListResponse { devices };
         Ok(Response::new(response))
     }
 
-    async fn list_address_book_peers(
+    async fn list_devices(
         &self,
         _request: Request<Empty>,
-    ) -> Result<Response<PeerInfoListResponse>, Status> {
-        let peers = self
+    ) -> Result<Response<DeviceInfoListResponse>, Status> {
+        let devices = self
             .inner
-            .address_book_get_all()
+            .devices_get_all()
             .into_iter()
-            .map(peer_info_to_proto)
+            .map(device_info_to_proto)
             .collect();
 
-        let response = PeerInfoListResponse { peers };
+        let response = DeviceInfoListResponse { devices };
         Ok(Response::new(response))
     }
 
-    async fn update_address_book_peer(
+    async fn update_device(
         &self,
-        request: Request<UpdateAddressBookPeerRequest>,
+        request: Request<UpdateDeviceRequest>,
     ) -> Result<Response<Empty>, Status> {
-        let peer_info = request
+        let device_info = request
             .into_inner()
-            .peer_info
-            .ok_or_else(|| Status::invalid_argument("peer_info is required"))?;
+            .device
+            .ok_or_else(|| Status::invalid_argument("device is required"))?;
 
-        let peer_info = proto_to_peer_info(peer_info)
-            .map_err(|e| Status::invalid_argument(format!("Invalid peer_info: {}", e)))?;
+        let device_info = proto_to_device_info(device_info)
+            .map_err(|e| Status::invalid_argument(format!("Invalid device: {}", e)))?;
 
         self.inner
-            .address_book_add_or_update(peer_info)
-            .map_err(|e| Status::internal(format!("Failed to add/update peer: {}", e)))?;
+            .devices_add_or_update(device_info)
+            .map_err(|e| Status::internal(format!("Failed to add/update device: {}", e)))?;
 
         Ok(Response::new(Empty {}))
     }
 
-    async fn get_address_book_peer(
+    async fn get_device(
         &self,
-        request: Request<GetAddressBookPeerRequest>,
-    ) -> Result<Response<PeerInfoResponse>, Status> {
+        request: Request<GetDeviceRequest>,
+    ) -> Result<Response<DeviceInfoResponse>, Status> {
         let peer_id = PeerId::from_str(&request.into_inner().peer_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
 
-        let peer_info = self
+        let device = self
             .inner
-            .address_book_get_peer(peer_id)
-            .map(peer_info_to_proto);
+            .devices_get_peer(peer_id)
+            .map(device_info_to_proto);
 
-        let response = PeerInfoResponse { peer_info };
+        let response = DeviceInfoResponse { device };
         Ok(Response::new(response))
     }
 
-    async fn remove_address_book_peer(
+    async fn remove_device(
         &self,
-        request: Request<RemoveAddressBookPeerRequest>,
+        request: Request<RemoveDeviceRequest>,
     ) -> Result<Response<Empty>, Status> {
         let peer_id = PeerId::from_str(&request.into_inner().peer_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
 
         self.inner
-            .address_book_remove(peer_id)
-            .map_err(|e| Status::internal(format!("Failed to remove peer: {}", e)))?;
+            .devices_remove(peer_id)
+            .map_err(|e| Status::internal(format!("Failed to remove device: {}", e)))?;
 
         Ok(Response::new(Empty {}))
     }
@@ -992,7 +922,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                     .collect(),
                 policy_state: c.policy_state,
                 policy_reason: c.policy_reason,
-                peer_alias: c.peer_alias,
+                peer_name: c.peer_name,
                 peer_role: c.peer_role,
             })
             .collect();
@@ -1524,10 +1454,10 @@ fn empty_to_none(value: String) -> Option<String> {
 }
 
 // Helper functions to convert between domain and proto types
-fn peer_info_to_proto(info: fungi_config::address_book::PeerInfo) -> PeerInfo {
-    PeerInfo {
+fn device_info_to_proto(info: fungi_config::devices::DeviceInfo) -> DeviceInfo {
+    DeviceInfo {
         peer_id: info.peer_id.to_string(),
-        alias: info.alias.unwrap_or_default(),
+        name: info.name.unwrap_or_default(),
         hostname: info.hostname.unwrap_or_default(),
         os: os_to_string(info.os),
         public_ip: info.public_ip.unwrap_or_default(),
@@ -1539,16 +1469,16 @@ fn peer_info_to_proto(info: fungi_config::address_book::PeerInfo) -> PeerInfo {
     }
 }
 
-fn proto_to_peer_info(proto: PeerInfo) -> Result<fungi_config::address_book::PeerInfo, String> {
+fn proto_to_device_info(proto: DeviceInfo) -> Result<fungi_config::devices::DeviceInfo, String> {
     let peer_id =
         PeerId::from_str(&proto.peer_id).map_err(|e| format!("Invalid peer_id: {}", e))?;
 
-    Ok(fungi_config::address_book::PeerInfo {
+    Ok(fungi_config::devices::DeviceInfo {
         peer_id,
-        alias: if proto.alias.is_empty() {
+        name: if proto.name.is_empty() {
             None
         } else {
-            Some(proto.alias)
+            Some(proto.name)
         },
         hostname: if proto.hostname.is_empty() {
             None
@@ -1569,25 +1499,25 @@ fn proto_to_peer_info(proto: PeerInfo) -> Result<fungi_config::address_book::Pee
     })
 }
 
-fn os_to_string(os: fungi_config::address_book::Os) -> String {
+fn os_to_string(os: fungi_config::devices::Os) -> String {
     match os {
-        fungi_config::address_book::Os::Windows => "Windows".to_string(),
-        fungi_config::address_book::Os::MacOS => "MacOS".to_string(),
-        fungi_config::address_book::Os::Linux => "Linux".to_string(),
-        fungi_config::address_book::Os::Android => "Android".to_string(),
-        fungi_config::address_book::Os::IOS => "IOS".to_string(),
-        fungi_config::address_book::Os::Unknown => "Unknown".to_string(),
+        fungi_config::devices::Os::Windows => "Windows".to_string(),
+        fungi_config::devices::Os::MacOS => "MacOS".to_string(),
+        fungi_config::devices::Os::Linux => "Linux".to_string(),
+        fungi_config::devices::Os::Android => "Android".to_string(),
+        fungi_config::devices::Os::IOS => "IOS".to_string(),
+        fungi_config::devices::Os::Unknown => "Unknown".to_string(),
     }
 }
 
-fn string_to_os(s: &str) -> fungi_config::address_book::Os {
+fn string_to_os(s: &str) -> fungi_config::devices::Os {
     match s {
-        "Windows" => fungi_config::address_book::Os::Windows,
-        "MacOS" => fungi_config::address_book::Os::MacOS,
-        "Linux" => fungi_config::address_book::Os::Linux,
-        "Android" => fungi_config::address_book::Os::Android,
-        "IOS" => fungi_config::address_book::Os::IOS,
-        _ => fungi_config::address_book::Os::Unknown,
+        "Windows" => fungi_config::devices::Os::Windows,
+        "MacOS" => fungi_config::devices::Os::MacOS,
+        "Linux" => fungi_config::devices::Os::Linux,
+        "Android" => fungi_config::devices::Os::Android,
+        "IOS" => fungi_config::devices::Os::IOS,
+        _ => fungi_config::devices::Os::Unknown,
     }
 }
 

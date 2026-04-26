@@ -355,9 +355,9 @@ impl TestNode {
         self.run_cli(["info", "id"])
     }
 
-    fn device_add(&self, peer_id: &str, alias: &str) -> Result<()> {
-        let output = self.run_cli(["device", "add", peer_id, "--alias", alias])?;
-        if !output.contains("Peer saved with alias") {
+    fn device_add(&self, peer_id: &str, name: &str) -> Result<()> {
+        let output = self.run_cli(["device", "add", peer_id, "--name", name])?;
+        if !output.contains("Device saved") {
             bail!("unexpected device add output on {}: {output}", self.name);
         }
         Ok(())

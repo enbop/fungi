@@ -25,7 +25,7 @@ pub enum PeerCommands {
     Current,
     /// Set the current default peer context
     Use {
-        /// Peer ID or alias
+        /// Peer ID or device name
         peer: PeerInput,
     },
     /// Clear the current default peer context
@@ -245,12 +245,12 @@ pub async fn execute_peer(args: CommonArgs, cmd: PeerCommands) {
 }
 
 fn print_current_peer(peer: &super::shared::ResolvedPeerTarget) {
-    match (&peer.alias, &peer.hostname) {
-        (Some(alias), Some(hostname)) if !alias.is_empty() && !hostname.is_empty() => {
-            println!("Current peer: {} ({alias}) [{hostname}]", peer.peer_id)
+    match (&peer.name, &peer.hostname) {
+        (Some(name), Some(hostname)) if !name.is_empty() && !hostname.is_empty() => {
+            println!("Current peer: {} ({name}) [{hostname}]", peer.peer_id)
         }
-        (Some(alias), _) if !alias.is_empty() => {
-            println!("Current peer: {} ({alias})", peer.peer_id)
+        (Some(name), _) if !name.is_empty() => {
+            println!("Current peer: {} ({name})", peer.peer_id)
         }
         _ => println!("Current peer: {}", peer.peer_id),
     }

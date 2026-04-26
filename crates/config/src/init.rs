@@ -1,4 +1,7 @@
-use crate::{DEFAULT_CONFIG_FILE, FungiConfig, FungiDir, address_book::AddressBookConfig};
+use crate::{
+    DEFAULT_CONFIG_FILE, FungiConfig, FungiDir, devices::DevicesConfig,
+    local_access::LocalAccessConfig, service_cache::ServiceCache,
+};
 use anyhow::Result;
 
 pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
@@ -10,7 +13,9 @@ pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
         if upgrade_existing {
             let config = FungiConfig::apply_from_dir(&fungi_dir)?;
             config.save_to_file()?;
-            AddressBookConfig::apply_from_dir(&fungi_dir)?;
+            DevicesConfig::apply_from_dir(&fungi_dir)?;
+            LocalAccessConfig::apply_from_dir(&fungi_dir)?;
+            ServiceCache::apply_from_dir(&fungi_dir)?;
             println!("Configuration file upgraded at {}", config_file.display());
             return Ok(());
         }
@@ -27,8 +32,12 @@ pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
     // create config.toml
     FungiConfig::apply_from_dir(&fungi_dir)?;
 
-    // create address_book.toml
-    AddressBookConfig::apply_from_dir(&fungi_dir)?;
+    // create devices.toml
+    DevicesConfig::apply_from_dir(&fungi_dir)?;
+
+    // create access/local_access.json and cache/remote_services/
+    LocalAccessConfig::apply_from_dir(&fungi_dir)?;
+    ServiceCache::apply_from_dir(&fungi_dir)?;
 
     // create .keys
     fungi_util::keypair::init_keypair(&fungi_dir)?;

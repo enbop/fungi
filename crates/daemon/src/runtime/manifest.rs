@@ -149,7 +149,7 @@ impl ServiceManifestDocument {
         } = self;
         let service_name = metadata.name;
         let metadata_labels = metadata.labels;
-        let service_sandbox = fungi_home.join("sandboxes").join(&service_name);
+        let service_data_dir = fungi_home.join("data").join(&service_name);
         let mut reserved_host_ports = used_host_ports.clone();
 
         let runtime = spec.runtime;
@@ -162,7 +162,12 @@ impl ServiceManifestDocument {
             }
             RuntimeKind::Wasmtime => match (spec.source.file, spec.source.url) {
                 (Some(file), None) => ServiceSource::WasmtimeFile {
-                    component: resolve_manifest_path(&file, base_dir, fungi_home, &service_sandbox),
+                    component: resolve_manifest_path(
+                        &file,
+                        base_dir,
+                        fungi_home,
+                        &service_data_dir,
+                    ),
                 },
                 (None, Some(url)) => ServiceSource::WasmtimeUrl { url },
                 (Some(_), Some(_)) => {
@@ -225,7 +230,7 @@ impl ServiceManifestDocument {
                         &mount.host_path,
                         base_dir,
                         fungi_home,
-                        &service_sandbox,
+                        &service_data_dir,
                     ),
                     runtime_path: mount.runtime_path,
                 })
@@ -234,7 +239,12 @@ impl ServiceManifestDocument {
             command: spec.command,
             entrypoint: spec.entrypoint,
             working_dir: spec.working_dir.map(|value| {
-                resolve_manifest_path_string(value.as_str(), base_dir, fungi_home, &service_sandbox)
+                resolve_manifest_path_string(
+                    value.as_str(),
+                    base_dir,
+                    fungi_home,
+                    &service_data_dir,
+                )
             }),
             labels: metadata_labels,
         })
@@ -427,9 +437,9 @@ fn resolve_manifest_path(
     path: &str,
     base_dir: &Path,
     fungi_home: &Path,
-    service_sandbox: &Path,
+    service_data_dir: &Path,
 ) -> PathBuf {
-    let expanded = resolve_manifest_path_string(path, base_dir, fungi_home, service_sandbox);
+    let expanded = resolve_manifest_path_string(path, base_dir, fungi_home, service_data_dir);
     PathBuf::from(expanded)
 }
 
@@ -437,12 +447,10 @@ fn resolve_manifest_path_string(
     path: &str,
     base_dir: &Path,
     fungi_home: &Path,
-    service_sandbox: &Path,
+    service_data_dir: &Path,
 ) -> String {
     let fungi_home_value = fungi_home.to_string_lossy();
-    let service_sandbox_value = service_sandbox.to_string_lossy();
-    let service_data = service_sandbox.join("data");
-    let service_data_value = service_data.to_string_lossy();
+    let service_data_value = service_data_dir.to_string_lossy();
     let expanded = path
         .replace("${FUNGI_HOME}", &fungi_home_value)
         .replace("$FUNGI_HOME", &fungi_home_value)
@@ -452,10 +460,10 @@ fn resolve_manifest_path_string(
         .replace("$SERVICE_DATA", &service_data_value)
         .replace("${service_data}", &service_data_value)
         .replace("$service_data", &service_data_value)
-        .replace("${APP_HOME}", &service_sandbox_value)
-        .replace("$APP_HOME", &service_sandbox_value)
-        .replace("${app_home}", &service_sandbox_value)
-        .replace("$app_home", &service_sandbox_value);
+        .replace("${APP_HOME}", &service_data_value)
+        .replace("$APP_HOME", &service_data_value)
+        .replace("${app_home}", &service_data_value)
+        .replace("$app_home", &service_data_value);
     let resolved = PathBuf::from(&expanded);
     if resolved.is_absolute() {
         resolved.to_string_lossy().to_string()

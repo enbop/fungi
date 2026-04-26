@@ -1,10 +1,7 @@
 use clap::Subcommand;
 use fungi_daemon_grpc::{
     Request,
-    fungi_daemon_grpc::{
-        Empty, RuntimeAllowedHostPathRequest, RuntimeAllowedPortRangeRequest,
-        RuntimeAllowedPortRequest,
-    },
+    fungi_daemon_grpc::{Empty, RuntimeAllowedHostPathRequest},
 };
 
 use crate::commands::CommonArgs;
@@ -33,30 +30,6 @@ pub enum SecurityCommands {
         /// Absolute host path root
         path: String,
     },
-    /// Add an allowed host port
-    AllowPort {
-        /// TCP port
-        port: u16,
-    },
-    /// Remove an allowed host port
-    DenyPort {
-        /// TCP port
-        port: u16,
-    },
-    /// Add an allowed host port range
-    AllowRange {
-        /// Inclusive start port
-        start: u16,
-        /// Inclusive end port
-        end: u16,
-    },
-    /// Remove an allowed host port range
-    DenyRange {
-        /// Inclusive start port
-        start: u16,
-        /// Inclusive end port
-        end: u16,
-    },
 }
 
 pub async fn execute_security(args: CommonArgs, cmd: SecurityCommands) {
@@ -83,14 +56,6 @@ pub async fn execute_security(args: CommonArgs, cmd: SecurityCommands) {
                         println!("  ! {}", note);
                     }
                 }
-                println!("allowed_ports:");
-                for port in config.allowed_ports {
-                    println!("  {}", port);
-                }
-                println!("allowed_port_ranges:");
-                for range in config.allowed_port_ranges {
-                    println!("  {}-{}", range.start, range.end);
-                }
             }
             Err(e) => fatal_grpc(e),
         },
@@ -115,50 +80,6 @@ pub async fn execute_security(args: CommonArgs, cmd: SecurityCommands) {
                 .await
             {
                 Ok(_) => println!("Allowed host path removed"),
-                Err(e) => fatal_grpc(e),
-            }
-        }
-        SecurityCommands::AllowPort { port } => {
-            let req = RuntimeAllowedPortRequest {
-                port: i32::from(port),
-            };
-            match client.add_runtime_allowed_port(Request::new(req)).await {
-                Ok(_) => println!("Allowed port added"),
-                Err(e) => fatal_grpc(e),
-            }
-        }
-        SecurityCommands::DenyPort { port } => {
-            let req = RuntimeAllowedPortRequest {
-                port: i32::from(port),
-            };
-            match client.remove_runtime_allowed_port(Request::new(req)).await {
-                Ok(_) => println!("Allowed port removed"),
-                Err(e) => fatal_grpc(e),
-            }
-        }
-        SecurityCommands::AllowRange { start, end } => {
-            let req = RuntimeAllowedPortRangeRequest {
-                start: i32::from(start),
-                end: i32::from(end),
-            };
-            match client
-                .add_runtime_allowed_port_range(Request::new(req))
-                .await
-            {
-                Ok(_) => println!("Allowed port range added"),
-                Err(e) => fatal_grpc(e),
-            }
-        }
-        SecurityCommands::DenyRange { start, end } => {
-            let req = RuntimeAllowedPortRangeRequest {
-                start: i32::from(start),
-                end: i32::from(end),
-            };
-            match client
-                .remove_runtime_allowed_port_range(Request::new(req))
-                .await
-            {
-                Ok(_) => println!("Allowed port range removed"),
                 Err(e) => fatal_grpc(e),
             }
         }

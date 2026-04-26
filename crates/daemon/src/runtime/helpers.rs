@@ -94,11 +94,11 @@ pub(crate) fn ensure_services_root_exists(fungi_home: &Path) -> Result<()> {
             services_root.display()
         )
     })?;
-    let sandboxes_root = fungi_home.join("sandboxes");
-    fs::create_dir_all(&sandboxes_root).with_context(|| {
+    let data_root = fungi_home.join("data");
+    fs::create_dir_all(&data_root).with_context(|| {
         format!(
-            "Failed to create sandboxes root directory: {}",
-            sandboxes_root.display()
+            "Failed to create service data root directory: {}",
+            data_root.display()
         )
     })?;
     Ok(())

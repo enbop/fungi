@@ -200,10 +200,7 @@ impl ServiceStateStore {
             .services_root
             .parent()
             .unwrap_or_else(|| Path::new("."));
-        let data_dir = fungi_home
-            .join("sandboxes")
-            .join(service_dir_name(service_name))
-            .join("data");
+        let data_dir = fungi_home.join("data").join(service_dir_name(service_name));
         fs::create_dir_all(&data_dir).with_context(|| {
             format!(
                 "Failed to create service data directory: {}",
@@ -316,7 +313,7 @@ mod tests {
 
         assert!(services_root.join("demo/service.yaml").is_file());
         assert!(services_root.join("demo/state.json").is_file());
-        assert!(dir.path().join("sandboxes/demo/data").is_dir());
+        assert!(dir.path().join("data/demo").is_dir());
 
         let reloaded = ServiceStateStore::load(services_root).unwrap();
         let services = reloaded.persisted_services();

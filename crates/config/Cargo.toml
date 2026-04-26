@@ -7,6 +7,7 @@ edition.workspace = true
 
 [dependencies]
 serde = { workspace = true }
+serde_json = { workspace = true }
 toml = { workspace = true }
 libp2p-identity = { workspace = true }
 multiaddr = { workspace = true }

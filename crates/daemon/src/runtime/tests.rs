@@ -100,7 +100,7 @@ fn runtime_control_new_creates_services_root() {
     .unwrap();
 
     assert!(fungi_home.join("services").is_dir());
-    assert!(fungi_home.join("sandboxes").is_dir());
+    assert!(fungi_home.join("data").is_dir());
 }
 
 #[test]
@@ -224,22 +224,20 @@ spec:
 
     let occupied_allowed_port = StdTcpListener::bind(("127.0.0.1", 0)).unwrap();
     let occupied_allowed_port_number = occupied_allowed_port.local_addr().unwrap().port();
+    let used_host_ports = BTreeSet::from([occupied_allowed_port_number]);
     let fungi_home = PathBuf::from("/tmp/fungi-home");
     let manifest = parse_service_manifest_yaml_with_policy(
         yaml,
         Path::new("."),
         &fungi_home,
-        &ManifestResolutionPolicy {
-            allowed_tcp_ports: vec![occupied_allowed_port_number],
-            allowed_tcp_port_ranges: Vec::new(),
-        },
-        &BTreeSet::new(),
+        &ManifestResolutionPolicy::default(),
+        &used_host_ports,
     )
     .unwrap();
 
     assert_eq!(
         manifest.mounts[0].host_path,
-        fungi_home.join("sandboxes/filebrowser/data")
+        fungi_home.join("data/filebrowser/data")
     );
     assert_ne!(manifest.ports[0].host_port, occupied_allowed_port_number);
     assert_eq!(

@@ -16,9 +16,9 @@ use fungi_daemon::{
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
-        AttachServiceAccessRequest, DetachServiceAccessRequest, Empty, GetServiceLogsRequest,
-        ListPeerCatalogRequest, ListServiceAccessesRequest, ListServicesResponse, PeerInfo,
-        PullServiceRequest, RemotePeerRequest, RemotePullServiceRequest,
+        AttachServiceAccessRequest, DetachServiceAccessRequest, DeviceInfo, Empty,
+        GetServiceLogsRequest, ListPeerCatalogRequest, ListServiceAccessesRequest,
+        ListServicesResponse, PullServiceRequest, RemotePeerRequest, RemotePullServiceRequest,
         RemoteServiceControlResponse, RemoteServiceNameRequest, ServiceInstanceResponse,
         ServiceNameRequest,
     },
@@ -819,9 +819,9 @@ async fn list_local_service_instances(client: &mut RpcClient) -> Vec<ServiceInst
     }
 }
 
-async fn list_saved_devices(client: &mut RpcClient) -> Vec<PeerInfo> {
-    match client.list_address_book_peers(Request::new(Empty {})).await {
-        Ok(resp) => resp.into_inner().peers,
+async fn list_saved_devices(client: &mut RpcClient) -> Vec<DeviceInfo> {
+    match client.list_devices(Request::new(Empty {})).await {
+        Ok(resp) => resp.into_inner().devices,
         Err(error) => fatal_grpc(error),
     }
 }
@@ -877,7 +877,7 @@ async fn fetch_cached_remote_services(client: &mut RpcClient, peer_id: &str) -> 
 
 #[derive(Debug, Clone)]
 struct CachedRemoteServiceMatch {
-    device: PeerInfo,
+    device: DeviceInfo,
     access: ServiceAccess,
 }
 
@@ -1627,7 +1627,7 @@ impl ServiceOverviewRow {
         }
     }
 
-    fn from_cached_access(access: ServiceAccess, device: &PeerInfo, verbose: bool) -> Self {
+    fn from_cached_access(access: ServiceAccess, device: &DeviceInfo, verbose: bool) -> Self {
         let device_name = device_display_name(device);
         let entries = access
             .endpoints
@@ -1669,7 +1669,7 @@ impl ServiceOverviewRow {
 
     fn from_remote_service(
         service: RemoteService,
-        device: &PeerInfo,
+        device: &DeviceInfo,
         attached: &[ServiceAccess],
         verbose: bool,
     ) -> Self {
@@ -1727,7 +1727,7 @@ impl ServiceOverviewRow {
         }
     }
 
-    fn remote_unavailable(device: &PeerInfo, error: String) -> Self {
+    fn remote_unavailable(device: &DeviceInfo, error: String) -> Self {
         let device_name = device_display_name(device);
         Self {
             reference: format!("@{device_name}"),
@@ -1800,9 +1800,9 @@ fn print_service_overview_rows(rows: &[ServiceOverviewRow]) {
     }
 }
 
-fn device_display_name(device: &PeerInfo) -> String {
-    if !device.alias.trim().is_empty() {
-        device.alias.clone()
+fn device_display_name(device: &DeviceInfo) -> String {
+    if !device.name.trim().is_empty() {
+        device.name.clone()
     } else if !device.hostname.trim().is_empty() {
         device.hostname.clone()
     } else {
@@ -1812,9 +1812,9 @@ fn device_display_name(device: &PeerInfo) -> String {
 
 fn resolved_device_display_name(device: &super::shared::ResolvedPeerTarget) -> String {
     device
-        .alias
+        .name
         .as_ref()
-        .filter(|alias| !alias.trim().is_empty())
+        .filter(|name| !name.trim().is_empty())
         .cloned()
         .or_else(|| {
             device
@@ -2199,7 +2199,7 @@ mod tests {
         let target = parse_dynamic_thing_target("filebrowser@nas/admin".to_string()).unwrap();
 
         assert_eq!(target.name, "filebrowser");
-        assert!(matches!(target.device, Some(DeviceInput::Alias(alias)) if alias == "nas"));
+        assert!(matches!(target.device, Some(DeviceInput::Name(name)) if name == "nas"));
         assert_eq!(target.entry.as_deref(), Some("admin"));
     }
 
@@ -2213,9 +2213,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(invocation.target.name, "rg");
-        assert!(
-            matches!(invocation.target.device, Some(DeviceInput::Alias(alias)) if alias == "nas")
-        );
+        assert!(matches!(invocation.target.device, Some(DeviceInput::Name(name)) if name == "nas"));
         assert_eq!(invocation.args, vec!["todo", "/data"]);
     }
 
@@ -2246,7 +2244,7 @@ mod tests {
 
         assert_eq!(input.manifest_path, None);
         assert_eq!(input.default_name.as_deref(), Some("ssh"));
-        assert!(matches!(input.device, Some(DeviceInput::Alias(alias)) if alias == "nas"));
+        assert!(matches!(input.device, Some(DeviceInput::Name(name)) if name == "nas"));
     }
 
     fn service_access(endpoints: Vec<ServiceAccessEndpoint>) -> ServiceAccess {

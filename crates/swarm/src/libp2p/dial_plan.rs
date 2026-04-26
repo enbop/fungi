@@ -108,7 +108,7 @@ fn source_rank(source: PeerAddressSource) -> u8 {
     match source {
         PeerAddressSource::Mdns => 0,
         PeerAddressSource::Identify => 1,
-        PeerAddressSource::AddressBook => 2,
+        PeerAddressSource::DeviceConfig => 2,
         PeerAddressSource::Manual => 3,
         PeerAddressSource::RelayDerived => 4,
         PeerAddressSource::AutoNat => 5,
@@ -129,11 +129,11 @@ mod tests {
     use crate::PeerAddressObservation;
 
     #[test]
-    fn dial_plan_orders_fresh_mdns_before_identify_and_address_book() {
+    fn dial_plan_orders_fresh_mdns_before_identify_and_device_config() {
         let peer_id = PeerId::random();
         let state = State::default();
 
-        let address_book_addr: Multiaddr = format!("/ip4/198.51.100.8/tcp/4001/p2p/{peer_id}")
+        let device_config_addr: Multiaddr = format!("/ip4/198.51.100.8/tcp/4001/p2p/{peer_id}")
             .parse()
             .unwrap();
         let identify_addr: Multiaddr = format!("/ip4/203.0.113.8/tcp/4001/p2p/{peer_id}")
@@ -146,8 +146,8 @@ mod tests {
         assert_eq!(
             state.record_peer_address(
                 peer_id,
-                address_book_addr.clone(),
-                PeerAddressSource::AddressBook
+                device_config_addr.clone(),
+                PeerAddressSource::DeviceConfig
             ),
             PeerAddressObservation::New
         );
@@ -164,14 +164,14 @@ mod tests {
 
         let expected_mdns_addr: Multiaddr = "/ip4/192.168.1.8/tcp/4001".parse().unwrap();
         let expected_identify_addr: Multiaddr = "/ip4/203.0.113.8/tcp/4001".parse().unwrap();
-        let expected_address_book_addr: Multiaddr = "/ip4/198.51.100.8/tcp/4001".parse().unwrap();
+        let expected_device_config_addr: Multiaddr = "/ip4/198.51.100.8/tcp/4001".parse().unwrap();
 
         assert_eq!(
             plan.direct_addresses(),
             vec![
                 expected_mdns_addr,
                 expected_identify_addr,
-                expected_address_book_addr
+                expected_device_config_addr
             ]
         );
     }
@@ -185,7 +185,7 @@ mod tests {
         let candidate = DialCandidate {
             addr: stale_addr.clone(),
             kind: DialCandidateKind::DirectTcp,
-            source: PeerAddressSource::AddressBook,
+            source: PeerAddressSource::DeviceConfig,
             freshness: AddressFreshness::Stale,
         };
         let plan = DialPlan {

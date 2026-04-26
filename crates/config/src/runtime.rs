@@ -10,12 +10,8 @@ pub struct Runtime {
     pub disable_wasmtime: bool,
     #[serde(default)]
     pub docker_socket_path: Option<PathBuf>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allowed_host_paths: Vec<PathBuf>,
-    #[serde(default)]
-    pub allowed_ports: Vec<u16>,
-    #[serde(default = "default_allowed_port_ranges")]
-    pub allowed_port_ranges: Vec<AllowedPortRange>,
 }
 
 impl Default for Runtime {
@@ -25,8 +21,6 @@ impl Default for Runtime {
             disable_wasmtime: false,
             docker_socket_path: None,
             allowed_host_paths: Vec::new(),
-            allowed_ports: Vec::new(),
-            allowed_port_ranges: default_allowed_port_ranges(),
         }
     }
 }
@@ -40,36 +34,24 @@ impl Runtime {
         !self.disable_wasmtime
     }
 
-    pub fn apply_default_allowed_host_paths(&mut self, fungi_dir: &Path) {
-        if !self.allowed_host_paths.is_empty() {
-            return;
-        }
-
-        self.allowed_host_paths = default_allowed_host_paths(fungi_dir);
-    }
-
     pub fn validate_allowed_host_path(path: &Path, fungi_dir: &Path) -> Result<PathBuf> {
         let normalized = normalize_absolute_path(path)?;
         if is_sensitive_fungi_path(&normalized, fungi_dir)? {
             bail!(
-                "refusing to allow fungi home secrets path: {}. Use {}/sandboxes or a directory outside fungi home",
+                "refusing to allow fungi home control-plane path: {}. Use {}/data or a directory outside fungi home",
                 normalized.display(),
-                normalize_absolute_path(fungi_dir.join("sandboxes").as_path())?.display()
+                normalize_absolute_path(fungi_dir.join("data").as_path())?.display()
             );
         }
         Ok(normalized)
     }
 }
 
-fn default_allowed_host_paths(fungi_dir: &Path) -> Vec<PathBuf> {
-    vec![fungi_dir.join("sandboxes")]
-}
-
 fn is_sensitive_fungi_path(path: &Path, fungi_dir: &Path) -> Result<bool> {
     let fungi_home = normalize_absolute_path(fungi_dir)?;
-    let sandboxes_root = normalize_absolute_path(&fungi_home.join("sandboxes"))?;
+    let data_root = normalize_absolute_path(&fungi_home.join("data"))?;
 
-    Ok(path.starts_with(&fungi_home) && !path.starts_with(&sandboxes_root))
+    Ok(path.starts_with(&fungi_home) && !path.starts_with(&data_root))
 }
 
 fn normalize_absolute_path(path: &Path) -> Result<PathBuf> {
@@ -92,19 +74,6 @@ fn normalize_absolute_path(path: &Path) -> Result<PathBuf> {
     Ok(normalized)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub struct AllowedPortRange {
-    pub start: u16,
-    pub end: u16,
-}
-
-fn default_allowed_port_ranges() -> Vec<AllowedPortRange> {
-    vec![AllowedPortRange {
-        start: 18080,
-        end: 18199,
-    }]
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,50 +88,19 @@ mod tests {
         assert!(runtime.docker_enabled());
         assert!(runtime.wasmtime_enabled());
         assert!(runtime.allowed_host_paths.is_empty());
-        assert!(runtime.allowed_ports.is_empty());
-        assert_eq!(
-            runtime.allowed_port_ranges,
-            vec![AllowedPortRange {
-                start: 18080,
-                end: 18199,
-            }]
-        );
     }
 
     #[test]
-    fn runtime_defaults_only_allow_sandboxes_subdir() {
+    fn runtime_preserves_explicit_allowed_host_paths() {
         let fungi_home = test_fungi_home();
-        let mut runtime = Runtime::default();
-
-        runtime.apply_default_allowed_host_paths(&fungi_home);
-
-        assert_eq!(
-            runtime.allowed_host_paths,
-            vec![fungi_home.join("sandboxes")]
-        );
-    }
-
-    #[test]
-    fn runtime_defaults_preserve_explicit_allowed_host_paths() {
-        let fungi_home = test_fungi_home();
-        let mut runtime = Runtime {
-            allowed_host_paths: vec![
-                fungi_home.clone(),
-                fungi_home.join("sandboxes"),
-                fungi_home.join("sandboxes/demo"),
-            ],
+        let runtime = Runtime {
+            allowed_host_paths: vec![fungi_home.join("data"), fungi_home.join("data/demo")],
             ..Runtime::default()
         };
 
-        runtime.apply_default_allowed_host_paths(&fungi_home);
-
         assert_eq!(
             runtime.allowed_host_paths,
-            vec![
-                fungi_home,
-                test_fungi_home().join("sandboxes"),
-                test_fungi_home().join("sandboxes/demo")
-            ]
+            vec![fungi_home.join("data"), fungi_home.join("data/demo")]
         );
     }
 
@@ -174,7 +112,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("refusing to allow fungi home secrets path")
+                .contains("refusing to allow fungi home control-plane path")
         );
     }
 }

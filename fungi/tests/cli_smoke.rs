@@ -58,7 +58,7 @@ fn cli_can_create_and_access_remote_tcp_tunnel_service() {
             "allowed-peers",
             "add",
             a_peer.as_str(),
-            "--alias",
+            "--name",
             "a",
         ],
         "y\n",
@@ -79,9 +79,29 @@ fn cli_can_create_and_access_remote_tcp_tunnel_service() {
         ["service", "add", "test-tcp@b"],
         &format!("\n\n127.0.0.1:{target_port}\n\n\n\n"),
     );
+    assert!(
+        a.path()
+            .join("cache")
+            .join("remote_services")
+            .join(format!("{b_peer}.json"))
+            .exists(),
+        "remote service cache should persist outside config.toml"
+    );
 
     let output = run_cli(a.path(), ["test-tcp@b"]);
     let local_addr = extract_local_address(&output.stdout);
+    assert!(
+        a.path().join("access").join("local_access.json").exists(),
+        "service access should persist outside config.toml"
+    );
+    let access_json =
+        std::fs::read_to_string(a.path().join("access").join("local_access.json")).unwrap();
+    assert!(access_json.contains("test-tcp"));
+    let config_toml = std::fs::read_to_string(a.path().join("config.toml")).unwrap();
+    assert!(
+        !config_toml.contains("remote_service_id"),
+        "service access should not be persisted in config.toml"
+    );
 
     let mut stream = connect_with_retry(&local_addr, Duration::from_secs(5));
     stream.write_all(b"ping").unwrap();

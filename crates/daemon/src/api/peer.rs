@@ -44,9 +44,9 @@ impl FungiDaemon {
 
         let is_relay = is_relay_connection(conn.multiaddr());
         let remote_addr = conn.multiaddr().to_string();
-        let peer_alias = self
-            .address_book_get_peer(peer_id)
-            .and_then(|peer| peer.alias)
+        let peer_name = self
+            .devices_get_peer(peer_id)
+            .and_then(|peer| peer.name)
             .unwrap_or_default();
         let peer_role = if self.is_configured_relay_peer(peer_id) {
             "relay-carrier"
@@ -72,7 +72,7 @@ impl FungiDaemon {
             active_streams_by_protocol,
             policy_state: conn.governance.state.as_str().to_string(),
             policy_reason: conn.governance.reason.clone().unwrap_or_default(),
-            peer_alias,
+            peer_name,
             peer_role,
         }
     }

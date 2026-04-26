@@ -44,7 +44,7 @@ impl ExternalAddressSource {
 pub enum PeerAddressSource {
     Identify,
     Mdns,
-    AddressBook,
+    DeviceConfig,
     Manual,
     RelayDerived,
     AutoNat,
@@ -56,7 +56,7 @@ impl PeerAddressSource {
         match self {
             PeerAddressSource::Identify => "identify",
             PeerAddressSource::Mdns => "mdns",
-            PeerAddressSource::AddressBook => "address-book",
+            PeerAddressSource::DeviceConfig => "device-config",
             PeerAddressSource::Manual => "manual",
             PeerAddressSource::RelayDerived => "relay-derived",
             PeerAddressSource::AutoNat => "autonat",

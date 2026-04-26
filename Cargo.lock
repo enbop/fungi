@@ -1678,6 +1678,7 @@ dependencies = [
  "mdns-sd",
  "multiaddr",
  "serde",
+ "serde_json",
  "tempfile",
  "toml",
 ]

@@ -43,7 +43,7 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
-use fungi_config::{FungiConfig, address_book::AddressBookConfig};
+use fungi_config::{FungiConfig, devices::DevicesConfig};
 use libp2p::{Multiaddr, PeerId, identity::Keypair, multiaddr::Protocol};
 use tempfile::TempDir;
 
@@ -159,7 +159,7 @@ impl TestDaemonBuilder {
             DaemonArgs::default(),
             cfg,
             keypair,
-            AddressBookConfig::default(),
+            DevicesConfig::default(),
         )
         .await?;
         Ok(TestDaemon {

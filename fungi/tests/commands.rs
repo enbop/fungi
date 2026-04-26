@@ -28,7 +28,7 @@ fn parses_service_add_with_device() {
     };
 
     assert_eq!(manifest.as_deref(), Some("demo.service.yaml"));
-    assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "laptop"));
+    assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "laptop"));
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn parses_interactive_service_add() {
     };
 
     assert!(manifest.is_none());
-    assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "laptop"));
+    assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "laptop"));
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn parses_service_open_with_named_entry_and_device() {
 
     assert_eq!(service, "filebrowser");
     assert_eq!(entry.as_deref(), Some("web"));
-    assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "laptop"));
+    assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "laptop"));
 }
 
 #[test]
@@ -117,7 +117,7 @@ fn parses_service_connect_with_device() {
     assert_eq!(service, "home-ssh");
     assert!(entry.is_none());
     assert!(local_port.is_none());
-    assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "home"));
+    assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "home"));
 }
 
 #[test]
@@ -202,7 +202,7 @@ fn parses_service_list_with_device() {
 
     assert!(!verbose);
     assert!(!refresh);
-    assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "home"));
+    assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "home"));
 }
 
 #[test]
@@ -227,7 +227,7 @@ fn parses_service_start_with_device() {
     };
 
     assert_eq!(name, "filebrowser");
-    assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "home"));
+    assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "home"));
 }
 
 #[test]
@@ -270,7 +270,7 @@ fn parses_service_stop_with_device() {
     };
 
     assert_eq!(name, "filebrowser");
-    assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "home"));
+    assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "home"));
 }
 
 #[test]
@@ -295,7 +295,7 @@ fn parses_service_remove_with_device() {
     };
 
     assert_eq!(name, "filebrowser");
-    assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "home"));
+    assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "home"));
 }
 
 #[test]
@@ -321,23 +321,23 @@ fn parses_service_inspect_with_device() {
 
     assert_eq!(name, "filebrowser");
     assert!(!verbose);
-    assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "home"));
+    assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "home"));
 }
 
 #[test]
-fn parses_service_target_device_aliases() {
+fn parses_service_target_device_names() {
     let by_device =
         FungiArgs::try_parse_from(["fungi", "service", "--device", "home", "list"]).unwrap();
     let Commands::Service(ServiceArgs { device, .. }) = by_device.command else {
         panic!("expected service list command");
     };
-    assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "home"));
+    assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "home"));
 
     let by_short = FungiArgs::try_parse_from(["fungi", "service", "-d", "nas", "list"]).unwrap();
     let Commands::Service(ServiceArgs { device, .. }) = by_short.command else {
         panic!("expected service list command");
     };
-    assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "nas"));
+    assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "nas"));
 }
 
 #[test]
@@ -429,7 +429,7 @@ fn parses_device_add_with_manual_address() {
     };
     let Some(DeviceCommands::Add {
         peer_id,
-        alias,
+        name,
         addresses,
     }) = device_args.command
     else {
@@ -437,7 +437,7 @@ fn parses_device_add_with_manual_address() {
     };
 
     assert_eq!(peer_id, "12D3KooWExample");
-    assert_eq!(alias, "nas");
+    assert_eq!(name, "nas");
     assert_eq!(addresses, vec!["/ip4/127.0.0.1/tcp/4001"]);
 }
 
@@ -488,7 +488,7 @@ fn parses_dynamic_thing_with_device_context() {
 
     assert!(matches!(
         args.common.dynamic_device,
-        Some(DeviceInput::Alias(alias)) if alias == "nas"
+        Some(DeviceInput::Name(name)) if name == "nas"
     ));
     assert_eq!(tokens, vec!["filebrowser"]);
 }
@@ -525,7 +525,7 @@ fn root_help_marks_tunnel_deprecated_and_hides_service_plumbing_commands() {
 }
 
 #[test]
-fn service_help_hides_pull_alias_from_main_path() {
+fn service_help_hides_pull_shortcut_from_main_path() {
     let mut command = FungiArgs::command();
     let service = command
         .find_subcommand_mut("service")

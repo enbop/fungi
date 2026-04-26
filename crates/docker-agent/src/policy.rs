@@ -57,10 +57,11 @@ impl AgentPolicy {
                 ));
             }
 
-            if !self
-                .allowed_ports
-                .iter()
-                .any(|rule| rule.allows(port.host_port))
+            if !self.allowed_ports.is_empty()
+                && !self
+                    .allowed_ports
+                    .iter()
+                    .any(|rule| rule.allows(port.host_port))
             {
                 return Err(DockerAgentError::PolicyDenied(format!(
                     "host port is not allowed: {}",

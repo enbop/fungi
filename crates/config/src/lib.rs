@@ -1,8 +1,9 @@
-pub mod address_book;
 mod build_info;
+pub mod devices;
 pub mod file_transfer;
 mod init;
 mod libp2p;
+pub mod local_access;
 mod rpc;
 pub mod runtime;
 pub mod service_cache;
@@ -28,15 +29,22 @@ use tcp_tunneling::*;
 
 use crate::{
     file_transfer::{FileTransfer, FileTransferClient, FileTransferService},
-    runtime::{AllowedPortRange, Runtime},
+    runtime::Runtime,
 };
 
 pub const DEFAULT_CONFIG_FILE: &str = "config.toml";
 pub const DEFAULT_FUNGI_DIR: &str = NIGHTLY_FUNGI_DIR;
 pub const DEFAULT_RPC_ADDRESS: &str = NIGHTLY_RPC_ADDRESS;
+pub const CURRENT_CONFIG_VERSION: u32 = 2;
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+fn default_config_version() -> u32 {
+    CURRENT_CONFIG_VERSION
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct FungiConfig {
+    #[serde(default = "default_config_version")]
+    pub version: u32,
     #[serde(default)]
     pub rpc: rpc::Rpc,
     #[serde(default)]
@@ -47,14 +55,27 @@ pub struct FungiConfig {
     pub file_transfer: FileTransfer,
     #[serde(default)]
     pub runtime: Runtime,
-    #[serde(default)]
-    pub service_cache: service_cache::ServiceCache,
 
     #[serde(default)]
     custom_hostname: Option<String>,
 
     #[serde(skip)]
     config_file: PathBuf,
+}
+
+impl Default for FungiConfig {
+    fn default() -> Self {
+        Self {
+            version: CURRENT_CONFIG_VERSION,
+            rpc: rpc::Rpc::default(),
+            network: Network::default(),
+            tcp_tunneling: TcpTunneling::default(),
+            file_transfer: FileTransfer::default(),
+            runtime: Runtime::default(),
+            custom_hostname: None,
+            config_file: PathBuf::new(),
+        }
+    }
 }
 
 impl FungiConfig {
@@ -66,16 +87,15 @@ impl FungiConfig {
         if config_file.exists() {
             return Ok(());
         }
-        let fungi_dir = config_file.parent().unwrap_or_else(|| Path::new("."));
-        let config = FungiConfig::default_for_dir(fungi_dir);
+        let config = FungiConfig::default_for_dir();
         let toml_string = toml::to_string(&config)?;
         std::fs::write(&config_file, toml_string)?;
         Ok(())
     }
 
-    fn default_for_dir(fungi_dir: &Path) -> Self {
+    fn default_for_dir() -> Self {
         let mut config = FungiConfig::default();
-        config.apply_runtime_defaults(fungi_dir);
+        config.apply_config_defaults();
         config
     }
 
@@ -89,7 +109,7 @@ impl FungiConfig {
         }
         let s = std::fs::read_to_string(&config_file)?;
         let mut cfg = Self::parse_toml(&s)?;
-        cfg.apply_runtime_defaults(fungi_dir);
+        cfg.apply_config_defaults();
         cfg.config_file = config_file;
         Ok(cfg)
     }
@@ -103,7 +123,7 @@ impl FungiConfig {
         println!("Loading Fungi config from: {config_file:?}");
         let s = std::fs::read_to_string(&config_file).context("Failed to read config file")?;
         let mut cfg = Self::parse_toml(&s)?;
-        cfg.apply_runtime_defaults(fungi_dir);
+        cfg.apply_config_defaults();
         cfg.config_file = config_file;
         Ok(cfg)
     }
@@ -171,50 +191,6 @@ impl FungiConfig {
                 .runtime
                 .allowed_host_paths
                 .retain(|entry| entry != path);
-        })
-    }
-
-    pub fn add_runtime_allowed_port(&self, port: u16) -> Result<Self> {
-        self.update_and_save(|config| {
-            if !config.runtime.allowed_ports.contains(&port) {
-                config.runtime.allowed_ports.push(port);
-                config.runtime.allowed_ports.sort_unstable();
-            }
-        })
-    }
-
-    pub fn remove_runtime_allowed_port(&self, port: u16) -> Result<Self> {
-        self.update_and_save(|config| {
-            config.runtime.allowed_ports.retain(|entry| *entry != port);
-        })
-    }
-
-    pub fn add_runtime_allowed_port_range(&self, range: AllowedPortRange) -> Result<Self> {
-        if range.start == 0 || range.end == 0 || range.start > range.end {
-            return Err(anyhow::anyhow!("invalid allowed port range"));
-        }
-
-        self.update_and_save(|config| {
-            if !config
-                .runtime
-                .allowed_port_ranges
-                .iter()
-                .any(|entry| entry == &range)
-            {
-                config.runtime.allowed_port_ranges.push(range.clone());
-                config.runtime.allowed_port_ranges.sort_by(|left, right| {
-                    left.start.cmp(&right.start).then(left.end.cmp(&right.end))
-                });
-            }
-        })
-    }
-
-    pub fn remove_runtime_allowed_port_range(&self, range: &AllowedPortRange) -> Result<Self> {
-        self.update_and_save(|config| {
-            config
-                .runtime
-                .allowed_port_ranges
-                .retain(|entry| entry != range);
         })
     }
 
@@ -442,8 +418,10 @@ impl FungiConfig {
 }
 
 impl FungiConfig {
-    fn apply_runtime_defaults(&mut self, fungi_dir: &Path) {
-        self.runtime.apply_default_allowed_host_paths(fungi_dir);
+    fn apply_config_defaults(&mut self) {
+        if self.version == 0 {
+            self.version = CURRENT_CONFIG_VERSION;
+        }
     }
 }
 
@@ -475,10 +453,15 @@ mod tests {
         FungiConfig::init_config_file(config_path.clone()).unwrap();
         assert!(config_path.exists());
         let content = std::fs::read_to_string(&config_path).unwrap();
+        assert!(content.contains("version = 2"));
         assert!(content.contains("[network]"));
         assert!(content.contains("[tcp_tunneling"));
         assert!(content.contains("[file_transfer"));
         assert!(content.contains("[runtime]"));
+        assert!(!content.contains("allowed_ports"));
+        assert!(!content.contains("allowed_port_ranges"));
+        assert!(!content.contains("allowed_host_paths"));
+        assert!(!content.contains("[service_cache"));
     }
 
     #[test]
