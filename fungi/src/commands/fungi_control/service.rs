@@ -143,10 +143,16 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             }
         }
         ServiceCommands::Add { manifest } => {
+            let add_input = parse_service_add_input(manifest);
+            let device = resolve_service_device_target(&args, device, add_input.device);
             let target_device_name = device.as_ref().map(resolved_device_display_name);
-            let created = match manifest {
-                Some(manifest) => read_manifest_yaml_file(&manifest),
-                None => create_service_manifest_interactively(target_device_name.as_deref()),
+            let created = if let Some(manifest_path) = add_input.manifest_path.as_deref() {
+                read_manifest_yaml_file(manifest_path)
+            } else {
+                create_service_manifest_interactively(
+                    target_device_name.as_deref(),
+                    add_input.default_name.as_deref(),
+                )
             };
             if let Some(device) = device {
                 print_target_device(&device);
@@ -218,11 +224,14 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             }
         }
         ServiceCommands::Start { name } => {
+            let target = parse_service_reference(name);
+            reject_service_entry(&target, "start");
+            let device = resolve_service_device_target(&args, device, target.device);
             if let Some(device) = device {
                 print_target_device(&device);
                 let req = RemoteServiceNameRequest {
                     peer_id: device.peer_id.clone(),
-                    name,
+                    name: target.name,
                 };
                 match client.remote_start_service(Request::new(req)).await {
                     Ok(resp) => {
@@ -232,7 +241,10 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                     Err(error) => fatal_grpc(error),
                 }
             } else {
-                let req = ServiceNameRequest { runtime: 0, name };
+                let req = ServiceNameRequest {
+                    runtime: 0,
+                    name: target.name,
+                };
                 match client.start_service(Request::new(req)).await {
                     Ok(_) => println!("Service started"),
                     Err(e) => fatal_grpc(e),
@@ -240,12 +252,19 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             }
         }
         ServiceCommands::Inspect { name, verbose } => {
+            let target = parse_service_reference(name);
+            reject_service_entry(&target, "inspect");
+            let device = resolve_service_device_target(&args, device, target.device);
             if let Some(device) = device {
                 print_target_device(&device);
-                let instance = inspect_remote_service(&mut client, &device.peer_id, name).await;
+                let instance =
+                    inspect_remote_service(&mut client, &device.peer_id, target.name).await;
                 print_service_instance_value(instance, verbose);
             } else {
-                let req = ServiceNameRequest { runtime: 0, name };
+                let req = ServiceNameRequest {
+                    runtime: 0,
+                    name: target.name,
+                };
                 match client.inspect_service(Request::new(req)).await {
                     Ok(resp) => print_service_instance(resp.into_inner(), verbose),
                     Err(e) => fatal_grpc(e),
@@ -270,11 +289,14 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             }
         }
         ServiceCommands::Stop { name } => {
+            let target = parse_service_reference(name);
+            reject_service_entry(&target, "stop");
+            let device = resolve_service_device_target(&args, device, target.device);
             if let Some(device) = device {
                 print_target_device(&device);
                 let req = RemoteServiceNameRequest {
                     peer_id: device.peer_id.clone(),
-                    name,
+                    name: target.name,
                 };
                 match client.remote_stop_service(Request::new(req)).await {
                     Ok(resp) => {
@@ -284,7 +306,10 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                     Err(error) => fatal_grpc(error),
                 }
             } else {
-                let req = ServiceNameRequest { runtime: 0, name };
+                let req = ServiceNameRequest {
+                    runtime: 0,
+                    name: target.name,
+                };
                 match client.stop_service(Request::new(req)).await {
                     Ok(_) => println!("Service stopped"),
                     Err(e) => fatal_grpc(e),
@@ -292,11 +317,14 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             }
         }
         ServiceCommands::Remove { name } => {
+            let target = parse_service_reference(name);
+            reject_service_entry(&target, "remove");
+            let device = resolve_service_device_target(&args, device, target.device);
             if let Some(device) = device {
                 print_target_device(&device);
                 let req = RemoteServiceNameRequest {
                     peer_id: device.peer_id.clone(),
-                    name,
+                    name: target.name,
                 };
                 match client.remote_remove_service(Request::new(req)).await {
                     Ok(resp) => {
@@ -306,7 +334,10 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                     Err(error) => fatal_grpc(error),
                 }
             } else {
-                let req = ServiceNameRequest { runtime: 0, name };
+                let req = ServiceNameRequest {
+                    runtime: 0,
+                    name: target.name,
+                };
                 match client.remove_service(Request::new(req)).await {
                     Ok(_) => println!("Service removed"),
                     Err(e) => fatal_grpc(e),
@@ -314,13 +345,21 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             }
         }
         ServiceCommands::Open { service, entry } => {
+            let target = parse_service_reference(service);
+            let entry = merge_entry(target.entry.as_deref(), entry.as_deref(), "open");
+            let device = resolve_service_device_target(&args, device, target.device);
             if let Some(device) = device {
                 print_target_device(&device);
                 let remote_service =
-                    discover_remote_service(&mut client, &device.peer_id, &service).await;
-                let access =
-                    existing_or_attach_access(&mut client, &device.peer_id, &service, None, None)
-                        .await;
+                    discover_remote_service(&mut client, &device.peer_id, &target.name).await;
+                let access = existing_or_attach_access(
+                    &mut client,
+                    &device.peer_id,
+                    &target.name,
+                    None,
+                    None,
+                )
+                .await;
                 let device_name = resolved_device_display_name(&device);
                 open_or_print_remote_service(
                     &remote_service,
@@ -329,7 +368,7 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                     entry.as_deref(),
                 );
             } else {
-                let instance = inspect_local_service(&mut client, service).await;
+                let instance = inspect_local_service(&mut client, target.name).await;
                 open_or_print_local_service(&instance, entry.as_deref());
             }
         }
@@ -338,12 +377,15 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             entry,
             local_port,
         } => {
+            let target = parse_service_reference(service);
+            let entry = merge_entry(target.entry.as_deref(), entry.as_deref(), "connect");
+            let device = resolve_service_device_target(&args, device, target.device);
             let address = if let Some(device) = device {
                 print_target_device(&device);
                 let access = existing_or_attach_access(
                     &mut client,
                     &device.peer_id,
-                    &service,
+                    &target.name,
                     entry.as_deref(),
                     local_port,
                 )
@@ -356,7 +398,7 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                         "--local-port can only be used when connecting to a service on another device",
                     )
                 }
-                let instance = inspect_local_service(&mut client, service).await;
+                let instance = inspect_local_service(&mut client, target.name).await;
                 select_local_port(&instance, entry.as_deref())
                     .map(|port| format!("127.0.0.1:{}", port.host_port))
             };
@@ -523,6 +565,85 @@ pub fn parse_dynamic_thing_target(value: String) -> Result<DynamicThingTarget, S
 fn parse_service_reference(value: String) -> DynamicThingTarget {
     let target = parse_dynamic_thing_target(value).unwrap_or_else(|error| fatal(error));
     target
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ServiceAddInput {
+    manifest_path: Option<String>,
+    default_name: Option<String>,
+    device: Option<DeviceInput>,
+}
+
+fn parse_service_add_input(value: Option<String>) -> ServiceAddInput {
+    let Some(value) = value else {
+        return ServiceAddInput {
+            manifest_path: None,
+            default_name: None,
+            device: None,
+        };
+    };
+
+    if looks_like_manifest_path(&value) {
+        return ServiceAddInput {
+            manifest_path: Some(value),
+            default_name: None,
+            device: None,
+        };
+    }
+
+    let target = parse_service_reference(value);
+    reject_service_entry(&target, "add");
+    ServiceAddInput {
+        manifest_path: None,
+        default_name: Some(target.name),
+        device: target.device,
+    }
+}
+
+fn looks_like_manifest_path(value: &str) -> bool {
+    let value = value.trim();
+    let lower = value.to_ascii_lowercase();
+    std::path::Path::new(value).exists()
+        || lower.ends_with(".yaml")
+        || lower.ends_with(".yml")
+        || lower.ends_with(".json")
+        || value.contains(std::path::MAIN_SEPARATOR)
+        || value.contains('/')
+        || value.contains('\\')
+}
+
+fn reject_service_entry(target: &DynamicThingTarget, action: &str) {
+    if target.entry.is_some() {
+        fatal(format!("Entry-specific {action} is not implemented yet"))
+    }
+}
+
+fn merge_entry(primary: Option<&str>, secondary: Option<&str>, action: &str) -> Option<String> {
+    match (primary, secondary) {
+        (Some(_), Some(_)) => fatal(format!(
+            "Entry specified twice. Use either `service@device/entry` or `fungi service {action} <service> <entry>`."
+        )),
+        (Some(entry), None) | (None, Some(entry)) => Some(entry.to_string()),
+        (None, None) => None,
+    }
+}
+
+fn resolve_service_device_target(
+    args: &CommonArgs,
+    scoped_device: Option<super::shared::ResolvedPeerTarget>,
+    target_device: Option<DeviceInput>,
+) -> Option<super::shared::ResolvedPeerTarget> {
+    match (scoped_device, target_device) {
+        (Some(_), Some(_)) => {
+            fatal("Device specified twice. Use either --device <device> or service@device.")
+        }
+        (Some(device), None) => Some(device),
+        (None, Some(device_input)) => match resolve_optional_device(args, Some(&device_input)) {
+            Ok(device) => device,
+            Err(error) => fatal(error),
+        },
+        (None, None) => None,
+    }
 }
 
 fn resolve_remote_service_reference(
@@ -1190,6 +1311,7 @@ pub(crate) fn read_manifest_yaml_file(path: &str) -> CreatedServiceManifest {
 
 fn create_service_manifest_interactively(
     target_device_name: Option<&str>,
+    default_service_name: Option<&str>,
 ) -> CreatedServiceManifest {
     println!("Create a service");
     println!("Press Ctrl+C to cancel.\n");
@@ -1203,7 +1325,13 @@ fn create_service_manifest_interactively(
         fatal("Only TCP tunnel services are supported by the creator for now")
     }
 
-    let name = prompt_required("Step 2/4 - Service name");
+    let name = match default_service_name {
+        Some(default_name) => prompt_with_default(
+            &format!("Step 2/4 - Service name [{default_name}]"),
+            default_name,
+        ),
+        None => prompt_required("Step 2/4 - Service name"),
+    };
     let target_label = target_device_name
         .map(|device| format!("Step 3/4 - TCP address on {device}, for example 127.0.0.1:22"))
         .unwrap_or_else(|| {
@@ -2096,6 +2224,29 @@ mod tests {
         let result = parse_dynamic_thing_target("filebrowser@".to_string());
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_service_add_input_treats_yaml_as_manifest() {
+        let input = parse_service_add_input(Some("demo.service.yaml".to_string()));
+
+        assert_eq!(
+            input,
+            ServiceAddInput {
+                manifest_path: Some("demo.service.yaml".to_string()),
+                default_name: None,
+                device: None,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_service_add_input_treats_service_reference_as_creator_defaults() {
+        let input = parse_service_add_input(Some("ssh@nas".to_string()));
+
+        assert_eq!(input.manifest_path, None);
+        assert_eq!(input.default_name.as_deref(), Some("ssh"));
+        assert!(matches!(input.device, Some(DeviceInput::Alias(alias)) if alias == "nas"));
     }
 
     fn service_access(endpoints: Vec<ServiceAccessEndpoint>) -> ServiceAccess {

@@ -48,6 +48,23 @@ fn parses_interactive_service_add() {
 }
 
 #[test]
+fn parses_service_add_reference_for_interactive_creator() {
+    let args = FungiArgs::try_parse_from(["fungi", "service", "add", "ssh@nas"]).unwrap();
+
+    let Commands::Service(ServiceArgs {
+        device,
+        command: Some(ServiceCommands::Add { manifest }),
+        ..
+    }) = args.command
+    else {
+        panic!("expected service add command");
+    };
+
+    assert!(device.device.is_none());
+    assert_eq!(manifest.as_deref(), Some("ssh@nas"));
+}
+
+#[test]
 fn parses_service_open_with_named_entry_and_device() {
     let args = FungiArgs::try_parse_from([
         "fungi",
@@ -209,6 +226,24 @@ fn parses_service_start_with_device() {
 
     assert_eq!(name, "filebrowser");
     assert!(matches!(device.device, Some(DeviceInput::Alias(alias)) if alias == "home"));
+}
+
+#[test]
+fn parses_service_start_reference() {
+    let args =
+        FungiArgs::try_parse_from(["fungi", "service", "start", "filebrowser@home"]).unwrap();
+
+    let Commands::Service(ServiceArgs {
+        device,
+        command: Some(ServiceCommands::Start { name }),
+        ..
+    }) = args.command
+    else {
+        panic!("expected service start command");
+    };
+
+    assert!(device.device.is_none());
+    assert_eq!(name, "filebrowser@home");
 }
 
 #[test]

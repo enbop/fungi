@@ -291,19 +291,24 @@ impl AddressBookConfig {
 
     pub fn add_or_update_peer(&self, peer_info: PeerInfo) -> Result<Self> {
         let validated_alias = match peer_info.alias.as_deref() {
-            Some(alias) => Some(Self::validate_alias(alias)?),
-            None => None,
+            Some(alias) => Self::validate_alias(alias)?,
+            None => {
+                return Err(anyhow::anyhow!(
+                    "Device name is required for managed devices"
+                ));
+            }
         };
 
-        if let Some(alias) = validated_alias.as_deref()
-            && self.alias_exists(alias, Some(&peer_info.peer_id))
-        {
-            return Err(anyhow::anyhow!("Alias already exists: {}", alias));
+        if self.alias_exists(&validated_alias, Some(&peer_info.peer_id)) {
+            return Err(anyhow::anyhow!(
+                "Device name already exists: {}",
+                validated_alias
+            ));
         }
 
         self.update_and_save(|config| {
             let mut peer_info = peer_info.clone();
-            peer_info.alias = validated_alias.clone();
+            peer_info.alias = Some(validated_alias.clone());
             if let Some(existing_peer) = config
                 .peers
                 .iter_mut()
@@ -365,10 +370,9 @@ impl AddressBookConfig {
                 continue;
             }
 
-            let mut peer = PeerInfo::new_unknown(peer_id);
-            peer.multiaddrs = normalized;
-            new_config.peers.push(peer);
-            changed = true;
+            // Learned addresses are connection cache, not user-managed devices.
+            // Unknown peers must not appear in the address book unless the user adds them.
+            continue;
         }
 
         if changed {
@@ -411,7 +415,7 @@ mod tests {
         let hostname = Some("test-host".to_string());
         let peer_info = PeerInfo {
             peer_id,
-            alias: None,
+            alias: Some("test-device".to_string()),
             hostname: hostname.clone(),
             multiaddrs: vec![],
             os: Os::this_device(),
@@ -426,6 +430,7 @@ mod tests {
 
         let peer_info = updated_config.get_peer_info(&peer_id).unwrap();
         assert_eq!(peer_info.peer_id, peer_id);
+        assert_eq!(peer_info.alias.as_deref(), Some("test-device"));
         assert_eq!(peer_info.hostname, hostname);
     }
 
@@ -435,7 +440,7 @@ mod tests {
         let peer_id = PeerId::random();
         let initial_peer_info = PeerInfo {
             peer_id,
-            alias: None,
+            alias: Some("device1".to_string()),
             hostname: Some("host1".to_string()),
             multiaddrs: vec![],
             os: Os::this_device(),
@@ -503,6 +508,25 @@ mod tests {
     }
 
     #[test]
+    fn test_add_peer_rejects_missing_alias() {
+        let (config, _temp_dir) = create_temp_peers_config();
+        let peer_info = PeerInfo {
+            peer_id: PeerId::random(),
+            alias: None,
+            hostname: Some("host1".to_string()),
+            multiaddrs: vec![],
+            os: Os::this_device(),
+            public_ip: None,
+            private_ips: vec![],
+            version: "1.0.0".to_string(),
+            created_at: SystemTime::now(),
+            last_connected: SystemTime::now(),
+        };
+
+        assert!(config.add_or_update_peer(peer_info).is_err());
+    }
+
+    #[test]
     fn test_add_peer_trims_alias_before_saving() {
         let (config, _temp_dir) = create_temp_peers_config();
         let peer_id = PeerId::random();
@@ -535,7 +559,7 @@ mod tests {
         let updated = config
             .add_or_update_peer(PeerInfo {
                 peer_id,
-                alias: None,
+                alias: Some("host1".to_string()),
                 hostname: Some("host1".to_string()),
                 multiaddrs: vec![],
                 os: Os::this_device(),
@@ -562,5 +586,21 @@ mod tests {
             peer.multiaddrs,
             vec!["/ip4/192.168.1.7/tcp/4001".to_string()]
         );
+    }
+
+    #[test]
+    fn test_sync_peer_multiaddrs_ignores_unknown_peer() {
+        let (config, _temp_dir) = create_temp_peers_config();
+        let peer_id = PeerId::random();
+
+        let synced = config
+            .sync_peer_multiaddrs(HashMap::from([(
+                peer_id,
+                vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
+            )]))
+            .unwrap();
+
+        assert!(synced.get_peer_info(&peer_id).is_none());
+        assert!(synced.get_all_peers().is_empty());
     }
 }
