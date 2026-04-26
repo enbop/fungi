@@ -1535,6 +1535,7 @@ fn peer_info_to_proto(info: fungi_config::address_book::PeerInfo) -> PeerInfo {
         created_at: system_time_to_i64(info.created_at),
         last_connected: system_time_to_i64(info.last_connected),
         version: info.version,
+        multiaddrs: info.multiaddrs,
     }
 }
 
@@ -1554,7 +1555,7 @@ fn proto_to_peer_info(proto: PeerInfo) -> Result<fungi_config::address_book::Pee
         } else {
             Some(proto.hostname)
         },
-        multiaddrs: vec![],
+        multiaddrs: proto.multiaddrs,
         os: string_to_os(&proto.os),
         public_ip: if proto.public_ip.is_empty() {
             None

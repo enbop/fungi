@@ -349,6 +349,8 @@ pub struct PeerInfo {
     pub last_connected: i64,
     #[prost(string, tag = "9")]
     pub version: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "10")]
+    pub multiaddrs: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PeerInfoListResponse {

@@ -441,6 +441,7 @@ message PeerInfo {
   int64           created_at     = 7;
   int64           last_connected = 8;
   string          version        = 9;
+  repeated string multiaddrs     = 10;
 }
 
 message PeerInfoListResponse { repeated PeerInfo peers = 1; }

@@ -244,6 +244,7 @@ fn new_minimal_peer_info(peer_id: String, alias: String) -> PeerInfo {
         created_at: now,
         last_connected: now,
         version: String::new(),
+        multiaddrs: Vec::new(),
     }
 }
 

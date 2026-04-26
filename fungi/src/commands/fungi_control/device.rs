@@ -35,7 +35,13 @@ pub enum DeviceCommands {
         /// Human-friendly unique device name
         #[arg(long = "name", alias = "alias", value_name = "NAME")]
         alias: String,
+        /// User-managed direct multiaddr for this device
+        #[arg(long = "addr", alias = "address", value_name = "MULTIADDR")]
+        addresses: Vec<String>,
     },
+    /// Manage user-added device addresses
+    #[command(subcommand)]
+    Address(DeviceAddressCommands),
     /// Rename an existing device
     Rename {
         /// Device ID or device name to rename
@@ -53,6 +59,29 @@ pub enum DeviceCommands {
     Remove {
         /// Device ID to remove
         peer_id: String,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum DeviceAddressCommands {
+    /// List user-managed addresses for a device
+    List {
+        /// Device ID or device name
+        device: String,
+    },
+    /// Add a user-managed address to a device
+    Add {
+        /// Device ID or device name
+        device: String,
+        /// Direct multiaddr to add
+        address: String,
+    },
+    /// Remove a user-managed address from a device
+    Remove {
+        /// Device ID or device name
+        device: String,
+        /// Direct multiaddr to remove
+        address: String,
     },
 }
 
@@ -93,11 +122,16 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
                 Err(e) => fatal_grpc(e),
             }
         }
-        DeviceCommands::Add { peer_id, alias } => {
+        DeviceCommands::Add {
+            peer_id,
+            alias,
+            addresses,
+        } => {
             let peer_id = match peer_id.parse::<PeerId>() {
                 Ok(value) => value,
                 Err(error) => fatal(format!("Invalid peer_id: {error}")),
             };
+            let addresses = normalize_multiaddrs(addresses);
 
             let existing = match client
                 .get_address_book_peer(Request::new(GetAddressBookPeerRequest {
@@ -112,9 +146,10 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
             let peer_info = match existing {
                 Some(mut peer) => {
                     peer.alias = alias;
+                    peer.multiaddrs = merge_multiaddrs(peer.multiaddrs, addresses);
                     peer
                 }
-                None => new_minimal_peer_info(peer_id.to_string(), alias),
+                None => new_minimal_peer_info(peer_id.to_string(), alias, addresses),
             };
 
             match client
@@ -127,6 +162,34 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
                 Err(error) => fatal_grpc(error),
             }
         }
+        DeviceCommands::Address(command) => match command {
+            DeviceAddressCommands::List { device } => {
+                let peer = get_saved_device(&args, &mut client, &device).await;
+                if peer.multiaddrs.is_empty() {
+                    println!("No manual addresses");
+                } else {
+                    for address in peer.multiaddrs {
+                        println!("{address}");
+                    }
+                }
+            }
+            DeviceAddressCommands::Add { device, address } => {
+                let mut peer = get_saved_device(&args, &mut client, &device).await;
+                peer.multiaddrs =
+                    merge_multiaddrs(peer.multiaddrs, normalize_multiaddrs(vec![address]));
+                save_device(&mut client, peer, "Device address added").await;
+            }
+            DeviceAddressCommands::Remove { device, address } => {
+                let mut peer = get_saved_device(&args, &mut client, &device).await;
+                let normalized = normalize_multiaddr(&address);
+                let before = peer.multiaddrs.len();
+                peer.multiaddrs.retain(|value| value != &normalized);
+                if peer.multiaddrs.len() == before {
+                    fatal("Device address not found")
+                }
+                save_device(&mut client, peer, "Device address removed").await;
+            }
+        },
         DeviceCommands::Rename { peer, alias } => {
             let target_peer_id = if let Ok(value) = peer.parse::<PeerId>() {
                 value.to_string()
@@ -186,7 +249,49 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
     }
 }
 
-fn new_minimal_peer_info(peer_id: String, alias: String) -> PeerInfo {
+async fn get_saved_device(
+    args: &CommonArgs,
+    client: &mut fungi_daemon_grpc::fungi_daemon_grpc::fungi_daemon_client::FungiDaemonClient<
+        tonic::transport::Channel,
+    >,
+    device: &str,
+) -> PeerInfo {
+    let peer_id = match resolve_peer_value(args, device) {
+        Ok(peer) => peer.peer_id,
+        Err(error) => fatal(error),
+    };
+
+    match client
+        .get_address_book_peer(Request::new(GetAddressBookPeerRequest { peer_id }))
+        .await
+    {
+        Ok(resp) => resp
+            .into_inner()
+            .peer_info
+            .unwrap_or_else(|| fatal("Device not found")),
+        Err(error) => fatal_grpc(error),
+    }
+}
+
+async fn save_device(
+    client: &mut fungi_daemon_grpc::fungi_daemon_grpc::fungi_daemon_client::FungiDaemonClient<
+        tonic::transport::Channel,
+    >,
+    peer_info: PeerInfo,
+    message: &str,
+) {
+    match client
+        .update_address_book_peer(Request::new(UpdateAddressBookPeerRequest {
+            peer_info: Some(peer_info),
+        }))
+        .await
+    {
+        Ok(_) => println!("{message}"),
+        Err(error) => fatal_grpc(error),
+    }
+}
+
+fn new_minimal_peer_info(peer_id: String, alias: String, multiaddrs: Vec<String>) -> PeerInfo {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -202,7 +307,40 @@ fn new_minimal_peer_info(peer_id: String, alias: String) -> PeerInfo {
         created_at: now,
         last_connected: now,
         version: String::new(),
+        multiaddrs,
     }
+}
+
+fn normalize_multiaddrs(addresses: Vec<String>) -> Vec<String> {
+    let mut addresses = addresses
+        .into_iter()
+        .map(|address| normalize_multiaddr(&address))
+        .collect::<Vec<_>>();
+    addresses.sort();
+    addresses.dedup();
+    addresses
+}
+
+fn normalize_multiaddr(address: &str) -> String {
+    let address = address.trim();
+    if address.is_empty() {
+        fatal("Device address cannot be empty")
+    }
+    if let Err(error) = address.parse::<multiaddr::Multiaddr>() {
+        fatal(format!("Invalid multiaddr: {error}"))
+    }
+    address.to_string()
+}
+
+fn merge_multiaddrs(existing: Vec<String>, added: Vec<String>) -> Vec<String> {
+    let mut merged = existing
+        .into_iter()
+        .map(|address| normalize_multiaddr(&address))
+        .chain(added)
+        .collect::<Vec<_>>();
+    merged.sort();
+    merged.dedup();
+    merged
 }
 
 fn print_peer_info(peer: &PeerInfo) {
@@ -220,5 +358,11 @@ fn print_peer_info_detailed(peer: &PeerInfo) {
     }
     if !peer.private_ips.is_empty() {
         println!("Private IPs: {}", peer.private_ips.join(", "));
+    }
+    if !peer.multiaddrs.is_empty() {
+        println!("Manual addresses:");
+        for address in &peer.multiaddrs {
+            println!("  {address}");
+        }
     }
 }

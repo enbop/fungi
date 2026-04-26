@@ -1,7 +1,9 @@
 use clap::{CommandFactory, Parser};
 use fungi::commands::{
     Commands, FungiArgs,
-    fungi_control::{DeviceCommands, DeviceInput, ServiceArgs, ServiceCommands},
+    fungi_control::{
+        DeviceAddressCommands, DeviceCommands, DeviceInput, ServiceArgs, ServiceCommands,
+    },
 };
 
 #[test]
@@ -406,6 +408,62 @@ fn parses_device_list_explicitly() {
     };
 
     assert!(matches!(device_args.command, Some(DeviceCommands::List)));
+}
+
+#[test]
+fn parses_device_add_with_manual_address() {
+    let args = FungiArgs::try_parse_from([
+        "fungi",
+        "device",
+        "add",
+        "12D3KooWExample",
+        "--name",
+        "nas",
+        "--addr",
+        "/ip4/127.0.0.1/tcp/4001",
+    ])
+    .unwrap();
+
+    let Commands::Device(device_args) = args.command else {
+        panic!("expected device command");
+    };
+    let Some(DeviceCommands::Add {
+        peer_id,
+        alias,
+        addresses,
+    }) = device_args.command
+    else {
+        panic!("expected device add command");
+    };
+
+    assert_eq!(peer_id, "12D3KooWExample");
+    assert_eq!(alias, "nas");
+    assert_eq!(addresses, vec!["/ip4/127.0.0.1/tcp/4001"]);
+}
+
+#[test]
+fn parses_device_address_add() {
+    let args = FungiArgs::try_parse_from([
+        "fungi",
+        "device",
+        "address",
+        "add",
+        "nas",
+        "/ip4/127.0.0.1/tcp/4001",
+    ])
+    .unwrap();
+
+    let Commands::Device(device_args) = args.command else {
+        panic!("expected device command");
+    };
+    let Some(DeviceCommands::Address(DeviceAddressCommands::Add { device, address })) =
+        device_args.command
+    else {
+        panic!("expected device address add command");
+    };
+
+    assert_eq!(device, "nas");
+    assert_eq!(address, "/ip4/127.0.0.1/tcp/4001");
 }
 
 #[test]

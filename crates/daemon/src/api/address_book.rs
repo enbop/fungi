@@ -1,5 +1,7 @@
 use anyhow::Result;
 use fungi_config::address_book::PeerInfo;
+use fungi_swarm::PeerAddressSource;
+use libp2p::Multiaddr;
 use libp2p::PeerId;
 
 use crate::FungiDaemon;
@@ -21,8 +23,9 @@ impl FungiDaemon {
 
     pub fn address_book_add_or_update(&self, peer_info: PeerInfo) -> Result<()> {
         let current_peers_config = self.address_book().lock().clone();
-        let updated_peers_config = current_peers_config.add_or_update_peer(peer_info)?;
+        let updated_peers_config = current_peers_config.add_or_update_peer(peer_info.clone())?;
         *self.address_book().lock() = updated_peers_config;
+        self.hydrate_address_book_peer_info(&peer_info);
         Ok(())
     }
 
@@ -54,5 +57,27 @@ impl FungiDaemon {
                 },
             )
             .collect()
+    }
+
+    fn hydrate_address_book_peer_info(&self, peer_info: &PeerInfo) {
+        for address in &peer_info.multiaddrs {
+            match address.parse::<Multiaddr>() {
+                Ok(multiaddr) => {
+                    self.swarm_control().state().record_peer_address(
+                        peer_info.peer_id,
+                        multiaddr,
+                        PeerAddressSource::AddressBook,
+                    );
+                }
+                Err(error) => {
+                    log::debug!(
+                        "Ignoring invalid address book multiaddr for peer {}: {} ({})",
+                        peer_info.peer_id,
+                        address,
+                        error
+                    );
+                }
+            }
+        }
     }
 }

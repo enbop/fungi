@@ -19,7 +19,7 @@ pub use access::{AccessCommands, execute_access};
 pub use allowed_peers::AllowedPeerCommands;
 pub use catalog::{CatalogCommands, execute_catalog};
 pub use connection::{ConnectionCommands, execute_connection};
-pub use device::{DeviceArgs, DeviceCommands, execute_device};
+pub use device::{DeviceAddressCommands, DeviceArgs, DeviceCommands, execute_device};
 pub use ft_client::{FtClientCommands, execute_ft_client};
 pub use ft_service::{FtServiceCommands, execute_ft_service};
 pub use info::{InfoCommands, execute_info};
