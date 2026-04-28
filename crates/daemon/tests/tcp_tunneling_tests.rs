@@ -3,7 +3,7 @@
 //! All daemon instances are created via [`fungi_daemon::test_support`] so that helper
 //! logic lives in one place and tests stay readable.
 
-use fungi_config::FungiConfig;
+use fungi_config::{FungiConfig, direct_addresses::DirectAddressCache};
 use fungi_daemon::FungiDaemon;
 use fungi_daemon::test_support::{
     TestDaemon, TestDaemonBuilder, reserve_ephemeral_port, spawn_connected_pair,
@@ -28,6 +28,7 @@ async fn spawn_daemon_in_dir(dir: &TempDir) -> FungiDaemon {
         config,
         Keypair::generate_ed25519(),
         Default::default(),
+        DirectAddressCache::apply_from_dir(dir.path()).unwrap(),
     )
     .await
     .expect("failed to start daemon")

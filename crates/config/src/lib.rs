@@ -1,5 +1,6 @@
 mod build_info;
 pub mod devices;
+pub mod direct_addresses;
 pub mod file_transfer;
 mod init;
 mod libp2p;

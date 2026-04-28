@@ -114,6 +114,10 @@ fn cli_can_create_and_access_remote_tcp_tunnel_service() {
 
 fn init_fungi_dir(path: &std::path::Path, rpc_port: u16, swarm_port: u16) {
     run_cli(path, ["init"]);
+    assert!(
+        path.join("cache").join("direct_addresses.json").exists(),
+        "direct address cache should persist outside devices.toml"
+    );
     let mut config = FungiConfig::apply_from_dir(path).unwrap();
     config.rpc.listen_address = format!("127.0.0.1:{rpc_port}");
     config.network.listen_tcp_port = swarm_port;

@@ -1,6 +1,7 @@
 use crate::{
     DEFAULT_CONFIG_FILE, FungiConfig, FungiDir, devices::DevicesConfig,
-    local_access::LocalAccessConfig, service_cache::ServiceCache,
+    direct_addresses::DirectAddressCache, local_access::LocalAccessConfig,
+    service_cache::ServiceCache,
 };
 use anyhow::Result;
 
@@ -14,6 +15,7 @@ pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
             let config = FungiConfig::apply_from_dir(&fungi_dir)?;
             config.save_to_file()?;
             DevicesConfig::apply_from_dir(&fungi_dir)?;
+            DirectAddressCache::apply_from_dir(&fungi_dir)?;
             LocalAccessConfig::apply_from_dir(&fungi_dir)?;
             ServiceCache::apply_from_dir(&fungi_dir)?;
             println!("Configuration file upgraded at {}", config_file.display());
@@ -35,7 +37,8 @@ pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
     // create devices.toml
     DevicesConfig::apply_from_dir(&fungi_dir)?;
 
-    // create access/local_access.json and cache/remote_services/
+    // create cache/direct_addresses.json, access/local_access.json, and cache/remote_services/
+    DirectAddressCache::apply_from_dir(&fungi_dir)?;
     LocalAccessConfig::apply_from_dir(&fungi_dir)?;
     ServiceCache::apply_from_dir(&fungi_dir)?;
 

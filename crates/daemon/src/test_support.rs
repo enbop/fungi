@@ -43,7 +43,7 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
-use fungi_config::{FungiConfig, devices::DevicesConfig};
+use fungi_config::{FungiConfig, devices::DevicesConfig, direct_addresses::DirectAddressCache};
 use libp2p::{Multiaddr, PeerId, identity::Keypair, multiaddr::Protocol};
 use tempfile::TempDir;
 
@@ -160,6 +160,7 @@ impl TestDaemonBuilder {
             cfg,
             keypair,
             DevicesConfig::default(),
+            DirectAddressCache::apply_from_dir(dir.path())?,
         )
         .await?;
         Ok(TestDaemon {

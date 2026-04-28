@@ -341,45 +341,6 @@ impl DevicesConfig {
             config.devices.retain(|p| p.peer_id != *peer_id);
         })
     }
-
-    pub fn sync_device_multiaddrs(&self, updates: HashMap<PeerId, Vec<String>>) -> Result<Self> {
-        let mut new_config = self.clone();
-        let mut changed = false;
-
-        for (peer_id, multiaddrs) in updates {
-            let mut normalized = multiaddrs
-                .into_iter()
-                .map(|addr| addr.trim().to_string())
-                .filter(|addr| !addr.is_empty())
-                .collect::<Vec<_>>();
-            normalized.sort();
-            normalized.dedup();
-
-            if normalized.is_empty() {
-                continue;
-            }
-
-            if let Some(existing_device) =
-                new_config.devices.iter_mut().find(|p| p.peer_id == peer_id)
-            {
-                if existing_device.multiaddrs != normalized {
-                    existing_device.multiaddrs = normalized;
-                    changed = true;
-                }
-                continue;
-            }
-
-            // Learned addresses are connection cache, not user-managed devices.
-            // Unknown peers must not appear in the device list unless the user adds them.
-            continue;
-        }
-
-        if changed {
-            new_config.save_to_file()?;
-        }
-
-        Ok(new_config)
-    }
 }
 
 #[cfg(test)]
@@ -550,57 +511,5 @@ mod tests {
                 .and_then(|peer| peer.name.clone()),
             Some("work-laptop".to_string())
         );
-    }
-
-    #[test]
-    fn test_sync_device_multiaddrs_updates_existing_device() {
-        let (config, _temp_dir) = create_temp_devices_config();
-        let peer_id = PeerId::random();
-        let updated = config
-            .add_or_update_device(DeviceInfo {
-                peer_id,
-                name: Some("host1".to_string()),
-                hostname: Some("host1".to_string()),
-                multiaddrs: vec![],
-                os: Os::this_device(),
-                public_ip: None,
-                private_ips: vec![],
-                version: "1.0.0".to_string(),
-                created_at: SystemTime::now(),
-                last_connected: SystemTime::now(),
-            })
-            .unwrap();
-
-        let synced = updated
-            .sync_device_multiaddrs(HashMap::from([(
-                peer_id,
-                vec![
-                    "/ip4/192.168.1.7/tcp/4001".to_string(),
-                    "/ip4/192.168.1.7/tcp/4001".to_string(),
-                ],
-            )]))
-            .unwrap();
-
-        let peer = synced.get_device_info(&peer_id).unwrap();
-        assert_eq!(
-            peer.multiaddrs,
-            vec!["/ip4/192.168.1.7/tcp/4001".to_string()]
-        );
-    }
-
-    #[test]
-    fn test_sync_device_multiaddrs_ignores_unknown_peer() {
-        let (config, _temp_dir) = create_temp_devices_config();
-        let peer_id = PeerId::random();
-
-        let synced = config
-            .sync_device_multiaddrs(HashMap::from([(
-                peer_id,
-                vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
-            )]))
-            .unwrap();
-
-        assert!(synced.get_device_info(&peer_id).is_none());
-        assert!(synced.get_all_devices().is_empty());
     }
 }

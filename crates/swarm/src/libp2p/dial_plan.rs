@@ -109,10 +109,11 @@ fn source_rank(source: PeerAddressSource) -> u8 {
         PeerAddressSource::Mdns => 0,
         PeerAddressSource::Identify => 1,
         PeerAddressSource::DeviceConfig => 2,
-        PeerAddressSource::Manual => 3,
-        PeerAddressSource::RelayDerived => 4,
-        PeerAddressSource::AutoNat => 5,
-        PeerAddressSource::Other => 6,
+        PeerAddressSource::DirectCache => 3,
+        PeerAddressSource::Manual => 4,
+        PeerAddressSource::RelayDerived => 5,
+        PeerAddressSource::AutoNat => 6,
+        PeerAddressSource::Other => 7,
     }
 }
 
