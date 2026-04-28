@@ -171,6 +171,8 @@ impl DirectAddressCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::devices::{DeviceInfo, DevicesConfig, Os};
+    use libp2p_identity::PeerId;
     use tempfile::TempDir;
 
     #[test]
@@ -197,6 +199,48 @@ mod tests {
                 .join("cache")
                 .join("direct_addresses.json")
                 .exists()
+        );
+    }
+
+    #[test]
+    fn recording_direct_address_does_not_mutate_devices_toml() {
+        let dir = TempDir::new().unwrap();
+        let devices = DevicesConfig::apply_from_dir(dir.path()).unwrap();
+        let peer_id = PeerId::random();
+        let devices = devices
+            .add_or_update_device(DeviceInfo {
+                peer_id,
+                name: Some("nas".to_string()),
+                hostname: Some("nas.local".to_string()),
+                multiaddrs: vec!["/ip4/192.168.1.10/tcp/4001".to_string()],
+                private_ips: vec![],
+                os: Os::Unknown,
+                version: "1.0.0".to_string(),
+                public_ip: None,
+                created_at: SystemTime::now(),
+                last_connected: SystemTime::now(),
+            })
+            .unwrap();
+        let devices_before = std::fs::read_to_string(devices.config_file_path()).unwrap();
+
+        let cache = DirectAddressCache::apply_from_dir(dir.path()).unwrap();
+        let updated = cache
+            .record_successful_addresses(
+                peer_id.to_string(),
+                vec!["/ip4/192.168.1.99/tcp/4001".to_string()],
+            )
+            .unwrap();
+
+        let devices_after = std::fs::read_to_string(devices.config_file_path()).unwrap();
+        assert_eq!(devices_after, devices_before);
+        assert_eq!(
+            updated.get_device_addresses(&peer_id.to_string()),
+            vec!["/ip4/192.168.1.99/tcp/4001".to_string()]
+        );
+        assert!(
+            std::fs::read_to_string(dir.path().join("cache").join("direct_addresses.json"))
+                .unwrap()
+                .contains("192.168.1.99")
         );
     }
 }

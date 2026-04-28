@@ -483,6 +483,57 @@ impl ConnectivityState {
         }
     }
 
+    pub fn restore_peer_address_record(
+        &mut self,
+        peer_id: PeerId,
+        address: Multiaddr,
+        source: PeerAddressSource,
+        first_observed_at: SystemTime,
+        last_observed_at: SystemTime,
+        observation_count: u64,
+    ) -> PeerAddressObservation {
+        let Some(normalized) = normalize_peer_address(&address, peer_id) else {
+            return PeerAddressObservation::Ignored;
+        };
+
+        let first_observed_at = first_observed_at.min(last_observed_at);
+        let observation_count = observation_count.max(1);
+        let key = (peer_id, normalized.clone());
+        let transport_kind = address_transport_kind(&normalized);
+
+        match self.peer_address_records.get_mut(&key) {
+            Some(record) => {
+                if last_observed_at <= record.last_observed_at {
+                    return PeerAddressObservation::Ignored;
+                }
+
+                record.first_observed_at = record.first_observed_at.min(first_observed_at);
+                record.last_observed_at = last_observed_at;
+                record.expired_at = None;
+                record.observation_count = record.observation_count.max(observation_count);
+                record.source = source;
+                PeerAddressObservation::Refreshed
+            }
+            None => {
+                self.peer_address_records.insert(
+                    key,
+                    PeerAddressRecord {
+                        peer_id,
+                        address: normalized,
+                        transport_kind,
+                        source,
+                        first_observed_at,
+                        last_observed_at,
+                        expired_at: None,
+                        observation_count,
+                    },
+                );
+                self.peer_address_revision += 1;
+                PeerAddressObservation::New
+            }
+        }
+    }
+
     pub fn expire_peer_address(&mut self, peer_id: PeerId, address: Multiaddr) -> bool {
         let Some(normalized) = normalize_peer_address(&address, peer_id) else {
             return false;
@@ -806,6 +857,37 @@ mod tests {
             records[0].freshness(SystemTime::now()),
             AddressFreshness::Expired
         );
+    }
+
+    #[test]
+    fn peer_address_restore_preserves_cached_freshness() {
+        let peer_id = PeerId::random();
+        let address: Multiaddr = format!("/ip4/192.168.1.7/tcp/4001/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let mut state = ConnectivityState::default();
+        let now = SystemTime::now();
+        let old_last_observed_at = now - Duration::from_secs(3600);
+        let old_first_observed_at = old_last_observed_at - Duration::from_secs(60);
+
+        assert_eq!(
+            state.restore_peer_address_record(
+                peer_id,
+                address,
+                PeerAddressSource::DirectCache,
+                old_first_observed_at,
+                old_last_observed_at,
+                7,
+            ),
+            PeerAddressObservation::New
+        );
+
+        let records = state.list_peer_addresses();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].first_observed_at, old_first_observed_at);
+        assert_eq!(records[0].last_observed_at, old_last_observed_at);
+        assert_eq!(records[0].observation_count, 7);
+        assert_eq!(records[0].freshness(now), AddressFreshness::Stale);
     }
 
     #[test]
