@@ -711,7 +711,6 @@ fn new_direct_address_successes(
     grouped: BTreeMap<String, Vec<String>>,
     last_synced_pairs: &mut BTreeSet<(String, String)>,
 ) -> BTreeMap<String, Vec<String>> {
-    let grouped = normalize_direct_address_groups(grouped);
     let current_pairs = direct_address_pairs(&grouped);
     let mut new_pairs = BTreeMap::<String, Vec<String>>::new();
 
@@ -723,7 +722,7 @@ fn new_direct_address_successes(
     }
 
     *last_synced_pairs = current_pairs;
-    normalize_direct_address_groups(new_pairs)
+    new_pairs
 }
 
 fn direct_address_pairs(grouped: &BTreeMap<String, Vec<String>>) -> BTreeSet<(String, String)> {
