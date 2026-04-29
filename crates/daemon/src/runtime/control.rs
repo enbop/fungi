@@ -19,6 +19,7 @@ use super::{
     },
     manifest::{parse_service_manifest_yaml_with_policy, service_expose_endpoint_bindings},
     model::*,
+    parse_service_manifest_yaml_with_policy_for_service_data_dir, peek_service_manifest_name,
     providers::{DockerRuntimeProvider, RuntimeProvider, WasmtimeRuntimeProvider},
 };
 
@@ -87,6 +88,14 @@ impl RuntimeControl {
     }
 
     pub async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
+        self.pull_with_local_service_id(manifest, None).await
+    }
+
+    async fn pull_with_local_service_id(
+        &self,
+        manifest: &ServiceManifest,
+        local_service_id: Option<&str>,
+    ) -> Result<ServiceInstance> {
         self.ensure_runtime_enabled(manifest.runtime)?;
         {
             let services = self.service_index.lock();
@@ -107,7 +116,7 @@ impl RuntimeControl {
         self.service_manifests
             .lock()
             .insert(manifest.name.clone(), manifest.clone());
-        self.persist_service(manifest, DesiredServiceState::Stopped)?;
+        self.persist_service(manifest, DesiredServiceState::Stopped, local_service_id)?;
         Ok(enrich_instance_from_manifest(instance, manifest))
     }
 
@@ -118,8 +127,24 @@ impl RuntimeControl {
         fungi_home: &Path,
         policy: &ManifestResolutionPolicy,
     ) -> Result<ServiceInstance> {
-        let manifest = self.resolve_manifest_yaml(content, base_dir, fungi_home, policy)?;
-        self.pull(&manifest).await
+        let manifest_name = peek_service_manifest_name(content)?;
+        let local_service_id = {
+            self.service_state
+                .lock()
+                .preview_local_service_id(&manifest_name)?
+        };
+        let used_host_ports = self.reserved_host_ports();
+        let service_data_dir = fungi_home.join("data").join(&local_service_id);
+        let manifest = parse_service_manifest_yaml_with_policy_for_service_data_dir(
+            content,
+            base_dir,
+            fungi_home,
+            &service_data_dir,
+            policy,
+            &used_host_ports,
+        )?;
+        self.pull_with_local_service_id(&manifest, Some(&local_service_id))
+            .await
     }
 
     pub fn resolve_manifest_yaml(
@@ -386,6 +411,7 @@ impl RuntimeControl {
         let persisted_services = { self.service_state.lock().persisted_services() };
 
         for PersistedService {
+            local_service_id: _,
             manifest,
             desired_state,
         } in persisted_services
@@ -463,10 +489,12 @@ impl RuntimeControl {
         &self,
         manifest: &ServiceManifest,
         desired_state: DesiredServiceState,
+        local_service_id: Option<&str>,
     ) -> Result<()> {
         self.service_state
             .lock()
-            .upsert_service(manifest, desired_state)
+            .upsert_service_with_local_service_id(manifest, desired_state, local_service_id)
+            .map(|_| ())
     }
 
     fn set_desired_state(&self, name: &str, desired_state: DesiredServiceState) -> Result<()> {

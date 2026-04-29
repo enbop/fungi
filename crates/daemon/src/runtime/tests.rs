@@ -247,6 +247,37 @@ spec:
 }
 
 #[test]
+fn manifest_document_supports_explicit_service_data_dir() {
+    let yaml = r#"
+apiVersion: fungi.rs/v1alpha1
+kind: ServiceManifest
+metadata:
+    name: filebrowser
+spec:
+    runtime: docker
+    source:
+        image: filebrowser/filebrowser:latest
+    mounts:
+        - hostPath: ${APP_HOME}/data
+          runtimePath: /srv
+"#;
+
+    let fungi_home = PathBuf::from("/tmp/fungi-home");
+    let service_data_dir = fungi_home.join("data/svc_01hz7j7n3evh1q4j1a8g9c2d3e");
+    let manifest = parse_service_manifest_yaml_with_policy_for_service_data_dir(
+        yaml,
+        Path::new("."),
+        &fungi_home,
+        &service_data_dir,
+        &ManifestResolutionPolicy::default(),
+        &BTreeSet::new(),
+    )
+    .unwrap();
+
+    assert_eq!(manifest.mounts[0].host_path, service_data_dir.join("data"));
+}
+
+#[test]
 fn manifest_document_defaults_missing_host_port_to_auto() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1

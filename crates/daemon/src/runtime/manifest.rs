@@ -31,6 +31,22 @@ pub fn parse_service_manifest_yaml(
     )
 }
 
+pub(crate) fn parse_managed_service_manifest_yaml(
+    content: &str,
+    base_dir: &Path,
+    fungi_home: &Path,
+    service_data_dir: &Path,
+) -> Result<ServiceManifest> {
+    parse_service_manifest_yaml_with_policy_for_service_data_dir(
+        content,
+        base_dir,
+        fungi_home,
+        service_data_dir,
+        &ManifestResolutionPolicy::default(),
+        &BTreeSet::new(),
+    )
+}
+
 pub fn parse_service_manifest_yaml_with_policy(
     content: &str,
     base_dir: &Path,
@@ -41,6 +57,31 @@ pub fn parse_service_manifest_yaml_with_policy(
     let document: ServiceManifestDocument =
         serde_yaml::from_str(content).context("Failed to parse service manifest YAML")?;
     document.into_service_manifest_for_node(base_dir, fungi_home, policy, used_host_ports)
+}
+
+pub(crate) fn parse_service_manifest_yaml_with_policy_for_service_data_dir(
+    content: &str,
+    base_dir: &Path,
+    fungi_home: &Path,
+    service_data_dir: &Path,
+    policy: &ManifestResolutionPolicy,
+    used_host_ports: &BTreeSet<u16>,
+) -> Result<ServiceManifest> {
+    let document: ServiceManifestDocument =
+        serde_yaml::from_str(content).context("Failed to parse service manifest YAML")?;
+    document.into_service_manifest_for_node_with_service_data_dir(
+        base_dir,
+        fungi_home,
+        service_data_dir,
+        policy,
+        used_host_ports,
+    )
+}
+
+pub(crate) fn peek_service_manifest_name(content: &str) -> Result<String> {
+    let document: ServiceManifestDocument =
+        serde_yaml::from_str(content).context("Failed to parse service manifest YAML")?;
+    normalize_non_empty(&document.metadata.name, "metadata.name")
 }
 
 pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
@@ -132,6 +173,25 @@ impl ServiceManifestDocument {
         self,
         base_dir: &Path,
         fungi_home: &Path,
+        policy: &ManifestResolutionPolicy,
+        used_host_ports: &BTreeSet<u16>,
+    ) -> Result<ServiceManifest> {
+        let service_name = normalize_non_empty(&self.metadata.name, "metadata.name")?;
+        let service_data_dir = fungi_home.join("data").join(service_name);
+        self.into_service_manifest_for_node_with_service_data_dir(
+            base_dir,
+            fungi_home,
+            &service_data_dir,
+            policy,
+            used_host_ports,
+        )
+    }
+
+    pub(crate) fn into_service_manifest_for_node_with_service_data_dir(
+        self,
+        base_dir: &Path,
+        fungi_home: &Path,
+        service_data_dir: &Path,
         _policy: &ManifestResolutionPolicy,
         used_host_ports: &BTreeSet<u16>,
     ) -> Result<ServiceManifest> {
@@ -145,9 +205,8 @@ impl ServiceManifestDocument {
             metadata,
             spec,
         } = self;
-        let service_name = metadata.name;
+        let service_name = normalize_non_empty(&metadata.name, "metadata.name")?;
         let metadata_labels = metadata.labels;
-        let service_data_dir = fungi_home.join("data").join(&service_name);
         let mut reserved_host_ports = used_host_ports.clone();
 
         let runtime = spec.runtime;
