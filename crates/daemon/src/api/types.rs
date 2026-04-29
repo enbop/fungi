@@ -151,7 +151,6 @@ pub struct ActiveStreamSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceAccess {
     pub peer_id: String,
-    pub service_id: String,
     pub service_name: String,
     pub endpoints: Vec<ServiceAccessEndpoint>,
 }

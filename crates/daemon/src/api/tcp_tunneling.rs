@@ -142,20 +142,20 @@ impl FungiDaemon {
     pub async fn attach_service_access(
         &self,
         peer_id: PeerId,
-        service_id: String,
+        service_name: String,
         entry: Option<String>,
         local_port: Option<u16>,
     ) -> Result<ServiceAccess> {
         let catalog_services = self.list_peer_catalog(peer_id).await?;
         let service = catalog_services
             .into_iter()
-            .find(|service| service.service_id == service_id)
-            .ok_or_else(|| anyhow::anyhow!("remote service not found: {}", service_id))?;
+            .find(|service| service.service_name == service_name)
+            .ok_or_else(|| anyhow::anyhow!("remote service not found: {}", service_name))?;
 
         if service.endpoints.is_empty() {
             bail!(
                 "remote service exposes no named TCP endpoints: {}",
-                service.service_id
+                service.service_name
             );
         }
 
@@ -189,7 +189,7 @@ impl FungiDaemon {
         for endpoint in endpoints {
             let existing_rule = existing_rules.iter().find(|(_, rule)| {
                 rule.remote_peer_id == peer_id_string
-                    && rule.remote_service_id.as_deref() == Some(service.service_id.as_str())
+                    && rule.remote_service_name.as_deref() == Some(service.service_name.as_str())
                     && rule.remote_service_port_name.as_deref() == Some(endpoint.name.as_str())
             });
 
@@ -206,7 +206,7 @@ impl FungiDaemon {
                         peer_id_string.clone(),
                         endpoint.service_port,
                         Some(endpoint.protocol.clone()),
-                        Some(service.service_id.clone()),
+                        None,
                         Some(service.service_name.clone()),
                         Some(endpoint.name.clone()),
                     )
@@ -247,7 +247,7 @@ impl FungiDaemon {
                 peer_id_string.clone(),
                 endpoint.service_port,
                 Some(endpoint.protocol.clone()),
-                Some(service.service_id.clone()),
+                None,
                 Some(service.service_name.clone()),
                 Some(endpoint.name.clone()),
             )
@@ -265,14 +265,13 @@ impl FungiDaemon {
         enabled_endpoints.sort_by(|left, right| left.name.cmp(&right.name));
         Ok(ServiceAccess {
             peer_id: peer_id_string,
-            service_id: service.service_id,
             service_name: service.service_name,
             endpoints: enabled_endpoints,
         })
     }
 
-    pub fn detach_service_access(&self, peer_id: PeerId, service_id: String) -> Result<()> {
-        self.detach_service_access_by_match(peer_id, &service_id)
+    pub fn detach_service_access(&self, peer_id: PeerId, service_name: String) -> Result<()> {
+        self.detach_service_access_by_match(peer_id, &service_name)
     }
 
     pub fn detach_service_access_by_match(&self, peer_id: PeerId, matcher: &str) -> Result<()> {
@@ -297,12 +296,9 @@ impl FungiDaemon {
 
     pub fn list_service_accesses(&self, peer_id: Option<PeerId>) -> Vec<ServiceAccess> {
         let peer_filter = peer_id.map(|peer_id| peer_id.to_string());
-        let mut grouped = BTreeMap::<(String, String, String), Vec<ServiceAccessEndpoint>>::new();
+        let mut grouped = BTreeMap::<(String, String), Vec<ServiceAccessEndpoint>>::new();
 
         for (_, rule) in self.get_tcp_forwarding_rules() {
-            let Some(service_id) = rule.remote_service_id.clone() else {
-                continue;
-            };
             let Some(service_name) = rule.remote_service_name.clone() else {
                 continue;
             };
@@ -316,7 +312,7 @@ impl FungiDaemon {
             }
 
             grouped
-                .entry((rule.remote_peer_id.clone(), service_id, service_name))
+                .entry((rule.remote_peer_id.clone(), service_name))
                 .or_default()
                 .push(ServiceAccessEndpoint {
                     name: endpoint_name,
@@ -329,11 +325,10 @@ impl FungiDaemon {
 
         let mut services = grouped
             .into_iter()
-            .map(|((peer_id, service_id, service_name), mut endpoints)| {
+            .map(|((peer_id, service_name), mut endpoints)| {
                 endpoints.sort_by(|left, right| left.name.cmp(&right.name));
                 ServiceAccess {
                     peer_id,
-                    service_id,
                     service_name,
                     endpoints,
                 }
@@ -342,7 +337,7 @@ impl FungiDaemon {
         services.sort_by(|left, right| {
             left.peer_id
                 .cmp(&right.peer_id)
-                .then(left.service_id.cmp(&right.service_id))
+                .then(left.service_name.cmp(&right.service_name))
         });
         services
     }
@@ -373,9 +368,6 @@ impl FungiDaemon {
 }
 
 fn ensure_requested_local_port_available(port: u16, reserved_ports: &BTreeSet<u16>) -> Result<()> {
-    if port == 0 {
-        bail!("local port must be greater than 0");
-    }
     if reserved_ports.contains(&port) {
         bail!(
             "local port is already used by another service access: {}",

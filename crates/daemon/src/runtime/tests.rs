@@ -285,8 +285,6 @@ spec:
         port: 22
     expose:
         enabled: true
-        serviceId: home-ssh
-        displayName: Home SSH
         transport:
             kind: tcp
         usage:
@@ -375,8 +373,6 @@ spec:
 
     let manifest = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
     let expose = manifest.expose.expect("expected expose config");
-    assert_eq!(expose.service_id, "filebrowser");
-    assert_eq!(expose.display_name, "filebrowser");
     assert_eq!(expose.transport.kind, ServiceExposeTransportKind::Tcp);
     let usage = expose.usage.expect("expected usage config");
     assert_eq!(usage.kind, ServiceExposeUsageKind::Web);

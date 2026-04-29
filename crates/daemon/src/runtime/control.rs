@@ -265,8 +265,6 @@ impl RuntimeControl {
 
             services.push(CatalogService {
                 service_name: manifest.name.clone(),
-                service_id: expose.service_id,
-                display_name: expose.display_name,
                 runtime: manifest.runtime,
                 transport: expose.transport,
                 usage: expose.usage,
@@ -284,7 +282,7 @@ impl RuntimeControl {
             });
         }
 
-        services.sort_by(|left, right| left.service_id.cmp(&right.service_id));
+        services.sort_by(|left, right| left.service_name.cmp(&right.service_name));
         Ok(services)
     }
 

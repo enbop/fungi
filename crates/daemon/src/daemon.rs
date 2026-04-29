@@ -487,7 +487,7 @@ impl FungiDaemon {
         rule: fungi_config::tcp_tunneling::ForwardingRule,
         add: bool,
     ) -> Result<()> {
-        if rule.remote_service_id.is_some() {
+        if rule.remote_service_name.is_some() {
             let fungi_dir = self.config_fungi_dir()?;
             let current_access = LocalAccessConfig::apply_from_dir(&fungi_dir)?;
             if add {

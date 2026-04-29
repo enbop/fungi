@@ -673,7 +673,7 @@ pub struct AttachServiceAccessRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub service_id: ::prost::alloc::string::String,
+    pub service_name: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub entry: ::prost::alloc::string::String,
     #[prost(int32, tag = "4")]
@@ -684,7 +684,7 @@ pub struct DetachServiceAccessRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub service_id: ::prost::alloc::string::String,
+    pub service_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListServiceAccessesRequest {

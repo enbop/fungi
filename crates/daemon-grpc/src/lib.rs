@@ -1387,7 +1387,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .inner
             .attach_service_access(
                 peer_id,
-                req.service_id,
+                req.service_name,
                 empty_to_none(req.entry),
                 if req.local_port > 0 {
                     Some(req.local_port as u16)
@@ -1415,7 +1415,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
 
         self.inner
-            .detach_service_access(peer_id, req.service_id)
+            .detach_service_access(peer_id, req.service_name)
             .map_err(|e| Status::internal(format!("Failed to detach service access: {e}")))?;
 
         Ok(Response::new(Empty {}))

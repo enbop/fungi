@@ -35,8 +35,6 @@ pub enum ServiceSource {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceExpose {
-    pub service_id: String,
-    pub display_name: String,
     pub transport: ServiceExposeTransport,
     pub usage: Option<ServiceExposeUsage>,
     pub icon_url: Option<String>,
@@ -132,8 +130,6 @@ pub struct ServiceStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogService {
     pub service_name: String,
-    pub service_id: String,
-    pub display_name: String,
     pub runtime: RuntimeKind,
     pub transport: ServiceExposeTransport,
     pub usage: Option<ServiceExposeUsage>,
@@ -252,12 +248,6 @@ pub enum ServiceManifestHostPort {
 pub struct ServiceManifestExpose {
     #[serde(default)]
     pub enabled: bool,
-    #[serde(rename = "serviceId")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub service_id: Option<String>,
-    #[serde(rename = "displayName")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub display_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transport: Option<ServiceManifestExposeTransport>,
     #[serde(skip_serializing_if = "Option::is_none")]

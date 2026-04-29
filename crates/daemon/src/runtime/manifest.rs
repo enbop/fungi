@@ -76,8 +76,6 @@ pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
             source,
             expose: manifest.expose.clone().map(|expose| ServiceManifestExpose {
                 enabled: true,
-                service_id: Some(expose.service_id),
-                display_name: Some(expose.display_name),
                 transport: Some(ServiceManifestExposeTransport {
                     kind: expose.transport.kind,
                 }),
@@ -253,7 +251,7 @@ impl ServiceManifestDocument {
 
 fn parse_manifest_expose(
     expose: Option<ServiceManifestExpose>,
-    manifest_name: &str,
+    _manifest_name: &str,
 ) -> Result<Option<ServiceExpose>> {
     let Some(expose) = expose else {
         return Ok(None);
@@ -266,14 +264,6 @@ fn parse_manifest_expose(
     let transport = expose.transport.ok_or_else(|| {
         anyhow::anyhow!("spec.expose.transport is required when expose.enabled=true")
     })?;
-    let service_id = normalize_non_empty(
-        expose.service_id.as_deref().unwrap_or(manifest_name),
-        "spec.expose.serviceId",
-    )?;
-    let display_name = normalize_non_empty(
-        expose.display_name.as_deref().unwrap_or(manifest_name),
-        "spec.expose.displayName",
-    )?;
     let icon_url = normalize_optional(expose.icon_url);
     let catalog_id = normalize_optional(expose.catalog_id);
     let usage = expose.usage.map(|usage| ServiceExposeUsage {
@@ -282,8 +272,6 @@ fn parse_manifest_expose(
     });
 
     Ok(Some(ServiceExpose {
-        service_id,
-        display_name,
         transport: ServiceExposeTransport {
             kind: transport.kind,
         },
@@ -359,7 +347,7 @@ pub fn service_expose_endpoint_bindings(
 
             Some(ServiceExposeEndpointBinding {
                 name: name.to_string(),
-                protocol: service_port_protocol(&expose.service_id, name),
+                protocol: service_port_protocol(&manifest.name, name),
                 host_port: port.host_port,
                 service_port: port.service_port,
             })

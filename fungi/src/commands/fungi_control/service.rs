@@ -414,7 +414,7 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
 
             let req = DetachServiceAccessRequest {
                 peer_id: device.peer_id,
-                service_id: service,
+                service_name: service,
             };
             match client.detach_service_access(Request::new(req)).await {
                 Ok(_) => println!("Local access disconnected"),
@@ -891,7 +891,7 @@ async fn open_unique_cached_remote_service(
 
     for device in devices {
         for access in list_accesses(client, &device.peer_id).await {
-            if service_matches(&access.service_id, &access.service_name, service) {
+            if service_matches(&access.service_name, service) {
                 matches.push(CachedRemoteServiceMatch {
                     device: device.clone(),
                     access,
@@ -905,7 +905,7 @@ async fn open_unique_cached_remote_service(
         1 => {
             let matched = matches.remove(0);
             let device_name = device_display_name(&matched.device);
-            let reference = format!("{}@{}", matched.access.service_id, device_name);
+            let reference = format!("{}@{}", matched.access.service_name, device_name);
             println!("Matched {reference}");
             open_or_print_cached_access(&matched.access, &device_name, entry);
             true
@@ -919,8 +919,8 @@ async fn open_unique_cached_remote_service(
     }
 }
 
-fn service_matches(service_id: &str, service_name: &str, value: &str) -> bool {
-    service_id == value || service_name == value
+fn service_matches(service_name: &str, value: &str) -> bool {
+    service_name == value
 }
 
 fn build_cached_access_web_url(access: &ServiceAccess, entry: Option<&str>) -> Option<String> {
@@ -964,7 +964,7 @@ fn format_cached_remote_candidates(matches: &[CachedRemoteServiceMatch]) -> Stri
         .map(|matched| {
             format!(
                 "  {}@{}",
-                matched.access.service_id,
+                matched.access.service_name,
                 device_display_name(&matched.device)
             )
         })
@@ -1002,13 +1002,13 @@ async fn list_accesses(client: &mut RpcClient, peer_id: &str) -> Vec<ServiceAcce
 async fn attach_access_with_options(
     client: &mut RpcClient,
     peer_id: &str,
-    service_id: &str,
+    service_name: &str,
     entry: Option<&str>,
     local_port: Option<u16>,
 ) -> ServiceAccess {
     let req = AttachServiceAccessRequest {
         peer_id: peer_id.to_string(),
-        service_id: service_id.to_string(),
+        service_name: service_name.to_string(),
         entry: entry.unwrap_or_default().to_string(),
         local_port: local_port.unwrap_or_default() as i32,
     };
@@ -1026,13 +1026,13 @@ async fn attach_access_with_options(
 async fn existing_or_attach_access(
     client: &mut RpcClient,
     peer_id: &str,
-    service_id: &str,
+    service_name: &str,
     entry: Option<&str>,
     local_port: Option<u16>,
 ) -> ServiceAccess {
     let existing = list_accesses(client, peer_id).await;
     if let Some(access) = existing.into_iter().find(|access| {
-        access.service_id == service_id
+        access.service_name == service_name
             && local_port.is_none()
             && entry
                 .map(|entry| {
@@ -1046,18 +1046,18 @@ async fn existing_or_attach_access(
         return access;
     }
 
-    attach_access_with_options(client, peer_id, service_id, entry, local_port).await
+    attach_access_with_options(client, peer_id, service_name, entry, local_port).await
 }
 
 async fn discover_remote_service(
     client: &mut RpcClient,
     peer_id: &str,
-    service_id: &str,
+    service_name: &str,
 ) -> RemoteService {
     if let Some(service) = fetch_cached_remote_services(client, peer_id)
         .await
         .into_iter()
-        .find(|service| service.service_id == service_id)
+        .find(|service| service.service_name == service_name)
     {
         return service;
     }
@@ -1069,8 +1069,8 @@ async fn discover_remote_service(
 
     services
         .into_iter()
-        .find(|service| service.service_id == service_id)
-        .unwrap_or_else(|| fatal(format!("Remote service not found: {service_id}")))
+        .find(|service| service.service_name == service_name)
+        .unwrap_or_else(|| fatal(format!("Remote service not found: {service_name}")))
 }
 
 fn build_web_url(
@@ -1135,7 +1135,7 @@ fn print_access_details(
 ) {
     let usage = service_usage_label(usage);
     let remote_port = format_remote_port(endpoint.remote_port);
-    println!("{}@{}", access.service_id, device_name);
+    println!("{}@{}", access.service_name, device_name);
     println!("type: {usage}");
     println!("state: connected");
     println!();
@@ -1382,8 +1382,6 @@ fn create_service_manifest_interactively(
             },
             expose: Some(ServiceManifestExpose {
                 enabled: true,
-                service_id: Some(name.clone()),
-                display_name: Some(name),
                 transport: Some(ServiceManifestExposeTransport {
                     kind: ServiceExposeTransportKind::Tcp,
                 }),
@@ -1657,7 +1655,7 @@ impl ServiceOverviewRow {
             .collect();
 
         Self {
-            reference: format!("{}@{}", access.service_id, device_name),
+            reference: format!("{}@{}", access.service_name, device_name),
             device: device_name,
             kind: "remote".to_string(),
             usage: access_usage_label(&access),
@@ -1676,7 +1674,7 @@ impl ServiceOverviewRow {
         let device_name = device_display_name(device);
         let attached_access = attached
             .iter()
-            .find(|access| access.service_id == service.service_id);
+            .find(|access| access.service_name == service.service_name);
         let entries = match attached_access {
             Some(access) => access
                 .endpoints
@@ -1717,7 +1715,7 @@ impl ServiceOverviewRow {
         };
 
         Self {
-            reference: format!("{}@{}", service.service_id, device_name),
+            reference: format!("{}@{}", service.service_name, device_name),
             device: device_name,
             kind: "remote".to_string(),
             usage: service_usage_label(service.usage.as_ref()).to_string(),
@@ -2137,14 +2135,10 @@ mod tests {
     }
 
     #[test]
-    fn service_matches_id_or_name() {
-        assert!(service_matches(
-            "filebrowser",
-            "File Browser",
-            "filebrowser"
-        ));
-        assert!(service_matches("fb", "filebrowser", "filebrowser"));
-        assert!(!service_matches("fb", "File Browser", "filebrowser"));
+    fn service_matches_name_only() {
+        assert!(service_matches("filebrowser", "filebrowser"));
+        assert!(!service_matches("File Browser", "filebrowser"));
+        assert!(!service_matches("fb", "filebrowser"));
     }
 
     #[test]
@@ -2250,7 +2244,6 @@ mod tests {
     fn service_access(endpoints: Vec<ServiceAccessEndpoint>) -> ServiceAccess {
         ServiceAccess {
             peer_id: "peer".to_string(),
-            service_id: "demo".to_string(),
             service_name: "demo".to_string(),
             endpoints,
         }
@@ -2269,8 +2262,6 @@ mod tests {
     fn remote_web_service(path: &str) -> RemoteService {
         RemoteService {
             service_name: "demo".to_string(),
-            service_id: "demo".to_string(),
-            display_name: "Demo".to_string(),
             runtime: RuntimeKind::Docker,
             transport: ServiceExposeTransport {
                 kind: ServiceExposeTransportKind::Tcp,

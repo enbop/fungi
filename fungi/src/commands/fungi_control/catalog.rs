@@ -25,8 +25,8 @@ pub enum CatalogCommands {
     },
     /// Inspect one published service from a remote peer
     Inspect {
-        /// Published service identifier
-        service_id: String,
+        /// Published service name
+        service_name: String,
         #[command(flatten)]
         peer: PeerTargetArg,
         /// Show detailed output
@@ -53,7 +53,7 @@ pub async fn execute_catalog(args: CommonArgs, cmd: CatalogCommands) {
             print_catalog_services(&peer.peer_id, &services, &attached, verbose);
         }
         CatalogCommands::Inspect {
-            service_id,
+            service_name,
             peer,
             verbose,
         } => {
@@ -66,11 +66,11 @@ pub async fn execute_catalog(args: CommonArgs, cmd: CatalogCommands) {
             let attached = list_attached_services(&mut client, &peer.peer_id).await;
             let Some(service) = services
                 .into_iter()
-                .find(|service| service.service_id == service_id)
+                .find(|service| service.service_name == service_name)
             else {
                 fatal(format!(
                     "Published service not found on peer {}: {}",
-                    peer.peer_id, service_id
+                    peer.peer_id, service_name
                 ));
             };
             print_catalog_service(&peer.peer_id, service, &attached, verbose);
@@ -86,7 +86,7 @@ fn print_catalog_services(
 ) {
     let attached_by_service = attached
         .iter()
-        .map(|service| (service.service_id.as_str(), service))
+        .map(|service| (service.service_name.as_str(), service))
         .collect::<std::collections::BTreeMap<_, _>>();
 
     if verbose {
@@ -94,15 +94,13 @@ fn print_catalog_services(
             .iter()
             .map(|service| CatalogListVerboseEntry {
                 peer_id: peer_id.to_string(),
-                service_id: service.service_id.clone(),
-                display_name: service.display_name.clone(),
                 service_name: service.service_name.clone(),
                 usage: catalog_usage_label(service),
                 runtime: service.runtime,
                 transport: catalog_transport_label(service),
-                attached: attached_by_service.contains_key(service.service_id.as_str()),
+                attached: attached_by_service.contains_key(service.service_name.as_str()),
                 local_urls: attached_by_service
-                    .get(service.service_id.as_str())
+                    .get(service.service_name.as_str())
                     .map(|access| build_local_urls(service, access))
                     .unwrap_or_default(),
                 endpoints: service
@@ -121,12 +119,11 @@ fn print_catalog_services(
         let rows = services
             .iter()
             .map(|service| CatalogListEntry {
-                service_id: service.service_id.clone(),
-                display_name: service.display_name.clone(),
+                service_name: service.service_name.clone(),
                 usage: catalog_usage_label(service),
-                attached: attached_by_service.contains_key(service.service_id.as_str()),
+                attached: attached_by_service.contains_key(service.service_name.as_str()),
                 local_urls: attached_by_service
-                    .get(service.service_id.as_str())
+                    .get(service.service_name.as_str())
                     .map(|access| build_local_urls(service, access))
                     .unwrap_or_default(),
             })
@@ -144,7 +141,7 @@ fn print_catalog_service(
 ) {
     let attached_access = attached
         .iter()
-        .find(|access| access.service_id == service.service_id);
+        .find(|access| access.service_name == service.service_name);
     let usage = catalog_usage_label(&service);
     let local_urls = attached_access
         .map(|access| build_local_urls(&service, access))
@@ -154,8 +151,6 @@ fn print_catalog_service(
     if verbose {
         let view = CatalogInspectVerboseView {
             peer_id: peer_id.to_string(),
-            service_id: service.service_id.clone(),
-            display_name: service.display_name.clone(),
             service_name: service.service_name,
             usage,
             runtime: service.runtime,
@@ -180,8 +175,6 @@ fn print_catalog_service(
         print_json(&view, "catalog inspect")
     } else {
         let view = CatalogInspectView {
-            service_id: service.service_id.clone(),
-            display_name: service.display_name.clone(),
             service_name: service.service_name,
             usage,
             status: service.status.state,
@@ -296,8 +289,7 @@ fn print_json<T: Serialize>(value: &T, label: &str) {
 
 #[derive(Debug, Serialize)]
 struct CatalogListEntry {
-    service_id: String,
-    display_name: String,
+    service_name: String,
     usage: String,
     attached: bool,
     local_urls: Vec<String>,
@@ -306,8 +298,6 @@ struct CatalogListEntry {
 #[derive(Debug, Serialize)]
 struct CatalogListVerboseEntry {
     peer_id: String,
-    service_id: String,
-    display_name: String,
     service_name: String,
     usage: String,
     runtime: fungi_daemon::RuntimeKind,
@@ -319,8 +309,6 @@ struct CatalogListVerboseEntry {
 
 #[derive(Debug, Serialize)]
 struct CatalogInspectView {
-    service_id: String,
-    display_name: String,
     service_name: String,
     usage: String,
     status: String,
@@ -333,8 +321,6 @@ struct CatalogInspectView {
 #[derive(Debug, Serialize)]
 struct CatalogInspectVerboseView {
     peer_id: String,
-    service_id: String,
-    display_name: String,
     service_name: String,
     usage: String,
     runtime: fungi_daemon::RuntimeKind,

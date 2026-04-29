@@ -224,11 +224,11 @@ service FungiDaemon {
 message Empty {}
 
 message VersionResponse {
-  string version = 1;
-  string channel = 2;
-  string commit = 3;
-  string build_time = 4;
-  string default_fungi_dir = 5;
+  string version             = 1;
+  string channel             = 2;
+  string commit              = 3;
+  string build_time          = 4;
+  string default_fungi_dir   = 5;
   string default_rpc_address = 6;
 }
 
@@ -260,11 +260,11 @@ message EffectiveRelayAddress {
 }
 
 message RelayConfigResponse {
-  bool                           relay_enabled             = 1;
-  bool                           use_community_relays      = 2;
+  bool relay_enabled        = 1;
+  bool use_community_relays = 2;
   // User-facing relay list. The daemon keeps one list in config and separates
   // TCP relay carriers from UDP/QUIC observers internally.
-  repeated string                custom_relay_addresses    = 3;
+  repeated string custom_relay_addresses = 3;
   // Community plus custom relay addresses after config resolution, with the
   // same TCP-carrier / UDP-observer semantics as custom_relay_addresses.
   repeated EffectiveRelayAddress effective_relay_addresses = 4;
@@ -482,7 +482,7 @@ message ConnectionSnapshot {
   repeated ProtocolStreamCountSnapshot active_streams_by_protocol = 9;
   string                               policy_state               = 10;
   string                               policy_reason              = 11;
-  string                               peer_name                 = 12;
+  string                               peer_name                  = 12;
   string                               peer_role                  = 13;
 }
 
@@ -622,15 +622,15 @@ message RemotePeerRequest { string peer_id = 1; }
 message RemoteServiceControlResponse { string service_name = 1; }
 
 message AttachServiceAccessRequest {
-  string peer_id    = 1;
-  string service_id = 2;
-  string entry      = 3;
-  int32  local_port = 4;
+  string peer_id      = 1;
+  string service_name = 2;
+  string entry        = 3;
+  int32  local_port   = 4;
 }
 
 message DetachServiceAccessRequest {
-  string peer_id    = 1;
-  string service_id = 2;
+  string peer_id      = 1;
+  string service_name = 2;
 }
 
 message ListServiceAccessesRequest {
