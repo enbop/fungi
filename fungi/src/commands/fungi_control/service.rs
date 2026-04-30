@@ -750,12 +750,8 @@ async fn open_dynamic_service_without_device(
         return;
     }
 
-    if open_unique_cached_remote_service(&mut client, &service, entry.as_deref()).await {
-        return;
-    }
-
     fatal(format!(
-        "Service not found in local services or cached remote access: {service}\nRun `fungi service --refresh` to refresh remote services, then use `fungi <service>@<device>` if needed."
+        "Local service not found: {service}\nRemote services must be addressed explicitly with `fungi <service>@<device>` or `fungi service -d <device> open <service>`."
     ));
 }
 
@@ -875,103 +871,6 @@ async fn fetch_cached_remote_services(client: &mut RpcClient, peer_id: &str) -> 
     }
 }
 
-#[derive(Debug, Clone)]
-struct CachedRemoteServiceMatch {
-    device: DeviceInfo,
-    access: ServiceAccess,
-}
-
-async fn open_unique_cached_remote_service(
-    client: &mut RpcClient,
-    service: &str,
-    entry: Option<&str>,
-) -> bool {
-    let devices = list_saved_devices(client).await;
-    let mut matches = Vec::new();
-
-    for device in devices {
-        for access in list_accesses(client, &device.peer_id).await {
-            if service_matches(&access.service_name, service) {
-                matches.push(CachedRemoteServiceMatch {
-                    device: device.clone(),
-                    access,
-                });
-            }
-        }
-    }
-
-    match matches.len() {
-        0 => false,
-        1 => {
-            let matched = matches.remove(0);
-            let device_name = device_display_name(&matched.device);
-            let reference = format!("{}@{}", matched.access.service_name, device_name);
-            println!("Matched {reference}");
-            open_or_print_cached_access(&matched.access, &device_name, entry);
-            true
-        }
-        _ => {
-            fatal(format!(
-                "Multiple remote services named {service}. Use one of:\n{}",
-                format_cached_remote_candidates(&matches)
-            ));
-        }
-    }
-}
-
-fn service_matches(service_name: &str, value: &str) -> bool {
-    service_name == value
-}
-
-fn build_cached_access_web_url(access: &ServiceAccess, entry: Option<&str>) -> Option<String> {
-    let endpoint = if let Some(entry) = entry {
-        if is_non_web_entry_name(entry) {
-            return None;
-        }
-        access
-            .endpoints
-            .iter()
-            .find(|endpoint| endpoint.name == entry)?
-    } else {
-        access
-            .endpoints
-            .iter()
-            .find(|endpoint| is_web_entry_name(Some(endpoint.name.as_str())))?
-    };
-
-    Some(format!(
-        "http://{}:{}",
-        endpoint.local_host, endpoint.local_port
-    ))
-}
-
-fn open_or_print_cached_access(access: &ServiceAccess, device_name: &str, entry: Option<&str>) {
-    if let Some(url) = build_cached_access_web_url(access, entry) {
-        open_url(&url);
-        println!("Opened {url}");
-        return;
-    }
-
-    let Some(endpoint) = select_access_endpoint(access, entry) else {
-        fatal("No connectable entry is available for this service")
-    };
-    print_access_details(access, endpoint, device_name, None);
-}
-
-fn format_cached_remote_candidates(matches: &[CachedRemoteServiceMatch]) -> String {
-    matches
-        .iter()
-        .map(|matched| {
-            format!(
-                "  {}@{}",
-                matched.access.service_name,
-                device_display_name(&matched.device)
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 async fn inspect_remote_service(
     client: &mut RpcClient,
     peer_id: &str,
@@ -1013,12 +912,11 @@ async fn attach_access_with_options(
         local_port: local_port.unwrap_or_default() as i32,
     };
     match client.attach_service_access(Request::new(req)).await {
-        Ok(resp) => {
-            match serde_json::from_str::<ServiceAccess>(&resp.into_inner().service_access_json) {
-                Ok(access) => access,
-                Err(error) => fatal(format!("Failed to decode access entry: {error}")),
-            }
-        }
+        Ok(resp) => match serde_json::from_str::<ServiceAccess>(&resp.into_inner().service_access_json)
+        {
+            Ok(access) => access,
+            Err(error) => fatal(format!("Failed to decode service access: {error}")),
+        },
         Err(error) => fatal_grpc(error),
     }
 }
@@ -2099,46 +1997,6 @@ mod tests {
         let url = build_local_web_url(&instance, Some("ssh"));
 
         assert!(url.is_none());
-    }
-
-    #[test]
-    fn build_cached_access_web_url_defaults_to_web_endpoint() {
-        let access = service_access(vec![
-            access_endpoint("ssh", 28022),
-            access_endpoint("web", 28080),
-        ]);
-
-        let url = build_cached_access_web_url(&access, None).unwrap();
-
-        assert_eq!(url, "http://127.0.0.1:28080");
-    }
-
-    #[test]
-    fn build_cached_access_web_url_rejects_non_web_default() {
-        let access = service_access(vec![
-            access_endpoint("ssh", 28022),
-            access_endpoint("api", 28080),
-        ]);
-
-        let url = build_cached_access_web_url(&access, None);
-
-        assert!(url.is_none());
-    }
-
-    #[test]
-    fn build_cached_access_web_url_rejects_explicit_tcp_entry() {
-        let access = service_access(vec![access_endpoint("ssh", 28022)]);
-
-        let url = build_cached_access_web_url(&access, Some("ssh"));
-
-        assert!(url.is_none());
-    }
-
-    #[test]
-    fn service_matches_name_only() {
-        assert!(service_matches("filebrowser", "filebrowser"));
-        assert!(!service_matches("File Browser", "filebrowser"));
-        assert!(!service_matches("fb", "filebrowser"));
     }
 
     #[test]
