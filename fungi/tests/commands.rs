@@ -50,6 +50,15 @@ fn parses_interactive_service_add() {
 }
 
 #[test]
+fn parses_migrate_command() {
+    let args = FungiArgs::try_parse_from(["fungi", "migrate"]).unwrap();
+
+    let Commands::Migrate(_) = args.command else {
+        panic!("expected migrate command");
+    };
+}
+
+#[test]
 fn parses_service_add_reference_for_interactive_creator() {
     let args = FungiArgs::try_parse_from(["fungi", "service", "add", "ssh@nas"]).unwrap();
 

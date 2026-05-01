@@ -16,6 +16,9 @@ pub use build_info::{
     STABLE_RPC_ADDRESS, build_commit, build_time, default_fungi_dir_name, default_rpc_address,
     dist_channel,
 };
+pub use fungi_config_migrate::{
+    DetectedVersion as FungiDirDetectedVersion, MigrationReport, migrate_if_needed,
+};
 pub use init::init;
 
 use anyhow::{Context as _, Result};
@@ -36,7 +39,7 @@ use crate::{
 pub const DEFAULT_CONFIG_FILE: &str = "config.toml";
 pub const DEFAULT_FUNGI_DIR: &str = NIGHTLY_FUNGI_DIR;
 pub const DEFAULT_RPC_ADDRESS: &str = NIGHTLY_RPC_ADDRESS;
-pub const CURRENT_CONFIG_VERSION: u32 = 2;
+pub const CURRENT_CONFIG_VERSION: u32 = fungi_config_migrate::CURRENT_FUNGI_DIR_VERSION;
 
 fn default_config_version() -> u32 {
     CURRENT_CONFIG_VERSION

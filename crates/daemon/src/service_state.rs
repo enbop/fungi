@@ -16,6 +16,7 @@ use crate::runtime::{
 };
 
 const SERVICE_STATE_SCHEMA_VERSION: u32 = 2;
+const LEGACY_SERVICE_STATE_FILE: &str = "services-state.json";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -60,6 +61,18 @@ pub struct ServiceStateStore {
 
 impl ServiceStateStore {
     pub fn load(services_root: PathBuf) -> Result<Self> {
+        let fungi_home = services_root
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
+        let legacy_service_state_path = fungi_home.join(LEGACY_SERVICE_STATE_FILE);
+        if legacy_service_state_path.exists() {
+            bail!(
+                "Unsupported legacy managed service state detected at {}. This release expects managed services under services/<local_service_id>/ and does not read services-state.json.",
+                legacy_service_state_path.display()
+            );
+        }
+
         fs::create_dir_all(&services_root).with_context(|| {
             format!(
                 "Failed to create services directory: {}",
@@ -67,10 +80,6 @@ impl ServiceStateStore {
             )
         })?;
 
-        let fungi_home = services_root
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .to_path_buf();
         let mut state = BTreeMap::new();
         let mut name_index = BTreeMap::new();
 
@@ -515,5 +524,27 @@ mod tests {
         assert!(!service_dir.exists());
         assert!(data_dir.is_dir());
         assert_eq!(fs::read_to_string(&data_file).unwrap(), "persist me");
+    }
+
+    #[test]
+    fn load_rejects_legacy_services_state_json() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let services_root = dir.path().join("services");
+        fs::write(
+            dir.path().join(LEGACY_SERVICE_STATE_FILE),
+            "{\n  \"schema_version\": 1,\n  \"services\": {}\n}\n",
+        )
+        .unwrap();
+
+        let error = ServiceStateStore::load(services_root)
+            .err()
+            .expect("legacy services-state.json should be rejected");
+
+        assert!(error.to_string().contains(LEGACY_SERVICE_STATE_FILE));
+        assert!(
+            error
+                .to_string()
+                .contains("Unsupported legacy managed service state detected")
+        );
     }
 }

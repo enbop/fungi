@@ -15,6 +15,7 @@ fungi-util = { workspace = true }
 anyhow = { workspace = true }
 log = { workspace = true }
 mdns-sd = { workspace = true }
+fungi-config-migrate = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

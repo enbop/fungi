@@ -4,6 +4,7 @@ resolver = "2"
 members = [
     "fungi",
     "crates/config",
+    "crates/config-migrate",
     "crates/daemon",
     "crates/docker-agent",
     "crates/stream",
@@ -85,6 +86,7 @@ libp2p = { version = "0.56", features = [
     "ed25519",
 ] }
 fungi-config = { path = "crates/config" }
+fungi-config-migrate = { path = "crates/config-migrate" }
 fungi-daemon = { path = "crates/daemon" }
 fungi-daemon-grpc = { path = "crates/daemon-grpc" }
 fungi-docker-agent = { path = "crates/docker-agent" }

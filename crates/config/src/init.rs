@@ -10,6 +10,17 @@ pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
     let config_file = fungi_dir.join(DEFAULT_CONFIG_FILE);
     std::fs::create_dir_all(&fungi_dir).ok();
 
+    let migration = crate::migrate_if_needed(&fungi_dir)?;
+    if migration.changed {
+        println!(
+            "Migrated Fungi configuration from {} to v{}.",
+            migration.source_version, migration.target_version
+        );
+        if let Some(backup_dir) = migration.backup_dir {
+            println!("Backup saved to {}", backup_dir.display());
+        }
+    }
+
     if config_file.exists() {
         if upgrade_existing {
             let config = FungiConfig::apply_from_dir(&fungi_dir)?;

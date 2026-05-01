@@ -1,6 +1,7 @@
 pub mod fungi_control;
 pub mod fungi_daemon;
 pub mod fungi_init;
+pub mod fungi_migrate;
 pub mod fungi_relay;
 
 use std::path::PathBuf;
@@ -66,6 +67,8 @@ impl FungiDir for CommonArgs {
 pub enum Commands {
     /// Initialize a Fungi configuration, and generate a keypair
     Init(fungi_init::InitArgs),
+    /// Migrate an existing Fungi configuration directory to the current schema
+    Migrate(fungi_migrate::MigrateArgs),
     /// Start a Fungi daemon or daemon-managed background services
     Daemon(fungi_daemon::DaemonCommandArgs),
 

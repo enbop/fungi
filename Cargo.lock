@@ -1672,6 +1672,7 @@ name = "fungi-config"
 version = "0.6.1"
 dependencies = [
  "anyhow",
+ "fungi-config-migrate",
  "fungi-util",
  "libp2p-identity",
  "log",
@@ -1681,6 +1682,20 @@ dependencies = [
  "serde_json",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "fungi-config-migrate"
+version = "0.6.1"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "toml",
+ "ulid",
 ]
 
 [[package]]

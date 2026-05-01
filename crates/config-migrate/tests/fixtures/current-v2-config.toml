@@ -1,0 +1,8 @@
+version = 2
+
+[rpc]
+listen_address = "127.0.0.1:6601"
+
+[network]
+relay_enabled = true
+use_community_relays = true

@@ -912,11 +912,12 @@ async fn attach_access_with_options(
         local_port: local_port.unwrap_or_default() as i32,
     };
     match client.attach_service_access(Request::new(req)).await {
-        Ok(resp) => match serde_json::from_str::<ServiceAccess>(&resp.into_inner().service_access_json)
-        {
-            Ok(access) => access,
-            Err(error) => fatal(format!("Failed to decode service access: {error}")),
-        },
+        Ok(resp) => {
+            match serde_json::from_str::<ServiceAccess>(&resp.into_inner().service_access_json) {
+                Ok(access) => access,
+                Err(error) => fatal(format!("Failed to decode service access: {error}")),
+            }
+        }
         Err(error) => fatal_grpc(error),
     }
 }
