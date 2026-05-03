@@ -21,6 +21,40 @@ impl Drop for DaemonChild {
 }
 
 #[test]
+fn cli_suggests_builtin_command_for_dynamic_typo_without_config() {
+    let home = TempDir::new().unwrap();
+    let output = run_cli_result(home.path(), ["devices"], "");
+
+    assert!(!output.status.success());
+    assert_eq!(output.stdout, "");
+    assert_eq!(
+        output.stderr,
+        concat!(
+            "No service or tool named `devices` was found.
+",
+            "
+",
+            "Hint: `devices` looks like a built-in command typo.
+",
+            "Did you mean:
+",
+            "
+",
+            "  fungi device
+",
+            "
+",
+            "For dynamic services, use:
+",
+            "
+",
+            "  fungi filebrowser@nas
+"
+        )
+    );
+}
+
+#[test]
 fn cli_can_create_and_access_remote_tcp_tunnel_service() {
     let a = TempDir::new().unwrap();
     let b = TempDir::new().unwrap();

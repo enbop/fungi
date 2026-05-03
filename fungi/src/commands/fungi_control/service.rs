@@ -567,6 +567,20 @@ fn parse_service_reference(value: String) -> DynamicThingTarget {
     target
 }
 
+pub fn fatal_dynamic_builtin_typo(name: &str, command: &str) -> ! {
+    fatal(format!(
+        "No service or tool named `{name}` was found.
+
+Hint: `{name}` looks like a built-in command typo.
+Did you mean:
+
+  fungi {command}
+
+For dynamic services, use:
+
+  fungi filebrowser@nas"
+    ))
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ServiceAddInput {
     manifest_path: Option<String>,
@@ -736,9 +750,22 @@ async fn open_dynamic_service_without_device(
     service: String,
     entry: Option<String>,
 ) {
+    let builtin_hint = if entry.is_none() {
+        let tokens = [service.clone()];
+        crate::commands::dynamic_builtin_typo_hint_for_tokens(&tokens, None)
+            .map(|(_, command)| command)
+    } else {
+        None
+    };
+
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
-        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
+        None => {
+            if let Some(command) = builtin_hint {
+                fatal_dynamic_builtin_typo(&service, &command)
+            }
+            fatal("Cannot connect to Fungi daemon. Is it running?")
+        }
     };
 
     if let Some(instance) = find_local_service(&mut client, &service).await {
@@ -750,11 +777,15 @@ async fn open_dynamic_service_without_device(
         return;
     }
 
+    if let Some(command) = builtin_hint {
+        fatal_dynamic_builtin_typo(&service, &command)
+    }
+
     fatal(format!(
-        "Local service not found: {service}\nRemote services must be addressed explicitly with `fungi <service>@<device>` or `fungi service -d <device> open <service>`."
+        "Local service not found: {service}
+Remote services must be addressed explicitly with `fungi <service>@<device>` or `fungi service -d <device> open <service>`."
     ));
 }
-
 async fn find_local_service(client: &mut RpcClient, service: &str) -> Option<ServiceInstance> {
     list_local_service_instances(client)
         .await
