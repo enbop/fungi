@@ -91,9 +91,7 @@ impl TestNode {
         let listen_tcp_port = find_free_port()?;
         let listen_udp_port = find_free_port()?;
         let config_toml = format!(
-            "version = 2\n\n[rpc]\nlisten_address = \"127.0.0.1:{rpc_port}\"\n\n[network]\nlisten_tcp_port = {listen_tcp_port}\nlisten_udp_port = {listen_udp_port}\nrelay_enabled = false\nuse_community_relays = false\n\n[runtime]\ndisable_docker = true\ndisable_wasmtime = false\nallowed_host_paths = [\"{}\", \"{}\"]\n",
-            fungi_dir.display(),
-            fungi_dir.join("services").display(),
+            "version = 2\n\n[rpc]\nlisten_address = \"127.0.0.1:{rpc_port}\"\n\n[network]\nlisten_tcp_port = {listen_tcp_port}\nlisten_udp_port = {listen_udp_port}\nrelay_enabled = false\nuse_community_relays = false\n\n[runtime]\ndisable_docker = true\ndisable_wasmtime = false\n",
         );
         std::fs::write(fungi_dir.join("config.toml"), config_toml)
             .with_context(|| format!("failed to write config for node {name}"))?;
@@ -447,7 +445,7 @@ fn http_get(port: u16) -> Result<String> {
 fn write_manifest_file(dir: &Path, wasm_url: &str) -> Result<PathBuf> {
     let manifest_path = dir.join("filebrowser-lite-wasi.service.yaml");
     let manifest_yaml = format!(
-        "apiVersion: fungi.rs/v1alpha1\nkind: ServiceManifest\n\nmetadata:\n  name: {service_name}\n  labels:\n    app: {service_name}\n    managedBy: fungi\n\nspec:\n  runtime: wasmtime\n\n  expose:\n    enabled: true\n    transport:\n      kind: tcp\n    usage:\n      kind: web\n      path: /\n    iconUrl: https://raw.githubusercontent.com/filebrowser/logo/master/icon.svg\n    catalogId: io.enbop.filebrowser-lite-wasi\n\n  source:\n    url: {wasm_url}\n\n  ports:\n    - hostPort: auto\n      name: http\n      servicePort: {service_port}\n      protocol: tcp\n\n  mounts:\n    - hostPath: ${{APP_HOME}}/data\n      runtimePath: data\n\n  env: {{}}\n\n  command: []\n  entrypoint: []\n\n  workingDir: null\n",
+        "apiVersion: fungi.rs/v1alpha1\nkind: ServiceManifest\n\nmetadata:\n  name: {service_name}\n  labels:\n    app: {service_name}\n    managedBy: fungi\n\nspec:\n  runtime: wasmtime\n\n  expose:\n    enabled: true\n    transport:\n      kind: tcp\n    usage:\n      kind: web\n      path: /\n    iconUrl: https://raw.githubusercontent.com/filebrowser/logo/master/icon.svg\n    catalogId: io.enbop.filebrowser-lite-wasi\n\n  source:\n    url: {wasm_url}\n\n  ports:\n    - hostPort: auto\n      name: http\n      servicePort: {service_port}\n      protocol: tcp\n\n  mounts:\n    - hostPath: ${{USER_HOME}}\n      runtimePath: data\n\n  env: {{}}\n\n  command: []\n  entrypoint: []\n\n  workingDir: null\n",
         service_name = SERVICE_NAME,
         service_port = SERVICE_PORT,
     );

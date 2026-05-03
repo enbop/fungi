@@ -17,9 +17,12 @@ use super::{
         enrich_instance_from_manifest, ensure_services_root_exists,
         is_missing_docker_container_error, missing_instance_from_manifest,
     },
-    manifest::{parse_service_manifest_yaml_with_policy, service_expose_endpoint_bindings},
+    manifest::{
+        ManifestPathRoots, parse_service_manifest_yaml_with_policy,
+        service_expose_endpoint_bindings,
+    },
     model::*,
-    parse_service_manifest_yaml_with_policy_for_service_data_dir, peek_service_manifest_name,
+    parse_service_manifest_yaml_with_policy_for_service_paths, peek_service_manifest_name,
     providers::{DockerRuntimeProvider, RuntimeProvider, WasmtimeRuntimeProvider},
 };
 
@@ -104,9 +107,21 @@ impl RuntimeControl {
             }
         }
 
+        let resolved_local_service_id = match local_service_id {
+            Some(local_service_id) => local_service_id.to_string(),
+            None => self
+                .service_state
+                .lock()
+                .preview_local_service_id(&manifest.name)?,
+        };
+
         let instance = match manifest.runtime {
             RuntimeKind::Docker => self.docker_provider()?.pull(manifest).await,
-            RuntimeKind::Wasmtime => self.wasmtime.pull(manifest).await,
+            RuntimeKind::Wasmtime => {
+                self.wasmtime
+                    .pull_with_local_service_id(manifest, &resolved_local_service_id)
+                    .await
+            }
             RuntimeKind::Link => Ok(self.link_instance_from_manifest(manifest, false)),
         }?;
 
@@ -116,7 +131,11 @@ impl RuntimeControl {
         self.service_manifests
             .lock()
             .insert(manifest.name.clone(), manifest.clone());
-        self.persist_service(manifest, DesiredServiceState::Stopped, local_service_id)?;
+        self.persist_service(
+            manifest,
+            DesiredServiceState::Stopped,
+            Some(&resolved_local_service_id),
+        )?;
         Ok(enrich_instance_from_manifest(instance, manifest))
     }
 
@@ -134,12 +153,12 @@ impl RuntimeControl {
                 .preview_local_service_id(&manifest_name)?
         };
         let used_host_ports = self.reserved_host_ports();
-        let service_data_dir = fungi_home.join("data").join(&local_service_id);
-        let manifest = parse_service_manifest_yaml_with_policy_for_service_data_dir(
+        let path_roots = ManifestPathRoots::for_local_service_id(fungi_home, &local_service_id);
+        let manifest = parse_service_manifest_yaml_with_policy_for_service_paths(
             content,
             base_dir,
             fungi_home,
-            &service_data_dir,
+            &path_roots,
             policy,
             &used_host_ports,
         )?;
@@ -202,7 +221,12 @@ impl RuntimeControl {
     pub async fn remove(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
         let remove_result = match runtime {
             RuntimeKind::Docker => self.docker_provider()?.remove(name).await,
-            RuntimeKind::Wasmtime => self.wasmtime.remove(name).await,
+            RuntimeKind::Wasmtime => {
+                let local_service_id = self.service_state.lock().local_service_id(name)?;
+                self.wasmtime
+                    .remove_with_local_service_id(name, &local_service_id)
+                    .await
+            }
             RuntimeKind::Link => Ok(()),
         };
 
@@ -411,7 +435,7 @@ impl RuntimeControl {
         let persisted_services = { self.service_state.lock().persisted_services() };
 
         for PersistedService {
-            local_service_id: _,
+            local_service_id,
             manifest,
             desired_state,
         } in persisted_services
@@ -425,7 +449,7 @@ impl RuntimeControl {
 
             if manifest.runtime == RuntimeKind::Wasmtime
                 && self.wasmtime_enabled
-                && let Err(error) = self.wasmtime.restore(&manifest).await
+                && let Err(error) = self.wasmtime.restore(&manifest, &local_service_id).await
             {
                 log::warn!(
                     "Failed to restore persisted wasmtime service '{}': {}",
@@ -482,7 +506,8 @@ impl RuntimeControl {
             .get(name)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("service not found: {name}"))?;
-        self.wasmtime.restore(&manifest).await
+        let local_service_id = self.service_state.lock().local_service_id(name)?;
+        self.wasmtime.restore(&manifest, &local_service_id).await
     }
 
     fn persist_service(

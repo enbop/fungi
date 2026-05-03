@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
+use fungi_config::paths::FungiPaths;
 use fungi_util::protocols::service_port_protocol;
 
 use super::model::*;
@@ -35,13 +36,13 @@ pub(crate) fn parse_managed_service_manifest_yaml(
     content: &str,
     base_dir: &Path,
     fungi_home: &Path,
-    service_data_dir: &Path,
+    local_service_id: &str,
 ) -> Result<ServiceManifest> {
-    parse_service_manifest_yaml_with_policy_for_service_data_dir(
+    parse_service_manifest_yaml_with_policy_for_service_paths(
         content,
         base_dir,
         fungi_home,
-        service_data_dir,
+        &ManifestPathRoots::for_local_service_id(fungi_home, local_service_id),
         &ManifestResolutionPolicy::default(),
         &BTreeSet::new(),
     )
@@ -59,20 +60,20 @@ pub fn parse_service_manifest_yaml_with_policy(
     document.into_service_manifest_for_node(base_dir, fungi_home, policy, used_host_ports)
 }
 
-pub(crate) fn parse_service_manifest_yaml_with_policy_for_service_data_dir(
+pub(crate) fn parse_service_manifest_yaml_with_policy_for_service_paths(
     content: &str,
     base_dir: &Path,
     fungi_home: &Path,
-    service_data_dir: &Path,
+    path_roots: &ManifestPathRoots,
     policy: &ManifestResolutionPolicy,
     used_host_ports: &BTreeSet<u16>,
 ) -> Result<ServiceManifest> {
     let document: ServiceManifestDocument =
         serde_yaml::from_str(content).context("Failed to parse service manifest YAML")?;
-    document.into_service_manifest_for_node_with_service_data_dir(
+    document.into_service_manifest_for_node_with_service_paths(
         base_dir,
         fungi_home,
-        service_data_dir,
+        path_roots,
         policy,
         used_host_ports,
     )
@@ -177,21 +178,21 @@ impl ServiceManifestDocument {
         used_host_ports: &BTreeSet<u16>,
     ) -> Result<ServiceManifest> {
         let service_name = normalize_non_empty(&self.metadata.name, "metadata.name")?;
-        let service_data_dir = fungi_home.join("data").join(service_name);
-        self.into_service_manifest_for_node_with_service_data_dir(
+        let path_roots = ManifestPathRoots::for_local_service_id(fungi_home, &service_name);
+        self.into_service_manifest_for_node_with_service_paths(
             base_dir,
             fungi_home,
-            &service_data_dir,
+            &path_roots,
             policy,
             used_host_ports,
         )
     }
 
-    pub(crate) fn into_service_manifest_for_node_with_service_data_dir(
+    pub(crate) fn into_service_manifest_for_node_with_service_paths(
         self,
         base_dir: &Path,
         fungi_home: &Path,
-        service_data_dir: &Path,
+        path_roots: &ManifestPathRoots,
         _policy: &ManifestResolutionPolicy,
         used_host_ports: &BTreeSet<u16>,
     ) -> Result<ServiceManifest> {
@@ -219,12 +220,7 @@ impl ServiceManifestDocument {
             }
             RuntimeKind::Wasmtime => match (spec.source.file, spec.source.url) {
                 (Some(file), None) => ServiceSource::WasmtimeFile {
-                    component: resolve_manifest_path(
-                        &file,
-                        base_dir,
-                        fungi_home,
-                        &service_data_dir,
-                    ),
+                    component: resolve_manifest_path(&file, base_dir, fungi_home, path_roots),
                 },
                 (None, Some(url)) => ServiceSource::WasmtimeUrl { url },
                 (Some(_), Some(_)) => {
@@ -287,7 +283,7 @@ impl ServiceManifestDocument {
                         &mount.host_path,
                         base_dir,
                         fungi_home,
-                        &service_data_dir,
+                        path_roots,
                     ),
                     runtime_path: mount.runtime_path,
                 })
@@ -296,12 +292,7 @@ impl ServiceManifestDocument {
             command: spec.command,
             entrypoint: spec.entrypoint,
             working_dir: spec.working_dir.map(|value| {
-                resolve_manifest_path_string(
-                    value.as_str(),
-                    base_dir,
-                    fungi_home,
-                    &service_data_dir,
-                )
+                resolve_manifest_path_string(value.as_str(), base_dir, fungi_home, path_roots)
             }),
             labels: metadata_labels,
         })
@@ -480,13 +471,33 @@ fn reserve_ephemeral_host_port(protocol: ServicePortProtocol) -> Result<u16> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct ManifestPathRoots {
+    service_appdata_dir: PathBuf,
+    service_artifacts_dir: PathBuf,
+    user_root_dir: PathBuf,
+    user_home_dir: PathBuf,
+}
+
+impl ManifestPathRoots {
+    pub(crate) fn for_local_service_id(fungi_home: &Path, local_service_id: &str) -> Self {
+        let paths = FungiPaths::from_fungi_home(fungi_home);
+        Self {
+            service_appdata_dir: paths.service_appdata_dir(local_service_id),
+            service_artifacts_dir: paths.service_artifacts_dir(local_service_id),
+            user_root_dir: paths.user_root(),
+            user_home_dir: paths.user_home(),
+        }
+    }
+}
+
 fn resolve_manifest_path(
     path: &str,
     base_dir: &Path,
     fungi_home: &Path,
-    service_data_dir: &Path,
+    path_roots: &ManifestPathRoots,
 ) -> PathBuf {
-    let expanded = resolve_manifest_path_string(path, base_dir, fungi_home, service_data_dir);
+    let expanded = resolve_manifest_path_string(path, base_dir, fungi_home, path_roots);
     PathBuf::from(expanded)
 }
 
@@ -494,23 +505,34 @@ fn resolve_manifest_path_string(
     path: &str,
     base_dir: &Path,
     fungi_home: &Path,
-    service_data_dir: &Path,
+    path_roots: &ManifestPathRoots,
 ) -> String {
     let fungi_home_value = fungi_home.to_string_lossy();
-    let service_data_value = service_data_dir.to_string_lossy();
+    let service_appdata_value = path_roots.service_appdata_dir.to_string_lossy();
+    let service_artifacts_value = path_roots.service_artifacts_dir.to_string_lossy();
+    let user_root_value = path_roots.user_root_dir.to_string_lossy();
+    let user_home_value = path_roots.user_home_dir.to_string_lossy();
     let expanded = path
         .replace("${FUNGI_HOME}", &fungi_home_value)
         .replace("$FUNGI_HOME", &fungi_home_value)
         .replace("${fungi_home}", &fungi_home_value)
         .replace("$fungi_home", &fungi_home_value)
-        .replace("${SERVICE_DATA}", &service_data_value)
-        .replace("$SERVICE_DATA", &service_data_value)
-        .replace("${service_data}", &service_data_value)
-        .replace("$service_data", &service_data_value)
-        .replace("${APP_HOME}", &service_data_value)
-        .replace("$APP_HOME", &service_data_value)
-        .replace("${app_home}", &service_data_value)
-        .replace("$app_home", &service_data_value);
+        .replace("${SERVICE_APPDATA}", &service_appdata_value)
+        .replace("$SERVICE_APPDATA", &service_appdata_value)
+        .replace("${service_appdata}", &service_appdata_value)
+        .replace("$service_appdata", &service_appdata_value)
+        .replace("${SERVICE_ARTIFACTS}", &service_artifacts_value)
+        .replace("$SERVICE_ARTIFACTS", &service_artifacts_value)
+        .replace("${service_artifacts}", &service_artifacts_value)
+        .replace("$service_artifacts", &service_artifacts_value)
+        .replace("${USER_ROOT}", &user_root_value)
+        .replace("$USER_ROOT", &user_root_value)
+        .replace("${user_root}", &user_root_value)
+        .replace("$user_root", &user_root_value)
+        .replace("${USER_HOME}", &user_home_value)
+        .replace("$USER_HOME", &user_home_value)
+        .replace("${user_home}", &user_home_value)
+        .replace("$user_home", &user_home_value);
     let resolved = PathBuf::from(&expanded);
     if resolved.is_absolute() {
         resolved.to_string_lossy().to_string()

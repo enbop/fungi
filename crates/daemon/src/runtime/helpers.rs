@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
+use fungi_config::paths::FungiPaths;
 use fungi_docker_agent::{ContainerSpec, DockerAgentError, PortProtocol};
 use tokio::process::Command;
 
@@ -87,18 +88,33 @@ pub(crate) fn ensure_manifest_mount_dirs(manifest: &ServiceManifest) -> Result<(
 }
 
 pub(crate) fn ensure_services_root_exists(fungi_home: &Path) -> Result<()> {
-    let services_root = fungi_home.join("services");
+    let paths = FungiPaths::from_fungi_home(fungi_home);
+    let services_root = paths.services_root();
     fs::create_dir_all(&services_root).with_context(|| {
         format!(
             "Failed to create services root directory: {}",
             services_root.display()
         )
     })?;
-    let data_root = fungi_home.join("data");
-    fs::create_dir_all(&data_root).with_context(|| {
+    let service_appdata_root = paths.service_appdata_root();
+    fs::create_dir_all(&service_appdata_root).with_context(|| {
         format!(
-            "Failed to create service data root directory: {}",
-            data_root.display()
+            "Failed to create service appdata root directory: {}",
+            service_appdata_root.display()
+        )
+    })?;
+    let service_artifacts_root = paths.service_artifacts_root();
+    fs::create_dir_all(&service_artifacts_root).with_context(|| {
+        format!(
+            "Failed to create service artifacts root directory: {}",
+            service_artifacts_root.display()
+        )
+    })?;
+    let user_home = paths.user_home();
+    fs::create_dir_all(&user_home).with_context(|| {
+        format!(
+            "Failed to create Fungi user workspace: {}",
+            user_home.display()
         )
     })?;
     Ok(())
@@ -177,6 +193,7 @@ async fn stage_wasmtime_component(
 
 pub(crate) async fn build_wasmtime_state(
     runtime_root: &Path,
+    service_artifacts_dir: &Path,
     allowed_host_paths: &[PathBuf],
     manifest: &ServiceManifest,
     restage_component: bool,
@@ -184,23 +201,29 @@ pub(crate) async fn build_wasmtime_state(
     ensure_wasmtime_manifest(manifest)?;
     validate_allowed_host_paths(manifest, allowed_host_paths)?;
 
-    let service_dir = runtime_root.join("wasmtime").join(&manifest.name);
-    fs::create_dir_all(&service_dir).with_context(|| {
+    fs::create_dir_all(service_artifacts_dir).with_context(|| {
         format!(
-            "Failed to create runtime directory: {}",
-            service_dir.display()
+            "Failed to create service artifacts directory: {}",
+            service_artifacts_dir.display()
         )
     })?;
     ensure_manifest_mount_dirs(manifest)?;
 
-    let staged_component_path = service_dir.join("component.wasm");
+    let staged_component_path = service_artifacts_dir.join("component.wasm");
     let staged_component_path = if restage_component || !staged_component_path.exists() {
-        stage_wasmtime_component(manifest, &service_dir).await?
+        stage_wasmtime_component(manifest, service_artifacts_dir).await?
     } else {
         staged_component_path
     };
 
-    let log_file_path = service_dir.join("runtime.log");
+    let runtime_dir = runtime_root.join("wasmtime").join(&manifest.name);
+    fs::create_dir_all(&runtime_dir).with_context(|| {
+        format!(
+            "Failed to create runtime directory: {}",
+            runtime_dir.display()
+        )
+    })?;
+    let log_file_path = runtime_dir.join("runtime.log");
     if !log_file_path.exists() {
         fs::File::create(&log_file_path)
             .with_context(|| format!("Failed to create log file: {}", log_file_path.display()))?;
@@ -210,7 +233,8 @@ pub(crate) async fn build_wasmtime_state(
         manifest: manifest.clone(),
         source_display: source_display(&manifest.source),
         staged_component_path,
-        service_dir,
+        service_dir: service_artifacts_dir.to_path_buf(),
+        runtime_dir,
         log_file_path,
         child: None,
         last_exit_code: None,

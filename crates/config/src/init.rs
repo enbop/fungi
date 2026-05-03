@@ -1,9 +1,9 @@
 use crate::{
     DEFAULT_CONFIG_FILE, FungiConfig, FungiDir, devices::DevicesConfig,
-    direct_addresses::DirectAddressCache, local_access::LocalAccessConfig,
+    direct_addresses::DirectAddressCache, local_access::LocalAccessConfig, paths::FungiPaths,
     service_cache::ServiceCache,
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
     let fungi_dir = dirs.fungi_dir();
@@ -20,6 +20,7 @@ pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
             println!("Backup saved to {}", backup_dir.display());
         }
     }
+    ensure_user_workspace(&fungi_dir)?;
 
     if config_file.exists() {
         if upgrade_existing {
@@ -58,4 +59,14 @@ pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
 
     log::info!("Fungi initialized at {}", fungi_dir.display());
     Ok(())
+}
+
+fn ensure_user_workspace(fungi_dir: &std::path::Path) -> Result<()> {
+    let paths = FungiPaths::from_fungi_home(fungi_dir);
+    std::fs::create_dir_all(paths.user_home()).with_context(|| {
+        format!(
+            "Failed to create Fungi user workspace: {}",
+            paths.user_home().display()
+        )
+    })
 }

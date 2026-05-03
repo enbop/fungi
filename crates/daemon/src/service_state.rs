@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
+use fungi_config::paths::FungiPaths;
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 use ulid::Ulid;
@@ -108,12 +109,11 @@ impl ServiceStateStore {
             })?;
             let state_file =
                 load_service_state_file(&service_dir.join("state.json"), &service_dir)?;
-            let service_data_dir = fungi_home.join("data").join(&state_file.local_service_id);
             let manifest = parse_managed_service_manifest_yaml(
                 &manifest_yaml,
                 &service_dir,
                 &fungi_home,
-                &service_data_dir,
+                &state_file.local_service_id,
             )
             .with_context(|| {
                 format!(
@@ -175,6 +175,10 @@ impl ServiceStateStore {
         }
 
         self.generate_unique_local_service_id()
+    }
+
+    pub fn local_service_id(&self, service_name: &str) -> Result<String> {
+        self.lookup_local_service_id(service_name)
     }
 
     pub fn upsert_service_with_local_service_id(
@@ -243,7 +247,7 @@ impl ServiceStateStore {
                 service_dir.display()
             )
         })?;
-        self.ensure_service_data_dir(local_service_id)?;
+        self.ensure_service_appdata_dir(local_service_id)?;
 
         let manifest_yaml = service_manifest_to_yaml(&service.manifest)?;
         atomic_write(&service_dir.join("service.yaml"), manifest_yaml.as_bytes())?;
@@ -263,20 +267,20 @@ impl ServiceStateStore {
         self.services_root.join(local_service_id)
     }
 
-    fn service_data_dir(&self, local_service_id: &str) -> PathBuf {
-        self.services_root
+    fn service_appdata_dir(&self, local_service_id: &str) -> PathBuf {
+        let fungi_home = self
+            .services_root
             .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join("data")
-            .join(local_service_id)
+            .unwrap_or_else(|| Path::new("."));
+        FungiPaths::from_fungi_home(fungi_home).service_appdata_dir(local_service_id)
     }
 
-    fn ensure_service_data_dir(&self, local_service_id: &str) -> Result<()> {
-        let data_dir = self.service_data_dir(local_service_id);
-        fs::create_dir_all(&data_dir).with_context(|| {
+    fn ensure_service_appdata_dir(&self, local_service_id: &str) -> Result<()> {
+        let appdata_dir = self.service_appdata_dir(local_service_id);
+        fs::create_dir_all(&appdata_dir).with_context(|| {
             format!(
-                "Failed to create service data directory: {}",
-                data_dir.display()
+                "Failed to create service appdata directory: {}",
+                appdata_dir.display()
             )
         })
     }
@@ -434,6 +438,7 @@ fn local_service_id_from_service_dir(service_dir: &Path) -> Result<String> {
 mod tests {
     use super::*;
     use crate::runtime::{RuntimeKind, ServiceSource};
+    use fungi_config::paths::FungiPaths;
 
     #[test]
     fn round_trips_persisted_services() {
@@ -479,7 +484,9 @@ mod tests {
                 .join("state.json")
                 .is_file()
         );
-        assert!(dir.path().join("data").join(&local_service_id).is_dir());
+        let paths = FungiPaths::from_fungi_home(dir.path());
+        assert!(paths.service_appdata_dir(&local_service_id).is_dir());
+        assert!(!dir.path().join("data").join(&local_service_id).exists());
 
         let reloaded = ServiceStateStore::load(services_root).unwrap();
         let services = reloaded.persisted_services();
@@ -490,9 +497,10 @@ mod tests {
     }
 
     #[test]
-    fn remove_service_preserves_service_data_dir() {
+    fn remove_service_preserves_service_appdata_dir() {
         let dir = tempfile::TempDir::new().unwrap();
         let services_root = dir.path().join("services");
+        let paths = FungiPaths::from_fungi_home(dir.path());
         let mut store = ServiceStateStore::load(services_root.clone()).unwrap();
 
         let manifest = ServiceManifest {
@@ -515,15 +523,15 @@ mod tests {
             .upsert_service_with_local_service_id(&manifest, DesiredServiceState::Stopped, None)
             .unwrap();
         let service_dir = services_root.join(&local_service_id);
-        let data_dir = dir.path().join("data").join(&local_service_id);
-        let data_file = data_dir.join("keep.txt");
-        fs::write(&data_file, b"persist me").unwrap();
+        let appdata_dir = paths.service_appdata_dir(&local_service_id);
+        let appdata_file = appdata_dir.join("keep.txt");
+        fs::write(&appdata_file, b"persist me").unwrap();
 
         store.remove_service("demo").unwrap();
 
         assert!(!service_dir.exists());
-        assert!(data_dir.is_dir());
-        assert_eq!(fs::read_to_string(&data_file).unwrap(), "persist me");
+        assert!(appdata_dir.is_dir());
+        assert_eq!(fs::read_to_string(&appdata_file).unwrap(), "persist me");
     }
 
     #[test]

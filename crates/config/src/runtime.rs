@@ -2,6 +2,8 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+use crate::paths::FungiPaths;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Runtime {
     #[serde(default)]
@@ -38,9 +40,10 @@ impl Runtime {
         let normalized = normalize_absolute_path(path)?;
         if is_sensitive_fungi_path(&normalized, fungi_dir)? {
             bail!(
-                "refusing to allow fungi home control-plane path: {}. Use {}/data or a directory outside fungi home",
+                "refusing to allow fungi home control-plane path: {}. Use {} or a directory outside fungi home",
                 normalized.display(),
-                normalize_absolute_path(fungi_dir.join("data").as_path())?.display()
+                normalize_absolute_path(&FungiPaths::from_fungi_home(fungi_dir).appdata_root())?
+                    .display()
             );
         }
         Ok(normalized)
@@ -49,9 +52,10 @@ impl Runtime {
 
 fn is_sensitive_fungi_path(path: &Path, fungi_dir: &Path) -> Result<bool> {
     let fungi_home = normalize_absolute_path(fungi_dir)?;
-    let data_root = normalize_absolute_path(&fungi_home.join("data"))?;
+    let appdata_root =
+        normalize_absolute_path(&FungiPaths::from_fungi_home(&fungi_home).appdata_root())?;
 
-    Ok(path.starts_with(&fungi_home) && !path.starts_with(&data_root))
+    Ok(path.starts_with(&fungi_home) && !path.starts_with(&appdata_root))
 }
 
 fn normalize_absolute_path(path: &Path) -> Result<PathBuf> {
@@ -94,13 +98,19 @@ mod tests {
     fn runtime_preserves_explicit_allowed_host_paths() {
         let fungi_home = test_fungi_home();
         let runtime = Runtime {
-            allowed_host_paths: vec![fungi_home.join("data"), fungi_home.join("data/demo")],
+            allowed_host_paths: vec![
+                fungi_home.join("appdata"),
+                fungi_home.join("appdata/services/demo"),
+            ],
             ..Runtime::default()
         };
 
         assert_eq!(
             runtime.allowed_host_paths,
-            vec![fungi_home.join("data"), fungi_home.join("data/demo")]
+            vec![
+                fungi_home.join("appdata"),
+                fungi_home.join("appdata/services/demo")
+            ]
         );
     }
 
@@ -113,6 +123,17 @@ mod tests {
             error
                 .to_string()
                 .contains("refusing to allow fungi home control-plane path")
+        );
+    }
+
+    #[test]
+    fn validate_allowed_host_path_allows_service_appdata_root() {
+        let fungi_home = test_fungi_home();
+        let path = FungiPaths::from_fungi_home(&fungi_home).appdata_root();
+
+        assert_eq!(
+            Runtime::validate_allowed_host_path(&path, &fungi_home).unwrap(),
+            path
         );
     }
 }

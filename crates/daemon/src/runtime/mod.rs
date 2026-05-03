@@ -14,8 +14,8 @@ pub use manifest::{
     service_manifest_to_yaml,
 };
 pub(crate) use manifest::{
-    parse_managed_service_manifest_yaml,
-    parse_service_manifest_yaml_with_policy_for_service_data_dir, peek_service_manifest_name,
+    parse_managed_service_manifest_yaml, parse_service_manifest_yaml_with_policy_for_service_paths,
+    peek_service_manifest_name,
 };
 pub use model::*;
 pub use providers::{

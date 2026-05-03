@@ -1,5 +1,6 @@
 use super::*;
 use anyhow::Result;
+use fungi_config::paths::FungiPaths;
 use fungi_docker_agent::DockerAgentError;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -85,6 +86,7 @@ fn ensure_manifest_mount_dirs_creates_missing_host_paths() {
 fn runtime_control_new_creates_services_root() {
     let temp_dir = TempDir::new().unwrap();
     let fungi_home = temp_dir.path().join("fungi-home");
+    let paths = FungiPaths::from_fungi_home(&fungi_home);
     let runtime_root = fungi_home.join("runtime");
     let services_root = fungi_home.join("services");
 
@@ -100,7 +102,9 @@ fn runtime_control_new_creates_services_root() {
     .unwrap();
 
     assert!(fungi_home.join("services").is_dir());
-    assert!(fungi_home.join("data").is_dir());
+    assert!(fungi_home.join("appdata/services").is_dir());
+    assert!(fungi_home.join("artifacts/services").is_dir());
+    assert!(paths.user_home().is_dir());
 }
 
 #[test]
@@ -203,7 +207,7 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
 }
 
 #[test]
-fn manifest_document_supports_app_home_and_auto_host_port() {
+fn manifest_document_supports_user_home_and_auto_host_port() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1
 kind: ServiceManifest
@@ -214,7 +218,7 @@ spec:
     source:
         image: filebrowser/filebrowser:latest
     mounts:
-        - hostPath: ${APP_HOME}/data
+        - hostPath: ${USER_HOME}
           runtimePath: /srv
     ports:
         - hostPort: auto
@@ -226,6 +230,7 @@ spec:
     let occupied_allowed_port_number = occupied_allowed_port.local_addr().unwrap().port();
     let used_host_ports = BTreeSet::from([occupied_allowed_port_number]);
     let fungi_home = PathBuf::from("/tmp/fungi-home");
+    let paths = FungiPaths::from_fungi_home(&fungi_home);
     let manifest = parse_service_manifest_yaml_with_policy(
         yaml,
         Path::new("."),
@@ -235,10 +240,7 @@ spec:
     )
     .unwrap();
 
-    assert_eq!(
-        manifest.mounts[0].host_path,
-        fungi_home.join("data/filebrowser/data")
-    );
+    assert_eq!(manifest.mounts[0].host_path, paths.user_home());
     assert_ne!(manifest.ports[0].host_port, occupied_allowed_port_number);
     assert_eq!(
         manifest.ports[0].host_port_allocation,
@@ -247,7 +249,7 @@ spec:
 }
 
 #[test]
-fn manifest_document_supports_explicit_service_data_dir() {
+fn manifest_document_supports_explicit_service_path_roots() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1
 kind: ServiceManifest
@@ -258,23 +260,43 @@ spec:
     source:
         image: filebrowser/filebrowser:latest
     mounts:
-        - hostPath: ${APP_HOME}/data
+        - hostPath: ${SERVICE_APPDATA}/db
           runtimePath: /srv
+        - hostPath: ${SERVICE_ARTIFACTS}/static
+          runtimePath: /static
+        - hostPath: ${USER_ROOT}
+          runtimePath: /user
+    workingDir: ${USER_HOME}
 "#;
 
     let fungi_home = PathBuf::from("/tmp/fungi-home");
-    let service_data_dir = fungi_home.join("data/svc_01hz7j7n3evh1q4j1a8g9c2d3e");
-    let manifest = parse_service_manifest_yaml_with_policy_for_service_data_dir(
+    let local_service_id = "svc_01hz7j7n3evh1q4j1a8g9c2d3e";
+    let paths = FungiPaths::from_fungi_home(&fungi_home);
+    let path_roots =
+        super::manifest::ManifestPathRoots::for_local_service_id(&fungi_home, local_service_id);
+    let manifest = parse_service_manifest_yaml_with_policy_for_service_paths(
         yaml,
         Path::new("."),
         &fungi_home,
-        &service_data_dir,
+        &path_roots,
         &ManifestResolutionPolicy::default(),
         &BTreeSet::new(),
     )
     .unwrap();
 
-    assert_eq!(manifest.mounts[0].host_path, service_data_dir.join("data"));
+    assert_eq!(
+        manifest.mounts[0].host_path,
+        paths.service_appdata_dir(local_service_id).join("db")
+    );
+    assert_eq!(
+        manifest.mounts[1].host_path,
+        paths.service_artifacts_dir(local_service_id).join("static")
+    );
+    assert_eq!(manifest.mounts[2].host_path, paths.user_root());
+    assert_eq!(
+        manifest.working_dir,
+        Some(paths.user_home().to_string_lossy().to_string())
+    );
 }
 
 #[test]
@@ -366,12 +388,15 @@ async fn wasmtime_provider_downloads_remote_component() {
         labels: BTreeMap::new(),
     };
 
-    let pulled = provider.pull(&manifest).await.unwrap();
+    let pulled = provider
+        .pull_with_local_service_id(&manifest, "svc_download")
+        .await
+        .unwrap();
     assert_eq!(pulled.status.state, "created");
     assert!(
         temp_dir
             .path()
-            .join("runtime/wasmtime/download-service/component.wasm")
+            .join("artifacts/services/svc_download/component.wasm")
             .exists()
     );
     drop(server);

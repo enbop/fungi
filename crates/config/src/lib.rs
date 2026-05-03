@@ -5,6 +5,7 @@ pub mod file_transfer;
 mod init;
 mod libp2p;
 pub mod local_access;
+pub mod paths;
 mod rpc;
 pub mod runtime;
 pub mod service_cache;
