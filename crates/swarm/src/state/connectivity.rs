@@ -447,7 +447,7 @@ impl ConnectivityState {
         address: Multiaddr,
         source: PeerAddressSource,
     ) -> PeerAddressObservation {
-        let Some(normalized) = normalize_peer_address(&address, peer_id) else {
+        let Some(normalized) = normalize_peer_address_for_source(&address, peer_id, source) else {
             return PeerAddressObservation::Ignored;
         };
 
@@ -492,7 +492,7 @@ impl ConnectivityState {
         last_observed_at: SystemTime,
         observation_count: u64,
     ) -> PeerAddressObservation {
-        let Some(normalized) = normalize_peer_address(&address, peer_id) else {
+        let Some(normalized) = normalize_peer_address_for_source(&address, peer_id, source) else {
             return PeerAddressObservation::Ignored;
         };
 
@@ -635,6 +635,29 @@ fn freshness_windows(transport_kind: AddressTransportKind) -> (Duration, Duratio
 }
 
 fn normalize_peer_address(address: &Multiaddr, peer_id: PeerId) -> Option<Multiaddr> {
+    normalize_peer_address_with_options(address, peer_id, false)
+}
+
+fn normalize_peer_address_for_source(
+    address: &Multiaddr,
+    peer_id: PeerId,
+    source: PeerAddressSource,
+) -> Option<Multiaddr> {
+    normalize_peer_address_with_options(address, peer_id, source_allows_local_address(source))
+}
+
+fn source_allows_local_address(source: PeerAddressSource) -> bool {
+    matches!(
+        source,
+        PeerAddressSource::DeviceConfig | PeerAddressSource::Manual
+    )
+}
+
+fn normalize_peer_address_with_options(
+    address: &Multiaddr,
+    peer_id: PeerId,
+    allow_local: bool,
+) -> Option<Multiaddr> {
     let mut normalized = Multiaddr::empty();
     let mut protocols = address.iter().peekable();
     let mut saw_transport = false;
@@ -642,37 +665,37 @@ fn normalize_peer_address(address: &Multiaddr, peer_id: PeerId) -> Option<Multia
     while let Some(protocol) = protocols.next() {
         match protocol {
             Protocol::Ip4(ip) => {
-                if ip.is_unspecified() || ip.is_loopback() {
+                if ip.is_unspecified() || (!allow_local && ip.is_loopback()) {
                     return None;
                 }
                 normalized.push(Protocol::Ip4(ip));
             }
             Protocol::Ip6(ip) => {
-                if ip.is_unspecified() || ip.is_loopback() {
+                if ip.is_unspecified() || (!allow_local && ip.is_loopback()) {
                     return None;
                 }
                 normalized.push(Protocol::Ip6(ip));
             }
             Protocol::Dns(name) => {
-                if is_local_hostname(&name) {
+                if !allow_local && is_local_hostname(&name) {
                     return None;
                 }
                 normalized.push(Protocol::Dns(name));
             }
             Protocol::Dns4(name) => {
-                if is_local_hostname(&name) {
+                if !allow_local && is_local_hostname(&name) {
                     return None;
                 }
                 normalized.push(Protocol::Dns4(name));
             }
             Protocol::Dns6(name) => {
-                if is_local_hostname(&name) {
+                if !allow_local && is_local_hostname(&name) {
                     return None;
                 }
                 normalized.push(Protocol::Dns6(name));
             }
             Protocol::Dnsaddr(name) => {
-                if is_local_hostname(&name) {
+                if !allow_local && is_local_hostname(&name) {
                     return None;
                 }
                 normalized.push(Protocol::Dnsaddr(name));
@@ -763,6 +786,39 @@ mod tests {
             .unwrap();
 
         assert!(normalize_peer_address(&address, peer_id).is_none());
+    }
+
+    #[test]
+    fn peer_address_record_accepts_loopback_device_config() {
+        let peer_id = PeerId::random();
+        let address: Multiaddr = format!("/ip4/127.0.0.1/tcp/4001/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let mut state = ConnectivityState::default();
+
+        assert_eq!(
+            state.record_peer_address(peer_id, address, PeerAddressSource::DeviceConfig),
+            PeerAddressObservation::New
+        );
+
+        let records = state.list_peer_addresses();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].address.to_string(), "/ip4/127.0.0.1/tcp/4001");
+    }
+
+    #[test]
+    fn peer_address_record_rejects_loopback_identify() {
+        let peer_id = PeerId::random();
+        let address: Multiaddr = format!("/ip4/127.0.0.1/tcp/4001/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let mut state = ConnectivityState::default();
+
+        assert_eq!(
+            state.record_peer_address(peer_id, address, PeerAddressSource::Identify),
+            PeerAddressObservation::Ignored
+        );
+        assert!(state.list_peer_addresses().is_empty());
     }
 
     #[test]

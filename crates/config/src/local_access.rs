@@ -87,6 +87,7 @@ impl LocalAccessConfig {
             left.remote_peer_id
                 .cmp(&right.remote_peer_id)
                 .then(left.remote_service_id.cmp(&right.remote_service_id))
+                .then(left.remote_service_name.cmp(&right.remote_service_name))
                 .then(
                     left.remote_service_port_name
                         .cmp(&right.remote_service_port_name),
@@ -114,6 +115,7 @@ fn forwarding_rule_matches(left: &ForwardingRule, right: &ForwardingRule) -> boo
         && left.remote_protocol == right.remote_protocol
         && left.remote_port == right.remote_port
         && left.remote_service_id == right.remote_service_id
+        && left.remote_service_name == right.remote_service_name
         && left.remote_service_port_name == right.remote_service_port_name
 }
 
@@ -133,6 +135,34 @@ mod tests {
         assert!(dir.path().join("access").join("local_access.json").exists());
     }
 
+    #[test]
+    fn keeps_same_endpoint_rules_for_different_service_names() {
+        let dir = TempDir::new().unwrap();
+        let config = LocalAccessConfig::apply_from_dir(dir.path()).unwrap();
+        let first = rule_without_id("alpha");
+        let second = rule_without_id("beta");
+
+        let updated = config
+            .add_forwarding_rule(first)
+            .unwrap()
+            .add_forwarding_rule(second)
+            .unwrap();
+
+        assert_eq!(updated.rules.len(), 2);
+        assert!(
+            updated
+                .rules
+                .iter()
+                .any(|rule| rule.remote_service_name.as_deref() == Some("alpha"))
+        );
+        assert!(
+            updated
+                .rules
+                .iter()
+                .any(|rule| rule.remote_service_name.as_deref() == Some("beta"))
+        );
+    }
+
     fn rule(service_id: &str) -> ForwardingRule {
         ForwardingRule {
             local_host: "127.0.0.1".to_string(),
@@ -142,6 +172,19 @@ mod tests {
             remote_port: 22,
             remote_service_id: Some(service_id.to_string()),
             remote_service_name: Some(service_id.to_string()),
+            remote_service_port_name: Some("main".to_string()),
+        }
+    }
+
+    fn rule_without_id(service_name: &str) -> ForwardingRule {
+        ForwardingRule {
+            local_host: "127.0.0.1".to_string(),
+            local_port: 2222,
+            remote_peer_id: "peer".to_string(),
+            remote_protocol: Some("/fungi/service/entry/0.2.0".to_string()),
+            remote_port: 22,
+            remote_service_id: None,
+            remote_service_name: Some(service_name.to_string()),
             remote_service_port_name: Some("main".to_string()),
         }
     }

@@ -14,6 +14,7 @@ use serde_json::json;
 use tempfile::TempDir;
 
 #[test]
+#[ignore = "integration test downloads and runs the v0.6.1 release binary; run explicitly with `cargo test -p fungi --test migrate_cli -- --ignored --nocapture`"]
 fn cli_migrate_upgrades_real_v061_home_with_legacy_address_book_and_service_state() {
     let home = TempDir::new().unwrap();
 
