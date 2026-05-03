@@ -28,6 +28,7 @@ async fn spawn_daemon_in_dir(dir: &TempDir) -> FungiDaemon {
         config,
         Keypair::generate_ed25519(),
         Default::default(),
+        Default::default(),
         DirectAddressCache::apply_from_dir(dir.path()).unwrap(),
     )
     .await
@@ -197,20 +198,19 @@ async fn connected_pair_has_distinct_peer_ids_and_empty_rules() {
 }
 
 #[tokio::test]
-async fn builder_sets_allowed_peer_in_config() {
-    let allowed = Keypair::generate_ed25519().public().to_peer_id();
+async fn builder_sets_trusted_device_in_config() {
+    let trusted_device = Keypair::generate_ed25519().public().to_peer_id();
     let d = TestDaemonBuilder::new()
-        .with_allowed_peer(allowed)
+        .with_trusted_device(trusted_device)
         .build()
         .await
         .unwrap();
 
-    let has_peer = d
+    let has_trusted_device = d
         .daemon()
-        .config()
+        .trusted_devices()
         .lock()
-        .network
-        .incoming_allowed_peers
-        .contains(&allowed);
-    assert!(has_peer);
+        .trusted_devices
+        .contains(&trusted_device);
+    assert!(has_trusted_device);
 }

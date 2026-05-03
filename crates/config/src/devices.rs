@@ -156,7 +156,7 @@ impl TryFrom<&mdns_sd::TxtProperties> for DeviceInfo {
             .val_str();
         let peer_id = peer_id_str
             .parse::<PeerId>()
-            .map_err(|_| io::Error::other(format!("Invalid peer_id: {}", peer_id_str)))?;
+            .map_err(|_| io::Error::other(format!("Invalid device ID: {}", peer_id_str)))?;
 
         let hostname = properties.get("hostname").map(|s| s.val_str().to_string());
         let os = properties

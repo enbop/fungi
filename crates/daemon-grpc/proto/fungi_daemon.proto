@@ -20,16 +20,14 @@ service FungiDaemon {
   // Returns the hostname advertised by the daemon.
   rpc Hostname(Empty) returns (HostnameResponse) {}
 
-  // Lists peers that are allowed to initiate incoming connections.
-  rpc GetIncomingAllowedPeers(Empty)
-  returns (IncomingAllowedPeersListResponse) {}
+  // Lists devices trusted to initiate incoming access.
+  rpc ListTrustedDevices(Empty) returns (TrustedDevicesListResponse) {}
 
-  // Adds a peer ID to the allowlist for incoming connections and persists it.
-  rpc AddIncomingAllowedPeer(AddIncomingAllowedPeerRequest) returns (Empty) {}
+  // Trusts a saved device for incoming access and persists it.
+  rpc TrustDevice(TrustDeviceRequest) returns (Empty) {}
 
-  // Removes a peer ID from the allowlist for incoming connections.
-  rpc RemoveIncomingAllowedPeer(RemoveIncomingAllowedPeerRequest)
-  returns (Empty) {}
+  // Removes incoming access trust from a device.
+  rpc UntrustDevice(UntrustDeviceRequest) returns (Empty) {}
 
   // Returns persisted relay configuration and the current effective relay list.
   rpc GetRelayConfig(Empty) returns (RelayConfigResponse) {}
@@ -238,11 +236,11 @@ message PeerIdResponse { string peer_id = 1; }
 
 message ConfigFilePathResponse { string config_file_path = 1; }
 
-message IncomingAllowedPeersListResponse { repeated DeviceInfo peers = 1; }
+message TrustedDevicesListResponse { repeated DeviceInfo devices = 1; }
 
-message AddIncomingAllowedPeerRequest { string peer_id = 1; }
+message TrustDeviceRequest { string peer_id = 1; }
 
-message RemoveIncomingAllowedPeerRequest { string peer_id = 1; }
+message UntrustDeviceRequest { string peer_id = 1; }
 
 message RelayEnabledRequest { bool enabled = 1; }
 

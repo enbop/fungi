@@ -11,7 +11,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::commands::CommonArgs;
 
 use super::{
+    TrustedDeviceCommands,
     client::get_rpc_client,
+    execute_trusted_device,
     shared::{fatal, fatal_grpc, resolve_peer_value},
 };
 
@@ -29,11 +31,12 @@ pub enum DeviceCommands {
     List,
     /// Add a device with a required device name
     Add {
-        /// Device ID to add
-        peer_id: String,
         /// Human-friendly unique device name
-        #[arg(long = "name", value_name = "NAME")]
+        #[arg(value_name = "NAME")]
         name: String,
+        /// Device ID to add
+        #[arg(value_name = "DEVICE_ID")]
+        peer_id: String,
         /// User-managed direct multiaddr for this device
         #[arg(long = "addr", alias = "address", value_name = "MULTIADDR")]
         addresses: Vec<String>,
@@ -41,6 +44,18 @@ pub enum DeviceCommands {
     /// Manage user-added device addresses
     #[command(subcommand)]
     Address(DeviceAddressCommands),
+    /// List devices trusted to initiate incoming access
+    Trusted,
+    /// Trust a saved device for incoming access
+    Trust {
+        /// Device name or device ID
+        device: String,
+    },
+    /// Remove incoming access trust from a device
+    Untrust {
+        /// Device name or device ID
+        device: String,
+    },
     /// Rename an existing device
     Rename {
         /// Device ID or device name to rename
@@ -85,12 +100,40 @@ pub enum DeviceAddressCommands {
 }
 
 pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
+    let cmd = device_args.command.unwrap_or(DeviceCommands::List);
+
+    match &cmd {
+        DeviceCommands::Trusted => {
+            execute_trusted_device(args, TrustedDeviceCommands::List).await;
+            return;
+        }
+        DeviceCommands::Trust { device } => {
+            execute_trusted_device(
+                args,
+                TrustedDeviceCommands::Trust {
+                    device: device.clone(),
+                },
+            )
+            .await;
+            return;
+        }
+        DeviceCommands::Untrust { device } => {
+            execute_trusted_device(
+                args,
+                TrustedDeviceCommands::Untrust {
+                    device: device.clone(),
+                },
+            )
+            .await;
+            return;
+        }
+        _ => {}
+    }
+
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
         None => fatal("Cannot connect to Fungi daemon. Is it running?"),
     };
-
-    let cmd = device_args.command.unwrap_or(DeviceCommands::List);
 
     match cmd {
         DeviceCommands::Mdns => match client.list_mdns_devices(Request::new(Empty {})).await {
@@ -126,7 +169,7 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
         } => {
             let peer_id = match peer_id.parse::<PeerId>() {
                 Ok(value) => value,
-                Err(error) => fatal(format!("Invalid peer_id: {error}")),
+                Err(error) => fatal(format!("Invalid device ID: {error}")),
             };
             let addresses = normalize_multiaddrs(addresses);
 
@@ -187,6 +230,9 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
                 save_device(&mut client, peer, "Device address removed").await;
             }
         },
+        DeviceCommands::Trusted | DeviceCommands::Trust { .. } | DeviceCommands::Untrust { .. } => {
+            unreachable!()
+        }
         DeviceCommands::Rename { peer, name } => {
             let target_peer_id = if let Ok(value) = peer.parse::<PeerId>() {
                 value.to_string()

@@ -41,18 +41,18 @@ impl FungiDaemon {
         Ok(())
     }
 
-    pub fn get_incoming_allowed_peers(&self) -> Vec<DeviceInfo> {
-        let allowed_peers = self
+    pub fn list_trusted_devices(&self) -> Vec<DeviceInfo> {
+        let trusted_device_ids = self
             .swarm_control()
             .state()
             .get_incoming_allowed_peers_list();
-        let peers_config_guard = self.devices();
-        let peers_config = peers_config_guard.lock();
+        let devices_config_guard = self.devices();
+        let devices_config = devices_config_guard.lock();
 
-        allowed_peers
+        trusted_device_ids
             .into_iter()
             .map(
-                |peer_id| match peers_config.get_device_info(&peer_id).cloned() {
+                |peer_id| match devices_config.get_device_info(&peer_id).cloned() {
                     Some(device_info) => device_info,
                     None => DeviceInfo::new_unknown(peer_id),
                 },

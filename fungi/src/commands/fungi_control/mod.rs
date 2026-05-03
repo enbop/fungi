@@ -1,5 +1,4 @@
 mod access;
-mod allowed_peers;
 mod catalog;
 mod client;
 mod connection;
@@ -13,10 +12,10 @@ mod relay_config;
 mod security;
 mod service;
 mod shared;
+mod trusted_devices;
 mod tunnel;
 
 pub use access::{AccessCommands, execute_access};
-pub use allowed_peers::AllowedPeerCommands;
 pub use catalog::{CatalogCommands, execute_catalog};
 pub use connection::{ConnectionCommands, execute_connection};
 pub use device::{DeviceAddressCommands, DeviceArgs, DeviceCommands, execute_device};
@@ -33,4 +32,5 @@ pub use service::{
     parse_dynamic_thing_target,
 };
 pub use shared::{DeviceInput, PeerInput};
+pub use trusted_devices::{TrustedDeviceCommands, execute_trusted_device};
 pub use tunnel::{TunnelCommands, execute_tunnel};

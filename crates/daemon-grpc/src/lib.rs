@@ -166,14 +166,14 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         Ok(Response::new(response))
     }
 
-    async fn get_incoming_allowed_peers(
+    async fn list_trusted_devices(
         &self,
         _request: Request<Empty>,
-    ) -> Result<Response<IncomingAllowedPeersListResponse>, Status> {
-        let response = IncomingAllowedPeersListResponse {
-            peers: self
+    ) -> Result<Response<TrustedDevicesListResponse>, Status> {
+        let response = TrustedDevicesListResponse {
+            devices: self
                 .inner
-                .get_incoming_allowed_peers()
+                .list_trusted_devices()
                 .into_iter()
                 .map(device_info_to_proto)
                 .collect(),
@@ -181,30 +181,30 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         Ok(Response::new(response))
     }
 
-    async fn add_incoming_allowed_peer(
+    async fn trust_device(
         &self,
-        request: Request<AddIncomingAllowedPeerRequest>,
+        request: Request<TrustDeviceRequest>,
     ) -> Result<Response<Empty>, Status> {
         let peer_id = PeerId::from_str(&request.into_inner().peer_id)
-            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+            .map_err(|e| Status::invalid_argument(format!("Invalid device ID: {}", e)))?;
 
         self.inner
-            .add_incoming_allowed_peer(peer_id)
-            .map_err(|e| Status::internal(format!("Failed to add peer: {}", e)))?;
+            .trust_device(peer_id)
+            .map_err(|e| Status::internal(format!("Failed to trust device: {}", e)))?;
 
         Ok(Response::new(Empty {}))
     }
 
-    async fn remove_incoming_allowed_peer(
+    async fn untrust_device(
         &self,
-        request: Request<RemoveIncomingAllowedPeerRequest>,
+        request: Request<UntrustDeviceRequest>,
     ) -> Result<Response<Empty>, Status> {
         let peer_id = PeerId::from_str(&request.into_inner().peer_id)
-            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+            .map_err(|e| Status::invalid_argument(format!("Invalid device ID: {}", e)))?;
 
         self.inner
-            .remove_incoming_allowed_peer(peer_id)
-            .map_err(|e| Status::internal(format!("Failed to remove peer: {}", e)))?;
+            .untrust_device(peer_id)
+            .map_err(|e| Status::internal(format!("Failed to untrust device: {}", e)))?;
 
         Ok(Response::new(Empty {}))
     }

@@ -1,7 +1,7 @@
 use crate::{
     DEFAULT_CONFIG_FILE, FungiConfig, FungiDir, devices::DevicesConfig,
     direct_addresses::DirectAddressCache, local_access::LocalAccessConfig, paths::FungiPaths,
-    service_cache::ServiceCache,
+    service_cache::ServiceCache, trusted_devices::TrustedDevicesConfig,
 };
 use anyhow::{Context, Result};
 
@@ -30,6 +30,7 @@ pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
             DirectAddressCache::apply_from_dir(&fungi_dir)?;
             LocalAccessConfig::apply_from_dir(&fungi_dir)?;
             ServiceCache::apply_from_dir(&fungi_dir)?;
+            TrustedDevicesConfig::apply_from_dir(&fungi_dir)?;
             println!("Configuration file upgraded at {}", config_file.display());
             return Ok(());
         }
@@ -53,6 +54,7 @@ pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
     DirectAddressCache::apply_from_dir(&fungi_dir)?;
     LocalAccessConfig::apply_from_dir(&fungi_dir)?;
     ServiceCache::apply_from_dir(&fungi_dir)?;
+    TrustedDevicesConfig::apply_from_dir(&fungi_dir)?;
 
     // create .keys
     fungi_util::keypair::init_keypair(&fungi_dir)?;

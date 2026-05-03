@@ -425,9 +425,8 @@ fn parses_device_add_with_manual_address() {
         "fungi",
         "device",
         "add",
-        "12D3KooWExample",
-        "--name",
         "nas",
+        "12D3KooWExample",
         "--addr",
         "/ip4/127.0.0.1/tcp/4001",
     ])
@@ -448,6 +447,20 @@ fn parses_device_add_with_manual_address() {
     assert_eq!(peer_id, "12D3KooWExample");
     assert_eq!(name, "nas");
     assert_eq!(addresses, vec!["/ip4/127.0.0.1/tcp/4001"]);
+}
+
+#[test]
+fn parses_device_trust() {
+    let args = FungiArgs::try_parse_from(["fungi", "device", "trust", "nas"]).unwrap();
+
+    let Commands::Device(device_args) = args.command else {
+        panic!("expected device command");
+    };
+    let Some(DeviceCommands::Trust { device }) = device_args.command else {
+        panic!("expected device trust command");
+    };
+
+    assert_eq!(device, "nas");
 }
 
 #[test]

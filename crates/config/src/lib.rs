@@ -10,6 +10,7 @@ mod rpc;
 pub mod runtime;
 pub mod service_cache;
 pub mod tcp_tunneling;
+pub mod trusted_devices;
 
 pub use crate::libp2p::*;
 pub use build_info::{
@@ -196,25 +197,6 @@ impl FungiConfig {
                 .runtime
                 .allowed_host_paths
                 .retain(|entry| entry != path);
-        })
-    }
-
-    pub fn add_incoming_allowed_peer(&self, peer_id: &PeerId) -> Result<Self> {
-        if self.network.incoming_allowed_peers.contains(peer_id) {
-            return Ok(self.clone());
-        }
-
-        self.update_and_save(|config| {
-            config.network.incoming_allowed_peers.push(*peer_id);
-        })
-    }
-
-    pub fn remove_incoming_allowed_peer(&self, peer_id: &PeerId) -> Result<Self> {
-        self.update_and_save(|config| {
-            config
-                .network
-                .incoming_allowed_peers
-                .retain(|p| p != peer_id);
         })
     }
 
@@ -467,55 +449,6 @@ mod tests {
         assert!(!content.contains("allowed_port_ranges"));
         assert!(!content.contains("allowed_host_paths"));
         assert!(!content.contains("[service_cache"));
-    }
-
-    #[test]
-    fn test_add_incoming_allowed_peer() {
-        let (config, _path) = create_temp_config();
-        let peer_id = PeerId::random();
-        let updated_config = config.add_incoming_allowed_peer(&peer_id).unwrap();
-        assert!(
-            updated_config
-                .network
-                .incoming_allowed_peers
-                .contains(&peer_id)
-        );
-        assert!(config.config_file.exists());
-        let content = std::fs::read_to_string(&config.config_file).unwrap();
-        println!("Config content: {content}");
-        assert!(content.contains(&peer_id.to_string()));
-    }
-
-    #[test]
-    fn test_remove_incoming_allowed_peer() {
-        let (config, _temp_dir) = create_temp_config();
-
-        // Add a peer first
-        let peer_id = PeerId::random();
-        let config_with_peer = config.add_incoming_allowed_peer(&peer_id).unwrap();
-        assert!(
-            config_with_peer
-                .network
-                .incoming_allowed_peers
-                .contains(&peer_id)
-        );
-
-        // Remove it
-        let final_config = config_with_peer
-            .remove_incoming_allowed_peer(&peer_id)
-            .unwrap();
-
-        // Verify it's removed from memory
-        assert!(
-            !final_config
-                .network
-                .incoming_allowed_peers
-                .contains(&peer_id)
-        );
-
-        // Verify changes were persisted
-        let content = std::fs::read_to_string(&config.config_file).unwrap();
-        assert!(!content.contains(&peer_id.to_string()));
     }
 
     #[test]

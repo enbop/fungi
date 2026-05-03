@@ -44,25 +44,14 @@ fn cli_can_create_and_access_remote_tcp_tunnel_service() {
         [
             "device",
             "add",
-            b_peer.as_str(),
-            "--name",
             "b",
+            b_peer.as_str(),
             "--addr",
             b_addr.as_str(),
         ],
     );
-    run_cli_with_input(
-        b.path(),
-        [
-            "security",
-            "allowed-peers",
-            "add",
-            a_peer.as_str(),
-            "--name",
-            "a",
-        ],
-        "y\n",
-    );
+    run_cli(b.path(), ["device", "add", "a", a_peer.as_str()]);
+    run_cli_with_input(b.path(), ["device", "trust", "a"], "y\n");
 
     let target = TcpListener::bind("127.0.0.1:0").unwrap();
     let target_port = target.local_addr().unwrap().port();

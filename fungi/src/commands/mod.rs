@@ -79,7 +79,7 @@ pub enum Commands {
     /// Show daemon information
     #[command(subcommand)]
     Info(fungi_control::InfoCommands),
-    /// Manage runtime safety boundary settings and incoming peer allowlists
+    /// Manage runtime safety boundary settings
     #[command(subcommand, visible_alias = "sec")]
     Security(fungi_control::SecurityCommands),
     /// Manage services on this node or your devices

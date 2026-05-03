@@ -108,13 +108,11 @@ impl FungiDaemon {
             .to_string()
     }
 
-    pub fn add_incoming_allowed_peer(&self, peer_id: PeerId) -> Result<()> {
-        // update config and write config file
-        let current_config = self.config().lock().clone();
-        let updated_config = current_config.add_incoming_allowed_peer(&peer_id)?;
-        *self.config().lock() = updated_config;
+    pub fn trust_device(&self, peer_id: PeerId) -> Result<()> {
+        let current_config = self.trusted_devices().lock().clone();
+        let updated_config = current_config.add_trusted_device(&peer_id)?;
+        *self.trusted_devices().lock() = updated_config;
 
-        // update state
         self.swarm_control()
             .state()
             .incoming_allowed_peers()
@@ -123,12 +121,11 @@ impl FungiDaemon {
         Ok(())
     }
 
-    pub fn remove_incoming_allowed_peer(&self, peer_id: PeerId) -> Result<()> {
-        // update config and write config file
-        let current_config = self.config().lock().clone();
-        let updated_config = current_config.remove_incoming_allowed_peer(&peer_id)?;
-        *self.config().lock() = updated_config;
-        // update state
+    pub fn untrust_device(&self, peer_id: PeerId) -> Result<()> {
+        let current_config = self.trusted_devices().lock().clone();
+        let updated_config = current_config.remove_trusted_device(&peer_id)?;
+        *self.trusted_devices().lock() = updated_config;
+
         self.swarm_control()
             .state()
             .incoming_allowed_peers()

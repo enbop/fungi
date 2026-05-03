@@ -23,6 +23,7 @@ use fungi_config::{
     direct_addresses::DirectAddressCache,
     file_transfer::{FileTransferClient as FTCConfig, FileTransferService as FTSConfig},
     local_access::LocalAccessConfig,
+    trusted_devices::TrustedDevicesConfig,
 };
 use fungi_swarm::{
     ConnectionDirection, FungiSwarm, PeerAddressSource, State, SwarmControl, TSwarm,
@@ -46,6 +47,7 @@ struct TaskHandles {
 pub struct FungiDaemon {
     config: Arc<Mutex<FungiConfig>>,
     devices_config: Arc<Mutex<DevicesConfig>>,
+    trusted_devices_config: Arc<Mutex<TrustedDevicesConfig>>,
     direct_address_cache: Arc<Mutex<DirectAddressCache>>,
     args: DaemonArgs,
 
@@ -70,6 +72,10 @@ impl FungiDaemon {
 
     pub fn devices(&self) -> Arc<Mutex<DevicesConfig>> {
         self.devices_config.clone()
+    }
+
+    pub fn trusted_devices(&self) -> Arc<Mutex<TrustedDevicesConfig>> {
+        self.trusted_devices_config.clone()
     }
 
     pub fn swarm_control(&self) -> &SwarmControl {
@@ -119,9 +125,18 @@ impl FungiDaemon {
         let keypair = get_keypair_from_dir(&fungi_dir)?;
 
         let devices_config = DevicesConfig::apply_from_dir(&fungi_dir)?;
+        let trusted_devices_config = TrustedDevicesConfig::apply_from_dir(&fungi_dir)?;
         let direct_address_cache = DirectAddressCache::apply_from_dir(&fungi_dir)?;
 
-        Self::start_with(args, config, keypair, devices_config, direct_address_cache).await
+        Self::start_with(
+            args,
+            config,
+            keypair,
+            devices_config,
+            trusted_devices_config,
+            direct_address_cache,
+        )
+        .await
     }
 
     pub async fn start_with(
@@ -129,12 +144,12 @@ impl FungiDaemon {
         config: FungiConfig,
         keypair: Keypair,
         devices_config: DevicesConfig,
+        trusted_devices_config: TrustedDevicesConfig,
         direct_address_cache: DirectAddressCache,
     ) -> Result<Self> {
         let state = State::new(
-            config
-                .network
-                .incoming_allowed_peers
+            trusted_devices_config
+                .trusted_devices
                 .clone()
                 .into_iter()
                 .collect(),
@@ -253,6 +268,7 @@ impl FungiDaemon {
         };
 
         let devices_config = Arc::new(Mutex::new(devices_config));
+        let trusted_devices_config = Arc::new(Mutex::new(trusted_devices_config));
         let direct_address_cache = Arc::new(Mutex::new(direct_address_cache));
 
         let task_handles = TaskHandles {
@@ -267,6 +283,7 @@ impl FungiDaemon {
         let daemon = Self {
             config: shared_config,
             devices_config,
+            trusted_devices_config,
             direct_address_cache,
             args,
             swarm_control,

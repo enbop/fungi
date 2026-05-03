@@ -1,4 +1,3 @@
-use libp2p_identity::PeerId;
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 
@@ -34,8 +33,6 @@ pub struct Network {
     pub listen_tcp_port: u16,
     #[serde(default)]
     pub listen_udp_port: u16,
-    #[serde(default)]
-    pub incoming_allowed_peers: Vec<PeerId>,
     #[serde(default = "default_relay_enabled")]
     pub relay_enabled: bool,
     #[serde(default = "default_use_community_relays")]
@@ -105,7 +102,6 @@ impl Default for Network {
         Self {
             listen_tcp_port: 0,
             listen_udp_port: 0,
-            incoming_allowed_peers: Vec::new(),
             relay_enabled: default_relay_enabled(),
             use_community_relays: default_use_community_relays(),
             custom_relay_addresses: Vec::new(),

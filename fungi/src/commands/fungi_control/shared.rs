@@ -10,13 +10,13 @@ const CLI_CONTEXT_FILE: &str = "cli_context.json";
 
 #[derive(Args, Debug, Clone)]
 pub struct PeerTargetArg {
-    #[arg(short = 'p', long = "peer", help = "Peer ID or name")]
+    #[arg(short = 'p', long = "peer", help = "Device ID or name")]
     pub peer: Option<PeerInput>,
 }
 
 #[derive(Args, Debug, Clone, Default)]
 pub struct OptionalPeerTargetArg {
-    #[arg(short = 'p', long = "peer", help = "Peer ID or name")]
+    #[arg(short = 'p', long = "peer", help = "Device ID or name")]
     pub peer: Option<PeerInput>,
 }
 
@@ -45,7 +45,7 @@ impl FromStr for PeerInput {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         let value = value.trim();
         if value.is_empty() {
-            return Err("Peer ID or name cannot be empty".to_string());
+            return Err("Device ID or name cannot be empty".to_string());
         }
 
         if let Ok(peer_id) = value.parse::<PeerId>() {
@@ -92,7 +92,7 @@ pub fn resolve_required_peer(
         return Ok(peer);
     }
 
-    Err("No peer selected. Use --peer/-p or `fungi peer use <peer>`.".to_string())
+    Err("No device selected. Use a device name or device ID.".to_string())
 }
 
 pub fn resolve_optional_peer(
@@ -146,8 +146,8 @@ pub fn resolve_peer_input(
             let name = device_info.as_ref().and_then(|entry| entry.name.clone());
             if name.is_none() {
                 return Err(format!(
-                    "Peer {} is not named yet. Name it first with `fungi device add {} --name <name>` or `fungi device rename {} <name>`.",
-                    peer_id, peer_id, peer_id
+                    "Device ID {} is not saved yet. Add it first with `fungi device add <name> {}`.",
+                    peer_id, peer_id
                 ));
             }
 
@@ -196,9 +196,9 @@ pub fn print_target_peer(peer: &ResolvedPeerTarget) {
     let name = peer.name.as_deref().unwrap_or("<unnamed>");
     match peer.hostname.as_deref() {
         Some(hostname) if !hostname.is_empty() => {
-            eprintln!("Target peer: {name} ({}) [{hostname}]", peer.peer_id)
+            eprintln!("Target device: {name} ({}) [{hostname}]", peer.peer_id)
         }
-        _ => eprintln!("Target peer: {name} ({})", peer.peer_id),
+        _ => eprintln!("Target device: {name} ({})", peer.peer_id),
     }
 }
 

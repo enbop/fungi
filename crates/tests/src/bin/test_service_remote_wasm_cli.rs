@@ -36,7 +36,8 @@ fn main() -> Result<()> {
     println!("Provider peer id: {provider_peer_id}");
     println!("Controller peer id: {controller_peer_id}");
 
-    provider.allowed_peer_add(&controller_peer_id)?;
+    provider.device_add(&controller_peer_id, "controller")?;
+    provider.trust_device(&controller_peer_id)?;
     wait_for_mdns_peer(&provider, &controller_peer_id, Duration::from_secs(45))?;
     wait_for_mdns_peer(&controller, &provider_peer_id, Duration::from_secs(45))?;
 
@@ -179,10 +180,21 @@ impl TestNode {
         self.run_cli(["info", "id"])
     }
 
-    fn allowed_peer_add(&self, peer_id: &str) -> Result<()> {
-        let output = self.run_cli(["allowed-peers", "add", peer_id])?;
-        if !output.contains("Peer added successfully") {
-            bail!("unexpected allowlist output on {}: {output}", self.name);
+    fn device_add(&self, peer_id: &str, name: &str) -> Result<()> {
+        let output = self.run_cli(["device", "add", name, peer_id])?;
+        if !output.contains("Device saved") {
+            bail!("unexpected device add output on {}: {output}", self.name);
+        }
+        Ok(())
+    }
+
+    fn trust_device(&self, peer_id: &str) -> Result<()> {
+        let output = self.run_cli(["device", "trust", peer_id])?;
+        if !output.contains("Device trusted") {
+            bail!(
+                "unexpected trusted-device output on {}: {output}",
+                self.name
+            );
         }
         Ok(())
     }
