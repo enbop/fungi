@@ -20,16 +20,14 @@ service FungiDaemon {
   // Returns the hostname advertised by the daemon.
   rpc Hostname(Empty) returns (HostnameResponse) {}
 
-  // Lists peers that are allowed to initiate incoming connections.
-  rpc GetIncomingAllowedPeers(Empty)
-  returns (IncomingAllowedPeersListResponse) {}
+  // Lists devices trusted to initiate incoming access.
+  rpc ListTrustedDevices(Empty) returns (TrustedDevicesListResponse) {}
 
-  // Adds a peer ID to the allowlist for incoming connections and persists it.
-  rpc AddIncomingAllowedPeer(AddIncomingAllowedPeerRequest) returns (Empty) {}
+  // Trusts a saved device for incoming access and persists it.
+  rpc TrustDevice(TrustDeviceRequest) returns (Empty) {}
 
-  // Removes a peer ID from the allowlist for incoming connections.
-  rpc RemoveIncomingAllowedPeer(RemoveIncomingAllowedPeerRequest)
-  returns (Empty) {}
+  // Removes incoming access trust from a device.
+  rpc UntrustDevice(UntrustDeviceRequest) returns (Empty) {}
 
   // Returns persisted relay configuration and the current effective relay list.
   rpc GetRelayConfig(Empty) returns (RelayConfigResponse) {}
@@ -49,7 +47,7 @@ service FungiDaemon {
   // Removes a custom relay address from the persisted configuration.
   rpc RemoveCustomRelayAddress(RelayAddressRequest) returns (Empty) {}
 
-  // Returns runtime enablement flags and the current shared safety boundary.
+  // Returns runtime enablement flags and explicit host path policy.
   rpc GetRuntimeConfig(Empty) returns (RuntimeConfigResponse) {}
 
   // Returns the local runtime status currently observed by the daemon.
@@ -60,20 +58,6 @@ service FungiDaemon {
 
   // Removes a host path root from the shared runtime safety boundary.
   rpc RemoveRuntimeAllowedHostPath(RuntimeAllowedHostPathRequest)
-  returns (Empty) {}
-
-  // Adds a single TCP port to the shared runtime safety boundary.
-  rpc AddRuntimeAllowedPort(RuntimeAllowedPortRequest) returns (Empty) {}
-
-  // Removes a single TCP port from the shared runtime safety boundary.
-  rpc RemoveRuntimeAllowedPort(RuntimeAllowedPortRequest) returns (Empty) {}
-
-  // Adds a TCP port range to the shared runtime safety boundary.
-  rpc AddRuntimeAllowedPortRange(RuntimeAllowedPortRangeRequest)
-  returns (Empty) {}
-
-  // Removes a TCP port range from the shared runtime safety boundary.
-  rpc RemoveRuntimeAllowedPortRange(RuntimeAllowedPortRangeRequest)
   returns (Empty) {}
 
   // Indicates whether the embedded file transfer service is running.
@@ -136,21 +120,20 @@ service FungiDaemon {
   // Deletes an existing TCP listening rule by identifier.
   rpc RemoveTcpListeningRule(RemoveTcpListeningRuleRequest) returns (Empty) {}
 
-  // Returns latest metadata for peers discovered via mDNS.
-  rpc ListMdnsDevices(Empty) returns (PeerInfoListResponse) {}
+  // Returns latest metadata for devices discovered via mDNS.
+  rpc ListMdnsDevices(Empty) returns (DeviceInfoListResponse) {}
 
-  // Lists every peer stored in the address book.
-  rpc ListAddressBookPeers(Empty) returns (PeerInfoListResponse) {}
+  // Lists every user-managed device.
+  rpc ListDevices(Empty) returns (DeviceInfoListResponse) {}
 
-  // Inserts or updates a peer entry in the address book.
-  rpc UpdateAddressBookPeer(UpdateAddressBookPeerRequest) returns (Empty) {}
+  // Inserts or updates a user-managed device.
+  rpc UpdateDevice(UpdateDeviceRequest) returns (Empty) {}
 
-  // Returns detailed information for a single address book peer.
-  rpc GetAddressBookPeer(GetAddressBookPeerRequest) returns (PeerInfoResponse) {
-  }
+  // Returns detailed information for a single user-managed device.
+  rpc GetDevice(GetDeviceRequest) returns (DeviceInfoResponse) {}
 
-  // Removes a peer from the address book.
-  rpc RemoveAddressBookPeer(RemoveAddressBookPeerRequest) returns (Empty) {}
+  // Removes a user-managed device.
+  rpc RemoveDevice(RemoveDeviceRequest) returns (Empty) {}
 
   // Continuously pings all active connections to a peer and streams results.
   rpc PingPeer(PingPeerRequest) returns (stream PingPeerEvent) {}
@@ -239,11 +222,11 @@ service FungiDaemon {
 message Empty {}
 
 message VersionResponse {
-  string version = 1;
-  string channel = 2;
-  string commit = 3;
-  string build_time = 4;
-  string default_fungi_dir = 5;
+  string version             = 1;
+  string channel             = 2;
+  string commit              = 3;
+  string build_time          = 4;
+  string default_fungi_dir   = 5;
   string default_rpc_address = 6;
 }
 
@@ -253,11 +236,11 @@ message PeerIdResponse { string peer_id = 1; }
 
 message ConfigFilePathResponse { string config_file_path = 1; }
 
-message IncomingAllowedPeersListResponse { repeated PeerInfo peers = 1; }
+message TrustedDevicesListResponse { repeated DeviceInfo devices = 1; }
 
-message AddIncomingAllowedPeerRequest { string peer_id = 1; }
+message TrustDeviceRequest { string peer_id = 1; }
 
-message RemoveIncomingAllowedPeerRequest { string peer_id = 1; }
+message UntrustDeviceRequest { string peer_id = 1; }
 
 message RelayEnabledRequest { bool enabled = 1; }
 
@@ -275,11 +258,11 @@ message EffectiveRelayAddress {
 }
 
 message RelayConfigResponse {
-  bool                           relay_enabled             = 1;
-  bool                           use_community_relays      = 2;
+  bool relay_enabled        = 1;
+  bool use_community_relays = 2;
   // User-facing relay list. The daemon keeps one list in config and separates
   // TCP relay carriers from UDP/QUIC observers internally.
-  repeated string                custom_relay_addresses    = 3;
+  repeated string custom_relay_addresses = 3;
   // Community plus custom relay addresses after config resolution, with the
   // same TCP-carrier / UDP-observer semantics as custom_relay_addresses.
   repeated EffectiveRelayAddress effective_relay_addresses = 4;
@@ -287,24 +270,10 @@ message RelayConfigResponse {
 
 message RuntimeAllowedHostPathRequest { string path = 1; }
 
-message RuntimeAllowedPortRequest { int32 port = 1; }
-
-message RuntimeAllowedPortRangeRequest {
-  int32 start = 1;
-  int32 end   = 2;
-}
-
-message RuntimeAllowedPortRange {
-  int32 start = 1;
-  int32 end   = 2;
-}
-
 message RuntimeConfigResponse {
-  bool                             disable_docker      = 1;
-  bool                             disable_wasmtime    = 2;
-  repeated string                  allowed_host_paths  = 3;
-  repeated int32                   allowed_ports       = 4;
-  repeated RuntimeAllowedPortRange allowed_port_ranges = 5;
+  bool            disable_docker     = 1;
+  bool            disable_wasmtime   = 2;
+  repeated string allowed_host_paths = 3;
 }
 
 message RuntimeAvailabilityStatus {
@@ -431,9 +400,9 @@ message RemoveTcpListeningRuleRequest {
   string protocol   = 3;
 }
 
-message PeerInfo {
+message DeviceInfo {
   string          peer_id        = 1;
-  string          alias          = 2;
+  string          name           = 2;
   string          hostname       = 3;
   string          os             = 4;
   string          public_ip      = 5;
@@ -441,17 +410,18 @@ message PeerInfo {
   int64           created_at     = 7;
   int64           last_connected = 8;
   string          version        = 9;
+  repeated string multiaddrs     = 10;
 }
 
-message PeerInfoListResponse { repeated PeerInfo peers = 1; }
+message DeviceInfoListResponse { repeated DeviceInfo devices = 1; }
 
-message PeerInfoResponse { PeerInfo peer_info = 1; }
+message DeviceInfoResponse { DeviceInfo device = 1; }
 
-message UpdateAddressBookPeerRequest { PeerInfo peer_info = 1; }
+message UpdateDeviceRequest { DeviceInfo device = 1; }
 
-message GetAddressBookPeerRequest { string peer_id = 1; }
+message GetDeviceRequest { string peer_id = 1; }
 
-message RemoveAddressBookPeerRequest { string peer_id = 1; }
+message RemoveDeviceRequest { string peer_id = 1; }
 
 message PingPeerRequest {
   string peer_id     = 1;
@@ -510,7 +480,7 @@ message ConnectionSnapshot {
   repeated ProtocolStreamCountSnapshot active_streams_by_protocol = 9;
   string                               policy_state               = 10;
   string                               policy_reason              = 11;
-  string                               peer_alias                 = 12;
+  string                               peer_name                  = 12;
   string                               peer_role                  = 13;
 }
 
@@ -624,7 +594,10 @@ message ServiceLogsResponse {
 
 message ListServicesResponse { string services_json = 1; }
 
-message ListPeerCatalogRequest { string peer_id = 1; }
+message ListPeerCatalogRequest {
+  string peer_id = 1;
+  bool   cached  = 2;
+}
 
 message ListPeerCatalogResponse { string services_json = 1; }
 
@@ -647,13 +620,15 @@ message RemotePeerRequest { string peer_id = 1; }
 message RemoteServiceControlResponse { string service_name = 1; }
 
 message AttachServiceAccessRequest {
-  string peer_id    = 1;
-  string service_id = 2;
+  string peer_id      = 1;
+  string service_name = 2;
+  string entry        = 3;
+  int32  local_port   = 4;
 }
 
 message DetachServiceAccessRequest {
-  string peer_id    = 1;
-  string service_id = 2;
+  string peer_id      = 1;
+  string service_name = 2;
 }
 
 message ListServiceAccessesRequest {

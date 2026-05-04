@@ -1,4 +1,4 @@
-mod address_book;
+mod devices;
 mod file_transfer;
 mod peer;
 mod relay;

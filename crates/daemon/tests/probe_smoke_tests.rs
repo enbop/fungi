@@ -127,12 +127,12 @@ async fn active_probe_ping_can_use_inbound_connection_id() -> Result<()> {
 
     let server = TestDaemonBuilder::new()
         .with_keypair(server_kp)
-        .with_allowed_peer(client_peer_id)
+        .with_trusted_device(client_peer_id)
         .build()
         .await?;
     let client = TestDaemonBuilder::new()
         .with_keypair(client_kp)
-        .with_allowed_peer(server_peer_id)
+        .with_trusted_device(server_peer_id)
         .build()
         .await?;
 

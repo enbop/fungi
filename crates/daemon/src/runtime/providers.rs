@@ -9,6 +9,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
+use fungi_config::paths::FungiPaths;
 use fungi_docker_agent::LogsOptions;
 use parking_lot::Mutex;
 use tokio::process::Child;
@@ -113,6 +114,7 @@ pub(crate) struct WasmtimeServiceState {
     pub(crate) source_display: String,
     pub(crate) staged_component_path: PathBuf,
     pub(crate) service_dir: PathBuf,
+    pub(crate) runtime_dir: PathBuf,
     pub(crate) log_file_path: PathBuf,
     pub(crate) child: Option<Child>,
     pub(crate) last_exit_code: Option<i32>,
@@ -145,6 +147,7 @@ impl WasmtimeRuntimeProvider {
         fungi_home: PathBuf,
         allowed_host_paths: Vec<PathBuf>,
     ) -> Self {
+        let allowed_host_paths = with_default_mount_roots(&fungi_home, allowed_host_paths);
         Self {
             runtime_root,
             launcher_path,
@@ -155,33 +158,47 @@ impl WasmtimeRuntimeProvider {
     }
 
     pub fn update_allowed_host_paths(&self, allowed_host_paths: Vec<PathBuf>) {
-        *self.allowed_host_paths.lock() = allowed_host_paths;
+        *self.allowed_host_paths.lock() =
+            with_default_mount_roots(&self.fungi_home, allowed_host_paths);
     }
 
     pub fn has_service(&self, handle: &str) -> bool {
         self.services.lock().contains_key(handle)
     }
 
-    pub(crate) async fn restore(&self, manifest: &ServiceManifest) -> Result<()> {
+    pub(crate) async fn restore(
+        &self,
+        manifest: &ServiceManifest,
+        local_service_id: &str,
+    ) -> Result<()> {
         let allowed_host_paths = self.allowed_host_paths.lock().clone();
-        let state =
-            build_wasmtime_state(&self.runtime_root, &allowed_host_paths, manifest, false).await?;
+        let state = build_wasmtime_state(
+            &self.runtime_root,
+            &self.service_artifacts_dir(local_service_id),
+            &allowed_host_paths,
+            manifest,
+            false,
+        )
+        .await?;
         let mut services = self.services.lock();
         services.entry(manifest.name.clone()).or_insert(state);
         Ok(())
     }
-}
 
-#[async_trait]
-impl RuntimeProvider for WasmtimeRuntimeProvider {
-    fn runtime_kind(&self) -> RuntimeKind {
-        RuntimeKind::Wasmtime
-    }
-
-    async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
+    pub(crate) async fn pull_with_local_service_id(
+        &self,
+        manifest: &ServiceManifest,
+        local_service_id: &str,
+    ) -> Result<ServiceInstance> {
         let allowed_host_paths = self.allowed_host_paths.lock().clone();
-        let state =
-            build_wasmtime_state(&self.runtime_root, &allowed_host_paths, manifest, true).await?;
+        let state = build_wasmtime_state(
+            &self.runtime_root,
+            &self.service_artifacts_dir(local_service_id),
+            &allowed_host_paths,
+            manifest,
+            true,
+        )
+        .await?;
 
         {
             let mut services = self.services.lock();
@@ -192,6 +209,40 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
         }
 
         self.inspect(&manifest.name).await
+    }
+
+    pub(crate) async fn remove_with_local_service_id(
+        &self,
+        handle: &str,
+        local_service_id: &str,
+    ) -> Result<()> {
+        self.remove_artifacts_and_runtime(handle, Some(local_service_id))
+            .await
+    }
+
+    fn service_artifacts_dir(&self, local_service_id: &str) -> PathBuf {
+        FungiPaths::from_fungi_home(&self.fungi_home).service_artifacts_dir(local_service_id)
+    }
+}
+
+fn with_default_mount_roots(fungi_home: &Path, mut paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    let fungi_paths = FungiPaths::from_fungi_home(fungi_home);
+    paths.push(fungi_paths.appdata_root());
+    paths.push(fungi_paths.user_root());
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
+#[async_trait]
+impl RuntimeProvider for WasmtimeRuntimeProvider {
+    fn runtime_kind(&self) -> RuntimeKind {
+        RuntimeKind::Wasmtime
+    }
+
+    async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
+        self.pull_with_local_service_id(manifest, &manifest.name)
+            .await
     }
 
     async fn start(&self, handle: &str) -> Result<()> {
@@ -271,26 +322,7 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
     }
 
     async fn remove(&self, handle: &str) -> Result<()> {
-        self.stop(handle).await.ok();
-
-        let state = {
-            let mut services = self.services.lock();
-            services.remove(handle)
-        };
-
-        let service_dir = state
-            .map(|state| state.service_dir)
-            .unwrap_or_else(|| self.runtime_root.join("wasmtime").join(handle));
-
-        if service_dir.exists() {
-            remove_dir_all_with_retry(&service_dir).with_context(|| {
-                format!(
-                    "Failed to remove runtime directory: {}",
-                    service_dir.display()
-                )
-            })?;
-        }
-        Ok(())
+        self.remove_artifacts_and_runtime(handle, None).await
     }
 
     async fn inspect(&self, handle: &str) -> Result<ServiceInstance> {
@@ -324,5 +356,48 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
             raw,
             text: tail_lines(&text, options.tail.as_deref()),
         })
+    }
+}
+
+impl WasmtimeRuntimeProvider {
+    async fn remove_artifacts_and_runtime(
+        &self,
+        handle: &str,
+        local_service_id: Option<&str>,
+    ) -> Result<()> {
+        self.stop(handle).await.ok();
+
+        let state = {
+            let mut services = self.services.lock();
+            services.remove(handle)
+        };
+
+        let (service_dir, runtime_dir) = state
+            .map(|state| (state.service_dir, state.runtime_dir))
+            .unwrap_or_else(|| {
+                let service_dir = local_service_id
+                    .map(|local_service_id| self.service_artifacts_dir(local_service_id))
+                    .unwrap_or_else(|| self.service_artifacts_dir(handle));
+                let runtime_dir = self.runtime_root.join("wasmtime").join(handle);
+                (service_dir, runtime_dir)
+            });
+
+        if service_dir.exists() {
+            remove_dir_all_with_retry(&service_dir).with_context(|| {
+                format!(
+                    "Failed to remove service artifacts directory: {}",
+                    service_dir.display()
+                )
+            })?;
+        }
+        if runtime_dir.exists() {
+            remove_dir_all_with_retry(&runtime_dir).with_context(|| {
+                format!(
+                    "Failed to remove runtime directory: {}",
+                    runtime_dir.display()
+                )
+            })?;
+        }
+        Ok(())
     }
 }

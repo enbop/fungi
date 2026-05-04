@@ -17,8 +17,12 @@ use super::{
         enrich_instance_from_manifest, ensure_services_root_exists,
         is_missing_docker_container_error, missing_instance_from_manifest,
     },
-    manifest::{parse_service_manifest_yaml_with_policy, service_expose_endpoint_bindings},
+    manifest::{
+        ManifestPathRoots, parse_service_manifest_yaml_with_policy,
+        service_expose_endpoint_bindings,
+    },
     model::*,
+    parse_service_manifest_yaml_with_policy_for_service_paths, peek_service_manifest_name,
     providers::{DockerRuntimeProvider, RuntimeProvider, WasmtimeRuntimeProvider},
 };
 
@@ -78,6 +82,7 @@ impl RuntimeControl {
         match runtime {
             RuntimeKind::Docker => self.docker.is_some(),
             RuntimeKind::Wasmtime => self.wasmtime_enabled,
+            RuntimeKind::Link => true,
         }
     }
 
@@ -86,6 +91,14 @@ impl RuntimeControl {
     }
 
     pub async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
+        self.pull_with_local_service_id(manifest, None).await
+    }
+
+    async fn pull_with_local_service_id(
+        &self,
+        manifest: &ServiceManifest,
+        local_service_id: Option<&str>,
+    ) -> Result<ServiceInstance> {
         self.ensure_runtime_enabled(manifest.runtime)?;
         {
             let services = self.service_index.lock();
@@ -94,9 +107,22 @@ impl RuntimeControl {
             }
         }
 
+        let resolved_local_service_id = match local_service_id {
+            Some(local_service_id) => local_service_id.to_string(),
+            None => self
+                .service_state
+                .lock()
+                .preview_local_service_id(&manifest.name)?,
+        };
+
         let instance = match manifest.runtime {
             RuntimeKind::Docker => self.docker_provider()?.pull(manifest).await,
-            RuntimeKind::Wasmtime => self.wasmtime.pull(manifest).await,
+            RuntimeKind::Wasmtime => {
+                self.wasmtime
+                    .pull_with_local_service_id(manifest, &resolved_local_service_id)
+                    .await
+            }
+            RuntimeKind::Link => Ok(self.link_instance_from_manifest(manifest, false)),
         }?;
 
         self.service_index
@@ -105,7 +131,11 @@ impl RuntimeControl {
         self.service_manifests
             .lock()
             .insert(manifest.name.clone(), manifest.clone());
-        self.persist_service(manifest, DesiredServiceState::Stopped)?;
+        self.persist_service(
+            manifest,
+            DesiredServiceState::Stopped,
+            Some(&resolved_local_service_id),
+        )?;
         Ok(enrich_instance_from_manifest(instance, manifest))
     }
 
@@ -116,8 +146,24 @@ impl RuntimeControl {
         fungi_home: &Path,
         policy: &ManifestResolutionPolicy,
     ) -> Result<ServiceInstance> {
-        let manifest = self.resolve_manifest_yaml(content, base_dir, fungi_home, policy)?;
-        self.pull(&manifest).await
+        let manifest_name = peek_service_manifest_name(content)?;
+        let local_service_id = {
+            self.service_state
+                .lock()
+                .preview_local_service_id(&manifest_name)?
+        };
+        let used_host_ports = self.reserved_host_ports();
+        let path_roots = ManifestPathRoots::for_local_service_id(fungi_home, &local_service_id);
+        let manifest = parse_service_manifest_yaml_with_policy_for_service_paths(
+            content,
+            base_dir,
+            fungi_home,
+            &path_roots,
+            policy,
+            &used_host_ports,
+        )?;
+        self.pull_with_local_service_id(&manifest, Some(&local_service_id))
+            .await
     }
 
     pub fn resolve_manifest_yaml(
@@ -143,6 +189,7 @@ impl RuntimeControl {
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.start(name).await,
             RuntimeKind::Wasmtime => self.wasmtime.start(name).await,
+            RuntimeKind::Link => Ok(()),
         }?;
         self.set_desired_state(name, DesiredServiceState::Running)
     }
@@ -152,6 +199,7 @@ impl RuntimeControl {
         let stop_result = match runtime {
             RuntimeKind::Docker => self.docker_provider()?.stop(name).await,
             RuntimeKind::Wasmtime => self.wasmtime.stop(name).await,
+            RuntimeKind::Link => Ok(()),
         };
 
         match stop_result {
@@ -173,7 +221,13 @@ impl RuntimeControl {
     pub async fn remove(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
         let remove_result = match runtime {
             RuntimeKind::Docker => self.docker_provider()?.remove(name).await,
-            RuntimeKind::Wasmtime => self.wasmtime.remove(name).await,
+            RuntimeKind::Wasmtime => {
+                let local_service_id = self.service_state.lock().local_service_id(name)?;
+                self.wasmtime
+                    .remove_with_local_service_id(name, &local_service_id)
+                    .await
+            }
+            RuntimeKind::Link => Ok(()),
         };
 
         match remove_result {
@@ -260,8 +314,6 @@ impl RuntimeControl {
 
             services.push(CatalogService {
                 service_name: manifest.name.clone(),
-                service_id: expose.service_id,
-                display_name: expose.display_name,
                 runtime: manifest.runtime,
                 transport: expose.transport,
                 usage: expose.usage,
@@ -279,7 +331,7 @@ impl RuntimeControl {
             });
         }
 
-        services.sort_by(|left, right| left.service_id.cmp(&right.service_id));
+        services.sort_by(|left, right| left.service_name.cmp(&right.service_name));
         Ok(services)
     }
 
@@ -327,6 +379,17 @@ impl RuntimeControl {
         let inspect_result = match runtime {
             RuntimeKind::Docker => self.docker_provider()?.inspect(name).await,
             RuntimeKind::Wasmtime => self.wasmtime.inspect(name).await,
+            RuntimeKind::Link => {
+                let manifest = self
+                    .get_service_manifest(name)
+                    .ok_or_else(|| anyhow::anyhow!("service not found: {name}"))?;
+                let running = self
+                    .service_state
+                    .lock()
+                    .desired_state(name)
+                    .is_some_and(|state| state == DesiredServiceState::Running);
+                return Ok(self.link_instance_from_manifest(&manifest, running));
+            }
         };
 
         let instance = match inspect_result {
@@ -364,6 +427,7 @@ impl RuntimeControl {
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.logs(name, options).await,
             RuntimeKind::Wasmtime => self.wasmtime.logs(name, options).await,
+            RuntimeKind::Link => bail!("link services do not have runtime logs"),
         }
     }
 
@@ -371,6 +435,7 @@ impl RuntimeControl {
         let persisted_services = { self.service_state.lock().persisted_services() };
 
         for PersistedService {
+            local_service_id,
             manifest,
             desired_state,
         } in persisted_services
@@ -384,7 +449,7 @@ impl RuntimeControl {
 
             if manifest.runtime == RuntimeKind::Wasmtime
                 && self.wasmtime_enabled
-                && let Err(error) = self.wasmtime.restore(&manifest).await
+                && let Err(error) = self.wasmtime.restore(&manifest, &local_service_id).await
             {
                 log::warn!(
                     "Failed to restore persisted wasmtime service '{}': {}",
@@ -425,6 +490,7 @@ impl RuntimeControl {
                     bail!("wasmtime runtime is disabled in config");
                 }
             }
+            RuntimeKind::Link => {}
         }
         Ok(())
     }
@@ -440,17 +506,20 @@ impl RuntimeControl {
             .get(name)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("service not found: {name}"))?;
-        self.wasmtime.restore(&manifest).await
+        let local_service_id = self.service_state.lock().local_service_id(name)?;
+        self.wasmtime.restore(&manifest, &local_service_id).await
     }
 
     fn persist_service(
         &self,
         manifest: &ServiceManifest,
         desired_state: DesiredServiceState,
+        local_service_id: Option<&str>,
     ) -> Result<()> {
         self.service_state
             .lock()
-            .upsert_service(manifest, desired_state)
+            .upsert_service_with_local_service_id(manifest, desired_state, local_service_id)
+            .map(|_| ())
     }
 
     fn set_desired_state(&self, name: &str, desired_state: DesiredServiceState) -> Result<()> {
@@ -473,5 +542,28 @@ impl RuntimeControl {
             .values()
             .flat_map(|manifest| manifest.ports.iter().map(|port| port.host_port))
             .collect()
+    }
+
+    fn link_instance_from_manifest(
+        &self,
+        manifest: &ServiceManifest,
+        running: bool,
+    ) -> ServiceInstance {
+        ServiceInstance {
+            id: format!("link:{}", manifest.name),
+            runtime: RuntimeKind::Link,
+            name: manifest.name.clone(),
+            source: match &manifest.source {
+                ServiceSource::TcpLink { host, port } => format!("{host}:{port}"),
+                _ => "link".to_string(),
+            },
+            labels: manifest.labels.clone(),
+            ports: manifest.ports.clone(),
+            exposed_endpoints: service_expose_endpoint_bindings(manifest),
+            status: ServiceStatus {
+                state: if running { "running" } else { "stopped" }.to_string(),
+                running,
+            },
+        }
     }
 }

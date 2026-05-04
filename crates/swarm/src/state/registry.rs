@@ -302,6 +302,25 @@ impl State {
             .record_peer_address(peer_id, address, source)
     }
 
+    pub fn restore_peer_address_record(
+        &self,
+        peer_id: PeerId,
+        address: Multiaddr,
+        source: PeerAddressSource,
+        first_observed_at: SystemTime,
+        last_observed_at: SystemTime,
+        observation_count: u64,
+    ) -> crate::PeerAddressObservation {
+        self.connectivity_state.lock().restore_peer_address_record(
+            peer_id,
+            address,
+            source,
+            first_observed_at,
+            last_observed_at,
+            observation_count,
+        )
+    }
+
     pub fn expire_peer_address(&self, peer_id: PeerId, address: Multiaddr) -> bool {
         self.connectivity_state
             .lock()

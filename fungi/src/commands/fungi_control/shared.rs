@@ -1,5 +1,5 @@
 use clap::Args;
-use fungi_config::{FungiDir, address_book::AddressBookConfig};
+use fungi_config::{FungiDir, devices::DevicesConfig};
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
@@ -10,21 +10,34 @@ const CLI_CONTEXT_FILE: &str = "cli_context.json";
 
 #[derive(Args, Debug, Clone)]
 pub struct PeerTargetArg {
-    #[arg(short = 'p', long = "peer", help = "Peer ID or alias")]
+    #[arg(short = 'p', long = "peer", help = "Device ID or name")]
     pub peer: Option<PeerInput>,
 }
 
 #[derive(Args, Debug, Clone, Default)]
 pub struct OptionalPeerTargetArg {
-    #[arg(short = 'p', long = "peer", help = "Peer ID or alias")]
+    #[arg(short = 'p', long = "peer", help = "Device ID or name")]
     pub peer: Option<PeerInput>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Args, Debug, Clone, Default)]
+pub struct OptionalDeviceTargetArg {
+    #[arg(
+        short = 'd',
+        long = "device",
+        value_name = "DEVICE",
+        help = "Device name"
+    )]
+    pub device: Option<DeviceInput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PeerInput {
     PeerId(PeerId),
-    Alias(String),
+    Name(String),
 }
+
+pub use PeerInput as DeviceInput;
 
 impl FromStr for PeerInput {
     type Err = String;
@@ -32,14 +45,14 @@ impl FromStr for PeerInput {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         let value = value.trim();
         if value.is_empty() {
-            return Err("Peer ID or alias cannot be empty".to_string());
+            return Err("Device ID or name cannot be empty".to_string());
         }
 
         if let Ok(peer_id) = value.parse::<PeerId>() {
             return Ok(Self::PeerId(peer_id));
         }
 
-        Ok(Self::Alias(value.to_string()))
+        Ok(Self::Name(value.to_string()))
     }
 }
 
@@ -47,7 +60,7 @@ impl fmt::Display for PeerInput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::PeerId(peer_id) => write!(f, "{peer_id}"),
-            Self::Alias(alias) => write!(f, "{alias}"),
+            Self::Name(name) => write!(f, "{name}"),
         }
     }
 }
@@ -55,7 +68,7 @@ impl fmt::Display for PeerInput {
 #[derive(Debug, Clone)]
 pub struct ResolvedPeerTarget {
     pub peer_id: String,
-    pub alias: Option<String>,
+    pub name: Option<String>,
     pub hostname: Option<String>,
 }
 
@@ -64,7 +77,7 @@ struct CliContext {
     #[serde(default)]
     current_peer_id: Option<String>,
     #[serde(default)]
-    current_peer_alias: Option<String>,
+    current_peer_name: Option<String>,
 }
 
 pub fn resolve_required_peer(
@@ -79,7 +92,7 @@ pub fn resolve_required_peer(
         return Ok(peer);
     }
 
-    Err("No peer selected. Use --peer/-p or `fungi peer use <peer>`.".to_string())
+    Err("No device selected. Use a device name or device ID.".to_string())
 }
 
 pub fn resolve_optional_peer(
@@ -92,6 +105,13 @@ pub fn resolve_optional_peer(
     }
 }
 
+pub fn resolve_optional_device(
+    args: &CommonArgs,
+    device: Option<&DeviceInput>,
+) -> Result<Option<ResolvedPeerTarget>, String> {
+    resolve_optional_peer(args, device)
+}
+
 pub fn get_current_peer(args: &CommonArgs) -> Result<Option<ResolvedPeerTarget>, String> {
     let Some(peer_id) = load_cli_context(args)?.current_peer_id else {
         return Ok(None);
@@ -102,7 +122,7 @@ pub fn get_current_peer(args: &CommonArgs) -> Result<Option<ResolvedPeerTarget>,
 pub fn set_current_peer(args: &CommonArgs, peer: &ResolvedPeerTarget) -> Result<(), String> {
     let context = CliContext {
         current_peer_id: Some(peer.peer_id.clone()),
-        current_peer_alias: peer.alias.clone(),
+        current_peer_name: peer.name.clone(),
     };
     save_cli_context(args, &context)
 }
@@ -122,32 +142,32 @@ pub fn resolve_peer_input(
 ) -> Result<ResolvedPeerTarget, String> {
     match peer {
         PeerInput::PeerId(peer_id) => {
-            let peer_info = lookup_peer_info(args, &peer_id.to_string())?;
-            let alias = peer_info.as_ref().and_then(|entry| entry.alias.clone());
-            if alias.is_none() {
+            let device_info = lookup_device_info(args, &peer_id.to_string())?;
+            let name = device_info.as_ref().and_then(|entry| entry.name.clone());
+            if name.is_none() {
                 return Err(format!(
-                    "Peer {} is not named yet. Name it first with `fungi device add {} --alias <name>` or `fungi device rename {} <name>`.",
-                    peer_id, peer_id, peer_id
+                    "Device ID {} is not saved yet. Add it first with `fungi device add <name> {}`.",
+                    peer_id, peer_id
                 ));
             }
 
             Ok(ResolvedPeerTarget {
                 peer_id: peer_id.to_string(),
-                alias,
-                hostname: peer_info.and_then(|entry| entry.hostname.clone()),
+                name,
+                hostname: device_info.and_then(|entry| entry.hostname.clone()),
             })
         }
-        PeerInput::Alias(alias) => {
-            let address_book = AddressBookConfig::apply_from_dir(&args.fungi_dir())
-                .map_err(|error| format!("Failed to load address book: {error}"))?;
-            match address_book.get_peer_by_alias(alias) {
+        PeerInput::Name(name) => {
+            let devices = DevicesConfig::apply_from_dir(&args.fungi_dir())
+                .map_err(|error| format!("Failed to load devices: {error}"))?;
+            match devices.get_device_by_name(name) {
                 Some(entry) => Ok(ResolvedPeerTarget {
                     peer_id: entry.peer_id.to_string(),
-                    alias: entry.alias.clone(),
+                    name: entry.name.clone(),
                     hostname: entry.hostname.clone(),
                 }),
                 None => Err(format!(
-                    "Unknown peer or alias: {alias}. Use --peer/-p with a peer ID, or set an address book alias first."
+                    "Unknown device name: {name}. Add or rename the device first."
                 )),
             }
         }
@@ -159,27 +179,32 @@ pub fn resolve_peer_value(args: &CommonArgs, peer: &str) -> Result<ResolvedPeerT
     resolve_peer_input(args, &peer)
 }
 
-fn lookup_peer_info(
+fn lookup_device_info(
     args: &CommonArgs,
     peer_id: &str,
-) -> Result<Option<fungi_config::address_book::PeerInfo>, String> {
-    let address_book = AddressBookConfig::apply_from_dir(&args.fungi_dir())
-        .map_err(|error| format!("Failed to load address book: {error}"))?;
-    Ok(address_book
-        .get_all_peers()
+) -> Result<Option<fungi_config::devices::DeviceInfo>, String> {
+    let devices = DevicesConfig::apply_from_dir(&args.fungi_dir())
+        .map_err(|error| format!("Failed to load devices: {error}"))?;
+    Ok(devices
+        .get_all_devices()
         .iter()
         .find(|entry| entry.peer_id.to_string() == peer_id)
         .cloned())
 }
 
 pub fn print_target_peer(peer: &ResolvedPeerTarget) {
-    let alias = peer.alias.as_deref().unwrap_or("<unnamed>");
+    let name = peer.name.as_deref().unwrap_or("<unnamed>");
     match peer.hostname.as_deref() {
         Some(hostname) if !hostname.is_empty() => {
-            eprintln!("Target peer: {alias} ({}) [{hostname}]", peer.peer_id)
+            eprintln!("Target device: {name} ({}) [{hostname}]", peer.peer_id)
         }
-        _ => eprintln!("Target peer: {alias} ({})", peer.peer_id),
+        _ => eprintln!("Target device: {name} ({})", peer.peer_id),
     }
+}
+
+pub fn print_target_device(device: &ResolvedPeerTarget) {
+    let name = device.name.as_deref().unwrap_or("<unnamed>");
+    eprintln!("Target device: {name}");
 }
 
 fn cli_context_path(args: &CommonArgs) -> std::path::PathBuf {

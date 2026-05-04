@@ -1,7 +1,6 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use anyhow::Result;
-use fungi_config::FungiConfig;
 use fungi_stream::IncomingStreams;
 use fungi_swarm::SwarmControl;
 use fungi_util::protocols::FUNGI_SERVICE_CONTROL_PROTOCOL;
@@ -11,7 +10,6 @@ use libp2p::{
     PeerId,
     futures::{AsyncReadExt, AsyncWriteExt},
 };
-use parking_lot::Mutex;
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::controls::TcpTunnelingControl;
@@ -25,7 +23,6 @@ const MAX_CONTROL_FRAME_LEN: usize = 2 * 1024 * 1024;
 #[derive(Clone)]
 pub struct ServiceControlProtocolControl {
     swarm_control: SwarmControl,
-    config: Arc<Mutex<FungiConfig>>,
     fungi_home: PathBuf,
     runtime_control: RuntimeControl,
     tcp_tunneling_control: TcpTunnelingControl,
@@ -34,14 +31,12 @@ pub struct ServiceControlProtocolControl {
 impl ServiceControlProtocolControl {
     pub fn new(
         swarm_control: SwarmControl,
-        config: Arc<Mutex<FungiConfig>>,
         fungi_home: PathBuf,
         runtime_control: RuntimeControl,
         tcp_tunneling_control: TcpTunnelingControl,
     ) -> Self {
         Self {
             swarm_control,
-            config,
             fungi_home,
             runtime_control,
             tcp_tunneling_control,
@@ -265,11 +260,7 @@ impl ServiceControlProtocolControl {
     }
 
     fn manifest_resolution_policy(&self) -> ManifestResolutionPolicy {
-        let config = self.config.lock();
-        ManifestResolutionPolicy {
-            allowed_tcp_ports: config.runtime.allowed_ports.clone(),
-            allowed_tcp_port_ranges: config.runtime.allowed_port_ranges.clone(),
-        }
+        ManifestResolutionPolicy::default()
     }
 
     async fn sync_service_endpoint_listeners_by_name(

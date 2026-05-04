@@ -4,7 +4,7 @@ use fungi_tests::{
     wait_ready,
 };
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
@@ -19,7 +19,7 @@ const PING_INTERVAL_MS: &str = "1000";
 
 fn main() -> Result<()> {
     run_scenario(
-        "no-allowlist",
+        "no-trusted-devices",
         false,
         false,
         &[
@@ -28,7 +28,7 @@ fn main() -> Result<()> {
         ],
     )?;
     run_scenario(
-        "only-node-b-allows-node-a",
+        "only-node-b-trusts-node-a",
         false,
         true,
         &[
@@ -46,7 +46,7 @@ fn main() -> Result<()> {
         ],
     )?;
     run_scenario(
-        "both-nodes-allow-each-other",
+        "both-nodes-trust-each-other",
         true,
         true,
         &[
@@ -70,11 +70,11 @@ fn run_scenario(
 
     if node_a_allows_b {
         println!("Configuring node-a to allow node-b");
-        scenario.node_a.allow_peer(&scenario.node_b_peer_id)?;
+        scenario.node_a.trust_device(&scenario.node_b_peer_id)?;
     }
     if node_b_allows_a {
         println!("Configuring node-b to allow node-a");
-        scenario.node_b.allow_peer(&scenario.node_a_peer_id)?;
+        scenario.node_b.trust_device(&scenario.node_a_peer_id)?;
     }
 
     thread::sleep(Duration::from_millis(500));
@@ -351,22 +351,71 @@ impl TestNode {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
 
+    fn run_cli_with_input<I, S>(&self, args: I, input: &str) -> Result<String>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let fungi_bin = get_fungi_binary_path()?;
+        let arg_list = args
+            .into_iter()
+            .map(|entry| entry.as_ref().to_string())
+            .collect::<Vec<_>>();
+
+        let mut child = Command::new(&fungi_bin)
+            .arg("--fungi-dir")
+            .arg(&self.fungi_dir)
+            .args(&arg_list)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .with_context(|| format!("failed to run cli on node {}", self.name))?;
+
+        if let Some(stdin) = child.stdin.as_mut() {
+            stdin
+                .write_all(input.as_bytes())
+                .with_context(|| format!("failed to write cli stdin on node {}", self.name))?;
+        }
+        drop(child.stdin.take());
+
+        let output = child
+            .wait_with_output()
+            .with_context(|| format!("failed to wait for cli on node {}", self.name))?;
+
+        if !output.status.success() {
+            bail!(
+                "node {} command {:?} failed\nstdout:\n{}\nstderr:\n{}\n{}",
+                self.name,
+                arg_list,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+                self.tail_log(120, "daemon log tail"),
+            );
+        }
+
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    }
+
     fn info_id(&self) -> Result<String> {
         self.run_cli(["info", "id"])
     }
 
-    fn device_add(&self, peer_id: &str, alias: &str) -> Result<()> {
-        let output = self.run_cli(["device", "add", peer_id, "--alias", alias])?;
-        if !output.contains("Peer saved with alias") {
+    fn device_add(&self, peer_id: &str, name: &str) -> Result<()> {
+        let output = self.run_cli(["device", "add", name, peer_id])?;
+        if !output.contains("Device saved") {
             bail!("unexpected device add output on {}: {output}", self.name);
         }
         Ok(())
     }
 
-    fn allow_peer(&self, peer_id: &str) -> Result<()> {
-        let output = self.run_cli(["security", "allowed-peers", "add", peer_id])?;
-        if !output.contains("Peer added successfully") {
-            bail!("unexpected allow-peer output on {}: {output}", self.name);
+    fn trust_device(&self, peer_id: &str) -> Result<()> {
+        let output = self.run_cli_with_input(["device", "trust", peer_id], "y\n")?;
+        if !output.contains("Device trusted") {
+            bail!(
+                "unexpected trusted-device output on {}: {output}",
+                self.name
+            );
         }
         Ok(())
     }
@@ -510,7 +559,7 @@ fn write_test_config(
     let relay_tcp = format!("/ip4/127.0.0.1/tcp/{relay_tcp_port}/p2p/{relay_peer_id}");
     let relay_udp = format!("/ip4/127.0.0.1/udp/{relay_udp_port}/quic-v1/p2p/{relay_peer_id}");
     let config = format!(
-        "[rpc]\nlisten_address = \"127.0.0.1:{rpc_port}\"\n\n[network]\nlisten_tcp_port = {listen_tcp_port}\nlisten_udp_port = {listen_udp_port}\nrelay_enabled = true\nuse_community_relays = false\ncustom_relay_addresses = [\"{relay_tcp}\", \"{relay_udp}\"]\nincoming_allowed_peers = []\n"
+        "[rpc]\nlisten_address = \"127.0.0.1:{rpc_port}\"\n\n[network]\nlisten_tcp_port = {listen_tcp_port}\nlisten_udp_port = {listen_udp_port}\nrelay_enabled = true\nuse_community_relays = false\ncustom_relay_addresses = [\"{relay_tcp}\", \"{relay_udp}\"]\n"
     );
 
     fs::write(fungi_dir.join("config.toml"), config).with_context(|| {

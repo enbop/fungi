@@ -7,6 +7,7 @@ edition.workspace = true
 
 [dependencies]
 serde = { workspace = true }
+serde_json = { workspace = true }
 toml = { workspace = true }
 libp2p-identity = { workspace = true }
 multiaddr = { workspace = true }
@@ -14,6 +15,7 @@ fungi-util = { workspace = true }
 anyhow = { workspace = true }
 log = { workspace = true }
 mdns-sd = { workspace = true }
+fungi-config-migrate = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

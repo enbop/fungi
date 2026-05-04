@@ -1,5 +1,6 @@
 use super::*;
 use anyhow::Result;
+use fungi_config::paths::FungiPaths;
 use fungi_docker_agent::DockerAgentError;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -7,7 +8,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
-    net::SocketAddr,
+    net::{SocketAddr, TcpListener as StdTcpListener},
     path::{Path, PathBuf},
 };
 use tempfile::TempDir;
@@ -38,6 +39,7 @@ fn docker_manifest_maps_to_container_spec() {
         ports: vec![ServicePort {
             name: None,
             host_port: 8080,
+            host_port_allocation: ServicePortAllocation::Fixed,
             service_port: 80,
             protocol: ServicePortProtocol::Tcp,
         }],
@@ -84,21 +86,25 @@ fn ensure_manifest_mount_dirs_creates_missing_host_paths() {
 fn runtime_control_new_creates_services_root() {
     let temp_dir = TempDir::new().unwrap();
     let fungi_home = temp_dir.path().join("fungi-home");
+    let paths = FungiPaths::from_fungi_home(&fungi_home);
     let runtime_root = fungi_home.join("runtime");
-    let service_state_file = fungi_home.join("services-state.json");
+    let services_root = fungi_home.join("services");
 
     RuntimeControl::new(
         runtime_root,
         PathBuf::from("/bin/echo"),
         fungi_home.clone(),
         None,
-        service_state_file,
+        services_root,
         Vec::new(),
         false,
     )
     .unwrap();
 
     assert!(fungi_home.join("services").is_dir());
+    assert!(fungi_home.join("appdata/services").is_dir());
+    assert!(fungi_home.join("artifacts/services").is_dir());
+    assert!(paths.user_home().is_dir());
 }
 
 #[test]
@@ -150,6 +156,7 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
         ports: vec![ServicePort {
             name: None,
             host_port: 18081,
+            host_port_allocation: ServicePortAllocation::Fixed,
             service_port: 8081,
             protocol: ServicePortProtocol::Tcp,
         }],
@@ -200,7 +207,7 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
 }
 
 #[test]
-fn manifest_document_supports_app_home_and_auto_host_port() {
+fn manifest_document_supports_user_home_and_auto_host_port() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1
 kind: ServiceManifest
@@ -211,7 +218,7 @@ spec:
     source:
         image: filebrowser/filebrowser:latest
     mounts:
-        - hostPath: ${APP_HOME}/data
+        - hostPath: ${USER_HOME}
           runtimePath: /srv
     ports:
         - hostPort: auto
@@ -219,24 +226,138 @@ spec:
           protocol: tcp
 "#;
 
+    let occupied_allowed_port = StdTcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let occupied_allowed_port_number = occupied_allowed_port.local_addr().unwrap().port();
+    let used_host_ports = BTreeSet::from([occupied_allowed_port_number]);
     let fungi_home = PathBuf::from("/tmp/fungi-home");
+    let paths = FungiPaths::from_fungi_home(&fungi_home);
     let manifest = parse_service_manifest_yaml_with_policy(
         yaml,
         Path::new("."),
         &fungi_home,
-        &ManifestResolutionPolicy {
-            allowed_tcp_ports: vec![28080],
-            allowed_tcp_port_ranges: Vec::new(),
-        },
+        &ManifestResolutionPolicy::default(),
+        &used_host_ports,
+    )
+    .unwrap();
+
+    assert_eq!(manifest.mounts[0].host_path, paths.user_home());
+    assert_ne!(manifest.ports[0].host_port, occupied_allowed_port_number);
+    assert_eq!(
+        manifest.ports[0].host_port_allocation,
+        ServicePortAllocation::Auto
+    );
+}
+
+#[test]
+fn manifest_document_supports_explicit_service_path_roots() {
+    let yaml = r#"
+apiVersion: fungi.rs/v1alpha1
+kind: ServiceManifest
+metadata:
+    name: filebrowser
+spec:
+    runtime: docker
+    source:
+        image: filebrowser/filebrowser:latest
+    mounts:
+        - hostPath: ${SERVICE_APPDATA}/db
+          runtimePath: /srv
+        - hostPath: ${SERVICE_ARTIFACTS}/static
+          runtimePath: /static
+        - hostPath: ${USER_ROOT}
+          runtimePath: /user
+    workingDir: ${USER_HOME}
+"#;
+
+    let fungi_home = PathBuf::from("/tmp/fungi-home");
+    let local_service_id = "svc_01hz7j7n3evh1q4j1a8g9c2d3e";
+    let paths = FungiPaths::from_fungi_home(&fungi_home);
+    let path_roots =
+        super::manifest::ManifestPathRoots::for_local_service_id(&fungi_home, local_service_id);
+    let manifest = parse_service_manifest_yaml_with_policy_for_service_paths(
+        yaml,
+        Path::new("."),
+        &fungi_home,
+        &path_roots,
+        &ManifestResolutionPolicy::default(),
         &BTreeSet::new(),
     )
     .unwrap();
 
     assert_eq!(
         manifest.mounts[0].host_path,
-        fungi_home.join("services/filebrowser/data")
+        paths.service_appdata_dir(local_service_id).join("db")
     );
-    assert_eq!(manifest.ports[0].host_port, 28080);
+    assert_eq!(
+        manifest.mounts[1].host_path,
+        paths.service_artifacts_dir(local_service_id).join("static")
+    );
+    assert_eq!(manifest.mounts[2].host_path, paths.user_root());
+    assert_eq!(
+        manifest.working_dir,
+        Some(paths.user_home().to_string_lossy().to_string())
+    );
+}
+
+#[test]
+fn manifest_document_defaults_missing_host_port_to_auto() {
+    let yaml = r#"
+apiVersion: fungi.rs/v1alpha1
+kind: ServiceManifest
+metadata:
+    name: filebrowser
+spec:
+    runtime: docker
+    source:
+        image: filebrowser/filebrowser:latest
+    ports:
+        - servicePort: 80
+          protocol: tcp
+"#;
+
+    let manifest = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
+
+    assert!(manifest.ports[0].host_port > 0);
+    assert_eq!(
+        manifest.ports[0].host_port_allocation,
+        ServicePortAllocation::Auto
+    );
+}
+
+#[test]
+fn manifest_document_supports_link_service() {
+    let yaml = r#"
+apiVersion: fungi.rs/v1alpha1
+kind: ServiceManifest
+metadata:
+    name: home-ssh
+spec:
+    runtime: link
+    source:
+        host: 127.0.0.1
+        port: 22
+    expose:
+        enabled: true
+        transport:
+            kind: tcp
+        usage:
+            kind: ssh
+    ports:
+        - hostPort: 22
+          servicePort: 22
+          name: ssh
+          protocol: tcp
+"#;
+
+    let manifest =
+        parse_service_manifest_yaml(yaml, Path::new("."), Path::new("/tmp/fungi-home")).unwrap();
+
+    assert_eq!(manifest.runtime, RuntimeKind::Link);
+    assert!(matches!(
+        manifest.source,
+        ServiceSource::TcpLink { ref host, port } if host == "127.0.0.1" && port == 22
+    ));
+    assert_eq!(manifest.ports[0].name.as_deref(), Some("ssh"));
 }
 
 #[tokio::test]
@@ -267,12 +388,15 @@ async fn wasmtime_provider_downloads_remote_component() {
         labels: BTreeMap::new(),
     };
 
-    let pulled = provider.pull(&manifest).await.unwrap();
+    let pulled = provider
+        .pull_with_local_service_id(&manifest, "svc_download")
+        .await
+        .unwrap();
     assert_eq!(pulled.status.state, "created");
     assert!(
         temp_dir
             .path()
-            .join("runtime/wasmtime/download-service/component.wasm")
+            .join("artifacts/services/svc_download/component.wasm")
             .exists()
     );
     drop(server);
@@ -305,8 +429,6 @@ spec:
 
     let manifest = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
     let expose = manifest.expose.expect("expected expose config");
-    assert_eq!(expose.service_id, "filebrowser");
-    assert_eq!(expose.display_name, "filebrowser");
     assert_eq!(expose.transport.kind, ServiceExposeTransportKind::Tcp);
     let usage = expose.usage.expect("expected usage config");
     assert_eq!(usage.kind, ServiceExposeUsageKind::Web);

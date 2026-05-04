@@ -1121,7 +1121,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 1.0.109",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -1654,11 +1654,13 @@ dependencies = [
  "interprocess",
  "libp2p",
  "log",
+ "multiaddr",
  "rand 0.8.5",
  "serde",
  "serde_json",
  "serde_yaml",
  "tarpc",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tonic",
@@ -1670,14 +1672,30 @@ name = "fungi-config"
 version = "0.6.1"
 dependencies = [
  "anyhow",
+ "fungi-config-migrate",
  "fungi-util",
  "libp2p-identity",
  "log",
  "mdns-sd",
  "multiaddr",
  "serde",
+ "serde_json",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "fungi-config-migrate"
+version = "0.6.1"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "toml",
+ "ulid",
 ]
 
 [[package]]
@@ -1721,6 +1739,7 @@ dependencies = [
  "tokio-util",
  "toml",
  "typed-path",
+ "ulid",
 ]
 
 [[package]]
@@ -5802,6 +5821,16 @@ dependencies = [
  "crunchy",
  "hex",
  "static_assertions",
+]
+
+[[package]]
+name = "ulid"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "470dbf6591da1b39d43c14523b2b469c86879a53e8b758c8e090a470fe7b1fbe"
+dependencies = [
+ "rand 0.9.1",
+ "web-time",
 ]
 
 [[package]]

@@ -4,6 +4,7 @@ resolver = "2"
 members = [
     "fungi",
     "crates/config",
+    "crates/config-migrate",
     "crates/daemon",
     "crates/docker-agent",
     "crates/stream",
@@ -63,6 +64,7 @@ tonic = "0.14.2"
 tonic-prost = "0.14.2"
 tonic-prost-build = "0.14.2"
 typed-path = "0.11.0"
+ulid = "1"
 unftp-sbe-fs = "0.3.0"
 void = "1"
 wasmtime-cli = "44"
@@ -84,6 +86,7 @@ libp2p = { version = "0.56", features = [
     "ed25519",
 ] }
 fungi-config = { path = "crates/config" }
+fungi-config-migrate = { path = "crates/config-migrate" }
 fungi-daemon = { path = "crates/daemon" }
 fungi-daemon-grpc = { path = "crates/daemon-grpc" }
 fungi-docker-agent = { path = "crates/docker-agent" }

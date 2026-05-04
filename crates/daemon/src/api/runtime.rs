@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use fungi_config::runtime::{AllowedPortRange, Runtime as RuntimeConfig};
+use fungi_config::runtime::Runtime as RuntimeConfig;
 use libp2p::PeerId;
 
 use crate::runtime::{
@@ -35,32 +35,6 @@ impl FungiDaemon {
     pub fn remove_runtime_allowed_host_path(&self, path: &Path) -> Result<()> {
         let current_config = self.config().lock().clone();
         let updated_config = current_config.remove_runtime_allowed_host_path(path)?;
-        self.apply_runtime_config_update(updated_config)
-    }
-
-    pub fn add_runtime_allowed_port(&self, port: u16) -> Result<()> {
-        let current_config = self.config().lock().clone();
-        let updated_config = current_config.add_runtime_allowed_port(port)?;
-        self.apply_runtime_config_update(updated_config)
-    }
-
-    pub fn remove_runtime_allowed_port(&self, port: u16) -> Result<()> {
-        let current_config = self.config().lock().clone();
-        let updated_config = current_config.remove_runtime_allowed_port(port)?;
-        self.apply_runtime_config_update(updated_config)
-    }
-
-    pub fn add_runtime_allowed_port_range(&self, start: u16, end: u16) -> Result<()> {
-        let current_config = self.config().lock().clone();
-        let updated_config =
-            current_config.add_runtime_allowed_port_range(AllowedPortRange { start, end })?;
-        self.apply_runtime_config_update(updated_config)
-    }
-
-    pub fn remove_runtime_allowed_port_range(&self, start: u16, end: u16) -> Result<()> {
-        let current_config = self.config().lock().clone();
-        let updated_config =
-            current_config.remove_runtime_allowed_port_range(&AllowedPortRange { start, end })?;
         self.apply_runtime_config_update(updated_config)
     }
 
@@ -128,12 +102,7 @@ impl FungiDaemon {
     }
 
     fn manifest_resolution_policy(&self) -> ManifestResolutionPolicy {
-        let config_handle = self.config();
-        let config = config_handle.lock();
-        ManifestResolutionPolicy {
-            allowed_tcp_ports: config.runtime.allowed_ports.clone(),
-            allowed_tcp_port_ranges: config.runtime.allowed_port_ranges.clone(),
-        }
+        ManifestResolutionPolicy::default()
     }
 
     fn apply_runtime_config_update(&self, updated_config: fungi_config::FungiConfig) -> Result<()> {
@@ -238,14 +207,51 @@ impl FungiDaemon {
         self.runtime_control().list_services().await
     }
 
-    pub async fn list_catalog_services(&self) -> Result<Vec<CatalogService>> {
+    pub async fn list_exposed_services(&self) -> Result<Vec<CatalogService>> {
         self.runtime_control().list_catalog_services().await
     }
 
-    pub async fn list_peer_catalog(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
+    pub async fn list_peer_services(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
         self.service_discovery_control()
-            .list_peer_catalog(peer_id)
+            .list_peer_services(peer_id)
             .await
+    }
+
+    pub async fn list_catalog_services(&self) -> Result<Vec<CatalogService>> {
+        self.list_exposed_services().await
+    }
+
+    pub async fn list_peer_catalog(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
+        self.refresh_peer_services(peer_id).await
+    }
+
+    pub fn list_cached_peer_services(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
+        let peer_id = peer_id.to_string();
+        let fungi_dir = self.config_fungi_dir()?;
+        let cache = fungi_config::service_cache::ServiceCache::apply_from_dir(&fungi_dir)?;
+        let Some(services_json) = cache.get_device_services_json(&peer_id)? else {
+            return Ok(Vec::new());
+        };
+        serde_json::from_str(&services_json)
+            .map_err(|error| anyhow::anyhow!("failed to decode cached peer services: {}", error))
+    }
+
+    pub async fn refresh_peer_services(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
+        let services = self.list_peer_services(peer_id).await?;
+        self.save_cached_peer_services(peer_id, &services)?;
+        Ok(services)
+    }
+
+    fn save_cached_peer_services(
+        &self,
+        peer_id: PeerId,
+        services: &[CatalogService],
+    ) -> Result<()> {
+        let services_json = serde_json::to_string(services)?;
+        let fungi_dir = self.config_fungi_dir()?;
+        let cache = fungi_config::service_cache::ServiceCache::apply_from_dir(&fungi_dir)?;
+        cache.set_device_services_json(peer_id.to_string(), services_json)?;
+        Ok(())
     }
 
     pub fn local_node_capabilities(&self) -> NodeCapabilities {

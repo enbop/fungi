@@ -44,11 +44,10 @@ env_logger = { workspace = true }
 mdns-sd = { workspace = true }
 flume = { workspace = true }
 typed-path = { workspace = true }
-reqwest = { workspace = true, features = [
-    "rustls-tls",
-] }
+reqwest = { workspace = true, features = ["rustls-tls"] }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
+ulid = { workspace = true }
 
 [dev-dependencies]
 toml = { workspace = true }

@@ -1,10 +1,12 @@
 use anyhow::{Ok, Result};
 use clap::Parser;
 use fungi::commands::*;
+use fungi_config::FungiDir;
 mod logging;
 
 fn main() -> Result<()> {
     let fungi_args = FungiArgs::parse();
+    run_migration_preflight(&fungi_args)?;
     logging::init_logging(&fungi_args)?;
     use fungi_control::*;
 
@@ -22,6 +24,7 @@ fn main() -> Result<()> {
         // fungi commands
         Commands::Daemon(args) => block_on(fungi_daemon::execute(fungi_args.common.clone(), args))?,
         Commands::Init(args) => block_on(fungi_init::run(fungi_args.common, args))?,
+        Commands::Migrate(args) => block_on(fungi_migrate::run(fungi_args.common, args))?,
         Commands::Relay(cmd) => block_on(execute_relay(fungi_args.common, cmd)),
 
         // control commands
@@ -41,8 +44,39 @@ fn main() -> Result<()> {
             interval_ms,
             verbose,
         } => block_on(execute_ping(fungi_args.common, peer, interval_ms, verbose)),
+        Commands::Dynamic(tokens) => {
+            let device_context = fungi_args.common.dynamic_device.clone();
+            block_on(execute_dynamic_thing(
+                fungi_args.common,
+                device_context,
+                tokens,
+            ))
+        }
     }
 
+    Ok(())
+}
+
+fn run_migration_preflight(fungi_args: &FungiArgs) -> Result<()> {
+    #[cfg(feature = "wasi")]
+    if matches!(&fungi_args.command, Commands::Run(_) | Commands::Serve(_)) {
+        return Ok(());
+    }
+
+    if matches!(&fungi_args.command, Commands::Migrate(_)) {
+        return Ok(());
+    }
+
+    let report = fungi_config::migrate_if_needed(&fungi_args.common.fungi_dir())?;
+    if report.changed {
+        println!(
+            "Migrated Fungi configuration from {} to v{}.",
+            report.source_version, report.target_version
+        );
+        if let Some(backup_dir) = report.backup_dir {
+            println!("Backup saved to {}", backup_dir.display());
+        }
+    }
     Ok(())
 }
 

@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::Result;
-use fungi_config::address_book::PeerInfo;
+use fungi_config::devices::DeviceInfo;
 use fungi_swarm::{PeerAddressSource, State};
 use libp2p::PeerId;
 use mdns_sd::{ResolvedService, ServiceDaemon, ServiceEvent, ServiceInfo};
@@ -16,7 +16,7 @@ const FUNGI_SERVICE_TYPE: &str = "_fungi._tcp.local.";
 
 #[derive(Clone)]
 pub struct MdnsControl {
-    local_devices: Arc<Mutex<HashMap<PeerId, PeerInfo>>>,
+    local_devices: Arc<Mutex<HashMap<PeerId, DeviceInfo>>>,
     task: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
     shutdown_tx: Arc<Mutex<Option<mpsc::Sender<()>>>>,
 }
@@ -30,7 +30,7 @@ impl MdnsControl {
         }
     }
 
-    pub fn start(&self, peer_info: PeerInfo, state: State) -> Result<()> {
+    pub fn start(&self, device_info: DeviceInfo, state: State) -> Result<()> {
         self.stop();
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel();
@@ -40,7 +40,7 @@ impl MdnsControl {
         let task_handle = Arc::clone(&self.task);
 
         let handle = std::thread::spawn(move || {
-            if let Err(e) = Self::run_mdns_service(peer_info, state, local_devices, shutdown_rx) {
+            if let Err(e) = Self::run_mdns_service(device_info, state, local_devices, shutdown_rx) {
                 log::error!("mDNS service error: {}", e);
             }
         });
@@ -63,11 +63,11 @@ impl MdnsControl {
         self.local_devices.lock().clear();
     }
 
-    pub fn get_all_devices(&self) -> HashMap<PeerId, PeerInfo> {
+    pub fn get_all_devices(&self) -> HashMap<PeerId, DeviceInfo> {
         self.local_devices.lock().clone()
     }
 
-    pub fn get_device(&self, peer_id: &PeerId) -> Option<PeerInfo> {
+    pub fn get_device(&self, peer_id: &PeerId) -> Option<DeviceInfo> {
         self.local_devices.lock().get(peer_id).cloned()
     }
 
@@ -81,9 +81,9 @@ impl MdnsControl {
     }
 
     fn run_mdns_service(
-        device_info: PeerInfo,
+        device_info: DeviceInfo,
         state: State,
-        local_devices: Arc<Mutex<HashMap<PeerId, PeerInfo>>>,
+        local_devices: Arc<Mutex<HashMap<PeerId, DeviceInfo>>>,
         shutdown_rx: mpsc::Receiver<()>,
     ) -> Result<()> {
         let mdns = ServiceDaemon::new()?;
@@ -170,23 +170,23 @@ impl MdnsControl {
         Ok(())
     }
 
-    fn parse_service_info(info: &ResolvedService) -> Option<PeerInfo> {
+    fn parse_service_info(info: &ResolvedService) -> Option<DeviceInfo> {
         let properties = info.get_properties();
 
-        let mut peer_info: PeerInfo = properties.try_into().ok()?;
+        let mut device_info: DeviceInfo = properties.try_into().ok()?;
 
         // Get IP address from service info
         let private_ips = Some(info.get_addresses().iter().next()?.to_string())
             .map(|addr| vec![addr])
             .unwrap_or_default();
 
-        peer_info.private_ips = private_ips;
+        device_info.private_ips = private_ips;
 
-        Some(peer_info)
+        Some(device_info)
     }
 
     fn remove_device_by_fullname(
-        local_devices: &Arc<Mutex<HashMap<PeerId, PeerInfo>>>,
+        local_devices: &Arc<Mutex<HashMap<PeerId, DeviceInfo>>>,
         fullname: &str,
     ) {
         if let Some(instance_name) = fullname.split('.').next()
@@ -197,8 +197,8 @@ impl MdnsControl {
     }
 }
 
-fn advertised_tcp_port(peer_info: &PeerInfo) -> Option<u16> {
-    peer_info.multiaddrs.iter().find_map(|addr| {
+fn advertised_tcp_port(device_info: &DeviceInfo) -> Option<u16> {
+    device_info.multiaddrs.iter().find_map(|addr| {
         addr.parse::<libp2p::Multiaddr>()
             .ok()?
             .iter()
@@ -209,15 +209,15 @@ fn advertised_tcp_port(peer_info: &PeerInfo) -> Option<u16> {
     })
 }
 
-fn hydrate_mdns_peer_addresses(state: &State, peer_info: &PeerInfo) {
+fn hydrate_mdns_peer_addresses(state: &State, device_info: &DeviceInfo) {
     let mut loaded = 0usize;
     let mut ignored = 0usize;
 
-    for address in &peer_info.multiaddrs {
+    for address in &device_info.multiaddrs {
         match address.parse() {
             Ok(multiaddr) => {
                 match state.record_peer_address(
-                    peer_info.peer_id,
+                    device_info.peer_id,
                     multiaddr,
                     PeerAddressSource::Mdns,
                 ) {
@@ -230,7 +230,7 @@ fn hydrate_mdns_peer_addresses(state: &State, peer_info: &PeerInfo) {
                 ignored += 1;
                 log::debug!(
                     "Ignoring invalid mDNS multiaddr for peer {}: {} ({})",
-                    peer_info.peer_id,
+                    device_info.peer_id,
                     address,
                     error
                 );
@@ -241,7 +241,7 @@ fn hydrate_mdns_peer_addresses(state: &State, peer_info: &PeerInfo) {
     if loaded > 0 || ignored > 0 {
         log::debug!(
             "mDNS hydrated peer address state for {}: loaded={} ignored={}",
-            peer_info.peer_id,
+            device_info.peer_id,
             loaded,
             ignored
         );

@@ -8,7 +8,7 @@
 //!   daemon starts, so tests never step on each other.
 //! * **Automatic cleanup** – the temp directory is deleted when `TestDaemon` is dropped.
 //! * **Composable** – use `TestDaemonBuilder` when you need extra configuration
-//!   (known PeerId, allowed peers, config tweaks, …).
+//!   (known PeerId, trusted devices, config tweaks, …).
 //!
 //! # Quick start
 //!
@@ -23,7 +23,7 @@
 //! async fn two_daemons_can_connect() {
 //!     let server = TestDaemon::spawn().await.unwrap();
 //!     let client = TestDaemonBuilder::new()
-//!         .with_allowed_peer(server.peer_id())
+//!         .with_trusted_device(server.peer_id())
 //!         .build()
 //!         .await
 //!         .unwrap();
@@ -43,7 +43,10 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
-use fungi_config::{FungiConfig, address_book::AddressBookConfig};
+use fungi_config::{
+    FungiConfig, devices::DevicesConfig, direct_addresses::DirectAddressCache,
+    trusted_devices::TrustedDevicesConfig,
+};
 use libp2p::{Multiaddr, PeerId, identity::Keypair, multiaddr::Protocol};
 use tempfile::TempDir;
 
@@ -90,7 +93,7 @@ fn minimal_test_config(dir: &TempDir, tcp_port: u16) -> FungiConfig {
 #[derive(Default)]
 pub struct TestDaemonBuilder {
     keypair: Option<Keypair>,
-    allowed_peers: Vec<PeerId>,
+    trusted_devices: Vec<PeerId>,
     custom_relay_addresses: Vec<Multiaddr>,
     config_mutators: Vec<ConfigMutator>,
 }
@@ -106,9 +109,9 @@ impl TestDaemonBuilder {
         self
     }
 
-    /// Allow an additional incoming peer on this daemon.
-    pub fn with_allowed_peer(mut self, peer_id: PeerId) -> Self {
-        self.allowed_peers.push(peer_id);
+    /// Trust an additional device for incoming access on this daemon.
+    pub fn with_trusted_device(mut self, peer_id: PeerId) -> Self {
+        self.trusted_devices.push(peer_id);
         self
     }
 
@@ -143,9 +146,7 @@ impl TestDaemonBuilder {
         let keypair = self.keypair.unwrap_or_else(Keypair::generate_ed25519);
         let tcp_port = reserve_ephemeral_port();
         let mut cfg = minimal_test_config(&dir, tcp_port);
-        cfg.network
-            .incoming_allowed_peers
-            .extend(self.allowed_peers);
+        let trusted_devices = TrustedDevicesConfig::in_memory(self.trusted_devices);
         if !self.custom_relay_addresses.is_empty() {
             cfg.network.relay_enabled = true;
             cfg.network.use_community_relays = false;
@@ -159,7 +160,9 @@ impl TestDaemonBuilder {
             DaemonArgs::default(),
             cfg,
             keypair,
-            AddressBookConfig::default(),
+            DevicesConfig::default(),
+            trusted_devices,
+            DirectAddressCache::apply_from_dir(dir.path())?,
         )
         .await?;
         Ok(TestDaemon {
@@ -285,7 +288,7 @@ impl TestDaemon {
 /// Returns `(client, server)` already wired so `client` can dial `server`.
 /// The caller should call `client.connect_to(&server).await` to complete the connection.
 pub async fn spawn_connected_pair() -> Result<(TestDaemon, TestDaemon)> {
-    // Spawn server first so we know its PeerId for the allow-list.
+    // Spawn server first so we can seed each daemon's trusted-device state.
     let server_kp = Keypair::generate_ed25519();
     let server_peer_id = server_kp.public().to_peer_id();
     let client_kp = Keypair::generate_ed25519();
@@ -293,12 +296,12 @@ pub async fn spawn_connected_pair() -> Result<(TestDaemon, TestDaemon)> {
 
     let server = TestDaemonBuilder::new()
         .with_keypair(server_kp)
-        .with_allowed_peer(client_peer_id)
+        .with_trusted_device(client_peer_id)
         .build()
         .await?;
     let client = TestDaemonBuilder::new()
         .with_keypair(client_kp)
-        .with_allowed_peer(server_peer_id)
+        .with_trusted_device(server_peer_id)
         .build()
         .await?;
 
@@ -312,7 +315,7 @@ mod tests {
     use libp2p::{StreamProtocol, futures::AsyncWriteExt, swarm::dial_opts::DialOpts};
 
     const REVERSE_STREAM_TEST_PROTOCOL: StreamProtocol =
-        StreamProtocol::new("/fungi/test/reverse-stream-allowlist-gap/1.0.0");
+        StreamProtocol::new("/fungi/test/reverse-stream-trust-gap/1.0.0");
 
     /// Smoke test: a single daemon starts up and exposes a non-trivial PeerId.
     #[tokio::test]
@@ -354,20 +357,19 @@ mod tests {
         assert_eq!(d.peer_id(), expected);
     }
 
-    /// `spawn_connected_pair` returns daemons with different peer IDs and correct allow-lists.
+    /// `spawn_connected_pair` returns daemons with different peer IDs and trusted-device state.
     #[tokio::test]
-    async fn spawn_connected_pair_has_distinct_peers_and_allow_lists() {
+    async fn spawn_connected_pair_has_distinct_peers_and_trusted_devices() {
         let (client, server) = spawn_connected_pair().await.unwrap();
         assert_ne!(client.peer_id(), server.peer_id());
 
-        // Server's incoming_allowed_peers should include the client.
-        let server_cfg = server.daemon().config();
-        let client_in_list = server_cfg
+        // Server's trusted devices should include the client.
+        let trusted_devices = server.daemon().trusted_devices();
+        let client_in_list = trusted_devices
             .lock()
-            .network
-            .incoming_allowed_peers
+            .trusted_devices
             .contains(&client.peer_id());
-        assert!(client_in_list, "server should allow client peer");
+        assert!(client_in_list, "server should trust client device");
     }
 
     #[tokio::test]
@@ -403,7 +405,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn disallowed_peer_cannot_open_reverse_stream_on_existing_outbound_connection() {
+    async fn untrusted_device_cannot_open_reverse_stream_on_existing_outbound_connection() {
         let victim_kp = Keypair::generate_ed25519();
         let victim_peer_id = victim_kp.public().to_peer_id();
         let attacker_kp = Keypair::generate_ed25519();
@@ -416,7 +418,7 @@ mod tests {
             .unwrap();
         let attacker = TestDaemonBuilder::new()
             .with_keypair(attacker_kp)
-            .with_allowed_peer(victim_peer_id)
+            .with_trusted_device(victim_peer_id)
             .build()
             .await
             .unwrap();
@@ -424,12 +426,11 @@ mod tests {
         assert!(
             !victim
                 .daemon()
-                .config()
+                .trusted_devices()
                 .lock()
-                .network
-                .incoming_allowed_peers
+                .trusted_devices
                 .contains(&attacker_peer_id),
-            "victim must not allow attacker peer"
+            "victim must not trust attacker device"
         );
 
         let mut incoming = victim
@@ -479,7 +480,7 @@ mod tests {
         let next = tokio::time::timeout(Duration::from_millis(500), incoming.next()).await;
         assert!(
             next.is_err(),
-            "victim should not receive an inbound stream from the disallowed peer"
+            "victim should not receive an inbound stream from the untrusted device"
         );
     }
 }

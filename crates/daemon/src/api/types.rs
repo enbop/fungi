@@ -129,7 +129,7 @@ pub struct ConnectionSnapshot {
     pub active_streams_by_protocol: Vec<ProtocolStreamCountSnapshot>,
     pub policy_state: String,
     pub policy_reason: String,
-    pub peer_alias: String,
+    pub peer_name: String,
     pub peer_role: String,
 }
 
@@ -151,7 +151,6 @@ pub struct ActiveStreamSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceAccess {
     pub peer_id: String,
-    pub service_id: String,
     pub service_name: String,
     pub endpoints: Vec<ServiceAccessEndpoint>,
 }
@@ -162,4 +161,6 @@ pub struct ServiceAccessEndpoint {
     pub protocol: String,
     pub local_host: String,
     pub local_port: u16,
+    #[serde(default)]
+    pub remote_port: u16,
 }

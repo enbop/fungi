@@ -16,9 +16,8 @@ pub use api::{ServiceAccess, ServiceAccessEndpoint};
 use clap::Parser;
 pub use daemon::FungiDaemon;
 pub use node_capabilities::{
-    LocalRuntimeAvailability, LocalRuntimeStatus, NodeAllowedTcpPorts, NodeCapabilities,
-    NodePortRange, NodeRuntimeCapabilities, build_local_node_capabilities,
-    build_local_runtime_status,
+    LocalRuntimeAvailability, LocalRuntimeStatus, NodeCapabilities, NodeRuntimeCapabilities,
+    build_local_node_capabilities, build_local_runtime_status,
 };
 pub use runtime::{
     CatalogService, CatalogServiceEndpoint, ManifestResolutionPolicy, RuntimeControl, RuntimeKind,
@@ -26,8 +25,9 @@ pub use runtime::{
     ServiceExposeTransportKind, ServiceExposeUsage, ServiceExposeUsageKind, ServiceInstance,
     ServiceLogs, ServiceLogsOptions, ServiceManifest, ServiceManifestDocument,
     ServiceManifestExpose, ServiceManifestExposeTransport, ServiceManifestExposeUsage,
-    ServiceManifestHostPort, ServiceMount, ServicePort, ServicePortProtocol, ServiceSource,
-    ServiceStatus, load_service_manifest_yaml_file, parse_service_manifest_yaml,
+    ServiceManifestHostPort, ServiceManifestMetadata, ServiceManifestPort, ServiceManifestSource,
+    ServiceManifestSpec, ServiceMount, ServicePort, ServicePortAllocation, ServicePortProtocol,
+    ServiceSource, ServiceStatus, load_service_manifest_yaml_file, parse_service_manifest_yaml,
     service_expose_endpoint_bindings,
 };
 pub use service_control::{

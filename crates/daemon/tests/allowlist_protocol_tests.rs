@@ -17,7 +17,7 @@ async fn spawn_reverse_connected_pair() -> Result<(TestDaemon, TestDaemon)> {
         .await?;
     let attacker = TestDaemonBuilder::new()
         .with_keypair(attacker_kp)
-        .with_allowed_peer(victim_peer_id)
+        .with_trusted_device(victim_peer_id)
         .build()
         .await?;
 
@@ -68,7 +68,7 @@ fn assert_only_inbound_connection(local: &TestDaemon, remote: &TestDaemon) {
 }
 
 #[tokio::test]
-async fn disallowed_peer_cannot_use_service_control_over_existing_inbound_connection() -> Result<()>
+async fn untrusted_device_cannot_use_service_control_over_existing_inbound_connection() -> Result<()>
 {
     let (victim, attacker) = spawn_reverse_connected_pair().await?;
     assert_only_inbound_connection(&attacker, &victim);
@@ -81,13 +81,13 @@ async fn disallowed_peer_cannot_use_service_control_over_existing_inbound_connec
 
     assert!(
         result.is_err(),
-        "disallowed peer should not be able to use service control over an existing inbound connection"
+        "untrusted device should not be able to use service control over an existing inbound connection"
     );
     Ok(())
 }
 
 #[tokio::test]
-async fn disallowed_peer_cannot_use_node_capabilities_over_existing_inbound_connection()
+async fn untrusted_device_cannot_use_node_capabilities_over_existing_inbound_connection()
 -> Result<()> {
     let (victim, attacker) = spawn_reverse_connected_pair().await?;
     assert_only_inbound_connection(&attacker, &victim);
@@ -100,13 +100,14 @@ async fn disallowed_peer_cannot_use_node_capabilities_over_existing_inbound_conn
 
     assert!(
         result.is_err(),
-        "disallowed peer should not be able to discover node capabilities over an existing inbound connection"
+        "untrusted device should not be able to discover node capabilities over an existing inbound connection"
     );
     Ok(())
 }
 
 #[tokio::test]
-async fn disallowed_peer_cannot_use_file_transfer_over_existing_inbound_connection() -> Result<()> {
+async fn untrusted_device_cannot_use_file_transfer_over_existing_inbound_connection() -> Result<()>
+{
     let (victim, attacker) = spawn_reverse_connected_pair().await?;
     assert_only_inbound_connection(&attacker, &victim);
 
@@ -129,7 +130,7 @@ async fn disallowed_peer_cannot_use_file_transfer_over_existing_inbound_connecti
 
     assert!(
         result.is_err(),
-        "disallowed peer should not be able to establish a file transfer RPC client over an existing inbound connection"
+        "untrusted device should not be able to establish a file transfer RPC client over an existing inbound connection"
     );
     Ok(())
 }

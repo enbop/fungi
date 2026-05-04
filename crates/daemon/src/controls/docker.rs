@@ -5,9 +5,10 @@ use std::{
 };
 
 use anyhow::Result;
+use fungi_config::paths::FungiPaths;
 use fungi_config::runtime::Runtime as RuntimeConfig;
 use fungi_docker_agent::{
-    AgentPolicy, ContainerDetails, ContainerLogs, ContainerSpec, DockerAgent, LogsOptions, PortRule,
+    AgentPolicy, ContainerDetails, ContainerLogs, ContainerSpec, DockerAgent, LogsOptions,
 };
 use parking_lot::Mutex;
 
@@ -17,10 +18,11 @@ const MANAGED_LABEL_VALUE: &str = "fungi";
 #[derive(Clone)]
 pub struct DockerControl {
     policy: Arc<Mutex<AgentPolicy>>,
+    default_allowed_host_paths: Vec<PathBuf>,
 }
 
 impl DockerControl {
-    pub fn from_config(config: &RuntimeConfig) -> Result<Option<Self>> {
+    pub fn from_config(config: &RuntimeConfig, fungi_home: &Path) -> Result<Option<Self>> {
         if config.disable_docker {
             return Ok(None);
         }
@@ -32,14 +34,23 @@ impl DockerControl {
             return Ok(None);
         };
 
+        let paths = FungiPaths::from_fungi_home(fungi_home);
+        let default_allowed_host_paths = vec![paths.appdata_root(), paths.user_root()];
+
         Ok(Some(Self {
-            policy: Arc::new(Mutex::new(build_agent_policy(config, socket_path))),
+            policy: Arc::new(Mutex::new(build_agent_policy(
+                config,
+                socket_path,
+                &default_allowed_host_paths,
+            ))),
+            default_allowed_host_paths,
         }))
     }
 
     pub fn update_runtime_config(&self, config: &RuntimeConfig) -> Result<()> {
         let socket_path = self.policy.lock().socket_path.clone();
-        *self.policy.lock() = build_agent_policy(config, socket_path);
+        *self.policy.lock() =
+            build_agent_policy(config, socket_path, &self.default_allowed_host_paths);
         Ok(())
     }
 
@@ -80,29 +91,22 @@ pub fn detect_socket_path(config: &RuntimeConfig) -> Option<PathBuf> {
     resolve_socket_path(config.docker_socket_path.as_deref())
 }
 
-fn build_agent_policy(config: &RuntimeConfig, socket_path: PathBuf) -> AgentPolicy {
-    let allowed_ports = config
-        .allowed_ports
-        .iter()
-        .copied()
-        .map(PortRule::Single)
-        .chain(
-            config
-                .allowed_port_ranges
-                .iter()
-                .map(|range| PortRule::Range {
-                    start: range.start,
-                    end: range.end,
-                }),
-        )
-        .collect();
+fn build_agent_policy(
+    config: &RuntimeConfig,
+    socket_path: PathBuf,
+    default_allowed_host_paths: &[PathBuf],
+) -> AgentPolicy {
+    let mut allowed_host_paths = default_allowed_host_paths.to_vec();
+    allowed_host_paths.extend(config.allowed_host_paths.clone());
+    allowed_host_paths.sort();
+    allowed_host_paths.dedup();
 
     AgentPolicy {
         socket_path,
         managed_label_key: MANAGED_LABEL_KEY.into(),
         managed_label_value: MANAGED_LABEL_VALUE.into(),
-        allowed_host_paths: config.allowed_host_paths.clone(),
-        allowed_ports,
+        allowed_host_paths,
+        allowed_ports: Vec::new(),
     }
 }
 
@@ -200,16 +204,21 @@ fn is_named_pipe_path(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fungi_config::runtime::{AllowedPortRange, Runtime};
+    use fungi_config::runtime::Runtime;
     use tempfile::TempDir;
 
     #[test]
     fn disabled_docker_returns_no_control() {
+        let temp_dir = TempDir::new().unwrap();
         let config = Runtime {
             disable_docker: true,
             ..Runtime::default()
         };
-        assert!(DockerControl::from_config(&config).unwrap().is_none());
+        assert!(
+            DockerControl::from_config(&config, temp_dir.path())
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -220,14 +229,13 @@ mod tests {
         let config = Runtime {
             docker_socket_path: Some(socket_path.clone()),
             allowed_host_paths: vec![temp_dir.path().join("fungi")],
-            allowed_ports: vec![8080],
-            allowed_port_ranges: vec![AllowedPortRange {
-                start: 20000,
-                end: 20100,
-            }],
             ..Runtime::default()
         };
 
-        assert!(DockerControl::from_config(&config).unwrap().is_some());
+        assert!(
+            DockerControl::from_config(&config, temp_dir.path())
+                .unwrap()
+                .is_some()
+        );
     }
 }

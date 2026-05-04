@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, BTreeSet},
     env,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::PathBuf,
@@ -19,29 +19,36 @@ use crate::{
 use anyhow::{Result, bail};
 use fungi_config::{
     FungiConfig,
-    address_book::{AddressBookConfig, PeerInfo},
+    devices::{DeviceInfo, DevicesConfig},
+    direct_addresses::DirectAddressCache,
     file_transfer::{FileTransferClient as FTCConfig, FileTransferService as FTSConfig},
+    local_access::LocalAccessConfig,
+    trusted_devices::TrustedDevicesConfig,
 };
-use fungi_swarm::{FungiSwarm, PeerAddressSource, State, SwarmControl, TSwarm};
+use fungi_swarm::{
+    ConnectionDirection, FungiSwarm, PeerAddressSource, State, SwarmControl, TSwarm,
+};
 use fungi_util::keypair::get_keypair_from_dir;
 use libp2p::{Multiaddr, identity::Keypair, multiaddr::Protocol};
 use parking_lot::Mutex;
 use tokio::task::JoinHandle;
 
-const PEER_ADDRESS_SYNC_INTERVAL: Duration = Duration::from_secs(600);
+const DIRECT_ADDRESS_CACHE_SYNC_INTERVAL: Duration = Duration::from_secs(30);
 
 #[allow(dead_code)]
 struct TaskHandles {
     swarm_task: JoinHandle<()>,
     proxy_ftp_task: Arc<Mutex<Option<JoinHandle<()>>>>,
     proxy_webdav_task: Arc<Mutex<Option<JoinHandle<()>>>>,
-    peer_address_sync_task: JoinHandle<()>,
+    direct_address_cache_sync_task: JoinHandle<()>,
 }
 
 #[allow(dead_code)]
 pub struct FungiDaemon {
     config: Arc<Mutex<FungiConfig>>,
-    address_book_config: Arc<Mutex<AddressBookConfig>>,
+    devices_config: Arc<Mutex<DevicesConfig>>,
+    trusted_devices_config: Arc<Mutex<TrustedDevicesConfig>>,
+    direct_address_cache: Arc<Mutex<DirectAddressCache>>,
     args: DaemonArgs,
 
     swarm_control: SwarmControl,
@@ -63,8 +70,12 @@ impl FungiDaemon {
         self.config.clone()
     }
 
-    pub fn address_book(&self) -> Arc<Mutex<AddressBookConfig>> {
-        self.address_book_config.clone()
+    pub fn devices(&self) -> Arc<Mutex<DevicesConfig>> {
+        self.devices_config.clone()
+    }
+
+    pub fn trusted_devices(&self) -> Arc<Mutex<TrustedDevicesConfig>> {
+        self.trusted_devices_config.clone()
     }
 
     pub fn swarm_control(&self) -> &SwarmControl {
@@ -113,26 +124,38 @@ impl FungiDaemon {
         let config = FungiConfig::apply_from_dir(&fungi_dir)?;
         let keypair = get_keypair_from_dir(&fungi_dir)?;
 
-        let address_book_config = AddressBookConfig::apply_from_dir(&fungi_dir)?;
+        let devices_config = DevicesConfig::apply_from_dir(&fungi_dir)?;
+        let trusted_devices_config = TrustedDevicesConfig::apply_from_dir(&fungi_dir)?;
+        let direct_address_cache = DirectAddressCache::apply_from_dir(&fungi_dir)?;
 
-        Self::start_with(args, config, keypair, address_book_config).await
+        Self::start_with(
+            args,
+            config,
+            keypair,
+            devices_config,
+            trusted_devices_config,
+            direct_address_cache,
+        )
+        .await
     }
 
     pub async fn start_with(
         args: DaemonArgs,
         config: FungiConfig,
         keypair: Keypair,
-        address_book_config: AddressBookConfig,
+        devices_config: DevicesConfig,
+        trusted_devices_config: TrustedDevicesConfig,
+        direct_address_cache: DirectAddressCache,
     ) -> Result<Self> {
         let state = State::new(
-            config
-                .network
-                .incoming_allowed_peers
+            trusted_devices_config
+                .trusted_devices
                 .clone()
                 .into_iter()
                 .collect(),
         );
-        hydrate_address_book_peer_addresses(&state, &address_book_config);
+        hydrate_device_addresses(&state, &devices_config);
+        hydrate_direct_address_cache(&state, &direct_address_cache);
 
         let relay_addrs = config
             .network
@@ -163,8 +186,8 @@ impl FungiDaemon {
         .await?;
         let mdns_control = MdnsControl::new();
         // TODO duplicate with libp2p-mdns?
-        let peer_info = mdns_peer_info(&config, swarm_control.local_peer_id());
-        mdns_control.start(peer_info, state.clone())?;
+        let device_info = mdns_device_info(&config, swarm_control.local_peer_id());
+        mdns_control.start(device_info, state.clone())?;
 
         let fts_control = FileTransferServiceControl::new(swarm_control.clone());
         Self::init_fts(config.file_transfer.server.clone(), &fts_control).await;
@@ -172,13 +195,13 @@ impl FungiDaemon {
         let ftc_control = FileTransferClientsControl::new(swarm_control.clone());
         Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
 
-        let docker_control = DockerControl::from_config(&config.runtime)?;
-        let shared_config = Arc::new(Mutex::new(config.clone()));
         let fungi_home = config
             .config_file_path()
             .parent()
             .unwrap_or_else(|| std::path::Path::new("."))
             .to_path_buf();
+        let docker_control = DockerControl::from_config(&config.runtime, &fungi_home)?;
+        let shared_config = Arc::new(Mutex::new(config.clone()));
         let runtime_root = config
             .config_file_path()
             .parent()
@@ -190,7 +213,7 @@ impl FungiDaemon {
                 .map_err(|e| anyhow::anyhow!("Failed to resolve current executable: {e}"))?,
             fungi_home.clone(),
             docker_control.clone(),
-            fungi_home.join("services-state.json"),
+            fungi_home.join("services"),
             config.runtime.allowed_host_paths.clone(),
             config.runtime.wasmtime_enabled() && wasmtime_runtime_supported(),
         )?;
@@ -206,13 +229,18 @@ impl FungiDaemon {
         node_capabilities_control.start()?;
 
         let tcp_tunneling_control = TcpTunnelingControl::new(swarm_control.clone());
+        let local_access_config = LocalAccessConfig::apply_from_dir(&fungi_home)?;
+        let mut tcp_tunneling_config = config.tcp_tunneling.clone();
+        tcp_tunneling_config
+            .forwarding
+            .rules
+            .extend(local_access_config.rules.clone());
         tcp_tunneling_control
-            .init_from_config(&config.tcp_tunneling)
+            .init_from_config(&tcp_tunneling_config)
             .await;
 
         let service_control_protocol_control = ServiceControlProtocolControl::new(
             swarm_control.clone(),
-            shared_config.clone(),
             fungi_home,
             runtime_control.clone(),
             tcp_tunneling_control.clone(),
@@ -239,20 +267,24 @@ impl FungiDaemon {
             None
         };
 
-        let address_book_config = Arc::new(Mutex::new(address_book_config));
+        let devices_config = Arc::new(Mutex::new(devices_config));
+        let trusted_devices_config = Arc::new(Mutex::new(trusted_devices_config));
+        let direct_address_cache = Arc::new(Mutex::new(direct_address_cache));
 
         let task_handles = TaskHandles {
             swarm_task,
             proxy_ftp_task: Arc::new(Mutex::new(proxy_ftp_task)),
             proxy_webdav_task: Arc::new(Mutex::new(proxy_webdav_task)),
-            peer_address_sync_task: spawn_peer_address_sync_task(
+            direct_address_cache_sync_task: spawn_direct_address_cache_sync_task(
                 swarm_control.clone(),
-                address_book_config.clone(),
+                direct_address_cache.clone(),
             ),
         };
         let daemon = Self {
             config: shared_config,
-            address_book_config,
+            devices_config,
+            trusted_devices_config,
+            direct_address_cache,
             args,
             swarm_control,
             mdns_control,
@@ -472,6 +504,17 @@ impl FungiDaemon {
         rule: fungi_config::tcp_tunneling::ForwardingRule,
         add: bool,
     ) -> Result<()> {
+        if rule.remote_service_name.is_some() {
+            let fungi_dir = self.config_fungi_dir()?;
+            let current_access = LocalAccessConfig::apply_from_dir(&fungi_dir)?;
+            if add {
+                current_access.add_forwarding_rule(rule)?;
+            } else {
+                current_access.remove_forwarding_rule(&rule)?;
+            }
+            return Ok(());
+        }
+
         let current_config = self.config.lock().clone();
         let updated_config = if add {
             current_config.add_tcp_forwarding_rule(rule)?
@@ -482,6 +525,15 @@ impl FungiDaemon {
         // Update the cached config
         *self.config.lock() = updated_config;
         Ok(())
+    }
+
+    pub(crate) fn config_fungi_dir(&self) -> Result<PathBuf> {
+        self.config
+            .lock()
+            .config_file_path()
+            .parent()
+            .map(std::path::Path::to_path_buf)
+            .ok_or_else(|| anyhow::anyhow!("config file has no parent directory"))
     }
 
     fn update_config_with_listening_rule(
@@ -502,18 +554,18 @@ impl FungiDaemon {
     }
 }
 
-fn hydrate_address_book_peer_addresses(state: &State, address_book_config: &AddressBookConfig) {
+fn hydrate_device_addresses(state: &State, devices_config: &DevicesConfig) {
     let mut loaded = 0usize;
     let mut ignored = 0usize;
 
-    for peer in &address_book_config.peers {
-        for address in &peer.multiaddrs {
+    for device in &devices_config.devices {
+        for address in &device.multiaddrs {
             match address.parse::<Multiaddr>() {
                 Ok(multiaddr) => {
                     match state.record_peer_address(
-                        peer.peer_id,
+                        device.peer_id,
                         multiaddr,
-                        PeerAddressSource::AddressBook,
+                        PeerAddressSource::DeviceConfig,
                     ) {
                         fungi_swarm::PeerAddressObservation::New
                         | fungi_swarm::PeerAddressObservation::Refreshed => loaded += 1,
@@ -523,8 +575,8 @@ fn hydrate_address_book_peer_addresses(state: &State, address_book_config: &Addr
                 Err(error) => {
                     ignored += 1;
                     log::debug!(
-                        "Ignoring invalid address book multiaddr for peer {}: {} ({})",
-                        peer.peer_id,
+                        "Ignoring invalid device multiaddr for peer {}: {} ({})",
+                        device.peer_id,
                         address,
                         error
                     );
@@ -535,77 +587,270 @@ fn hydrate_address_book_peer_addresses(state: &State, address_book_config: &Addr
 
     if loaded > 0 || ignored > 0 {
         log::info!(
-            "Loaded {} peer address(es) from address book into dial planner state (ignored={})",
+            "Loaded {} device address(es) into dial planner state (ignored={})",
             loaded,
             ignored
         );
     }
 }
 
-fn mdns_peer_info(config: &FungiConfig, peer_id: libp2p::PeerId) -> PeerInfo {
-    let mut peer_info = PeerInfo::this_device(peer_id, config.get_hostname());
+fn hydrate_direct_address_cache(state: &State, cache: &DirectAddressCache) {
+    let mut loaded = 0usize;
+    let mut ignored = 0usize;
 
-    for ip in &peer_info.private_ips {
+    for device in &cache.devices {
+        let Ok(peer_id) = device.peer_id.parse::<libp2p::PeerId>() else {
+            ignored += device.addresses.len();
+            continue;
+        };
+
+        for entry in &device.addresses {
+            match entry.address.parse::<Multiaddr>() {
+                Ok(multiaddr) => {
+                    match state.restore_peer_address_record(
+                        peer_id,
+                        multiaddr,
+                        PeerAddressSource::DirectCache,
+                        entry.first_success_at,
+                        entry.last_success_at,
+                        entry.success_count,
+                    ) {
+                        fungi_swarm::PeerAddressObservation::New
+                        | fungi_swarm::PeerAddressObservation::Refreshed => loaded += 1,
+                        fungi_swarm::PeerAddressObservation::Ignored => ignored += 1,
+                    }
+                }
+                Err(error) => {
+                    ignored += 1;
+                    log::debug!(
+                        "Ignoring invalid cached direct address for peer {}: {} ({})",
+                        device.peer_id,
+                        entry.address,
+                        error
+                    );
+                }
+            }
+        }
+    }
+
+    if loaded > 0 || ignored > 0 {
+        log::info!(
+            "Loaded {} cached direct address(es) into dial planner state (ignored={})",
+            loaded,
+            ignored
+        );
+    }
+}
+
+fn mdns_device_info(config: &FungiConfig, peer_id: libp2p::PeerId) -> DeviceInfo {
+    let mut device_info = DeviceInfo::this_device(peer_id, config.get_hostname());
+
+    for ip in &device_info.private_ips {
         let ip_version = if ip.contains(':') { "6" } else { "4" };
         if config.network.listen_tcp_port != 0 {
-            peer_info.multiaddrs.push(format!(
+            device_info.multiaddrs.push(format!(
                 "/ip{ip_version}/{ip}/tcp/{}/p2p/{peer_id}",
                 config.network.listen_tcp_port
             ));
         }
 
         if config.network.listen_udp_port != 0 {
-            peer_info.multiaddrs.push(format!(
+            device_info.multiaddrs.push(format!(
                 "/ip{ip_version}/{ip}/udp/{}/quic-v1/p2p/{peer_id}",
                 config.network.listen_udp_port
             ));
         }
     }
 
-    peer_info
+    device_info
 }
 
-fn spawn_peer_address_sync_task(
+fn spawn_direct_address_cache_sync_task(
     swarm_control: SwarmControl,
-    address_book_config: Arc<Mutex<AddressBookConfig>>,
+    direct_address_cache: Arc<Mutex<DirectAddressCache>>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(PEER_ADDRESS_SYNC_INTERVAL);
+        let mut interval = tokio::time::interval(DIRECT_ADDRESS_CACHE_SYNC_INTERVAL);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        let mut last_synced_revision = 0;
+        let mut last_synced_pairs = BTreeSet::<(String, String)>::new();
 
         loop {
             interval.tick().await;
 
-            let revision_before_sync = swarm_control.state().peer_address_revision();
-            if revision_before_sync == last_synced_revision {
-                continue;
-            }
-
-            let mut grouped = HashMap::<libp2p::PeerId, Vec<String>>::new();
-            for record in swarm_control.state().list_peer_addresses() {
-                grouped
-                    .entry(record.peer_id)
-                    .or_default()
-                    .push(record.address.to_string());
-            }
-
+            let grouped = collect_direct_connection_addresses(swarm_control.state());
+            let grouped = new_direct_address_successes(grouped, &mut last_synced_pairs);
             if grouped.is_empty() {
                 continue;
             }
 
-            let current = address_book_config.lock().clone();
-            match current.sync_peer_multiaddrs(grouped) {
-                Ok(updated) => {
-                    *address_book_config.lock() = updated;
-                    last_synced_revision = revision_before_sync;
+            let mut current = direct_address_cache.lock().clone();
+            let mut updated_any = false;
+            for (peer_id, addresses) in grouped {
+                match current.record_successful_addresses(peer_id, addresses) {
+                    Ok(updated) => {
+                        current = updated;
+                        updated_any = true;
+                    }
+                    Err(error) => {
+                        log::warn!("Failed to save cached direct address: {error}");
+                    }
                 }
-                Err(error) => {
-                    log::warn!("Failed to sync learned peer addresses into address book: {error}");
-                }
+            }
+
+            if updated_any {
+                *direct_address_cache.lock() = current;
             }
         }
     })
+}
+
+fn collect_direct_connection_addresses(state: &State) -> BTreeMap<String, Vec<String>> {
+    let mut grouped = BTreeMap::<String, Vec<String>>::new();
+    for peer_id in state.connected_peer_ids() {
+        for connection in state.get_connections_by_peer_id(&peer_id) {
+            if !matches!(connection.direction, ConnectionDirection::Outbound)
+                || connection.is_relay()
+            {
+                continue;
+            }
+
+            grouped
+                .entry(peer_id.to_string())
+                .or_default()
+                .push(connection.remote_addr.to_string());
+        }
+    }
+
+    normalize_direct_address_groups(grouped)
+}
+
+fn new_direct_address_successes(
+    grouped: BTreeMap<String, Vec<String>>,
+    last_synced_pairs: &mut BTreeSet<(String, String)>,
+) -> BTreeMap<String, Vec<String>> {
+    let current_pairs = direct_address_pairs(&grouped);
+    let mut new_pairs = BTreeMap::<String, Vec<String>>::new();
+
+    for (peer_id, address) in current_pairs.difference(last_synced_pairs) {
+        new_pairs
+            .entry(peer_id.clone())
+            .or_default()
+            .push(address.clone());
+    }
+
+    *last_synced_pairs = current_pairs;
+    new_pairs
+}
+
+fn direct_address_pairs(grouped: &BTreeMap<String, Vec<String>>) -> BTreeSet<(String, String)> {
+    grouped
+        .iter()
+        .flat_map(|(peer_id, addresses)| {
+            addresses
+                .iter()
+                .map(|address| (peer_id.clone(), address.clone()))
+        })
+        .collect()
+}
+
+fn normalize_direct_address_groups(
+    mut grouped: BTreeMap<String, Vec<String>>,
+) -> BTreeMap<String, Vec<String>> {
+    grouped.retain(|_, addresses| {
+        addresses.retain(|address| !address.trim().is_empty());
+        for address in addresses.iter_mut() {
+            *address = address.trim().to_string();
+        }
+        addresses.sort();
+        addresses.dedup();
+        !addresses.is_empty()
+    });
+    grouped
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_direct_address_successes_only_returns_new_pairs() {
+        let mut last_synced_pairs = BTreeSet::new();
+
+        let first = new_direct_address_successes(
+            BTreeMap::from([
+                (
+                    "peer-a".to_string(),
+                    vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
+                ),
+                (
+                    "peer-b".to_string(),
+                    vec!["/ip4/192.168.1.8/tcp/4001".to_string()],
+                ),
+            ]),
+            &mut last_synced_pairs,
+        );
+        assert_eq!(first.len(), 2);
+
+        let second = new_direct_address_successes(
+            BTreeMap::from([
+                (
+                    "peer-a".to_string(),
+                    vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
+                ),
+                (
+                    "peer-b".to_string(),
+                    vec![
+                        "/ip4/192.168.1.8/tcp/4001".to_string(),
+                        "/ip4/192.168.1.9/tcp/4001".to_string(),
+                    ],
+                ),
+            ]),
+            &mut last_synced_pairs,
+        );
+        assert_eq!(
+            second,
+            BTreeMap::from([(
+                "peer-b".to_string(),
+                vec!["/ip4/192.168.1.9/tcp/4001".to_string()]
+            )])
+        );
+
+        let third = new_direct_address_successes(
+            BTreeMap::from([
+                (
+                    "peer-a".to_string(),
+                    vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
+                ),
+                (
+                    "peer-b".to_string(),
+                    vec![
+                        "/ip4/192.168.1.8/tcp/4001".to_string(),
+                        "/ip4/192.168.1.9/tcp/4001".to_string(),
+                    ],
+                ),
+            ]),
+            &mut last_synced_pairs,
+        );
+        assert!(third.is_empty());
+
+        let empty = new_direct_address_successes(BTreeMap::new(), &mut last_synced_pairs);
+        assert!(empty.is_empty());
+
+        let after_disconnect = new_direct_address_successes(
+            BTreeMap::from([(
+                "peer-a".to_string(),
+                vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
+            )]),
+            &mut last_synced_pairs,
+        );
+        assert_eq!(
+            after_disconnect,
+            BTreeMap::from([(
+                "peer-a".to_string(),
+                vec!["/ip4/192.168.1.7/tcp/4001".to_string()]
+            )])
+        );
+    }
 }
 
 fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) -> Result<()> {

@@ -142,19 +142,25 @@ impl FungiDaemon {
     pub async fn attach_service_access(
         &self,
         peer_id: PeerId,
-        service_id: String,
+        service_name: String,
+        entry: Option<String>,
+        local_port: Option<u16>,
     ) -> Result<ServiceAccess> {
         let catalog_services = self.list_peer_catalog(peer_id).await?;
         let service = catalog_services
             .into_iter()
-            .find(|service| service.service_id == service_id)
-            .ok_or_else(|| anyhow::anyhow!("remote service not found: {}", service_id))?;
+            .find(|service| service.service_name == service_name)
+            .ok_or_else(|| anyhow::anyhow!("remote service not found: {}", service_name))?;
 
         if service.endpoints.is_empty() {
             bail!(
                 "remote service exposes no named TCP endpoints: {}",
-                service.service_id
+                service.service_name
             );
+        }
+
+        if local_port.is_some() && service.endpoints.len() > 1 && entry.is_none() {
+            bail!("choose a service entry before assigning a fixed local port");
         }
 
         let peer_id_string = peer_id.to_string();
@@ -164,33 +170,84 @@ impl FungiDaemon {
             .map(|(_, rule)| rule.local_port)
             .collect::<BTreeSet<_>>();
         let mut enabled_endpoints = Vec::new();
+        let endpoints = service
+            .endpoints
+            .into_iter()
+            .filter(|endpoint| {
+                entry
+                    .as_deref()
+                    .map(|entry| endpoint.name == entry)
+                    .unwrap_or(true)
+            })
+            .collect::<Vec<_>>();
 
-        for endpoint in service.endpoints {
-            if let Some((_, rule)) = existing_rules.iter().find(|(_, rule)| {
+        if endpoints.is_empty() {
+            let entry = entry.unwrap_or_else(|| "default".to_string());
+            bail!("remote service entry not found: {}", entry);
+        }
+
+        for endpoint in endpoints {
+            let existing_rule = existing_rules.iter().find(|(_, rule)| {
                 rule.remote_peer_id == peer_id_string
-                    && rule.remote_service_id.as_deref() == Some(service.service_id.as_str())
+                    && rule.remote_service_name.as_deref() == Some(service.service_name.as_str())
                     && rule.remote_service_port_name.as_deref() == Some(endpoint.name.as_str())
-            }) {
+            });
+
+            if let Some((rule_id, rule)) = existing_rule {
+                if let Some(local_port) = local_port
+                    && rule.local_port != local_port
+                {
+                    reserved_local_ports.remove(&rule.local_port);
+                    ensure_requested_local_port_available(local_port, &reserved_local_ports)?;
+                    self.remove_tcp_forwarding_rule_internal(rule_id)?;
+                    self.add_tcp_forwarding_rule_with_details(
+                        "127.0.0.1".to_string(),
+                        local_port,
+                        peer_id_string.clone(),
+                        endpoint.service_port,
+                        Some(endpoint.protocol.clone()),
+                        None,
+                        Some(service.service_name.clone()),
+                        Some(endpoint.name.clone()),
+                    )
+                    .await?;
+                    reserved_local_ports.insert(local_port);
+                    enabled_endpoints.push(ServiceAccessEndpoint {
+                        name: endpoint.name,
+                        protocol: endpoint.protocol,
+                        local_host: "127.0.0.1".to_string(),
+                        local_port,
+                        remote_port: endpoint.service_port,
+                    });
+                    continue;
+                }
+
                 enabled_endpoints.push(ServiceAccessEndpoint {
                     name: endpoint.name,
                     protocol: endpoint.protocol,
                     local_host: rule.local_host.clone(),
                     local_port: rule.local_port,
+                    remote_port: rule.remote_port,
                 });
                 continue;
             }
 
-            let local_port =
-                allocate_local_forward_port(endpoint.service_port, &reserved_local_ports)?;
+            let local_port = match local_port {
+                Some(local_port) => {
+                    ensure_requested_local_port_available(local_port, &reserved_local_ports)?;
+                    local_port
+                }
+                None => allocate_local_forward_port(endpoint.service_port, &reserved_local_ports)?,
+            };
             reserved_local_ports.insert(local_port);
 
             self.add_tcp_forwarding_rule_with_details(
                 "127.0.0.1".to_string(),
                 local_port,
                 peer_id_string.clone(),
-                0,
+                endpoint.service_port,
                 Some(endpoint.protocol.clone()),
-                Some(service.service_id.clone()),
+                None,
                 Some(service.service_name.clone()),
                 Some(endpoint.name.clone()),
             )
@@ -201,20 +258,20 @@ impl FungiDaemon {
                 protocol: endpoint.protocol,
                 local_host: "127.0.0.1".to_string(),
                 local_port,
+                remote_port: endpoint.service_port,
             });
         }
 
         enabled_endpoints.sort_by(|left, right| left.name.cmp(&right.name));
         Ok(ServiceAccess {
             peer_id: peer_id_string,
-            service_id: service.service_id,
             service_name: service.service_name,
             endpoints: enabled_endpoints,
         })
     }
 
-    pub fn detach_service_access(&self, peer_id: PeerId, service_id: String) -> Result<()> {
-        self.detach_service_access_by_match(peer_id, &service_id)
+    pub fn detach_service_access(&self, peer_id: PeerId, service_name: String) -> Result<()> {
+        self.detach_service_access_by_match(peer_id, &service_name)
     }
 
     pub fn detach_service_access_by_match(&self, peer_id: PeerId, matcher: &str) -> Result<()> {
@@ -239,12 +296,9 @@ impl FungiDaemon {
 
     pub fn list_service_accesses(&self, peer_id: Option<PeerId>) -> Vec<ServiceAccess> {
         let peer_filter = peer_id.map(|peer_id| peer_id.to_string());
-        let mut grouped = BTreeMap::<(String, String, String), Vec<ServiceAccessEndpoint>>::new();
+        let mut grouped = BTreeMap::<(String, String), Vec<ServiceAccessEndpoint>>::new();
 
         for (_, rule) in self.get_tcp_forwarding_rules() {
-            let Some(service_id) = rule.remote_service_id.clone() else {
-                continue;
-            };
             let Some(service_name) = rule.remote_service_name.clone() else {
                 continue;
             };
@@ -258,23 +312,23 @@ impl FungiDaemon {
             }
 
             grouped
-                .entry((rule.remote_peer_id.clone(), service_id, service_name))
+                .entry((rule.remote_peer_id.clone(), service_name))
                 .or_default()
                 .push(ServiceAccessEndpoint {
                     name: endpoint_name,
                     protocol: rule.remote_protocol.clone().unwrap_or_default(),
                     local_host: rule.local_host.clone(),
                     local_port: rule.local_port,
+                    remote_port: rule.remote_port,
                 });
         }
 
         let mut services = grouped
             .into_iter()
-            .map(|((peer_id, service_id, service_name), mut endpoints)| {
+            .map(|((peer_id, service_name), mut endpoints)| {
                 endpoints.sort_by(|left, right| left.name.cmp(&right.name));
                 ServiceAccess {
                     peer_id,
-                    service_id,
                     service_name,
                     endpoints,
                 }
@@ -283,7 +337,7 @@ impl FungiDaemon {
         services.sort_by(|left, right| {
             left.peer_id
                 .cmp(&right.peer_id)
-                .then(left.service_id.cmp(&right.service_id))
+                .then(left.service_name.cmp(&right.service_name))
         });
         services
     }
@@ -311,6 +365,18 @@ impl FungiDaemon {
 
         self.remove_tcp_listening_rule_internal(&rule_id)
     }
+}
+
+fn ensure_requested_local_port_available(port: u16, reserved_ports: &BTreeSet<u16>) -> Result<()> {
+    if reserved_ports.contains(&port) {
+        bail!(
+            "local port is already used by another service access: {}",
+            port
+        );
+    }
+    StdTcpListener::bind(("127.0.0.1", port))
+        .map(|_| ())
+        .map_err(|error| anyhow::anyhow!("local port {} is not available: {}", port, error))
 }
 
 fn allocate_local_forward_port(preferred_port: u16, reserved_ports: &BTreeSet<u16>) -> Result<u16> {

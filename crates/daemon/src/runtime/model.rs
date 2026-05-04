@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
-use fungi_config::runtime::AllowedPortRange;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -8,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub enum RuntimeKind {
     Docker,
     Wasmtime,
+    Link,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,12 +30,11 @@ pub enum ServiceSource {
     Docker { image: String },
     WasmtimeFile { component: PathBuf },
     WasmtimeUrl { url: String },
+    TcpLink { host: String, port: u16 },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceExpose {
-    pub service_id: String,
-    pub display_name: String,
     pub transport: ServiceExposeTransport,
     pub usage: Option<ServiceExposeUsage>,
     pub icon_url: Option<String>,
@@ -78,8 +77,23 @@ pub struct ServiceMount {
 pub struct ServicePort {
     pub name: Option<String>,
     pub host_port: u16,
+    #[serde(default)]
+    pub host_port_allocation: ServicePortAllocation,
     pub service_port: u16,
     pub protocol: ServicePortProtocol,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ServicePortAllocation {
+    Auto,
+    Fixed,
+}
+
+impl Default for ServicePortAllocation {
+    fn default() -> Self {
+        Self::Fixed
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -90,10 +104,7 @@ pub enum ServicePortProtocol {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct ManifestResolutionPolicy {
-    pub allowed_tcp_ports: Vec<u16>,
-    pub allowed_tcp_port_ranges: Vec<AllowedPortRange>,
-}
+pub struct ManifestResolutionPolicy;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceInstance {
@@ -119,8 +130,6 @@ pub struct ServiceStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogService {
     pub service_name: String,
-    pub service_id: String,
-    pub display_name: String,
     pub runtime: RuntimeKind,
     pub transport: ServiceExposeTransport,
     pub usage: Option<ServiceExposeUsage>,
@@ -194,9 +203,16 @@ pub struct ServiceManifestSpec {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ServiceManifestSource {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub image: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,10 +226,13 @@ pub struct ServiceManifestMount {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceManifestPort {
     #[serde(rename = "hostPort")]
-    pub host_port: ServiceManifestHostPort,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_port: Option<ServiceManifestHostPort>,
     #[serde(rename = "servicePort")]
     pub service_port: u16,
     #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub protocol: ServicePortProtocol,
 }
@@ -229,15 +248,15 @@ pub enum ServiceManifestHostPort {
 pub struct ServiceManifestExpose {
     #[serde(default)]
     pub enabled: bool,
-    #[serde(rename = "serviceId")]
-    pub service_id: Option<String>,
-    #[serde(rename = "displayName")]
-    pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub transport: Option<ServiceManifestExposeTransport>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<ServiceManifestExposeUsage>,
     #[serde(rename = "iconUrl")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub icon_url: Option<String>,
     #[serde(rename = "catalogId")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub catalog_id: Option<String>,
 }
 
@@ -249,5 +268,6 @@ pub struct ServiceManifestExposeTransport {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceManifestExposeUsage {
     pub kind: ServiceExposeUsageKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
 }

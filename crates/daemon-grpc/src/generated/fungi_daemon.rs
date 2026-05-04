@@ -32,17 +32,17 @@ pub struct ConfigFilePathResponse {
     pub config_file_path: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IncomingAllowedPeersListResponse {
+pub struct TrustedDevicesListResponse {
     #[prost(message, repeated, tag = "1")]
-    pub peers: ::prost::alloc::vec::Vec<PeerInfo>,
+    pub devices: ::prost::alloc::vec::Vec<DeviceInfo>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AddIncomingAllowedPeerRequest {
+pub struct TrustDeviceRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RemoveIncomingAllowedPeerRequest {
+pub struct UntrustDeviceRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
 }
@@ -90,26 +90,7 @@ pub struct RuntimeAllowedHostPathRequest {
     #[prost(string, tag = "1")]
     pub path: ::prost::alloc::string::String,
 }
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RuntimeAllowedPortRequest {
-    #[prost(int32, tag = "1")]
-    pub port: i32,
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RuntimeAllowedPortRangeRequest {
-    #[prost(int32, tag = "1")]
-    pub start: i32,
-    #[prost(int32, tag = "2")]
-    pub end: i32,
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RuntimeAllowedPortRange {
-    #[prost(int32, tag = "1")]
-    pub start: i32,
-    #[prost(int32, tag = "2")]
-    pub end: i32,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RuntimeConfigResponse {
     #[prost(bool, tag = "1")]
     pub disable_docker: bool,
@@ -117,10 +98,6 @@ pub struct RuntimeConfigResponse {
     pub disable_wasmtime: bool,
     #[prost(string, repeated, tag = "3")]
     pub allowed_host_paths: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(int32, repeated, tag = "4")]
-    pub allowed_ports: ::prost::alloc::vec::Vec<i32>,
-    #[prost(message, repeated, tag = "5")]
-    pub allowed_port_ranges: ::prost::alloc::vec::Vec<RuntimeAllowedPortRange>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RuntimeAvailabilityStatus {
@@ -330,11 +307,11 @@ pub struct RemoveTcpListeningRuleRequest {
     pub protocol: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct PeerInfo {
+pub struct DeviceInfo {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub alias: ::prost::alloc::string::String,
+    pub name: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub hostname: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
@@ -349,29 +326,31 @@ pub struct PeerInfo {
     pub last_connected: i64,
     #[prost(string, tag = "9")]
     pub version: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "10")]
+    pub multiaddrs: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PeerInfoListResponse {
+pub struct DeviceInfoListResponse {
     #[prost(message, repeated, tag = "1")]
-    pub peers: ::prost::alloc::vec::Vec<PeerInfo>,
+    pub devices: ::prost::alloc::vec::Vec<DeviceInfo>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct PeerInfoResponse {
+pub struct DeviceInfoResponse {
     #[prost(message, optional, tag = "1")]
-    pub peer_info: ::core::option::Option<PeerInfo>,
+    pub device: ::core::option::Option<DeviceInfo>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct UpdateAddressBookPeerRequest {
+pub struct UpdateDeviceRequest {
     #[prost(message, optional, tag = "1")]
-    pub peer_info: ::core::option::Option<PeerInfo>,
+    pub device: ::core::option::Option<DeviceInfo>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetAddressBookPeerRequest {
+pub struct GetDeviceRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RemoveAddressBookPeerRequest {
+pub struct RemoveDeviceRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
 }
@@ -469,7 +448,7 @@ pub struct ConnectionSnapshot {
     #[prost(string, tag = "11")]
     pub policy_reason: ::prost::alloc::string::String,
     #[prost(string, tag = "12")]
-    pub peer_alias: ::prost::alloc::string::String,
+    pub peer_name: ::prost::alloc::string::String,
     #[prost(string, tag = "13")]
     pub peer_role: ::prost::alloc::string::String,
 }
@@ -647,6 +626,8 @@ pub struct ListServicesResponse {
 pub struct ListPeerCatalogRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
+    #[prost(bool, tag = "2")]
+    pub cached: bool,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListPeerCatalogResponse {
@@ -692,14 +673,18 @@ pub struct AttachServiceAccessRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub service_id: ::prost::alloc::string::String,
+    pub service_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub entry: ::prost::alloc::string::String,
+    #[prost(int32, tag = "4")]
+    pub local_port: i32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DetachServiceAccessRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub service_id: ::prost::alloc::string::String,
+    pub service_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListServiceAccessesRequest {
@@ -904,64 +889,56 @@ pub mod fungi_daemon_client {
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "Hostname"));
             self.inner.unary(req, path, codec).await
         }
-        /// Lists peers that are allowed to initiate incoming connections.
-        pub async fn get_incoming_allowed_peers(
+        /// Lists devices trusted to initiate incoming access.
+        pub async fn list_trusted_devices(
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::IncomingAllowedPeersListResponse>,
-            tonic::Status,
-        > {
+        ) -> std::result::Result<tonic::Response<super::TrustedDevicesListResponse>, tonic::Status>
+        {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/GetIncomingAllowedPeers",
+                "/fungi_daemon.FungiDaemon/ListTrustedDevices",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
                 "fungi_daemon.FungiDaemon",
-                "GetIncomingAllowedPeers",
+                "ListTrustedDevices",
             ));
             self.inner.unary(req, path, codec).await
         }
-        /// Adds a peer ID to the allowlist for incoming connections and persists it.
-        pub async fn add_incoming_allowed_peer(
+        /// Trusts a saved device for incoming access and persists it.
+        pub async fn trust_device(
             &mut self,
-            request: impl tonic::IntoRequest<super::AddIncomingAllowedPeerRequest>,
+            request: impl tonic::IntoRequest<super::TrustDeviceRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/AddIncomingAllowedPeer",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/TrustDevice");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "fungi_daemon.FungiDaemon",
-                "AddIncomingAllowedPeer",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "TrustDevice"));
             self.inner.unary(req, path, codec).await
         }
-        /// Removes a peer ID from the allowlist for incoming connections.
-        pub async fn remove_incoming_allowed_peer(
+        /// Removes incoming access trust from a device.
+        pub async fn untrust_device(
             &mut self,
-            request: impl tonic::IntoRequest<super::RemoveIncomingAllowedPeerRequest>,
+            request: impl tonic::IntoRequest<super::UntrustDeviceRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/RemoveIncomingAllowedPeer",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/UntrustDevice");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "fungi_daemon.FungiDaemon",
-                "RemoveIncomingAllowedPeer",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "UntrustDevice"));
             self.inner.unary(req, path, codec).await
         }
         /// Returns persisted relay configuration and the current effective relay list.
@@ -1061,7 +1038,7 @@ pub mod fungi_daemon_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        /// Returns runtime enablement flags and the current shared safety boundary.
+        /// Returns runtime enablement flags and explicit host path policy.
         pub async fn get_runtime_config(
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
@@ -1135,82 +1112,6 @@ pub mod fungi_daemon_client {
             req.extensions_mut().insert(GrpcMethod::new(
                 "fungi_daemon.FungiDaemon",
                 "RemoveRuntimeAllowedHostPath",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        /// Adds a single TCP port to the shared runtime safety boundary.
-        pub async fn add_runtime_allowed_port(
-            &mut self,
-            request: impl tonic::IntoRequest<super::RuntimeAllowedPortRequest>,
-        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/AddRuntimeAllowedPort",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "fungi_daemon.FungiDaemon",
-                "AddRuntimeAllowedPort",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        /// Removes a single TCP port from the shared runtime safety boundary.
-        pub async fn remove_runtime_allowed_port(
-            &mut self,
-            request: impl tonic::IntoRequest<super::RuntimeAllowedPortRequest>,
-        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/RemoveRuntimeAllowedPort",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "fungi_daemon.FungiDaemon",
-                "RemoveRuntimeAllowedPort",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        /// Adds a TCP port range to the shared runtime safety boundary.
-        pub async fn add_runtime_allowed_port_range(
-            &mut self,
-            request: impl tonic::IntoRequest<super::RuntimeAllowedPortRangeRequest>,
-        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/AddRuntimeAllowedPortRange",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "fungi_daemon.FungiDaemon",
-                "AddRuntimeAllowedPortRange",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        /// Removes a TCP port range from the shared runtime safety boundary.
-        pub async fn remove_runtime_allowed_port_range(
-            &mut self,
-            request: impl tonic::IntoRequest<super::RuntimeAllowedPortRangeRequest>,
-        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/RemoveRuntimeAllowedPortRange",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "fungi_daemon.FungiDaemon",
-                "RemoveRuntimeAllowedPortRange",
             ));
             self.inner.unary(req, path, codec).await
         }
@@ -1544,11 +1445,11 @@ pub mod fungi_daemon_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        /// Returns latest metadata for peers discovered via mDNS.
+        /// Returns latest metadata for devices discovered via mDNS.
         pub async fn list_mdns_devices(
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
-        ) -> std::result::Result<tonic::Response<super::PeerInfoListResponse>, tonic::Status>
+        ) -> std::result::Result<tonic::Response<super::DeviceInfoListResponse>, tonic::Status>
         {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
@@ -1563,81 +1464,69 @@ pub mod fungi_daemon_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        /// Lists every peer stored in the address book.
-        pub async fn list_address_book_peers(
+        /// Lists every user-managed device.
+        pub async fn list_devices(
             &mut self,
             request: impl tonic::IntoRequest<super::Empty>,
-        ) -> std::result::Result<tonic::Response<super::PeerInfoListResponse>, tonic::Status>
+        ) -> std::result::Result<tonic::Response<super::DeviceInfoListResponse>, tonic::Status>
         {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/ListAddressBookPeers",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/ListDevices");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "fungi_daemon.FungiDaemon",
-                "ListAddressBookPeers",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "ListDevices"));
             self.inner.unary(req, path, codec).await
         }
-        /// Inserts or updates a peer entry in the address book.
-        pub async fn update_address_book_peer(
+        /// Inserts or updates a user-managed device.
+        pub async fn update_device(
             &mut self,
-            request: impl tonic::IntoRequest<super::UpdateAddressBookPeerRequest>,
+            request: impl tonic::IntoRequest<super::UpdateDeviceRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/UpdateAddressBookPeer",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/UpdateDevice");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "fungi_daemon.FungiDaemon",
-                "UpdateAddressBookPeer",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "UpdateDevice"));
             self.inner.unary(req, path, codec).await
         }
-        /// Returns detailed information for a single address book peer.
-        pub async fn get_address_book_peer(
+        /// Returns detailed information for a single user-managed device.
+        pub async fn get_device(
             &mut self,
-            request: impl tonic::IntoRequest<super::GetAddressBookPeerRequest>,
-        ) -> std::result::Result<tonic::Response<super::PeerInfoResponse>, tonic::Status> {
+            request: impl tonic::IntoRequest<super::GetDeviceRequest>,
+        ) -> std::result::Result<tonic::Response<super::DeviceInfoResponse>, tonic::Status>
+        {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/GetAddressBookPeer",
-            );
+            let path = http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/GetDevice");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "fungi_daemon.FungiDaemon",
-                "GetAddressBookPeer",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "GetDevice"));
             self.inner.unary(req, path, codec).await
         }
-        /// Removes a peer from the address book.
-        pub async fn remove_address_book_peer(
+        /// Removes a user-managed device.
+        pub async fn remove_device(
             &mut self,
-            request: impl tonic::IntoRequest<super::RemoveAddressBookPeerRequest>,
+            request: impl tonic::IntoRequest<super::RemoveDeviceRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/RemoveAddressBookPeer",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/RemoveDevice");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "fungi_daemon.FungiDaemon",
-                "RemoveAddressBookPeer",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "RemoveDevice"));
             self.inner.unary(req, path, codec).await
         }
         /// Continuously pings all active connections to a peer and streams results.
@@ -2113,23 +2002,20 @@ pub mod fungi_daemon_server {
             &self,
             request: tonic::Request<super::Empty>,
         ) -> std::result::Result<tonic::Response<super::HostnameResponse>, tonic::Status>;
-        /// Lists peers that are allowed to initiate incoming connections.
-        async fn get_incoming_allowed_peers(
+        /// Lists devices trusted to initiate incoming access.
+        async fn list_trusted_devices(
             &self,
             request: tonic::Request<super::Empty>,
-        ) -> std::result::Result<
-            tonic::Response<super::IncomingAllowedPeersListResponse>,
-            tonic::Status,
-        >;
-        /// Adds a peer ID to the allowlist for incoming connections and persists it.
-        async fn add_incoming_allowed_peer(
+        ) -> std::result::Result<tonic::Response<super::TrustedDevicesListResponse>, tonic::Status>;
+        /// Trusts a saved device for incoming access and persists it.
+        async fn trust_device(
             &self,
-            request: tonic::Request<super::AddIncomingAllowedPeerRequest>,
+            request: tonic::Request<super::TrustDeviceRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Removes a peer ID from the allowlist for incoming connections.
-        async fn remove_incoming_allowed_peer(
+        /// Removes incoming access trust from a device.
+        async fn untrust_device(
             &self,
-            request: tonic::Request<super::RemoveIncomingAllowedPeerRequest>,
+            request: tonic::Request<super::UntrustDeviceRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
         /// Returns persisted relay configuration and the current effective relay list.
         async fn get_relay_config(
@@ -2159,7 +2045,7 @@ pub mod fungi_daemon_server {
             &self,
             request: tonic::Request<super::RelayAddressRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Returns runtime enablement flags and the current shared safety boundary.
+        /// Returns runtime enablement flags and explicit host path policy.
         async fn get_runtime_config(
             &self,
             request: tonic::Request<super::Empty>,
@@ -2178,26 +2064,6 @@ pub mod fungi_daemon_server {
         async fn remove_runtime_allowed_host_path(
             &self,
             request: tonic::Request<super::RuntimeAllowedHostPathRequest>,
-        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Adds a single TCP port to the shared runtime safety boundary.
-        async fn add_runtime_allowed_port(
-            &self,
-            request: tonic::Request<super::RuntimeAllowedPortRequest>,
-        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Removes a single TCP port from the shared runtime safety boundary.
-        async fn remove_runtime_allowed_port(
-            &self,
-            request: tonic::Request<super::RuntimeAllowedPortRequest>,
-        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Adds a TCP port range to the shared runtime safety boundary.
-        async fn add_runtime_allowed_port_range(
-            &self,
-            request: tonic::Request<super::RuntimeAllowedPortRangeRequest>,
-        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Removes a TCP port range from the shared runtime safety boundary.
-        async fn remove_runtime_allowed_port_range(
-            &self,
-            request: tonic::Request<super::RuntimeAllowedPortRangeRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
         /// Indicates whether the embedded file transfer service is running.
         async fn get_file_transfer_service_enabled(
@@ -2292,30 +2158,30 @@ pub mod fungi_daemon_server {
             &self,
             request: tonic::Request<super::RemoveTcpListeningRuleRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Returns latest metadata for peers discovered via mDNS.
+        /// Returns latest metadata for devices discovered via mDNS.
         async fn list_mdns_devices(
             &self,
             request: tonic::Request<super::Empty>,
-        ) -> std::result::Result<tonic::Response<super::PeerInfoListResponse>, tonic::Status>;
-        /// Lists every peer stored in the address book.
-        async fn list_address_book_peers(
+        ) -> std::result::Result<tonic::Response<super::DeviceInfoListResponse>, tonic::Status>;
+        /// Lists every user-managed device.
+        async fn list_devices(
             &self,
             request: tonic::Request<super::Empty>,
-        ) -> std::result::Result<tonic::Response<super::PeerInfoListResponse>, tonic::Status>;
-        /// Inserts or updates a peer entry in the address book.
-        async fn update_address_book_peer(
+        ) -> std::result::Result<tonic::Response<super::DeviceInfoListResponse>, tonic::Status>;
+        /// Inserts or updates a user-managed device.
+        async fn update_device(
             &self,
-            request: tonic::Request<super::UpdateAddressBookPeerRequest>,
+            request: tonic::Request<super::UpdateDeviceRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Returns detailed information for a single address book peer.
-        async fn get_address_book_peer(
+        /// Returns detailed information for a single user-managed device.
+        async fn get_device(
             &self,
-            request: tonic::Request<super::GetAddressBookPeerRequest>,
-        ) -> std::result::Result<tonic::Response<super::PeerInfoResponse>, tonic::Status>;
-        /// Removes a peer from the address book.
-        async fn remove_address_book_peer(
+            request: tonic::Request<super::GetDeviceRequest>,
+        ) -> std::result::Result<tonic::Response<super::DeviceInfoResponse>, tonic::Status>;
+        /// Removes a user-managed device.
+        async fn remove_device(
             &self,
-            request: tonic::Request<super::RemoveAddressBookPeerRequest>,
+            request: tonic::Request<super::RemoveDeviceRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
         /// Server streaming response type for the PingPeer method.
         type PingPeerStream: tonic::codegen::tokio_stream::Stream<
@@ -2667,17 +2533,16 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/GetIncomingAllowedPeers" => {
+                "/fungi_daemon.FungiDaemon/ListTrustedDevices" => {
                     #[allow(non_camel_case_types)]
-                    struct GetIncomingAllowedPeersSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for GetIncomingAllowedPeersSvc<T> {
-                        type Response = super::IncomingAllowedPeersListResponse;
+                    struct ListTrustedDevicesSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for ListTrustedDevicesSvc<T> {
+                        type Response = super::TrustedDevicesListResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::get_incoming_allowed_peers(&inner, request)
-                                    .await
+                                <T as FungiDaemon>::list_trusted_devices(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2688,7 +2553,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = GetIncomingAllowedPeersSvc(inner);
+                        let method = ListTrustedDevicesSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -2704,22 +2569,19 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/AddIncomingAllowedPeer" => {
+                "/fungi_daemon.FungiDaemon/TrustDevice" => {
                     #[allow(non_camel_case_types)]
-                    struct AddIncomingAllowedPeerSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon>
-                        tonic::server::UnaryService<super::AddIncomingAllowedPeerRequest>
-                        for AddIncomingAllowedPeerSvc<T>
-                    {
+                    struct TrustDeviceSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::TrustDeviceRequest> for TrustDeviceSvc<T> {
                         type Response = super::Empty;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::AddIncomingAllowedPeerRequest>,
+                            request: tonic::Request<super::TrustDeviceRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::add_incoming_allowed_peer(&inner, request).await
+                                <T as FungiDaemon>::trust_device(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2730,7 +2592,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = AddIncomingAllowedPeerSvc(inner);
+                        let method = TrustDeviceSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -2746,23 +2608,21 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/RemoveIncomingAllowedPeer" => {
+                "/fungi_daemon.FungiDaemon/UntrustDevice" => {
                     #[allow(non_camel_case_types)]
-                    struct RemoveIncomingAllowedPeerSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon>
-                        tonic::server::UnaryService<super::RemoveIncomingAllowedPeerRequest>
-                        for RemoveIncomingAllowedPeerSvc<T>
+                    struct UntrustDeviceSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::UntrustDeviceRequest>
+                        for UntrustDeviceSvc<T>
                     {
                         type Response = super::Empty;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::RemoveIncomingAllowedPeerRequest>,
+                            request: tonic::Request<super::UntrustDeviceRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::remove_incoming_allowed_peer(&inner, request)
-                                    .await
+                                <T as FungiDaemon>::untrust_device(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2773,7 +2633,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = RemoveIncomingAllowedPeerSvc(inner);
+                        let method = UntrustDeviceSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -3136,179 +2996,6 @@ pub mod fungi_daemon_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = RemoveRuntimeAllowedHostPathSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/fungi_daemon.FungiDaemon/AddRuntimeAllowedPort" => {
-                    #[allow(non_camel_case_types)]
-                    struct AddRuntimeAllowedPortSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon>
-                        tonic::server::UnaryService<super::RuntimeAllowedPortRequest>
-                        for AddRuntimeAllowedPortSvc<T>
-                    {
-                        type Response = super::Empty;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::RuntimeAllowedPortRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as FungiDaemon>::add_runtime_allowed_port(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = AddRuntimeAllowedPortSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/fungi_daemon.FungiDaemon/RemoveRuntimeAllowedPort" => {
-                    #[allow(non_camel_case_types)]
-                    struct RemoveRuntimeAllowedPortSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon>
-                        tonic::server::UnaryService<super::RuntimeAllowedPortRequest>
-                        for RemoveRuntimeAllowedPortSvc<T>
-                    {
-                        type Response = super::Empty;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::RuntimeAllowedPortRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as FungiDaemon>::remove_runtime_allowed_port(&inner, request)
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = RemoveRuntimeAllowedPortSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/fungi_daemon.FungiDaemon/AddRuntimeAllowedPortRange" => {
-                    #[allow(non_camel_case_types)]
-                    struct AddRuntimeAllowedPortRangeSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon>
-                        tonic::server::UnaryService<super::RuntimeAllowedPortRangeRequest>
-                        for AddRuntimeAllowedPortRangeSvc<T>
-                    {
-                        type Response = super::Empty;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::RuntimeAllowedPortRangeRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as FungiDaemon>::add_runtime_allowed_port_range(&inner, request)
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = AddRuntimeAllowedPortRangeSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/fungi_daemon.FungiDaemon/RemoveRuntimeAllowedPortRange" => {
-                    #[allow(non_camel_case_types)]
-                    struct RemoveRuntimeAllowedPortRangeSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon>
-                        tonic::server::UnaryService<super::RuntimeAllowedPortRangeRequest>
-                        for RemoveRuntimeAllowedPortRangeSvc<T>
-                    {
-                        type Response = super::Empty;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::RuntimeAllowedPortRangeRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as FungiDaemon>::remove_runtime_allowed_port_range(
-                                    &inner, request,
-                                )
-                                .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = RemoveRuntimeAllowedPortRangeSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -4015,7 +3702,7 @@ pub mod fungi_daemon_server {
                     #[allow(non_camel_case_types)]
                     struct ListMdnsDevicesSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for ListMdnsDevicesSvc<T> {
-                        type Response = super::PeerInfoListResponse;
+                        type Response = super::DeviceInfoListResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
@@ -4047,16 +3734,16 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/ListAddressBookPeers" => {
+                "/fungi_daemon.FungiDaemon/ListDevices" => {
                     #[allow(non_camel_case_types)]
-                    struct ListAddressBookPeersSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for ListAddressBookPeersSvc<T> {
-                        type Response = super::PeerInfoListResponse;
+                    struct ListDevicesSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::Empty> for ListDevicesSvc<T> {
+                        type Response = super::DeviceInfoListResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(&mut self, request: tonic::Request<super::Empty>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::list_address_book_peers(&inner, request).await
+                                <T as FungiDaemon>::list_devices(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -4067,7 +3754,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = ListAddressBookPeersSvc(inner);
+                        let method = ListDevicesSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -4083,22 +3770,21 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/UpdateAddressBookPeer" => {
+                "/fungi_daemon.FungiDaemon/UpdateDevice" => {
                     #[allow(non_camel_case_types)]
-                    struct UpdateAddressBookPeerSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon>
-                        tonic::server::UnaryService<super::UpdateAddressBookPeerRequest>
-                        for UpdateAddressBookPeerSvc<T>
+                    struct UpdateDeviceSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::UpdateDeviceRequest>
+                        for UpdateDeviceSvc<T>
                     {
                         type Response = super::Empty;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::UpdateAddressBookPeerRequest>,
+                            request: tonic::Request<super::UpdateDeviceRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::update_address_book_peer(&inner, request).await
+                                <T as FungiDaemon>::update_device(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -4109,7 +3795,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = UpdateAddressBookPeerSvc(inner);
+                        let method = UpdateDeviceSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -4125,22 +3811,19 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/GetAddressBookPeer" => {
+                "/fungi_daemon.FungiDaemon/GetDevice" => {
                     #[allow(non_camel_case_types)]
-                    struct GetAddressBookPeerSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon>
-                        tonic::server::UnaryService<super::GetAddressBookPeerRequest>
-                        for GetAddressBookPeerSvc<T>
-                    {
-                        type Response = super::PeerInfoResponse;
+                    struct GetDeviceSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::GetDeviceRequest> for GetDeviceSvc<T> {
+                        type Response = super::DeviceInfoResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::GetAddressBookPeerRequest>,
+                            request: tonic::Request<super::GetDeviceRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::get_address_book_peer(&inner, request).await
+                                <T as FungiDaemon>::get_device(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -4151,7 +3834,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = GetAddressBookPeerSvc(inner);
+                        let method = GetDeviceSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -4167,22 +3850,21 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/RemoveAddressBookPeer" => {
+                "/fungi_daemon.FungiDaemon/RemoveDevice" => {
                     #[allow(non_camel_case_types)]
-                    struct RemoveAddressBookPeerSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon>
-                        tonic::server::UnaryService<super::RemoveAddressBookPeerRequest>
-                        for RemoveAddressBookPeerSvc<T>
+                    struct RemoveDeviceSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::RemoveDeviceRequest>
+                        for RemoveDeviceSvc<T>
                     {
                         type Response = super::Empty;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::RemoveAddressBookPeerRequest>,
+                            request: tonic::Request<super::RemoveDeviceRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::remove_address_book_peer(&inner, request).await
+                                <T as FungiDaemon>::remove_device(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -4193,7 +3875,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = RemoveAddressBookPeerSvc(inner);
+                        let method = RemoveDeviceSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

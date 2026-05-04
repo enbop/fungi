@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let runtime = RuntimeControl::with_wasmtime_provider(
         provider,
         None,
-        args.mount_dir.join("services-state.json"),
+        args.mount_dir.join("services"),
         true,
     )?;
 
@@ -79,6 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ports: vec![ServicePort {
             name: None,
             host_port: args.port,
+            host_port_allocation: fungi_daemon::ServicePortAllocation::Fixed,
             service_port: args.port,
             protocol: ServicePortProtocol::Tcp,
         }],

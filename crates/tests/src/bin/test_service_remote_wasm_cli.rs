@@ -36,7 +36,8 @@ fn main() -> Result<()> {
     println!("Provider peer id: {provider_peer_id}");
     println!("Controller peer id: {controller_peer_id}");
 
-    provider.allowed_peer_add(&controller_peer_id)?;
+    provider.device_add(&controller_peer_id, "controller")?;
+    provider.trust_device(&controller_peer_id)?;
     wait_for_mdns_peer(&provider, &controller_peer_id, Duration::from_secs(45))?;
     wait_for_mdns_peer(&controller, &provider_peer_id, Duration::from_secs(45))?;
 
@@ -73,7 +74,7 @@ struct TestNode {
 }
 
 impl TestNode {
-    fn start(fungi_bin: &Path, name: &str, allowed_service_port: u16) -> Result<Self> {
+    fn start(fungi_bin: &Path, name: &str, _service_port: u16) -> Result<Self> {
         let temp_dir = TempDir::new().context("failed to create temp dir")?;
         let fungi_dir = temp_dir.path().join("fungi-home");
         let log_file = temp_dir.path().join(format!("{name}-daemon.log"));
@@ -91,9 +92,7 @@ impl TestNode {
         let listen_tcp_port = find_free_port()?;
         let listen_udp_port = find_free_port()?;
         let config_toml = format!(
-            "[rpc]\nlisten_address = \"127.0.0.1:{rpc_port}\"\n\n[network]\nlisten_tcp_port = {listen_tcp_port}\nlisten_udp_port = {listen_udp_port}\nrelay_enabled = false\nuse_community_relays = false\n\n[runtime]\ndisable_docker = true\ndisable_wasmtime = false\nallowed_host_paths = [\"{}\", \"{}\"]\nallowed_ports = [{allowed_service_port}]\nallowed_port_ranges = []\n",
-            fungi_dir.display(),
-            fungi_dir.join("services").display(),
+            "version = 2\n\n[rpc]\nlisten_address = \"127.0.0.1:{rpc_port}\"\n\n[network]\nlisten_tcp_port = {listen_tcp_port}\nlisten_udp_port = {listen_udp_port}\nrelay_enabled = false\nuse_community_relays = false\n\n[runtime]\ndisable_docker = true\ndisable_wasmtime = false\n",
         );
         std::fs::write(fungi_dir.join("config.toml"), config_toml)
             .with_context(|| format!("failed to write config for node {name}"))?;
@@ -181,10 +180,21 @@ impl TestNode {
         self.run_cli(["info", "id"])
     }
 
-    fn allowed_peer_add(&self, peer_id: &str) -> Result<()> {
-        let output = self.run_cli(["allowed-peers", "add", peer_id])?;
-        if !output.contains("Peer added successfully") {
-            bail!("unexpected allowlist output on {}: {output}", self.name);
+    fn device_add(&self, peer_id: &str, name: &str) -> Result<()> {
+        let output = self.run_cli(["device", "add", name, peer_id])?;
+        if !output.contains("Device saved") {
+            bail!("unexpected device add output on {}: {output}", self.name);
+        }
+        Ok(())
+    }
+
+    fn trust_device(&self, peer_id: &str) -> Result<()> {
+        let output = self.run_cli(["device", "trust", peer_id])?;
+        if !output.contains("Device trusted") {
+            bail!(
+                "unexpected trusted-device output on {}: {output}",
+                self.name
+            );
         }
         Ok(())
     }
@@ -447,9 +457,8 @@ fn http_get(port: u16) -> Result<String> {
 fn write_manifest_file(dir: &Path, wasm_url: &str) -> Result<PathBuf> {
     let manifest_path = dir.join("filebrowser-lite-wasi.service.yaml");
     let manifest_yaml = format!(
-        "apiVersion: fungi.rs/v1alpha1\nkind: ServiceManifest\n\nmetadata:\n  name: {service_name}\n  labels:\n    app: {service_name}\n    managedBy: fungi\n\nspec:\n  runtime: wasmtime\n\n  expose:\n    enabled: true\n    serviceId: {service_id}\n    displayName: File Browser Lite\n    transport:\n      kind: tcp\n    usage:\n      kind: web\n      path: /\n    iconUrl: https://raw.githubusercontent.com/filebrowser/logo/master/icon.svg\n    catalogId: io.enbop.filebrowser-lite-wasi\n\n  source:\n    url: {wasm_url}\n\n  ports:\n    - hostPort: auto\n      name: http\n      servicePort: {service_port}\n      protocol: tcp\n\n  mounts:\n    - hostPath: ${{APP_HOME}}/data\n      runtimePath: data\n\n  env: {{}}\n\n  command: []\n  entrypoint: []\n\n  workingDir: null\n",
+        "apiVersion: fungi.rs/v1alpha1\nkind: ServiceManifest\n\nmetadata:\n  name: {service_name}\n  labels:\n    app: {service_name}\n    managedBy: fungi\n\nspec:\n  runtime: wasmtime\n\n  expose:\n    enabled: true\n    transport:\n      kind: tcp\n    usage:\n      kind: web\n      path: /\n    iconUrl: https://raw.githubusercontent.com/filebrowser/logo/master/icon.svg\n    catalogId: io.enbop.filebrowser-lite-wasi\n\n  source:\n    url: {wasm_url}\n\n  ports:\n    - hostPort: auto\n      name: http\n      servicePort: {service_port}\n      protocol: tcp\n\n  mounts:\n    - hostPath: ${{USER_HOME}}\n      runtimePath: data\n\n  env: {{}}\n\n  command: []\n  entrypoint: []\n\n  workingDir: null\n",
         service_name = SERVICE_NAME,
-        service_id = SERVICE_ID,
         service_port = SERVICE_PORT,
     );
     std::fs::write(&manifest_path, manifest_yaml).context("failed to write manifest file")?;

@@ -178,8 +178,7 @@ async fn execute_connections(
                 }
                 matched_protocol_streams_total += stream_count_for_view;
 
-                let name_display =
-                    connection_display_name(&conn.peer_id, &conn.peer_alias, verbose);
+                let name_display = connection_display_name(&conn.peer_id, &conn.peer_name, verbose);
                 let peer_display = if verbose {
                     conn.peer_id.clone()
                 } else {
@@ -227,9 +226,9 @@ async fn execute_connections(
     }
 }
 
-fn connection_display_name(peer_id: &str, peer_alias: &str, verbose: bool) -> String {
-    if !peer_alias.trim().is_empty() {
-        return peer_alias.to_string();
+fn connection_display_name(peer_id: &str, peer_name: &str, verbose: bool) -> String {
+    if !peer_name.trim().is_empty() {
+        return peer_name.to_string();
     }
 
     if verbose {

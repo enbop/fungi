@@ -13,7 +13,7 @@ async fn create_daemons() -> (TestDaemon, TestDaemon) {
 
     let server_daemon = TestDaemonBuilder::new()
         .with_keypair(server_key)
-        .with_allowed_peer(client_peer_id)
+        .with_trusted_device(client_peer_id)
         .with_config(|cfg| {
             cfg.file_transfer.server.enabled = true;
             cfg.file_transfer.server.shared_root_dir = PathBuf::from("docs");
@@ -24,7 +24,7 @@ async fn create_daemons() -> (TestDaemon, TestDaemon) {
 
     let client_daemon = TestDaemonBuilder::new()
         .with_keypair(client_key)
-        .with_allowed_peer(server_peer_id)
+        .with_trusted_device(server_peer_id)
         .with_config(move |cfg| {
             cfg.file_transfer.proxy_webdav.host = "0.0.0.0".parse().unwrap();
             cfg.file_transfer.proxy_ftp.host = "0.0.0.0".parse().unwrap();

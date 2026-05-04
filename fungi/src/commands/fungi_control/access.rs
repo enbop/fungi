@@ -34,8 +34,8 @@ pub enum AccessCommands {
     },
     /// Create a reusable local access entry for a published remote service
     Attach {
-        /// Published service identifier
-        service_id: String,
+        /// Published service name
+        service_name: String,
         #[command(flatten)]
         peer: PeerTargetArg,
         /// Show detailed output
@@ -44,15 +44,15 @@ pub enum AccessCommands {
     },
     /// Remove a local access entry for a published remote service
     Detach {
-        /// Published service identifier
-        service_id: String,
+        /// Published service name
+        service_name: String,
         #[command(flatten)]
         peer: PeerTargetArg,
     },
     /// Open a published remote service, creating access if needed
     Open {
-        /// Published service identifier
-        service_id: String,
+        /// Published service name
+        service_name: String,
         #[command(flatten)]
         peer: PeerTargetArg,
         /// Create only a temporary access entry for this open operation
@@ -81,7 +81,7 @@ pub async fn execute_access(args: CommonArgs, cmd: AccessCommands) {
             print_accesses(&accesses, verbose);
         }
         AccessCommands::Attach {
-            service_id,
+            service_name,
             peer,
             verbose,
         } => {
@@ -90,10 +90,10 @@ pub async fn execute_access(args: CommonArgs, cmd: AccessCommands) {
                 Err(error) => fatal(error),
             };
             print_target_peer(&peer);
-            let access = attach_access(&mut client, &peer.peer_id, &service_id).await;
+            let access = attach_access(&mut client, &peer.peer_id, &service_name).await;
             print_access(&access, verbose);
         }
-        AccessCommands::Detach { service_id, peer } => {
+        AccessCommands::Detach { service_name, peer } => {
             let peer = match resolve_required_peer(&args, peer.peer.as_ref()) {
                 Ok(peer) => peer,
                 Err(error) => fatal(error),
@@ -101,7 +101,7 @@ pub async fn execute_access(args: CommonArgs, cmd: AccessCommands) {
             print_target_peer(&peer);
             let req = DetachServiceAccessRequest {
                 peer_id: peer.peer_id,
-                service_id,
+                service_name,
             };
             match client.detach_service_access(Request::new(req)).await {
                 Ok(_) => println!("Access entry detached"),
@@ -109,7 +109,7 @@ pub async fn execute_access(args: CommonArgs, cmd: AccessCommands) {
             }
         }
         AccessCommands::Open {
-            service_id,
+            service_name,
             peer,
             ephemeral,
         } => {
@@ -123,8 +123,8 @@ pub async fn execute_access(args: CommonArgs, cmd: AccessCommands) {
             };
             print_target_peer(&peer);
 
-            let catalog = discover_catalog_service(&mut client, &peer.peer_id, &service_id).await;
-            let access = existing_or_attach_access(&mut client, &peer.peer_id, &service_id).await;
+            let catalog = discover_catalog_service(&mut client, &peer.peer_id, &service_name).await;
+            let access = existing_or_attach_access(&mut client, &peer.peer_id, &service_name).await;
             let urls = build_local_urls(&catalog, &access);
             let Some(url) = urls.into_iter().next() else {
                 fatal("No local URL is available for this access entry")
@@ -160,11 +160,13 @@ async fn attach_access(
         tonic::transport::Channel,
     >,
     peer_id: &str,
-    service_id: &str,
+    service_name: &str,
 ) -> ServiceAccess {
     let req = AttachServiceAccessRequest {
         peer_id: peer_id.to_string(),
-        service_id: service_id.to_string(),
+        service_name: service_name.to_string(),
+        entry: String::new(),
+        local_port: 0,
     };
     match client.attach_service_access(Request::new(req)).await {
         Ok(resp) => {
@@ -182,17 +184,17 @@ async fn existing_or_attach_access(
         tonic::transport::Channel,
     >,
     peer_id: &str,
-    service_id: &str,
+    service_name: &str,
 ) -> ServiceAccess {
     let existing = list_accesses(client, Some(peer_id)).await;
     if let Some(access) = existing
         .into_iter()
-        .find(|access| access.service_id == service_id)
+        .find(|access| access.service_name == service_name)
     {
         return access;
     }
 
-    attach_access(client, peer_id, service_id).await
+    attach_access(client, peer_id, service_name).await
 }
 
 async fn discover_catalog_service(
@@ -200,10 +202,11 @@ async fn discover_catalog_service(
         tonic::transport::Channel,
     >,
     peer_id: &str,
-    service_id: &str,
+    service_name: &str,
 ) -> CatalogService {
     let req = ListPeerCatalogRequest {
         peer_id: peer_id.to_string(),
+        cached: false,
     };
     let services = match client.list_peer_catalog(Request::new(req)).await {
         Ok(resp) => {
@@ -217,8 +220,8 @@ async fn discover_catalog_service(
 
     services
         .into_iter()
-        .find(|service| service.service_id == service_id)
-        .unwrap_or_else(|| fatal(format!("Published service not found: {service_id}")))
+        .find(|service| service.service_name == service_name)
+        .unwrap_or_else(|| fatal(format!("Published service not found: {service_name}")))
 }
 
 fn print_accesses(accesses: &[ServiceAccess], verbose: bool) {
@@ -227,7 +230,6 @@ fn print_accesses(accesses: &[ServiceAccess], verbose: bool) {
             .iter()
             .map(|access| AccessListVerboseEntry {
                 peer_id: access.peer_id.clone(),
-                service_id: access.service_id.clone(),
                 service_name: access.service_name.clone(),
                 endpoints: access
                     .endpoints
@@ -248,7 +250,6 @@ fn print_accesses(accesses: &[ServiceAccess], verbose: bool) {
             .iter()
             .map(|access| AccessListEntry {
                 peer_id: access.peer_id.clone(),
-                service_id: access.service_id.clone(),
                 service_name: access.service_name.clone(),
                 endpoints: access
                     .endpoints
@@ -269,7 +270,6 @@ fn print_access(access: &ServiceAccess, verbose: bool) {
     if verbose {
         let view = AccessInspectVerboseView {
             peer_id: access.peer_id.clone(),
-            service_id: access.service_id.clone(),
             service_name: access.service_name.clone(),
             endpoints: access
                 .endpoints
@@ -286,7 +286,6 @@ fn print_access(access: &ServiceAccess, verbose: bool) {
     } else {
         let view = AccessInspectView {
             peer_id: access.peer_id.clone(),
-            service_id: access.service_id.clone(),
             service_name: access.service_name.clone(),
             endpoints: access
                 .endpoints
@@ -371,7 +370,6 @@ fn print_json<T: Serialize>(value: &T, label: &str) {
 #[derive(Debug, Serialize)]
 struct AccessListEntry {
     peer_id: String,
-    service_id: String,
     service_name: String,
     endpoints: Vec<LocalAccessEndpointView>,
 }
@@ -379,7 +377,6 @@ struct AccessListEntry {
 #[derive(Debug, Serialize)]
 struct AccessListVerboseEntry {
     peer_id: String,
-    service_id: String,
     service_name: String,
     endpoints: Vec<AccessEndpointVerboseView>,
 }
@@ -393,7 +390,6 @@ struct LocalAccessEndpointView {
 #[derive(Debug, Serialize)]
 struct AccessInspectView {
     peer_id: String,
-    service_id: String,
     service_name: String,
     endpoints: Vec<LocalAccessEndpointView>,
 }
@@ -401,7 +397,6 @@ struct AccessInspectView {
 #[derive(Debug, Serialize)]
 struct AccessInspectVerboseView {
     peer_id: String,
-    service_id: String,
     service_name: String,
     endpoints: Vec<AccessEndpointVerboseView>,
 }
