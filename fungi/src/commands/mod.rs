@@ -6,7 +6,7 @@ pub mod fungi_relay;
 
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use fungi_config::{FungiDir, default_fungi_dir_name};
 use fungi_control::DeviceInput;
 
@@ -128,4 +128,102 @@ pub enum Commands {
     /// Invoke a service or tool by name
     #[command(external_subcommand)]
     Dynamic(Vec<String>),
+}
+
+pub fn dynamic_builtin_typo_hint_for_tokens(
+    tokens: &[String],
+    device_context: Option<&DeviceInput>,
+) -> Option<(String, String)> {
+    if device_context.is_some() || tokens.len() != 1 {
+        return None;
+    }
+
+    let target = fungi_control::parse_dynamic_thing_target(tokens[0].clone()).ok()?;
+    if target.device.is_some() || target.entry.is_some() {
+        return None;
+    }
+
+    let mut command = FungiArgs::command();
+    command.build();
+    let mut command = command.allow_external_subcommands(false);
+    let err = command
+        .try_get_matches_from_mut(["fungi", target.name.as_str()])
+        .err()?;
+    if err.kind() != clap::error::ErrorKind::InvalidSubcommand {
+        return None;
+    }
+
+    let suggestion = match err.get(clap::error::ContextKind::SuggestedSubcommand)? {
+        clap::error::ContextValue::String(value) => value.clone(),
+        clap::error::ContextValue::Strings(values) => values
+            .iter()
+            .min_by_key(|value| edit_distance(&target.name, value))
+            .cloned()?,
+        _ => return None,
+    };
+
+    Some((target.name, suggestion))
+}
+
+fn edit_distance(left: &str, right: &str) -> usize {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    let mut previous: Vec<usize> = (0..=right.len()).collect();
+    let mut current = vec![0; right.len() + 1];
+
+    for (left_index, left_byte) in left.iter().enumerate() {
+        current[0] = left_index + 1;
+        for (right_index, right_byte) in right.iter().enumerate() {
+            let substitution = previous[right_index] + usize::from(left_byte != right_byte);
+            let insertion = current[right_index] + 1;
+            let deletion = previous[right_index + 1] + 1;
+            current[right_index + 1] = substitution.min(insertion).min(deletion);
+        }
+        std::mem::swap(&mut previous, &mut current);
+    }
+
+    previous[right.len()]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dynamic_builtin_typo_hint_uses_clap_subcommand_suggestions() {
+        assert_eq!(
+            dynamic_builtin_typo_hint_for_tokens(&["devices".to_string()], None),
+            Some(("devices".to_string(), "device".to_string()))
+        );
+        assert_eq!(
+            dynamic_builtin_typo_hint_for_tokens(&["devic".to_string()], None),
+            Some(("devic".to_string(), "device".to_string()))
+        );
+    }
+
+    #[test]
+    fn dynamic_builtin_typo_hint_only_checks_unscoped_single_dynamic_targets() {
+        assert_eq!(
+            dynamic_builtin_typo_hint_for_tokens(
+                &["devices".to_string(), "extra".to_string()],
+                None
+            ),
+            None
+        );
+        assert_eq!(
+            dynamic_builtin_typo_hint_for_tokens(&["devices@nas".to_string()], None),
+            None
+        );
+        assert_eq!(
+            dynamic_builtin_typo_hint_for_tokens(
+                &["devices".to_string()],
+                Some(&DeviceInput::Name("nas".to_string()))
+            ),
+            None
+        );
+        assert_eq!(
+            dynamic_builtin_typo_hint_for_tokens(&["filebrowser".to_string()], None),
+            None
+        );
+    }
 }

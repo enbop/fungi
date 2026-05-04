@@ -21,6 +21,67 @@ impl Drop for DaemonChild {
 }
 
 #[test]
+fn cli_suggests_builtin_command_for_dynamic_typo_without_config() {
+    let home = TempDir::new().unwrap();
+    let output = run_cli_result(home.path(), ["devices"], "");
+
+    assert!(!output.status.success());
+    assert_eq!(output.stdout, "");
+    assert_eq!(
+        output.stderr,
+        concat!(
+            "No service or tool named `devices` was found.
+",
+            "
+",
+            "Hint: `devices` looks like a built-in command typo.
+",
+            "Did you mean:
+",
+            "
+",
+            "  fungi device
+",
+            "
+",
+            "For dynamic services, use:
+",
+            "
+",
+            "  fungi filebrowser@nas
+"
+        )
+    );
+}
+
+#[test]
+fn cli_prefers_existing_dynamic_service_over_builtin_typo_hint() {
+    let home = TempDir::new().unwrap();
+    let rpc = reserve_port();
+    let swarm = reserve_port();
+    let target = reserve_port();
+
+    init_fungi_dir(home.path(), rpc, swarm);
+    let _daemon = start_daemon(home.path());
+    let _peer = wait_peer_id(home.path());
+
+    run_cli_with_input(
+        home.path(),
+        ["service", "add"],
+        &format!("\ndevices\n127.0.0.1:{target}\ntcp\n\nn\n"),
+    );
+
+    let output = run_cli_result(home.path(), ["devices"], "");
+
+    assert!(!output.status.success());
+    assert_eq!(output.stdout, "");
+    assert_eq!(
+        output.stderr,
+        "No web entry is available for this service\n"
+    );
+}
+
+#[test]
 #[cfg_attr(
     windows,
     ignore = "Windows GitHub Actions intermittently cancels short-lived local gRPC CLI connections in this two-daemon smoke; Linux/macOS cover the full remote TCP service flow"
