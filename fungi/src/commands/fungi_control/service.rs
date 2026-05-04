@@ -6,6 +6,7 @@ use std::{
 };
 
 use clap::{Args, Subcommand};
+use fungi_config::{FungiConfig, FungiDir};
 use fungi_daemon::{
     CatalogService, RuntimeKind, ServiceAccess, ServiceExposeTransportKind, ServiceExposeUsageKind,
     ServiceInstance, ServiceManifestDocument, ServiceManifestExpose,
@@ -757,6 +758,12 @@ async fn open_dynamic_service_without_device(
     } else {
         None
     };
+
+    if let Some(command) = builtin_hint.as_ref()
+        && FungiConfig::try_read_from_dir(&args.fungi_dir()).is_err()
+    {
+        fatal_dynamic_builtin_typo(&service, command)
+    }
 
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,

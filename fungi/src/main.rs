@@ -67,14 +67,6 @@ fn run_migration_preflight(fungi_args: &FungiArgs) -> Result<()> {
         return Ok(());
     }
 
-    if let Commands::Dynamic(tokens) = &fungi_args.command {
-        if let Some((name, command)) =
-            dynamic_builtin_typo_hint_for_tokens(tokens, fungi_args.common.dynamic_device.as_ref())
-        {
-            fungi_control::fatal_dynamic_builtin_typo(&name, &command)
-        }
-    }
-
     let report = fungi_config::migrate_if_needed(&fungi_args.common.fungi_dir())?;
     if report.changed {
         println!(

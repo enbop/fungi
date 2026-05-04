@@ -55,6 +55,33 @@ fn cli_suggests_builtin_command_for_dynamic_typo_without_config() {
 }
 
 #[test]
+fn cli_prefers_existing_dynamic_service_over_builtin_typo_hint() {
+    let home = TempDir::new().unwrap();
+    let rpc = reserve_port();
+    let swarm = reserve_port();
+    let target = reserve_port();
+
+    init_fungi_dir(home.path(), rpc, swarm);
+    let _daemon = start_daemon(home.path());
+    let _peer = wait_peer_id(home.path());
+
+    run_cli_with_input(
+        home.path(),
+        ["service", "add"],
+        &format!("\ndevices\n127.0.0.1:{target}\ntcp\n\nn\n"),
+    );
+
+    let output = run_cli_result(home.path(), ["devices"], "");
+
+    assert!(!output.status.success());
+    assert_eq!(output.stdout, "");
+    assert_eq!(
+        output.stderr,
+        "No web entry is available for this service\n"
+    );
+}
+
+#[test]
 fn cli_can_create_and_access_remote_tcp_tunnel_service() {
     let a = TempDir::new().unwrap();
     let b = TempDir::new().unwrap();

@@ -155,11 +155,34 @@ pub fn dynamic_builtin_typo_hint_for_tokens(
 
     let suggestion = match err.get(clap::error::ContextKind::SuggestedSubcommand)? {
         clap::error::ContextValue::String(value) => value.clone(),
-        clap::error::ContextValue::Strings(values) => values.last()?.clone(),
+        clap::error::ContextValue::Strings(values) => values
+            .iter()
+            .min_by_key(|value| edit_distance(&target.name, value))
+            .cloned()?,
         _ => return None,
     };
 
     Some((target.name, suggestion))
+}
+
+fn edit_distance(left: &str, right: &str) -> usize {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    let mut previous: Vec<usize> = (0..=right.len()).collect();
+    let mut current = vec![0; right.len() + 1];
+
+    for (left_index, left_byte) in left.iter().enumerate() {
+        current[0] = left_index + 1;
+        for (right_index, right_byte) in right.iter().enumerate() {
+            let substitution = previous[right_index] + usize::from(left_byte != right_byte);
+            let insertion = current[right_index] + 1;
+            let deletion = previous[right_index + 1] + 1;
+            current[right_index + 1] = substitution.min(insertion).min(deletion);
+        }
+        std::mem::swap(&mut previous, &mut current);
+    }
+
+    previous[right.len()]
 }
 
 #[cfg(test)]
