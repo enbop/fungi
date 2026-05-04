@@ -150,10 +150,11 @@ fn wait_peer_id(path: &std::path::Path) -> String {
 }
 
 fn run_cli<const N: usize>(path: &std::path::Path, args: [&str; N]) -> CliOutput {
-    let output = run_cli_result(path, args, "");
+    let output = run_cli_result_with_retry(path, args, "");
     assert!(
         output.status.success(),
-        "command failed\nstdout:\n{}\nstderr:\n{}",
+        "command {:?} failed\nstdout:\n{}\nstderr:\n{}",
+        output.args,
         output.stdout,
         output.stderr
     );
@@ -165,10 +166,11 @@ fn run_cli_with_input<const N: usize>(
     args: [&str; N],
     input: &str,
 ) -> CliOutput {
-    let output = run_cli_result(path, args, input);
+    let output = run_cli_result_with_retry(path, args, input);
     assert!(
         output.status.success(),
-        "command failed\nstdout:\n{}\nstderr:\n{}",
+        "command {:?} failed\nstdout:\n{}\nstderr:\n{}",
+        output.args,
         output.stdout,
         output.stderr
     );
@@ -176,9 +178,26 @@ fn run_cli_with_input<const N: usize>(
 }
 
 struct CliOutput {
+    args: Vec<String>,
     status: std::process::ExitStatus,
     stdout: String,
     stderr: String,
+}
+
+fn run_cli_result_with_retry<const N: usize>(
+    path: &std::path::Path,
+    args: [&str; N],
+    input: &str,
+) -> CliOutput {
+    let mut output = run_cli_result(path, args, input);
+    for _ in 0..5 {
+        if output.status.success() || !is_transient_grpc_transport_error(&output) {
+            return output;
+        }
+        thread::sleep(Duration::from_millis(200));
+        output = run_cli_result(path, args, input);
+    }
+    output
 }
 
 fn run_cli_result<const N: usize>(
@@ -186,6 +205,10 @@ fn run_cli_result<const N: usize>(
     args: [&str; N],
     input: &str,
 ) -> CliOutput {
+    let arg_list = args
+        .iter()
+        .map(|arg| (*arg).to_string())
+        .collect::<Vec<_>>();
     let mut child = Command::new(fungi_bin())
         .arg("--fungi-dir")
         .arg(path)
@@ -208,6 +231,7 @@ fn run_cli_result<const N: usize>(
         if child.try_wait().unwrap().is_some() {
             let output = child.wait_with_output().unwrap();
             return CliOutput {
+                args: arg_list,
                 status: output.status,
                 stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
                 stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -217,13 +241,20 @@ fn run_cli_result<const N: usize>(
             let _ = child.kill();
             let output = child.wait_with_output().unwrap();
             panic!(
-                "command timed out\nstdout:\n{}\nstderr:\n{}",
+                "command {:?} timed out\nstdout:\n{}\nstderr:\n{}",
+                arg_list,
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr)
             );
         }
         thread::sleep(Duration::from_millis(50));
     }
+}
+
+fn is_transient_grpc_transport_error(output: &CliOutput) -> bool {
+    output.stdout.trim().is_empty()
+        && (output.stderr.contains("h2 protocol error")
+            || output.stderr.contains("The operation was cancelled"))
 }
 
 fn connect_with_retry(addr: &str, timeout: Duration) -> TcpStream {
