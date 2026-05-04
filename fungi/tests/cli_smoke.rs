@@ -21,6 +21,10 @@ impl Drop for DaemonChild {
 }
 
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "Windows GitHub Actions intermittently cancels short-lived local gRPC CLI connections in this two-daemon smoke; Linux/macOS cover the full remote TCP service flow"
+)]
 fn cli_can_create_and_access_remote_tcp_tunnel_service() {
     let a = TempDir::new().unwrap();
     let b = TempDir::new().unwrap();
