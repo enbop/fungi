@@ -16,11 +16,11 @@ use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
         AttachServiceAccessRequest, DetachServiceAccessRequest, DeviceInfo, Empty,
-        GetRecipeRequest, GetServiceLogsRequest, ListPeerCatalogRequest, ListRecipesRequest,
+        GetRecipeRequest, GetServiceLogsRequest, ListDeviceServicesRequest, ListRecipesRequest,
         ListRecipesResponse, ListServiceAccessesRequest, ListServicesResponse, PullServiceRequest,
-        RecipeDetail, RecipeRuntimeKind, RecipeSummary, RemotePeerRequest,
-        RemotePullServiceRequest, RemoteServiceControlResponse, RemoteServiceNameRequest,
-        ResolveRecipeRequest, ServiceInstanceResponse, ServiceNameRequest,
+        RecipeDetail, RecipeRuntimeKind, RecipeSummary, RemotePullServiceRequest,
+        RemoteServiceControlResponse, RemoteServiceNameRequest, ResolveRecipeRequest,
+        ServiceInstanceResponse, ServiceNameRequest,
     },
 };
 use serde::Serialize;
@@ -164,10 +164,11 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
         ServiceCommands::List { verbose, refresh } => {
             if let Some(device) = device {
                 print_target_device(&device);
-                let req = RemotePeerRequest {
-                    peer_id: device.peer_id,
+                let req = ListDeviceServicesRequest {
+                    device_id: device.peer_id,
+                    cached: false,
                 };
-                match client.remote_list_services(Request::new(req)).await {
+                match client.list_device_managed_services(Request::new(req)).await {
                     Ok(resp) => print_service_instances(resp.into_inner(), verbose),
                     Err(error) => fatal_grpc(error),
                 }
@@ -1180,10 +1181,11 @@ async fn list_remote_service_instances(
     client: &mut RpcClient,
     peer_id: &str,
 ) -> Vec<ServiceInstance> {
-    let req = RemotePeerRequest {
-        peer_id: peer_id.to_string(),
+    let req = ListDeviceServicesRequest {
+        device_id: peer_id.to_string(),
+        cached: false,
     };
-    match client.remote_list_services(Request::new(req)).await {
+    match client.list_device_managed_services(Request::new(req)).await {
         Ok(resp) => {
             match serde_json::from_str::<Vec<ServiceInstance>>(&resp.into_inner().services_json) {
                 Ok(services) => services,
@@ -1198,11 +1200,14 @@ async fn fetch_remote_services(
     client: &mut RpcClient,
     peer_id: &str,
 ) -> Result<Vec<RemoteService>, String> {
-    let req = ListPeerCatalogRequest {
-        peer_id: peer_id.to_string(),
+    let req = ListDeviceServicesRequest {
+        device_id: peer_id.to_string(),
         cached: false,
     };
-    match client.list_peer_catalog(Request::new(req)).await {
+    match client
+        .list_device_published_services(Request::new(req))
+        .await
+    {
         Ok(resp) => serde_json::from_str::<Vec<RemoteService>>(&resp.into_inner().services_json)
             .map_err(|error| format!("Failed to decode remote services: {error}")),
         Err(error) => Err(error.message().to_string()),
@@ -1210,11 +1215,14 @@ async fn fetch_remote_services(
 }
 
 async fn fetch_cached_remote_services(client: &mut RpcClient, peer_id: &str) -> Vec<RemoteService> {
-    let req = ListPeerCatalogRequest {
-        peer_id: peer_id.to_string(),
+    let req = ListDeviceServicesRequest {
+        device_id: peer_id.to_string(),
         cached: true,
     };
-    match client.list_peer_catalog(Request::new(req)).await {
+    match client
+        .list_device_published_services(Request::new(req))
+        .await
+    {
         Ok(resp) => {
             match serde_json::from_str::<Vec<RemoteService>>(&resp.into_inner().services_json) {
                 Ok(services) => services,

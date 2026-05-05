@@ -30,6 +30,7 @@ pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
             DirectAddressCache::apply_from_dir(&fungi_dir)?;
             LocalAccessConfig::apply_from_dir(&fungi_dir)?;
             ServiceCache::apply_from_dir(&fungi_dir)?;
+            ServiceCache::apply_managed_services_from_dir(&fungi_dir)?;
             RecipeCache::apply_from_dir(&fungi_dir)?;
             TrustedDevicesConfig::apply_from_dir(&fungi_dir)?;
             println!("Configuration file upgraded at {}", config_file.display());
@@ -52,10 +53,11 @@ pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
     DevicesConfig::apply_from_dir(&fungi_dir)?;
 
     // create cache/direct_addresses.json, access/local_access.json,
-    // cache/remote_services/, and cache/recipes/
+    // cache/remote_services/, cache/device_managed_services/, and cache/recipes/
     DirectAddressCache::apply_from_dir(&fungi_dir)?;
     LocalAccessConfig::apply_from_dir(&fungi_dir)?;
     ServiceCache::apply_from_dir(&fungi_dir)?;
+    ServiceCache::apply_managed_services_from_dir(&fungi_dir)?;
     RecipeCache::apply_from_dir(&fungi_dir)?;
     TrustedDevicesConfig::apply_from_dir(&fungi_dir)?;
 

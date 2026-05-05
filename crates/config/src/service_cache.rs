@@ -6,7 +6,8 @@ use std::{
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
-const REMOTE_SERVICES_CACHE_DIR: &str = "cache/remote_services";
+const DEVICE_PUBLISHED_SERVICES_CACHE_DIR: &str = "cache/remote_services";
+const DEVICE_MANAGED_SERVICES_CACHE_DIR: &str = "cache/device_managed_services";
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ServiceCache {
@@ -23,10 +24,22 @@ pub struct CachedDeviceServices {
 
 impl ServiceCache {
     pub fn apply_from_dir(fungi_dir: &Path) -> Result<Self> {
-        let root_dir = fungi_dir.join(REMOTE_SERVICES_CACHE_DIR);
+        Self::apply_published_services_from_dir(fungi_dir)
+    }
+
+    pub fn apply_published_services_from_dir(fungi_dir: &Path) -> Result<Self> {
+        Self::apply_namespace_from_dir(fungi_dir, DEVICE_PUBLISHED_SERVICES_CACHE_DIR)
+    }
+
+    pub fn apply_managed_services_from_dir(fungi_dir: &Path) -> Result<Self> {
+        Self::apply_namespace_from_dir(fungi_dir, DEVICE_MANAGED_SERVICES_CACHE_DIR)
+    }
+
+    fn apply_namespace_from_dir(fungi_dir: &Path, namespace: &str) -> Result<Self> {
+        let root_dir = fungi_dir.join(namespace);
         std::fs::create_dir_all(&root_dir).with_context(|| {
             format!(
-                "failed to create remote services cache directory: {}",
+                "failed to create device services cache directory: {}",
                 root_dir.display()
             )
         })?;
@@ -50,7 +63,7 @@ impl ServiceCache {
     pub fn set_device_services_json(&self, peer_id: String, services_json: String) -> Result<()> {
         std::fs::create_dir_all(&self.root_dir).with_context(|| {
             format!(
-                "failed to create remote services cache directory: {}",
+                "failed to create device services cache directory: {}",
                 self.root_dir.display()
             )
         })?;
@@ -90,6 +103,42 @@ mod tests {
             dir.path()
                 .join("cache")
                 .join("remote_services")
+                .join("peer-a.json")
+                .exists()
+        );
+    }
+
+    #[test]
+    fn separates_published_and_managed_device_service_caches() {
+        let dir = TempDir::new().unwrap();
+        let published = ServiceCache::apply_published_services_from_dir(dir.path()).unwrap();
+        let managed = ServiceCache::apply_managed_services_from_dir(dir.path()).unwrap();
+
+        published
+            .set_device_services_json("peer-a".to_string(), "[{\"published\":true}]".to_string())
+            .unwrap();
+        managed
+            .set_device_services_json("peer-a".to_string(), "[{\"managed\":true}]".to_string())
+            .unwrap();
+
+        assert_eq!(
+            published
+                .get_device_services_json("peer-a")
+                .unwrap()
+                .as_deref(),
+            Some("[{\"published\":true}]")
+        );
+        assert_eq!(
+            managed
+                .get_device_services_json("peer-a")
+                .unwrap()
+                .as_deref(),
+            Some("[{\"managed\":true}]")
+        );
+        assert!(
+            dir.path()
+                .join("cache")
+                .join("device_managed_services")
                 .join("peer-a.json")
                 .exists()
         );

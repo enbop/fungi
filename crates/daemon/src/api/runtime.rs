@@ -223,7 +223,19 @@ impl FungiDaemon {
     }
 
     pub async fn list_peer_catalog(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
-        self.refresh_peer_services(peer_id).await
+        self.list_device_published_services(peer_id, false).await
+    }
+
+    pub async fn list_device_published_services(
+        &self,
+        device_id: PeerId,
+        cached: bool,
+    ) -> Result<Vec<CatalogService>> {
+        if cached {
+            self.list_cached_device_published_services(device_id)
+        } else {
+            self.refresh_device_published_services(device_id).await
+        }
     }
 
     pub async fn list_service_recipes(&self, refresh: bool) -> Result<Vec<ServiceRecipeSummary>> {
@@ -262,9 +274,18 @@ impl FungiDaemon {
     }
 
     pub fn list_cached_peer_services(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
-        let peer_id = peer_id.to_string();
+        self.list_cached_device_published_services(peer_id)
+    }
+
+    pub fn list_cached_device_published_services(
+        &self,
+        device_id: PeerId,
+    ) -> Result<Vec<CatalogService>> {
+        let peer_id = device_id.to_string();
         let fungi_dir = self.config_fungi_dir()?;
-        let cache = fungi_config::service_cache::ServiceCache::apply_from_dir(&fungi_dir)?;
+        let cache = fungi_config::service_cache::ServiceCache::apply_published_services_from_dir(
+            &fungi_dir,
+        )?;
         let Some(services_json) = cache.get_device_services_json(&peer_id)? else {
             return Ok(Vec::new());
         };
@@ -273,20 +294,79 @@ impl FungiDaemon {
     }
 
     pub async fn refresh_peer_services(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
-        let services = self.list_peer_services(peer_id).await?;
-        self.save_cached_peer_services(peer_id, &services)?;
+        self.refresh_device_published_services(peer_id).await
+    }
+
+    pub async fn refresh_device_published_services(
+        &self,
+        device_id: PeerId,
+    ) -> Result<Vec<CatalogService>> {
+        let services = self.list_peer_services(device_id).await?;
+        self.save_cached_device_published_services(device_id, &services)?;
         Ok(services)
     }
 
-    fn save_cached_peer_services(
+    fn save_cached_device_published_services(
         &self,
-        peer_id: PeerId,
+        device_id: PeerId,
         services: &[CatalogService],
     ) -> Result<()> {
         let services_json = serde_json::to_string(services)?;
         let fungi_dir = self.config_fungi_dir()?;
-        let cache = fungi_config::service_cache::ServiceCache::apply_from_dir(&fungi_dir)?;
-        cache.set_device_services_json(peer_id.to_string(), services_json)?;
+        let cache = fungi_config::service_cache::ServiceCache::apply_published_services_from_dir(
+            &fungi_dir,
+        )?;
+        cache.set_device_services_json(device_id.to_string(), services_json)?;
+        Ok(())
+    }
+
+    pub fn list_cached_device_managed_services_json(&self, device_id: PeerId) -> Result<String> {
+        let fungi_dir = self.config_fungi_dir()?;
+        let cache =
+            fungi_config::service_cache::ServiceCache::apply_managed_services_from_dir(&fungi_dir)?;
+        Ok(cache
+            .get_device_services_json(&device_id.to_string())?
+            .unwrap_or_else(|| "[]".to_string()))
+    }
+
+    pub async fn list_device_managed_services(
+        &self,
+        device_id: PeerId,
+        cached: bool,
+    ) -> Result<ServiceControlResponse> {
+        if cached {
+            Ok(ServiceControlResponse::success_services(
+                None,
+                self.list_cached_device_managed_services_json(device_id)?,
+            ))
+        } else {
+            self.refresh_device_managed_services(device_id).await
+        }
+    }
+
+    pub async fn refresh_device_managed_services(
+        &self,
+        device_id: PeerId,
+    ) -> Result<ServiceControlResponse> {
+        let response = self
+            .service_control_protocol_control()
+            .list_peer_services(device_id)
+            .await?;
+        if let Some(services_json) = response.services_json.as_ref() {
+            self.save_cached_device_managed_services_json(device_id, services_json)?;
+        }
+        Ok(response)
+    }
+
+    fn save_cached_device_managed_services_json(
+        &self,
+        device_id: PeerId,
+        services_json: &str,
+    ) -> Result<()> {
+        let fungi_dir = self.config_fungi_dir()?;
+        let cache =
+            fungi_config::service_cache::ServiceCache::apply_managed_services_from_dir(&fungi_dir)?;
+        cache.set_device_services_json(device_id.to_string(), services_json.to_string())?;
         Ok(())
     }
 
@@ -374,9 +454,12 @@ impl FungiDaemon {
         peer_id: PeerId,
         manifest_yaml: String,
     ) -> Result<ServiceControlResponse> {
-        self.service_control_protocol_control()
+        let response = self
+            .service_control_protocol_control()
             .pull_peer_service(peer_id, manifest_yaml)
-            .await
+            .await?;
+        let _ = self.refresh_device_managed_services(peer_id).await;
+        Ok(response)
     }
 
     pub async fn remote_start_service(
@@ -384,15 +467,16 @@ impl FungiDaemon {
         peer_id: PeerId,
         name: String,
     ) -> Result<ServiceControlResponse> {
-        self.service_control_protocol_control()
+        let response = self
+            .service_control_protocol_control()
             .start_peer_service(peer_id, name)
-            .await
+            .await?;
+        let _ = self.refresh_device_managed_services(peer_id).await;
+        Ok(response)
     }
 
     pub async fn remote_list_services(&self, peer_id: PeerId) -> Result<ServiceControlResponse> {
-        self.service_control_protocol_control()
-            .list_peer_services(peer_id)
-            .await
+        self.list_device_managed_services(peer_id, false).await
     }
 
     pub async fn remote_stop_service(
@@ -413,6 +497,7 @@ impl FungiDaemon {
         if !service_key.is_empty() {
             let _ = self.detach_service_access_by_match(peer_id, &service_key);
         }
+        let _ = self.refresh_device_managed_services(peer_id).await;
         Ok(response)
     }
 
@@ -434,6 +519,7 @@ impl FungiDaemon {
         if !service_key.is_empty() {
             let _ = self.detach_service_access_by_match(peer_id, &service_key);
         }
+        let _ = self.refresh_device_managed_services(peer_id).await;
         Ok(response)
     }
 }

@@ -187,7 +187,15 @@ service FungiDaemon {
   // Resolves one official recipe into a concrete manifest for local or remote pull.
   rpc ResolveRecipe(ResolveRecipeRequest) returns (ResolveRecipeResponse) {}
 
-    // Lists services published by a remote peer for consumption.
+  // Lists services published by a device for consumption.
+  rpc ListDevicePublishedServices(ListDeviceServicesRequest)
+  returns (ListServicesResponse) {}
+
+  // Lists services managed on a device, including stopped ones.
+  rpc ListDeviceManagedServices(ListDeviceServicesRequest)
+  returns (ListServicesResponse) {}
+
+    // Compatibility alias for services published by a remote peer for consumption.
   rpc ListPeerCatalog(ListPeerCatalogRequest)
   returns (ListPeerCatalogResponse) {}
 
@@ -211,7 +219,7 @@ service FungiDaemon {
   rpc RemoteRemoveService(RemoteServiceNameRequest)
   returns (RemoteServiceControlResponse) {}
 
-    // Lists pulled services on a remote peer, including stopped ones.
+    // Compatibility alias for pulled services on a remote peer, including stopped ones.
   rpc RemoteListServices(RemotePeerRequest)
   returns (ListServicesResponse) {}
 
@@ -662,6 +670,11 @@ message ListPeerCatalogRequest {
 }
 
 message ListPeerCatalogResponse { string services_json = 1; }
+
+message ListDeviceServicesRequest {
+  string device_id = 1;
+  bool   cached    = 2;
+}
 
 message GetPeerCapabilitySummaryRequest { string peer_id = 1; }
 
