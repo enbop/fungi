@@ -457,7 +457,7 @@ fn http_get(port: u16) -> Result<String> {
 fn write_manifest_file(dir: &Path, wasm_url: &str) -> Result<PathBuf> {
     let manifest_path = dir.join("filebrowser-lite-wasi.service.yaml");
     let manifest_yaml = format!(
-        "apiVersion: fungi.rs/v1alpha1\nkind: ServiceManifest\n\nmetadata:\n  name: {service_name}\n  labels:\n    app: {service_name}\n    managedBy: fungi\n\nspec:\n  runtime: wasmtime\n\n  expose:\n    enabled: true\n    transport:\n      kind: tcp\n    usage:\n      kind: web\n      path: /\n    iconUrl: https://raw.githubusercontent.com/filebrowser/logo/master/icon.svg\n    catalogId: io.enbop.filebrowser-lite-wasi\n\n  source:\n    url: {wasm_url}\n\n  ports:\n    - hostPort: auto\n      name: http\n      servicePort: {service_port}\n      protocol: tcp\n\n  mounts:\n    - hostPath: ${{USER_HOME}}\n      runtimePath: data\n\n  env: {{}}\n\n  command: []\n  entrypoint: []\n\n  workingDir: null\n",
+        "apiVersion: fungi.rs/v1alpha1\nkind: Service\n\nmetadata:\n  name: {service_name}\n  labels:\n    app: {service_name}\n    managedBy: fungi\n\nspec:\n  run:\n    wasmtime:\n      url: {wasm_url}\n\n  entries:\n    http:\n      port: {service_port}\n      usage: web\n      path: /\n      iconUrl: https://raw.githubusercontent.com/filebrowser/logo/master/icon.svg\n      catalogId: io.enbop.filebrowser-lite-wasi\n\n  mounts:\n    - hostPath: ${{USER_HOME}}\n      runtimePath: data\n\n  env: {{}}\n\n  command: []\n  entrypoint: []\n\n  workingDir: null\n",
         service_name = SERVICE_NAME,
         service_port = SERVICE_PORT,
     );

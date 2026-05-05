@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     net::{TcpListener as StdTcpListener, UdpSocket as StdUdpSocket},
     path::{Path, PathBuf},
@@ -86,48 +86,41 @@ pub(crate) fn peek_service_manifest_name(content: &str) -> Result<String> {
 }
 
 pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
-    let source = match &manifest.source {
-        ServiceSource::Docker { image } => ServiceManifestSource {
-            image: Some(image.clone()),
-            ..ServiceManifestSource::default()
-        },
-        ServiceSource::WasmtimeFile { component } => ServiceManifestSource {
-            file: Some(component.display().to_string()),
-            ..ServiceManifestSource::default()
-        },
-        ServiceSource::WasmtimeUrl { url } => ServiceManifestSource {
-            url: Some(url.clone()),
-            ..ServiceManifestSource::default()
-        },
-        ServiceSource::TcpLink { host, port } => ServiceManifestSource {
-            host: Some(host.clone()),
-            port: Some(*port),
-            ..ServiceManifestSource::default()
-        },
+    let run = match &manifest.source {
+        ServiceSource::Docker { image } => Some(ServiceManifestRun {
+            docker: Some(ServiceManifestDockerRun {
+                image: image.clone(),
+            }),
+            wasmtime: None,
+        }),
+        ServiceSource::WasmtimeFile { component } => Some(ServiceManifestRun {
+            docker: None,
+            wasmtime: Some(ServiceManifestWasmtimeRun {
+                file: Some(component.display().to_string()),
+                url: None,
+            }),
+        }),
+        ServiceSource::WasmtimeUrl { url } => Some(ServiceManifestRun {
+            docker: None,
+            wasmtime: Some(ServiceManifestWasmtimeRun {
+                file: None,
+                url: Some(url.clone()),
+            }),
+        }),
+        ServiceSource::TcpLink { .. } => None,
     };
+    let entries = manifest_entries_to_document(manifest);
 
     let document = ServiceManifestDocument {
         api_version: "fungi.rs/v1alpha1".to_string(),
-        kind: "ServiceManifest".to_string(),
+        kind: "Service".to_string(),
         metadata: ServiceManifestMetadata {
             name: manifest.name.clone(),
             labels: manifest.labels.clone(),
         },
         spec: ServiceManifestSpec {
-            runtime: manifest.runtime,
-            source,
-            expose: manifest.expose.clone().map(|expose| ServiceManifestExpose {
-                enabled: true,
-                transport: Some(ServiceManifestExposeTransport {
-                    kind: expose.transport.kind,
-                }),
-                usage: expose.usage.map(|usage| ServiceManifestExposeUsage {
-                    kind: usage.kind,
-                    path: usage.path,
-                }),
-                icon_url: expose.icon_url,
-                catalog_id: expose.catalog_id,
-            }),
+            run,
+            entries,
             env: manifest.env.clone(),
             mounts: manifest
                 .mounts
@@ -135,16 +128,6 @@ pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
                 .map(|mount| ServiceManifestMount {
                     host_path: mount.host_path.display().to_string(),
                     runtime_path: mount.runtime_path.clone(),
-                })
-                .collect(),
-            ports: manifest
-                .ports
-                .iter()
-                .map(|port| ServiceManifestPort {
-                    host_port: Some(ServiceManifestHostPort::Fixed(port.host_port)),
-                    service_port: port.service_port,
-                    name: port.name.clone(),
-                    protocol: port.protocol,
                 })
                 .collect(),
             command: manifest.command.clone(),
@@ -196,7 +179,7 @@ impl ServiceManifestDocument {
         _policy: &ManifestResolutionPolicy,
         used_host_ports: &BTreeSet<u16>,
     ) -> Result<ServiceManifest> {
-        if self.kind != "ServiceManifest" {
+        if self.kind != "Service" {
             bail!("Unsupported manifest kind: {}", self.kind);
         }
 
@@ -209,70 +192,23 @@ impl ServiceManifestDocument {
         let service_name = normalize_non_empty(&metadata.name, "metadata.name")?;
         let metadata_labels = metadata.labels;
         let mut reserved_host_ports = used_host_ports.clone();
+        if spec.entries.is_empty() {
+            bail!("service manifest requires at least one spec.entries item");
+        }
 
-        let runtime = spec.runtime;
-        let source = match runtime {
-            RuntimeKind::Docker => {
-                let Some(image) = spec.source.image else {
-                    bail!("docker service manifest requires spec.source.image");
-                };
-                ServiceSource::Docker { image }
-            }
-            RuntimeKind::Wasmtime => match (spec.source.file, spec.source.url) {
-                (Some(file), None) => ServiceSource::WasmtimeFile {
-                    component: resolve_manifest_path(&file, base_dir, fungi_home, path_roots),
-                },
-                (None, Some(url)) => ServiceSource::WasmtimeUrl { url },
-                (Some(_), Some(_)) => {
-                    bail!(
-                        "wasmtime service manifest accepts only one of spec.source.file or spec.source.url"
-                    )
-                }
-                (None, None) => {
-                    bail!("wasmtime service manifest requires spec.source.file or spec.source.url")
-                }
-            },
-            RuntimeKind::Link => {
-                let host = normalize_non_empty(
-                    spec.source.host.as_deref().unwrap_or("127.0.0.1"),
-                    "spec.source.host",
-                )?;
-                let Some(port) = spec.source.port else {
-                    bail!("link service manifest requires spec.source.port");
-                };
-                if port == 0 {
-                    bail!("link service source port must be greater than 0");
-                }
-                ServiceSource::TcpLink { host, port }
-            }
-        };
-
-        let ports = spec
-            .ports
-            .into_iter()
-            .map(|port| {
-                let resolved_port = resolve_manifest_host_port(
-                    port.host_port,
-                    port.protocol,
-                    &mut reserved_host_ports,
-                )?;
-                Ok(ServicePort {
-                    name: normalize_optional(port.name),
-                    host_port: resolved_port.port,
-                    host_port_allocation: resolved_port.allocation,
-                    service_port: port.service_port,
-                    protocol: port.protocol,
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        let expose = parse_manifest_expose(spec.expose, &service_name)?;
-        validate_manifest_exposed_ports(expose.as_ref(), &ports)?;
+        let runtime_and_source =
+            parse_manifest_run(spec.run, &spec.entries, base_dir, fungi_home, path_roots)?;
+        let ports = parse_manifest_entries(
+            &spec.entries,
+            runtime_and_source.runtime,
+            &mut reserved_host_ports,
+        )?;
+        let expose = parse_manifest_entries_expose(&spec.entries)?;
 
         Ok(ServiceManifest {
             name: service_name.clone(),
-            runtime,
-            source,
+            runtime: runtime_and_source.runtime,
+            source: runtime_and_source.source,
             expose,
             env: spec.env,
             mounts: spec
@@ -299,36 +235,302 @@ impl ServiceManifestDocument {
     }
 }
 
-fn parse_manifest_expose(
-    expose: Option<ServiceManifestExpose>,
-    _manifest_name: &str,
-) -> Result<Option<ServiceExpose>> {
-    let Some(expose) = expose else {
-        return Ok(None);
-    };
+struct RuntimeAndSource {
+    runtime: RuntimeKind,
+    source: ServiceSource,
+}
 
-    if !expose.enabled {
-        return Ok(None);
+fn manifest_entries_to_document(
+    manifest: &ServiceManifest,
+) -> BTreeMap<String, ServiceManifestEntry> {
+    let usage = manifest
+        .expose
+        .as_ref()
+        .and_then(|expose| expose.usage.as_ref())
+        .map(|usage| manifest_usage_to_entry_usage(usage.kind));
+    let path = manifest
+        .expose
+        .as_ref()
+        .and_then(|expose| expose.usage.as_ref())
+        .and_then(|usage| usage.path.clone());
+    let icon_url = manifest
+        .expose
+        .as_ref()
+        .and_then(|expose| expose.icon_url.clone());
+    let catalog_id = manifest
+        .expose
+        .as_ref()
+        .and_then(|expose| expose.catalog_id.clone());
+
+    let mut entries = BTreeMap::new();
+    for (index, port) in manifest.ports.iter().enumerate() {
+        let fallback_name = if index == 0 {
+            "main".to_string()
+        } else {
+            format!("main-{index}")
+        };
+        let name = port.name.clone().unwrap_or(fallback_name);
+        let protocol = (port.protocol != ServicePortProtocol::Tcp).then_some(port.protocol);
+        let entry = match &manifest.source {
+            ServiceSource::TcpLink { host, port } => ServiceManifestEntry {
+                target: Some(format!("{host}:{port}")),
+                port: None,
+                protocol,
+                usage,
+                path: path.clone(),
+                icon_url: icon_url.clone(),
+                catalog_id: catalog_id.clone(),
+            },
+            _ => ServiceManifestEntry {
+                target: None,
+                port: Some(port.service_port),
+                protocol,
+                usage,
+                path: path.clone(),
+                icon_url: icon_url.clone(),
+                catalog_id: catalog_id.clone(),
+            },
+        };
+        entries.insert(name, entry);
+    }
+    entries
+}
+
+fn manifest_usage_to_entry_usage(kind: ServiceExposeUsageKind) -> ServiceManifestEntryUsageKind {
+    match kind {
+        ServiceExposeUsageKind::Web => ServiceManifestEntryUsageKind::Web,
+        ServiceExposeUsageKind::Ssh => ServiceManifestEntryUsageKind::Ssh,
+        ServiceExposeUsageKind::Raw => ServiceManifestEntryUsageKind::Tcp,
+    }
+}
+
+fn entry_usage_to_manifest_usage(kind: ServiceManifestEntryUsageKind) -> ServiceExposeUsageKind {
+    match kind {
+        ServiceManifestEntryUsageKind::Web => ServiceExposeUsageKind::Web,
+        ServiceManifestEntryUsageKind::Ssh => ServiceExposeUsageKind::Ssh,
+        ServiceManifestEntryUsageKind::Tcp => ServiceExposeUsageKind::Raw,
+    }
+}
+
+fn parse_manifest_run(
+    run: Option<ServiceManifestRun>,
+    entries: &BTreeMap<String, ServiceManifestEntry>,
+    base_dir: &Path,
+    fungi_home: &Path,
+    path_roots: &ManifestPathRoots,
+) -> Result<RuntimeAndSource> {
+    match run {
+        Some(run) => parse_runtime_run(run, entries, base_dir, fungi_home, path_roots),
+        None => parse_tcp_tunnel_run(entries),
+    }
+}
+
+fn parse_runtime_run(
+    run: ServiceManifestRun,
+    entries: &BTreeMap<String, ServiceManifestEntry>,
+    base_dir: &Path,
+    fungi_home: &Path,
+    path_roots: &ManifestPathRoots,
+) -> Result<RuntimeAndSource> {
+    for (name, entry) in entries {
+        if entry.target.is_some() {
+            bail!("spec.entries.{name}.target cannot be used when spec.run is set");
+        }
+        if entry.port.is_none() {
+            bail!("spec.entries.{name}.port is required when spec.run is set");
+        }
     }
 
-    let transport = expose.transport.ok_or_else(|| {
-        anyhow::anyhow!("spec.expose.transport is required when expose.enabled=true")
-    })?;
-    let icon_url = normalize_optional(expose.icon_url);
-    let catalog_id = normalize_optional(expose.catalog_id);
-    let usage = expose.usage.map(|usage| ServiceExposeUsage {
-        kind: usage.kind,
-        path: normalize_optional(usage.path),
-    });
+    match (run.docker, run.wasmtime) {
+        (Some(docker), None) => {
+            let image = normalize_non_empty(&docker.image, "spec.run.docker.image")?;
+            Ok(RuntimeAndSource {
+                runtime: RuntimeKind::Docker,
+                source: ServiceSource::Docker { image },
+            })
+        }
+        (None, Some(wasmtime)) => match (wasmtime.file, wasmtime.url) {
+            (Some(file), None) => Ok(RuntimeAndSource {
+                runtime: RuntimeKind::Wasmtime,
+                source: ServiceSource::WasmtimeFile {
+                    component: resolve_manifest_path(&file, base_dir, fungi_home, path_roots),
+                },
+            }),
+            (None, Some(url)) => {
+                let url = normalize_non_empty(&url, "spec.run.wasmtime.url")?;
+                Ok(RuntimeAndSource {
+                    runtime: RuntimeKind::Wasmtime,
+                    source: ServiceSource::WasmtimeUrl { url },
+                })
+            }
+            (Some(_), Some(_)) => {
+                bail!(
+                    "wasmtime service manifest accepts only one of spec.run.wasmtime.file or spec.run.wasmtime.url"
+                )
+            }
+            (None, None) => {
+                bail!(
+                    "wasmtime service manifest requires spec.run.wasmtime.file or spec.run.wasmtime.url"
+                )
+            }
+        },
+        (Some(_), Some(_)) => {
+            bail!("service manifest accepts only one runtime under spec.run")
+        }
+        (None, None) => bail!("spec.run requires docker or wasmtime"),
+    }
+}
 
+fn parse_tcp_tunnel_run(
+    entries: &BTreeMap<String, ServiceManifestEntry>,
+) -> Result<RuntimeAndSource> {
+    if entries.len() != 1 {
+        bail!("tcp tunnel service manifests currently support exactly one entry");
+    }
+    let (name, entry) = entries.iter().next().expect("entries is non-empty");
+    if entry.target.is_some() && entry.port.is_some() {
+        bail!("spec.entries.{name} must use either target or port, not both");
+    }
+    if entry.port.is_some() {
+        bail!("spec.entries.{name}.port cannot be used without spec.run");
+    }
+    let Some(target) = entry.target.as_deref() else {
+        bail!("spec.entries.{name} requires target or port");
+    };
+    let protocol = entry.protocol.unwrap_or(ServicePortProtocol::Tcp);
+    if protocol != ServicePortProtocol::Tcp {
+        bail!("spec.entries.{name}.target currently supports only protocol: tcp");
+    }
+    let (host, port) = parse_tcp_target(target, &format!("spec.entries.{name}.target"))?;
+    if !matches!(host.as_str(), "127.0.0.1" | "localhost") {
+        bail!("spec.entries.{name}.target currently supports only 127.0.0.1 or localhost");
+    }
+    Ok(RuntimeAndSource {
+        runtime: RuntimeKind::Link,
+        source: ServiceSource::TcpLink { host, port },
+    })
+}
+
+fn parse_manifest_entries(
+    entries: &BTreeMap<String, ServiceManifestEntry>,
+    runtime: RuntimeKind,
+    reserved_host_ports: &mut BTreeSet<u16>,
+) -> Result<Vec<ServicePort>> {
+    entries
+        .iter()
+        .map(|(name, entry)| parse_manifest_entry(name, entry, runtime, reserved_host_ports))
+        .collect()
+}
+
+fn parse_manifest_entry(
+    name: &str,
+    entry: &ServiceManifestEntry,
+    runtime: RuntimeKind,
+    reserved_host_ports: &mut BTreeSet<u16>,
+) -> Result<ServicePort> {
+    let name = normalize_non_empty(name, "spec.entries key")?;
+    let protocol = entry.protocol.unwrap_or(ServicePortProtocol::Tcp);
+    if protocol != ServicePortProtocol::Tcp {
+        bail!("spec.entries.{name}.protocol currently supports only tcp");
+    }
+
+    match (entry.target.as_deref(), entry.port) {
+        (Some(_), Some(_)) => {
+            bail!("spec.entries.{name} must use either target or port, not both");
+        }
+        (Some(target), None) => {
+            if runtime != RuntimeKind::Link {
+                bail!("spec.entries.{name}.target cannot be used when spec.run is set");
+            }
+            let (_host, port) = parse_tcp_target(target, &format!("spec.entries.{name}.target"))?;
+            Ok(ServicePort {
+                name: Some(name),
+                host_port: port,
+                host_port_allocation: ServicePortAllocation::Fixed,
+                service_port: port,
+                protocol,
+            })
+        }
+        (None, Some(service_port)) => {
+            if runtime == RuntimeKind::Link {
+                bail!("spec.entries.{name}.port cannot be used without spec.run");
+            }
+            if service_port == 0 {
+                bail!("spec.entries.{name}.port must be greater than 0");
+            }
+            let resolved_port = allocate_auto_host_port(protocol, reserved_host_ports)?;
+            Ok(ServicePort {
+                name: Some(name),
+                host_port: resolved_port.port,
+                host_port_allocation: resolved_port.allocation,
+                service_port,
+                protocol,
+            })
+        }
+        (None, None) => bail!("spec.entries.{name} requires target or port"),
+    }
+}
+
+fn parse_manifest_entries_expose(
+    entries: &BTreeMap<String, ServiceManifestEntry>,
+) -> Result<Option<ServiceExpose>> {
+    let Some((first_name, first_entry)) = entries.iter().next() else {
+        return Ok(None);
+    };
+    let first_metadata = entry_expose_metadata(first_entry);
+    for (name, entry) in entries.iter().skip(1) {
+        let metadata = entry_expose_metadata(entry);
+        if metadata != first_metadata {
+            bail!(
+                "spec.entries.{name} expose metadata must match spec.entries.{first_name}; per-entry usage/path/iconUrl/catalogId is not supported yet"
+            );
+        }
+    }
+
+    let usage = first_metadata.usage.map(|kind| ServiceExposeUsage {
+        kind: entry_usage_to_manifest_usage(kind),
+        path: first_metadata.path.clone(),
+    });
     Ok(Some(ServiceExpose {
         transport: ServiceExposeTransport {
-            kind: transport.kind,
+            kind: ServiceExposeTransportKind::Tcp,
         },
         usage,
-        icon_url,
-        catalog_id,
+        icon_url: first_metadata.icon_url.clone(),
+        catalog_id: first_metadata.catalog_id.clone(),
     }))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EntryExposeMetadata {
+    usage: Option<ServiceManifestEntryUsageKind>,
+    path: Option<String>,
+    icon_url: Option<String>,
+    catalog_id: Option<String>,
+}
+
+fn entry_expose_metadata(entry: &ServiceManifestEntry) -> EntryExposeMetadata {
+    EntryExposeMetadata {
+        usage: entry.usage,
+        path: normalize_optional(entry.path.clone()),
+        icon_url: normalize_optional(entry.icon_url.clone()),
+        catalog_id: normalize_optional(entry.catalog_id.clone()),
+    }
+}
+
+fn parse_tcp_target(value: &str, field_name: &str) -> Result<(String, u16)> {
+    let value = normalize_non_empty(value, field_name)?;
+    let Some((host, port)) = value.rsplit_once(':') else {
+        bail!("{field_name} must use host:port");
+    };
+    let host = normalize_non_empty(host, field_name)?;
+    let port = port
+        .parse::<u16>()
+        .with_context(|| format!("{field_name} port must be a number"))?;
+    if port == 0 {
+        bail!("{field_name} port must be greater than 0");
+    }
+    Ok((host, port))
 }
 
 fn normalize_non_empty(value: &str, field_name: &str) -> Result<String> {
@@ -348,30 +550,6 @@ fn normalize_optional(value: Option<String>) -> Option<String> {
             Some(trimmed.to_string())
         }
     })
-}
-
-fn validate_manifest_exposed_ports(
-    expose: Option<&ServiceExpose>,
-    ports: &[ServicePort],
-) -> Result<()> {
-    let Some(expose) = expose else {
-        return Ok(());
-    };
-
-    if expose.transport.kind != ServiceExposeTransportKind::Tcp {
-        return Ok(());
-    }
-
-    if ports.iter().any(|port| {
-        port.protocol == ServicePortProtocol::Tcp
-            && port.name.as_ref().is_some_and(|name| !name.is_empty())
-    }) {
-        return Ok(());
-    }
-
-    bail!(
-        "spec.expose.enabled=true with tcp transport requires at least one named TCP port in spec.ports[].name"
-    )
 }
 
 pub fn service_expose_endpoint_bindings(
@@ -411,32 +589,6 @@ pub fn service_expose_endpoint_bindings(
 struct ResolvedManifestHostPort {
     port: u16,
     allocation: ServicePortAllocation,
-}
-
-fn resolve_manifest_host_port(
-    host_port: Option<ServiceManifestHostPort>,
-    protocol: ServicePortProtocol,
-    reserved_host_ports: &mut BTreeSet<u16>,
-) -> Result<ResolvedManifestHostPort> {
-    match host_port {
-        Some(ServiceManifestHostPort::Fixed(port)) => {
-            if !reserved_host_ports.insert(port) {
-                bail!("host port is already reserved in this manifest or node: {port}");
-            }
-            Ok(ResolvedManifestHostPort {
-                port,
-                allocation: ServicePortAllocation::Fixed,
-            })
-        }
-        Some(ServiceManifestHostPort::Keyword(value)) => {
-            let keyword = value.trim().to_ascii_lowercase();
-            if keyword != "auto" {
-                bail!("hostPort must be a number or the keyword: auto");
-            }
-            allocate_auto_host_port(protocol, reserved_host_ports)
-        }
-        None => allocate_auto_host_port(protocol, reserved_host_ports),
-    }
 }
 
 fn allocate_auto_host_port(

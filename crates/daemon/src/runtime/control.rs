@@ -324,6 +324,7 @@ impl RuntimeControl {
                     .map(|endpoint| CatalogServiceEndpoint {
                         name: endpoint.name,
                         protocol: endpoint.protocol,
+                        host_port: endpoint.host_port,
                         service_port: endpoint.service_port,
                     })
                     .collect(),

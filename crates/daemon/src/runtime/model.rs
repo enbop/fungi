@@ -144,6 +144,8 @@ pub struct CatalogService {
 pub struct CatalogServiceEndpoint {
     pub name: String,
     pub protocol: String,
+    #[serde(default)]
+    pub host_port: u16,
     pub service_port: u16,
 }
 
@@ -184,15 +186,15 @@ pub struct ServiceManifestMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceManifestSpec {
-    pub runtime: RuntimeKind,
-    pub source: ServiceManifestSource,
-    pub expose: Option<ServiceManifestExpose>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run: Option<ServiceManifestRun>,
+    #[serde(default)]
+    pub entries: BTreeMap<String, ServiceManifestEntry>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
     #[serde(default)]
     pub mounts: Vec<ServiceManifestMount>,
-    #[serde(default)]
-    pub ports: Vec<ServiceManifestPort>,
     #[serde(default)]
     pub command: Vec<String>,
     #[serde(default)]
@@ -202,17 +204,55 @@ pub struct ServiceManifestSpec {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ServiceManifestSource {
+pub struct ServiceManifestRun {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub image: Option<String>,
+    pub docker: Option<ServiceManifestDockerRun>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wasmtime: Option<ServiceManifestWasmtimeRun>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceManifestDockerRun {
+    pub image: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ServiceManifestWasmtimeRun {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ServiceManifestEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub host: Option<String>,
+    pub target: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<ServicePortProtocol>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<ServiceManifestEntryUsageKind>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(rename = "iconUrl")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon_url: Option<String>,
+    #[serde(rename = "catalogId")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub catalog_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ServiceManifestEntryUsageKind {
+    Web,
+    Ssh,
+    Tcp,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -224,27 +264,6 @@ pub struct ServiceManifestMount {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceManifestPort {
-    #[serde(rename = "hostPort")]
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub host_port: Option<ServiceManifestHostPort>,
-    #[serde(rename = "servicePort")]
-    pub service_port: u16,
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    pub protocol: ServicePortProtocol,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ServiceManifestHostPort {
-    Fixed(u16),
-    Keyword(String),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceManifestExpose {
     #[serde(default)]
     pub enabled: bool,
@@ -252,9 +271,6 @@ pub struct ServiceManifestExpose {
     pub transport: Option<ServiceManifestExposeTransport>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<ServiceManifestExposeUsage>,
-    #[serde(rename = "iconUrl")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub icon_url: Option<String>,
     #[serde(rename = "catalogId")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub catalog_id: Option<String>,

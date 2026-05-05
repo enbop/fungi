@@ -437,7 +437,9 @@ fn local_service_id_from_service_dir(service_dir: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::{RuntimeKind, ServiceSource};
+    use crate::runtime::{
+        RuntimeKind, ServicePort, ServicePortAllocation, ServicePortProtocol, ServiceSource,
+    };
     use fungi_config::paths::FungiPaths;
 
     #[test]
@@ -455,7 +457,13 @@ mod tests {
             expose: None,
             env: BTreeMap::new(),
             mounts: Vec::new(),
-            ports: Vec::new(),
+            ports: vec![ServicePort {
+                name: Some("http".into()),
+                host_port: 18080,
+                host_port_allocation: ServicePortAllocation::Fixed,
+                service_port: 80,
+                protocol: ServicePortProtocol::Tcp,
+            }],
             command: Vec::new(),
             entrypoint: Vec::new(),
             working_dir: None,
@@ -512,7 +520,13 @@ mod tests {
             expose: None,
             env: BTreeMap::new(),
             mounts: Vec::new(),
-            ports: Vec::new(),
+            ports: vec![ServicePort {
+                name: Some("http".into()),
+                host_port: 18080,
+                host_port_allocation: ServicePortAllocation::Fixed,
+                service_port: 80,
+                protocol: ServicePortProtocol::Tcp,
+            }],
             command: Vec::new(),
             entrypoint: Vec::new(),
             working_dir: None,
