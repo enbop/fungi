@@ -69,13 +69,7 @@ impl RecipeCache {
         self.release_dir(release_version).join("index.json")
     }
 
-    pub fn manifest_asset_path(&self, release_version: &str, asset_name: &str) -> Result<PathBuf> {
-        Ok(self
-            .assets_dir(release_version)
-            .join(validate_asset_name(asset_name)?))
-    }
-
-    pub fn readme_asset_path(&self, release_version: &str, asset_name: &str) -> Result<PathBuf> {
+    pub fn asset_path(&self, release_version: &str, asset_name: &str) -> Result<PathBuf> {
         Ok(self
             .assets_dir(release_version)
             .join(validate_asset_name(asset_name)?))
@@ -93,7 +87,7 @@ impl RecipeCache {
         asset_name: &str,
         bytes: &[u8],
     ) -> Result<PathBuf> {
-        let path = self.manifest_asset_path(release_version, asset_name)?;
+        let path = self.asset_path(release_version, asset_name)?;
         self.write_bytes(&path, bytes)?;
         Ok(path)
     }

@@ -263,7 +263,7 @@ async fn ensure_cached_asset(
     release_version: &str,
     asset_name: &str,
 ) -> Result<PathBuf> {
-    let path = cache.manifest_asset_path(release_version, asset_name)?;
+    let path = cache.asset_path(release_version, asset_name)?;
     if path.exists()
         && path
             .metadata()

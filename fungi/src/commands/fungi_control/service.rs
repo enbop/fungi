@@ -888,9 +888,34 @@ fn print_service_recipe_list_value(resp: ListRecipesResponse) {
 }
 
 fn print_service_recipe_detail_value(detail: &RecipeDetail) {
+    print_recipe_metadata(detail);
+}
+
+fn print_recipe_add_review(
+    detail: &RecipeDetail,
+    service_name: &str,
+    target_device_name: Option<&str>,
+    resolved_manifest_path: &str,
+    warnings: &[String],
+) {
     let summary = recipe_summary(detail);
     println!("Recipe: {}", summary.id);
-    println!("Name: {}", summary.name);
+    println!("Service name: {}", service_name);
+    println!("Target: {}", target_device_name.unwrap_or("local node"));
+    print_recipe_metadata_with_options(detail, false);
+    println!("Resolved manifest: {}", resolved_manifest_path);
+    print_recipe_warnings(warnings);
+}
+
+fn print_recipe_metadata(detail: &RecipeDetail) {
+    print_recipe_metadata_with_options(detail, true);
+}
+
+fn print_recipe_metadata_with_options(detail: &RecipeDetail, include_name: bool) {
+    let summary = recipe_summary(detail);
+    if include_name {
+        println!("Name: {}", summary.name);
+    }
     println!("Description: {}", summary.description);
     println!("Runtime: {}", recipe_runtime_label(summary.runtime));
     println!("Stability: {}", summary.stability);
@@ -910,32 +935,6 @@ fn print_service_recipe_detail_value(detail: &RecipeDetail) {
     if !detail.remote_readme_url.is_empty() {
         println!("Remote readme: {}", detail.remote_readme_url);
     }
-}
-
-fn print_recipe_add_review(
-    detail: &RecipeDetail,
-    service_name: &str,
-    target_device_name: Option<&str>,
-    resolved_manifest_path: &str,
-    warnings: &[String],
-) {
-    let summary = recipe_summary(detail);
-    println!("Recipe: {}", summary.id);
-    println!("Service name: {}", service_name);
-    println!("Target: {}", target_device_name.unwrap_or("local node"));
-    println!("Runtime: {}", recipe_runtime_label(summary.runtime));
-    println!("Source: {}", summary.source_label);
-    println!("Release: {}", summary.release_version);
-    println!("Cached manifest: {}", detail.cached_manifest_path);
-    if !detail.cached_readme_path.is_empty() {
-        println!("Cached readme: {}", detail.cached_readme_path);
-    }
-    println!("Resolved manifest: {}", resolved_manifest_path);
-    println!("Remote manifest: {}", detail.remote_manifest_url);
-    if !detail.remote_readme_url.is_empty() {
-        println!("Remote readme: {}", detail.remote_readme_url);
-    }
-    print_recipe_warnings(warnings);
 }
 
 fn print_recipe_warnings(warnings: &[String]) {
