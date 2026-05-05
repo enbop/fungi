@@ -621,13 +621,13 @@ message RecipeSummary {
 }
 
 message RecipeDetail {
-  RecipeSummary     summary              = 1;
-  repeated string   tags                 = 2;
-  string            homepage             = 3;
-  string            cached_manifest_path = 4;
-  string            cached_readme_path   = 5;
-  string            remote_manifest_url  = 6;
-  string            remote_readme_url    = 7;
+  RecipeSummary   summary              = 1;
+  repeated string tags                 = 2;
+  string          homepage             = 3;
+  string          cached_manifest_path = 4;
+  string          cached_readme_path   = 5;
+  string          remote_manifest_url  = 6;
+  string          remote_readme_url    = 7;
 }
 
 message ListRecipesRequest { bool refresh = 1; }
@@ -642,18 +642,18 @@ message GetRecipeRequest {
 message GetRecipeResponse { RecipeDetail detail = 1; }
 
 message ResolveRecipeRequest {
-  string recipe_id     = 1;
-  string service_name  = 2;
-  string peer_id       = 3;
-  bool   refresh       = 4;
+  string recipe_id    = 1;
+  string service_name = 2;
+  string peer_id      = 3;
+  bool   refresh      = 4;
 }
 
 message ResolveRecipeResponse {
-  RecipeDetail     detail                  = 1;
-  string           manifest_yaml           = 2;
-  string           manifest_base_dir       = 3;
-  string           resolved_manifest_path  = 4;
-  repeated string  warnings                = 5;
+  RecipeDetail    detail                 = 1;
+  string          manifest_yaml          = 2;
+  string          manifest_base_dir      = 3;
+  string          resolved_manifest_path = 4;
+  repeated string warnings               = 5;
 }
 
 message ListPeerCatalogRequest {
