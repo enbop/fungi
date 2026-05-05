@@ -7,8 +7,8 @@ use serde::Deserialize;
 use crate::ServiceManifestDocument;
 
 const OFFICIAL_RECIPE_SOURCE_LABEL: &str = "enbop/fungi-service-recipes";
-const OFFICIAL_RECIPE_LATEST_INDEX_URL: &str =
-    "https://github.com/enbop/fungi-service-recipes/releases/latest/download/index.json";
+const OFFICIAL_RECIPE_LATEST_RELEASE_URL: &str =
+    "https://github.com/enbop/fungi-service-recipes/releases/latest";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServiceRecipeRuntime {
@@ -227,13 +227,18 @@ async fn load_official_recipe_index(
 }
 
 async fn refresh_latest_official_recipe_index(cache: &RecipeCache) -> Result<String> {
-    let response = reqwest::get(OFFICIAL_RECIPE_LATEST_INDEX_URL)
+    let latest_release_response = reqwest::get(OFFICIAL_RECIPE_LATEST_RELEASE_URL)
+        .await
+        .context("failed to resolve latest official recipe release")?
+        .error_for_status()
+        .context("latest official recipe release request failed")?;
+    let release_version = release_version_from_release_page_url(latest_release_response.url())?;
+
+    let response = reqwest::get(release_asset_url(&release_version, "index.json"))
         .await
         .context("failed to fetch official recipe index")?
         .error_for_status()
         .context("official recipe index request failed")?;
-    let final_url = response.url().clone();
-    let release_version = release_version_from_url(&final_url)?;
     let bytes = response
         .bytes()
         .await
@@ -271,15 +276,15 @@ fn release_asset_url(release_version: &str, asset_name: &str) -> String {
     )
 }
 
-fn release_version_from_url(url: &reqwest::Url) -> Result<String> {
+fn release_version_from_release_page_url(url: &reqwest::Url) -> Result<String> {
     let segments = url
         .path_segments()
         .map(|segments| segments.collect::<Vec<_>>())
         .unwrap_or_default();
-    let Some(download_index) = segments.iter().position(|segment| *segment == "download") else {
+    let Some(tag_index) = segments.iter().position(|segment| *segment == "tag") else {
         bail!("failed to determine recipe release version from {}", url);
     };
-    let Some(release_version) = segments.get(download_index + 1) else {
+    let Some(release_version) = segments.get(tag_index + 1) else {
         bail!("failed to determine recipe release version from {}", url);
     };
     Ok((*release_version).to_string())
@@ -308,17 +313,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_release_version_from_redirect_url() {
-        let url = reqwest::Url::parse(
-            "https://github.com/enbop/fungi-service-recipes/releases/download/v0.3.1/index.json",
-        )
-        .unwrap();
-
-        assert_eq!(release_version_from_url(&url).unwrap(), "v0.3.1");
+    fn maps_tcp_recipe_runtime_to_link() {
+        assert_eq!(parse_recipe_runtime("tcp").unwrap(), ServiceRecipeRuntime::Link);
     }
 
     #[test]
-    fn maps_tcp_recipe_runtime_to_link() {
-        assert_eq!(parse_recipe_runtime("tcp").unwrap(), ServiceRecipeRuntime::Link);
+    fn parses_release_version_from_release_page_url() {
+        let url = reqwest::Url::parse(
+            "https://github.com/enbop/fungi-service-recipes/releases/tag/v0.3.1",
+        )
+        .unwrap();
+
+        assert_eq!(release_version_from_release_page_url(&url).unwrap(), "v0.3.1");
     }
 }
