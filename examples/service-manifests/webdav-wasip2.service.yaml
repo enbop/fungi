@@ -12,8 +12,7 @@ spec:
   entries:
     http:
       port: 8080
-      usage: web
-      path: /
+      usage: tcp
 
   mounts:
     - hostPath: ${USER_HOME}
@@ -25,3 +24,4 @@ spec:
 notes:
   - "Project: https://github.com/enbop/webdav-wasip2"
   - "Artifact URL: https://github.com/enbop/webdav-wasip2/releases/download/v0.1.0/webdav-wasip2.wasm"
+  - "Use a WebDAV client against the printed local address; browser GET currently returns a Wasmtime 500 for this experimental component."

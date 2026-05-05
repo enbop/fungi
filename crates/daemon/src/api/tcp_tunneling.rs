@@ -6,7 +6,7 @@ use std::{
 use anyhow::{Result, bail};
 use libp2p::PeerId;
 
-use crate::FungiDaemon;
+use crate::{CatalogServiceEndpoint, FungiDaemon};
 
 use super::types::{ServiceAccess, ServiceAccessEndpoint};
 
@@ -194,6 +194,7 @@ impl FungiDaemon {
             });
 
             if let Some((rule_id, rule)) = existing_rule {
+                let remote_port = catalog_endpoint_listen_port(&endpoint);
                 if let Some(local_port) = local_port
                     && rule.local_port != local_port
                 {
@@ -204,7 +205,7 @@ impl FungiDaemon {
                         "127.0.0.1".to_string(),
                         local_port,
                         peer_id_string.clone(),
-                        endpoint.service_port,
+                        remote_port,
                         Some(endpoint.protocol.clone()),
                         None,
                         Some(service.service_name.clone()),
@@ -217,7 +218,7 @@ impl FungiDaemon {
                         protocol: endpoint.protocol,
                         local_host: "127.0.0.1".to_string(),
                         local_port,
-                        remote_port: endpoint.service_port,
+                        remote_port,
                     });
                     continue;
                 }
@@ -240,12 +241,13 @@ impl FungiDaemon {
                 None => allocate_local_forward_port(endpoint.service_port, &reserved_local_ports)?,
             };
             reserved_local_ports.insert(local_port);
+            let remote_port = catalog_endpoint_listen_port(&endpoint);
 
             self.add_tcp_forwarding_rule_with_details(
                 "127.0.0.1".to_string(),
                 local_port,
                 peer_id_string.clone(),
-                endpoint.service_port,
+                remote_port,
                 Some(endpoint.protocol.clone()),
                 None,
                 Some(service.service_name.clone()),
@@ -258,7 +260,7 @@ impl FungiDaemon {
                 protocol: endpoint.protocol,
                 local_host: "127.0.0.1".to_string(),
                 local_port,
-                remote_port: endpoint.service_port,
+                remote_port,
             });
         }
 
@@ -364,6 +366,14 @@ impl FungiDaemon {
             })?;
 
         self.remove_tcp_listening_rule_internal(&rule_id)
+    }
+}
+
+fn catalog_endpoint_listen_port(endpoint: &CatalogServiceEndpoint) -> u16 {
+    if endpoint.host_port == 0 {
+        endpoint.service_port
+    } else {
+        endpoint.host_port
     }
 }
 

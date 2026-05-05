@@ -20,14 +20,19 @@ fn parses_service_add_with_device() {
 
     let Commands::Service(ServiceArgs {
         device,
-        command: Some(ServiceCommands::Add { manifest }),
+        command:
+            Some(ServiceCommands::Add {
+                target_or_manifest,
+                manifest,
+            }),
         ..
     }) = args.command
     else {
         panic!("expected service add command");
     };
 
-    assert_eq!(manifest.as_deref(), Some("demo.service.yaml"));
+    assert_eq!(target_or_manifest.as_deref(), Some("demo.service.yaml"));
+    assert!(manifest.is_none());
     assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "laptop"));
 }
 
@@ -38,13 +43,18 @@ fn parses_interactive_service_add() {
 
     let Commands::Service(ServiceArgs {
         device,
-        command: Some(ServiceCommands::Add { manifest }),
+        command:
+            Some(ServiceCommands::Add {
+                target_or_manifest,
+                manifest,
+            }),
         ..
     }) = args.command
     else {
         panic!("expected service add command");
     };
 
+    assert!(target_or_manifest.is_none());
     assert!(manifest.is_none());
     assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "laptop"));
 }
@@ -64,7 +74,11 @@ fn parses_service_add_reference_for_interactive_creator() {
 
     let Commands::Service(ServiceArgs {
         device,
-        command: Some(ServiceCommands::Add { manifest }),
+        command:
+            Some(ServiceCommands::Add {
+                target_or_manifest,
+                manifest,
+            }),
         ..
     }) = args.command
     else {
@@ -72,7 +86,32 @@ fn parses_service_add_reference_for_interactive_creator() {
     };
 
     assert!(device.device.is_none());
-    assert_eq!(manifest.as_deref(), Some("ssh@nas"));
+    assert_eq!(target_or_manifest.as_deref(), Some("ssh@nas"));
+    assert!(manifest.is_none());
+}
+
+#[test]
+fn parses_service_add_reference_then_manifest() {
+    let args =
+        FungiArgs::try_parse_from(["fungi", "service", "add", "ssh@nas", "ssh.service.yaml"])
+            .unwrap();
+
+    let Commands::Service(ServiceArgs {
+        device,
+        command:
+            Some(ServiceCommands::Add {
+                target_or_manifest,
+                manifest,
+            }),
+        ..
+    }) = args.command
+    else {
+        panic!("expected service add command");
+    };
+
+    assert!(device.device.is_none());
+    assert_eq!(target_or_manifest.as_deref(), Some("ssh@nas"));
+    assert_eq!(manifest.as_deref(), Some("ssh.service.yaml"));
 }
 
 #[test]

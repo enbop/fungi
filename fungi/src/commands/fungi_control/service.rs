@@ -63,7 +63,9 @@ pub enum ServiceCommands {
     },
     /// Add a service to this node or another device
     Add {
-        /// Path to a service manifest YAML file; omit to open the interactive creator
+        /// Service reference, manifest path, or creator default; use `name@device manifest.yaml` for remote add
+        target_or_manifest: Option<String>,
+        /// Path to a service manifest YAML file when the first argument is a service reference
         manifest: Option<String>,
     },
     /// Open a service in the default local app when possible
@@ -141,8 +143,11 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                 print_service_overview(&mut client, verbose, service_args.refresh || refresh).await;
             }
         }
-        ServiceCommands::Add { manifest } => {
-            let add_input = parse_service_add_input(manifest);
+        ServiceCommands::Add {
+            target_or_manifest,
+            manifest,
+        } => {
+            let add_input = parse_service_add_input(target_or_manifest, manifest);
             let device = resolve_service_device_target(&args, device, add_input.device);
             let target_device_name = device.as_ref().map(resolved_device_display_name);
             let created = if let Some(manifest_path) = add_input.manifest_path.as_deref() {
@@ -587,7 +592,28 @@ struct ServiceAddInput {
     device: Option<DeviceInput>,
 }
 
-fn parse_service_add_input(value: Option<String>) -> ServiceAddInput {
+fn parse_service_add_input(
+    target_or_manifest: Option<String>,
+    manifest: Option<String>,
+) -> ServiceAddInput {
+    if let Some(manifest_path) = manifest {
+        let Some(target) = target_or_manifest else {
+            return ServiceAddInput {
+                manifest_path: Some(manifest_path),
+                default_name: None,
+                device: None,
+            };
+        };
+        let target = parse_service_reference(target);
+        reject_service_entry(&target, "add");
+        return ServiceAddInput {
+            manifest_path: Some(manifest_path),
+            default_name: Some(target.name),
+            device: target.device,
+        };
+    }
+
+    let value = target_or_manifest;
     let Some(value) = value else {
         return ServiceAddInput {
             manifest_path: None,
@@ -2112,7 +2138,7 @@ mod tests {
 
     #[test]
     fn parse_service_add_input_treats_yaml_as_manifest() {
-        let input = parse_service_add_input(Some("demo.service.yaml".to_string()));
+        let input = parse_service_add_input(Some("demo.service.yaml".to_string()), None);
 
         assert_eq!(
             input,
@@ -2126,9 +2152,21 @@ mod tests {
 
     #[test]
     fn parse_service_add_input_treats_service_reference_as_creator_defaults() {
-        let input = parse_service_add_input(Some("ssh@nas".to_string()));
+        let input = parse_service_add_input(Some("ssh@nas".to_string()), None);
 
         assert_eq!(input.manifest_path, None);
+        assert_eq!(input.default_name.as_deref(), Some("ssh"));
+        assert!(matches!(input.device, Some(DeviceInput::Name(name)) if name == "nas"));
+    }
+
+    #[test]
+    fn parse_service_add_input_accepts_service_reference_before_manifest() {
+        let input = parse_service_add_input(
+            Some("ssh@nas".to_string()),
+            Some("ssh.service.yaml".to_string()),
+        );
+
+        assert_eq!(input.manifest_path.as_deref(), Some("ssh.service.yaml"));
         assert_eq!(input.default_name.as_deref(), Some("ssh"));
         assert!(matches!(input.device, Some(DeviceInput::Name(name)) if name == "nas"));
     }

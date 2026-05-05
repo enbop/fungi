@@ -144,6 +144,8 @@ pub struct CatalogService {
 pub struct CatalogServiceEndpoint {
     pub name: String,
     pub protocol: String,
+    #[serde(default)]
+    pub host_port: u16,
     pub service_port: u16,
 }
 
