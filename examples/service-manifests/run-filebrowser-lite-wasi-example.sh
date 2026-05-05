@@ -6,7 +6,6 @@ EXAMPLE_DIR="$(cd "$(dirname "$0")" && pwd)"
 TMP_ROOT="$(mktemp -d /tmp/fungi-filebrowser-lite-wasi-example.XXXXXX)"
 FUNGI_DIR="$TMP_ROOT/fungi-home"
 RPC_ADDR="127.0.0.1:55406"
-SERVICE_PORT="${SERVICE_PORT:-28082}"
 BIN="$ROOT_DIR/target/debug/fungi"
 DAEMON_PID=""
 
@@ -20,12 +19,6 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$FUNGI_DIR"
-
-if lsof -nP -iTCP:"$SERVICE_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "service port $SERVICE_PORT is already in use" >&2
-  lsof -nP -iTCP:"$SERVICE_PORT" -sTCP:LISTEN >&2 || true
-  exit 1
-fi
 
 cd "$ROOT_DIR"
 echo "== building fungi =="
@@ -41,9 +34,6 @@ listen_address = "$RPC_ADDR"
 [runtime]
 disable_docker = true
 disable_wasmtime = false
-allowed_host_paths = ["$FUNGI_DIR", "$FUNGI_DIR/services"]
-allowed_ports = [$SERVICE_PORT]
-allowed_port_ranges = []
 EOF
 
 echo "== starting daemon =="
@@ -71,10 +61,13 @@ if [[ "$daemon_ready" != "true" ]]; then
 fi
 
 echo "== pull filebrowser-lite-wasi manifest =="
-"$BIN" --fungi-dir "$FUNGI_DIR" service pull "$EXAMPLE_DIR/filebrowser-lite-wasi.service.yaml"
+"$BIN" --fungi-dir "$FUNGI_DIR" service add "$EXAMPLE_DIR/filebrowser-lite-wasi.service.yaml"
 
 echo "== start filebrowser-lite-wasi service =="
 "$BIN" --fungi-dir "$FUNGI_DIR" service start filebrowser-lite-wasi
+
+SERVICE_PORT="$("$BIN" --fungi-dir "$FUNGI_DIR" service inspect filebrowser-lite-wasi --verbose | python3 -c 'import json,sys; print(json.load(sys.stdin)["local_endpoints"][0]["local_port"])')"
+echo "filebrowser-lite-wasi local port: $SERVICE_PORT"
 
 echo "== waiting for filebrowser-lite-wasi http endpoint =="
 ready="false"

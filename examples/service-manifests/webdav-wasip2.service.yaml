@@ -1,0 +1,27 @@
+apiVersion: fungi.rs/v1alpha1
+kind: Service
+
+metadata:
+  name: webdav-wasip2
+
+spec:
+  run:
+    wasmtime:
+      url: https://github.com/enbop/webdav-wasip2/releases/download/v0.1.0/webdav-wasip2.wasm
+
+  entries:
+    http:
+      port: 8080
+      usage: web
+      path: /
+
+  mounts:
+    - hostPath: ${USER_HOME}
+      runtimePath: data
+
+  env:
+    WEBDAV_FS_ROOT: data
+
+notes:
+  - "Project: https://github.com/enbop/webdav-wasip2"
+  - "Artifact URL: https://github.com/enbop/webdav-wasip2/releases/download/v0.1.0/webdav-wasip2.wasm"

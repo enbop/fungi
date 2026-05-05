@@ -157,47 +157,87 @@ fn migrate_legacy_service_manifest(
     old_service_data_dir: &Path,
     new_service_data_dir: &Path,
 ) -> CurrentServiceManifestDocument {
-    let source = match manifest.source {
-        LegacyServiceSource::Docker { image } => CurrentServiceManifestSource {
-            image: Some(image),
-            ..CurrentServiceManifestSource::default()
+    let run = match manifest.source {
+        LegacyServiceSource::Docker { image } => CurrentServiceManifestRun {
+            docker: Some(CurrentServiceManifestDockerRun { image }),
+            wasmtime: None,
         },
-        LegacyServiceSource::WasmtimeFile { component } => CurrentServiceManifestSource {
-            file: Some(
-                rewrite_legacy_managed_path(component, old_service_data_dir, new_service_data_dir)
+        LegacyServiceSource::WasmtimeFile { component } => CurrentServiceManifestRun {
+            docker: None,
+            wasmtime: Some(CurrentServiceManifestWasmtimeRun {
+                file: Some(
+                    rewrite_legacy_managed_path(
+                        component,
+                        old_service_data_dir,
+                        new_service_data_dir,
+                    )
                     .display()
                     .to_string(),
-            ),
-            ..CurrentServiceManifestSource::default()
+                ),
+                url: None,
+            }),
         },
-        LegacyServiceSource::WasmtimeUrl { url } => CurrentServiceManifestSource {
-            url: Some(url),
-            ..CurrentServiceManifestSource::default()
+        LegacyServiceSource::WasmtimeUrl { url } => CurrentServiceManifestRun {
+            docker: None,
+            wasmtime: Some(CurrentServiceManifestWasmtimeRun {
+                file: None,
+                url: Some(url),
+            }),
         },
     };
+    let expose = manifest.expose;
+    let usage = expose
+        .as_ref()
+        .and_then(|expose| expose.usage.as_ref())
+        .map(|usage| legacy_usage_to_current_entry_usage(usage.kind));
+    let path = expose
+        .as_ref()
+        .and_then(|expose| expose.usage.as_ref())
+        .and_then(|usage| normalize_optional(usage.path.clone()));
+    let icon_url = expose
+        .as_ref()
+        .and_then(|expose| normalize_optional(expose.icon_url.clone()));
+    let catalog_id = expose
+        .as_ref()
+        .and_then(|expose| normalize_optional(expose.catalog_id.clone()));
+    let entries = manifest
+        .ports
+        .into_iter()
+        .enumerate()
+        .map(|(index, port)| {
+            let name = port.name.unwrap_or_else(|| {
+                if index == 0 {
+                    "main".to_string()
+                } else {
+                    format!("main-{index}")
+                }
+            });
+            (
+                name,
+                CurrentServiceManifestEntry {
+                    target: None,
+                    port: Some(port.service_port),
+                    protocol: (port.protocol != LegacyServicePortProtocol::Tcp)
+                        .then_some(port.protocol),
+                    usage,
+                    path: path.clone(),
+                    icon_url: icon_url.clone(),
+                    catalog_id: catalog_id.clone(),
+                },
+            )
+        })
+        .collect();
 
     CurrentServiceManifestDocument {
         api_version: "fungi.rs/v1alpha1".to_string(),
-        kind: "ServiceManifest".to_string(),
+        kind: "Service".to_string(),
         metadata: CurrentServiceManifestMetadata {
             name: manifest.name,
             labels: manifest.labels,
         },
         spec: CurrentServiceManifestSpec {
-            runtime: manifest.runtime,
-            source,
-            expose: manifest.expose.map(|expose| CurrentServiceManifestExpose {
-                enabled: true,
-                transport: Some(CurrentServiceManifestExposeTransport {
-                    kind: expose.transport.kind,
-                }),
-                usage: expose.usage.map(|usage| CurrentServiceManifestExposeUsage {
-                    kind: usage.kind,
-                    path: normalize_optional(usage.path),
-                }),
-                icon_url: normalize_optional(expose.icon_url),
-                catalog_id: normalize_optional(expose.catalog_id),
-            }),
+            run,
+            entries,
             env: manifest.env,
             mounts: manifest
                 .mounts
@@ -213,16 +253,6 @@ fn migrate_legacy_service_manifest(
                     runtime_path: mount.runtime_path,
                 })
                 .collect(),
-            ports: manifest
-                .ports
-                .into_iter()
-                .map(|port| CurrentServiceManifestPort {
-                    host_port: Some(CurrentServiceManifestHostPort::Fixed(port.host_port)),
-                    service_port: port.service_port,
-                    name: port.name,
-                    protocol: port.protocol,
-                })
-                .collect(),
             command: manifest.command,
             entrypoint: manifest.entrypoint,
             working_dir: manifest.working_dir.map(|path| {
@@ -235,6 +265,16 @@ fn migrate_legacy_service_manifest(
                 .to_string()
             }),
         },
+    }
+}
+
+fn legacy_usage_to_current_entry_usage(
+    kind: LegacyServiceExposeUsageKind,
+) -> CurrentServiceManifestEntryUsageKind {
+    match kind {
+        LegacyServiceExposeUsageKind::Web => CurrentServiceManifestEntryUsageKind::Web,
+        LegacyServiceExposeUsageKind::Ssh => CurrentServiceManifestEntryUsageKind::Ssh,
+        LegacyServiceExposeUsageKind::Raw => CurrentServiceManifestEntryUsageKind::Tcp,
     }
 }
 
@@ -273,7 +313,8 @@ struct LegacyPersistedService {
 #[derive(Debug, Clone, Deserialize)]
 struct LegacyServiceManifest {
     name: String,
-    runtime: LegacyRuntimeKind,
+    #[serde(rename = "runtime")]
+    _runtime: LegacyRuntimeKind,
     source: LegacyServiceSource,
     expose: Option<LegacyServiceExpose>,
     #[serde(default)]
@@ -311,7 +352,8 @@ struct LegacyServiceExpose {
     _service_id: String,
     #[serde(rename = "display_name")]
     _display_name: String,
-    transport: LegacyServiceExposeTransport,
+    #[serde(rename = "transport")]
+    _transport: LegacyServiceExposeTransport,
     usage: Option<LegacyServiceExposeUsage>,
     icon_url: Option<String>,
     catalog_id: Option<String>,
@@ -319,7 +361,8 @@ struct LegacyServiceExpose {
 
 #[derive(Debug, Clone, Deserialize)]
 struct LegacyServiceExposeTransport {
-    kind: LegacyServiceExposeTransportKind,
+    #[serde(rename = "kind")]
+    _kind: LegacyServiceExposeTransportKind,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -352,12 +395,13 @@ struct LegacyServiceMount {
 #[derive(Debug, Clone, Deserialize)]
 struct LegacyServicePort {
     name: Option<String>,
-    host_port: u16,
+    #[serde(rename = "host_port")]
+    _host_port: u16,
     service_port: u16,
     protocol: LegacyServicePortProtocol,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 enum LegacyServicePortProtocol {
     Tcp,
@@ -413,15 +457,12 @@ struct CurrentServiceManifestMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CurrentServiceManifestSpec {
-    runtime: LegacyRuntimeKind,
-    source: CurrentServiceManifestSource,
-    expose: Option<CurrentServiceManifestExpose>,
+    run: CurrentServiceManifestRun,
+    entries: BTreeMap<String, CurrentServiceManifestEntry>,
     #[serde(default)]
     env: BTreeMap<String, String>,
     #[serde(default)]
     mounts: Vec<CurrentServiceManifestMount>,
-    #[serde(default)]
-    ports: Vec<CurrentServiceManifestPort>,
     #[serde(default)]
     command: Vec<String>,
     #[serde(default)]
@@ -430,53 +471,42 @@ struct CurrentServiceManifestSpec {
     working_dir: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct CurrentServiceManifestSource {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CurrentServiceManifestRun {
     #[serde(skip_serializing_if = "Option::is_none")]
-    image: Option<String>,
+    docker: Option<CurrentServiceManifestDockerRun>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    wasmtime: Option<CurrentServiceManifestWasmtimeRun>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CurrentServiceManifestDockerRun {
+    image: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct CurrentServiceManifestWasmtimeRun {
     #[serde(skip_serializing_if = "Option::is_none")]
     file: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     url: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CurrentServiceManifestMount {
-    #[serde(rename = "hostPath")]
-    host_path: String,
-    #[serde(rename = "runtimePath")]
-    runtime_path: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CurrentServiceManifestPort {
-    #[serde(rename = "hostPort")]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct CurrentServiceManifestEntry {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    target: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    port: Option<u16>,
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    host_port: Option<CurrentServiceManifestHostPort>,
-    #[serde(rename = "servicePort")]
-    service_port: u16,
+    protocol: Option<LegacyServicePortProtocol>,
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
-    protocol: LegacyServicePortProtocol,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-enum CurrentServiceManifestHostPort {
-    Fixed(u16),
-    Keyword(String),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CurrentServiceManifestExpose {
+    usage: Option<CurrentServiceManifestEntryUsageKind>,
     #[serde(default)]
-    enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    transport: Option<CurrentServiceManifestExposeTransport>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<CurrentServiceManifestExposeUsage>,
+    path: Option<String>,
     #[serde(rename = "iconUrl")]
     #[serde(skip_serializing_if = "Option::is_none")]
     icon_url: Option<String>,
@@ -485,13 +515,18 @@ struct CurrentServiceManifestExpose {
     catalog_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CurrentServiceManifestExposeTransport {
-    kind: LegacyServiceExposeTransportKind,
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum CurrentServiceManifestEntryUsageKind {
+    Web,
+    Ssh,
+    Tcp,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct CurrentServiceManifestExposeUsage {
-    kind: LegacyServiceExposeUsageKind,
-    path: Option<String>,
+struct CurrentServiceManifestMount {
+    #[serde(rename = "hostPath")]
+    host_path: String,
+    #[serde(rename = "runtimePath")]
+    runtime_path: String,
 }

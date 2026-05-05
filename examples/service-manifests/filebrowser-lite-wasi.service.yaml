@@ -1,38 +1,28 @@
 apiVersion: fungi.rs/v1alpha1
-kind: ServiceManifest
+kind: Service
 
 metadata:
   name: filebrowser-lite-wasi
 
 spec:
-  runtime: wasmtime
+  run:
+    wasmtime:
+      url: https://github.com/enbop/filebrowser-lite/releases/download/lite-v0.2.0/filebrowser-lite-wasi.wasm
 
-  expose:
-    enabled: true
-    transport:
-      kind: tcp
-    usage:
-      kind: web
+  entries:
+    http:
+      port: 8082
+      usage: web
       path: /
-    iconUrl: https://raw.githubusercontent.com/filebrowser/logo/master/icon.svg
-
-  source:
-    url: https://github.com/enbop/filebrowser-lite/releases/latest/download/filebrowser-lite-wasi.wasm
-
-  ports:
-    - hostPort: auto
-      name: http
-      servicePort: 8082
-      protocol: tcp
+      iconUrl: https://raw.githubusercontent.com/filebrowser/logo/master/icon.svg
+      catalogId: io.enbop.filebrowser-lite-wasi
 
   mounts:
-    - hostPath: ${APP_HOME}/data
+    - hostPath: ${USER_HOME}
       runtimePath: data
 
   env: {}
 
 notes:
-  - "Project: https://github.com/enbop/filebrowser-lite/tree/master/filebrowser-lite-wasi (forked from https://github.com/filebrowser/filebrowser)"
-  - "Artifact URL: https://github.com/enbop/filebrowser-lite/releases/latest/download/filebrowser-lite-wasi.wasm"
-  - "${APP_HOME} resolves on the target node to fungi_home/data/<service-name>."
-  - "hostPort: auto asks the target node to choose an available ephemeral port."
+  - "Project: https://github.com/enbop/filebrowser-lite/tree/master/filebrowser-lite-wasi"
+  - "Artifact URL: https://github.com/enbop/filebrowser-lite/releases/download/lite-v0.2.0/filebrowser-lite-wasi.wasm"

@@ -23,11 +23,11 @@ pub use runtime::{
     CatalogService, CatalogServiceEndpoint, ManifestResolutionPolicy, RuntimeControl, RuntimeKind,
     ServiceExpose, ServiceExposeEndpointBinding, ServiceExposeTransport,
     ServiceExposeTransportKind, ServiceExposeUsage, ServiceExposeUsageKind, ServiceInstance,
-    ServiceLogs, ServiceLogsOptions, ServiceManifest, ServiceManifestDocument,
-    ServiceManifestExpose, ServiceManifestExposeTransport, ServiceManifestExposeUsage,
-    ServiceManifestHostPort, ServiceManifestMetadata, ServiceManifestPort, ServiceManifestSource,
-    ServiceManifestSpec, ServiceMount, ServicePort, ServicePortAllocation, ServicePortProtocol,
-    ServiceSource, ServiceStatus, load_service_manifest_yaml_file, parse_service_manifest_yaml,
+    ServiceLogs, ServiceLogsOptions, ServiceManifest, ServiceManifestDockerRun,
+    ServiceManifestDocument, ServiceManifestEntry, ServiceManifestEntryUsageKind,
+    ServiceManifestMetadata, ServiceManifestRun, ServiceManifestSpec, ServiceManifestWasmtimeRun,
+    ServiceMount, ServicePort, ServicePortAllocation, ServicePortProtocol, ServiceSource,
+    ServiceStatus, load_service_manifest_yaml_file, parse_service_manifest_yaml,
     service_expose_endpoint_bindings,
 };
 pub use service_control::{

@@ -322,12 +322,15 @@ fn migrates_legacy_service_state_into_local_service_id_layout_and_moves_service_
         migrated_data_dir.to_string_lossy().as_ref()
     );
     assert_eq!(
-        manifest["spec"]["source"]["file"],
+        manifest["spec"]["run"]["wasmtime"]["file"],
         migrated_data_dir
             .join("component.wasm")
             .to_string_lossy()
             .as_ref()
     );
+    assert_eq!(manifest["spec"]["entries"]["http"]["port"], 80);
+    assert_eq!(manifest["spec"]["entries"]["http"]["usage"], "web");
+    assert_eq!(manifest["spec"]["entries"]["http"]["path"], "/");
     let mounts = manifest["spec"]["mounts"].as_sequence().unwrap();
     assert_eq!(mounts.len(), 1);
     assert_eq!(

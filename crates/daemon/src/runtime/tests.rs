@@ -210,20 +210,20 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
 fn manifest_document_supports_user_home_and_auto_host_port() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1
-kind: ServiceManifest
+kind: Service
 metadata:
     name: filebrowser
 spec:
-    runtime: docker
-    source:
-        image: filebrowser/filebrowser:latest
+    run:
+        docker:
+            image: filebrowser/filebrowser:latest
+    entries:
+        http:
+            port: 80
+            usage: web
     mounts:
         - hostPath: ${USER_HOME}
           runtimePath: /srv
-    ports:
-        - hostPort: auto
-          servicePort: 80
-          protocol: tcp
 "#;
 
     let occupied_allowed_port = StdTcpListener::bind(("127.0.0.1", 0)).unwrap();
@@ -252,13 +252,16 @@ spec:
 fn manifest_document_supports_explicit_service_path_roots() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1
-kind: ServiceManifest
+kind: Service
 metadata:
     name: filebrowser
 spec:
-    runtime: docker
-    source:
-        image: filebrowser/filebrowser:latest
+    run:
+        docker:
+            image: filebrowser/filebrowser:latest
+    entries:
+        http:
+            port: 80
     mounts:
         - hostPath: ${SERVICE_APPDATA}/db
           runtimePath: /srv
@@ -303,16 +306,16 @@ spec:
 fn manifest_document_defaults_missing_host_port_to_auto() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1
-kind: ServiceManifest
+kind: Service
 metadata:
     name: filebrowser
 spec:
-    runtime: docker
-    source:
-        image: filebrowser/filebrowser:latest
-    ports:
-        - servicePort: 80
-          protocol: tcp
+    run:
+        docker:
+            image: filebrowser/filebrowser:latest
+    entries:
+        http:
+            port: 80
 "#;
 
     let manifest = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
@@ -328,25 +331,14 @@ spec:
 fn manifest_document_supports_link_service() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1
-kind: ServiceManifest
+kind: Service
 metadata:
     name: home-ssh
 spec:
-    runtime: link
-    source:
-        host: 127.0.0.1
-        port: 22
-    expose:
-        enabled: true
-        transport:
-            kind: tcp
-        usage:
-            kind: ssh
-    ports:
-        - hostPort: 22
-          servicePort: 22
-          name: ssh
-          protocol: tcp
+    entries:
+        ssh:
+            target: 127.0.0.1:22
+            usage: ssh
 "#;
 
     let manifest =
@@ -406,25 +398,18 @@ async fn wasmtime_provider_downloads_remote_component() {
 fn parse_manifest_expose_defaults_service_identity() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1
-kind: ServiceManifest
+kind: Service
 metadata:
     name: filebrowser
 spec:
-    runtime: docker
-    expose:
-        enabled: true
-        transport:
-            kind: tcp
-        usage:
-            kind: web
+    run:
+        docker:
+            image: filebrowser/filebrowser:latest
+    entries:
+        http:
+            port: 80
+            usage: web
             path: /
-    source:
-        image: filebrowser/filebrowser:latest
-    ports:
-        - name: http
-          hostPort: 8080
-          servicePort: 80
-          protocol: tcp
 "#;
 
     let manifest = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
@@ -436,24 +421,40 @@ spec:
 }
 
 #[test]
-fn parse_manifest_expose_disabled_returns_none() {
+fn parse_manifest_rejects_entry_with_target_and_port() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1
-kind: ServiceManifest
+kind: Service
 metadata:
     name: raw-service
 spec:
-    runtime: docker
-    expose:
-        enabled: false
-        transport:
-            kind: tcp
-    source:
-        image: example/raw:latest
+    entries:
+        main:
+            target: 127.0.0.1:1234
+            port: 1234
 "#;
 
-    let manifest = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
-    assert!(manifest.expose.is_none());
+    let error = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp"))
+        .expect_err("entry cannot use target and port together");
+    assert!(error.to_string().contains("either target or port"));
+}
+
+#[test]
+fn parse_manifest_rejects_entry_without_target_or_port() {
+    let yaml = r#"
+apiVersion: fungi.rs/v1alpha1
+kind: Service
+metadata:
+    name: raw-service
+spec:
+    entries:
+        main:
+            usage: tcp
+"#;
+
+    let error = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp"))
+        .expect_err("entry requires target or port");
+    assert!(error.to_string().contains("requires target or port"));
 }
 
 #[test]

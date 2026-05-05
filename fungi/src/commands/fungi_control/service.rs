@@ -8,11 +8,9 @@ use std::{
 use clap::{Args, Subcommand};
 use fungi_config::{FungiConfig, FungiDir};
 use fungi_daemon::{
-    CatalogService, RuntimeKind, ServiceAccess, ServiceExposeTransportKind, ServiceExposeUsageKind,
-    ServiceInstance, ServiceManifestDocument, ServiceManifestExpose,
-    ServiceManifestExposeTransport, ServiceManifestExposeUsage, ServiceManifestHostPort,
-    ServiceManifestMetadata, ServiceManifestPort, ServiceManifestSource, ServiceManifestSpec,
-    ServicePortProtocol,
+    CatalogService, RuntimeKind, ServiceAccess, ServiceExposeUsageKind, ServiceInstance,
+    ServiceManifestDocument, ServiceManifestEntry, ServiceManifestEntryUsageKind,
+    ServiceManifestMetadata, ServiceManifestSpec, ServicePortProtocol,
 };
 use fungi_daemon_grpc::{
     Request,
@@ -1282,9 +1280,9 @@ fn create_service_manifest_interactively(
 
     let usage = prompt_with_default("Step 4/4 - Usage [ssh|web|tcp]", "tcp");
     let (usage_kind, entry_name) = match usage.trim().to_ascii_lowercase().as_str() {
-        "ssh" => (ServiceExposeUsageKind::Ssh, "ssh"),
-        "web" | "http" | "https" => (ServiceExposeUsageKind::Web, "web"),
-        "tcp" | "raw" | "api" | "mcp" => (ServiceExposeUsageKind::Raw, "main"),
+        "ssh" => (ServiceManifestEntryUsageKind::Ssh, "ssh"),
+        "web" | "http" | "https" => (ServiceManifestEntryUsageKind::Web, "web"),
+        "tcp" | "raw" | "api" | "mcp" => (ServiceManifestEntryUsageKind::Tcp, "main"),
         _ => fatal("Usage must be one of: ssh, web, tcp"),
     };
 
@@ -1296,7 +1294,7 @@ fn create_service_manifest_interactively(
     } else {
         println!("  target: {host}:{port} on this device");
     }
-    println!("  usage: {}", usage_kind_label(usage_kind));
+    println!("  usage: {}", manifest_entry_usage_label(usage_kind));
     let confirm = prompt_with_default("Save this service? [Y/n]", "y");
     if matches!(confirm.trim().to_ascii_lowercase().as_str(), "n" | "no") {
         fatal("Canceled")
@@ -1305,38 +1303,27 @@ fn create_service_manifest_interactively(
 
     let document = ServiceManifestDocument {
         api_version: "fungi.rs/v1alpha1".to_string(),
-        kind: "ServiceManifest".to_string(),
+        kind: "Service".to_string(),
         metadata: ServiceManifestMetadata {
             name: name.clone(),
             labels: BTreeMap::new(),
         },
         spec: ServiceManifestSpec {
-            runtime: RuntimeKind::Link,
-            source: ServiceManifestSource {
-                host: Some(host),
-                port: Some(port),
-                ..ServiceManifestSource::default()
-            },
-            expose: Some(ServiceManifestExpose {
-                enabled: true,
-                transport: Some(ServiceManifestExposeTransport {
-                    kind: ServiceExposeTransportKind::Tcp,
-                }),
-                usage: Some(ServiceManifestExposeUsage {
-                    kind: usage_kind,
+            run: None,
+            entries: BTreeMap::from([(
+                entry_name.to_string(),
+                ServiceManifestEntry {
+                    target: Some(format!("{host}:{port}")),
+                    port: None,
+                    protocol: None,
+                    usage: Some(usage_kind),
                     path: None,
-                }),
-                icon_url: None,
-                catalog_id: None,
-            }),
+                    icon_url: None,
+                    catalog_id: None,
+                },
+            )]),
             env: BTreeMap::new(),
             mounts: Vec::new(),
-            ports: vec![ServiceManifestPort {
-                host_port: Some(ServiceManifestHostPort::Fixed(port)),
-                service_port: port,
-                name: Some(entry_name.to_string()),
-                protocol: ServicePortProtocol::Tcp,
-            }],
             command: Vec::new(),
             entrypoint: Vec::new(),
             working_dir: None,
@@ -1414,6 +1401,14 @@ fn usage_kind_label(kind: ServiceExposeUsageKind) -> &'static str {
         ServiceExposeUsageKind::Web => "web",
         ServiceExposeUsageKind::Ssh => "ssh",
         ServiceExposeUsageKind::Raw => "tcp",
+    }
+}
+
+fn manifest_entry_usage_label(kind: ServiceManifestEntryUsageKind) -> &'static str {
+    match kind {
+        ServiceManifestEntryUsageKind::Web => "web",
+        ServiceManifestEntryUsageKind::Ssh => "ssh",
+        ServiceManifestEntryUsageKind::Tcp => "tcp",
     }
 }
 
