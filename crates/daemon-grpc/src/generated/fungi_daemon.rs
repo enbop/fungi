@@ -623,6 +623,86 @@ pub struct ListServicesResponse {
     pub services_json: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RecipeSummary {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub description: ::prost::alloc::string::String,
+    #[prost(enumeration = "RecipeRuntimeKind", tag = "4")]
+    pub runtime: i32,
+    #[prost(string, tag = "5")]
+    pub stability: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub source_label: ::prost::alloc::string::String,
+    #[prost(string, tag = "7")]
+    pub release_version: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RecipeDetail {
+    #[prost(message, optional, tag = "1")]
+    pub summary: ::core::option::Option<RecipeSummary>,
+    #[prost(string, repeated, tag = "2")]
+    pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, tag = "3")]
+    pub homepage: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub cached_manifest_path: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub cached_readme_path: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub remote_manifest_url: ::prost::alloc::string::String,
+    #[prost(string, tag = "7")]
+    pub remote_readme_url: ::prost::alloc::string::String,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListRecipesRequest {
+    #[prost(bool, tag = "1")]
+    pub refresh: bool,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListRecipesResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub recipes: ::prost::alloc::vec::Vec<RecipeSummary>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetRecipeRequest {
+    #[prost(string, tag = "1")]
+    pub recipe_id: ::prost::alloc::string::String,
+    #[prost(bool, tag = "2")]
+    pub refresh: bool,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetRecipeResponse {
+    #[prost(message, optional, tag = "1")]
+    pub detail: ::core::option::Option<RecipeDetail>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ResolveRecipeRequest {
+    #[prost(string, tag = "1")]
+    pub recipe_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub service_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub peer_id: ::prost::alloc::string::String,
+    #[prost(bool, tag = "4")]
+    pub refresh: bool,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ResolveRecipeResponse {
+    #[prost(message, optional, tag = "1")]
+    pub detail: ::core::option::Option<RecipeDetail>,
+    #[prost(string, tag = "2")]
+    pub manifest_yaml: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub manifest_base_dir: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub resolved_manifest_path: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "5")]
+    pub warnings: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListPeerCatalogRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
@@ -726,6 +806,38 @@ impl ServiceRuntimeKind {
             "SERVICE_RUNTIME_KIND_UNSPECIFIED" => Some(Self::Unspecified),
             "SERVICE_RUNTIME_KIND_DOCKER" => Some(Self::Docker),
             "SERVICE_RUNTIME_KIND_WASMTIME" => Some(Self::Wasmtime),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum RecipeRuntimeKind {
+    Unspecified = 0,
+    Docker = 1,
+    Wasmtime = 2,
+    Link = 3,
+}
+impl RecipeRuntimeKind {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "RECIPE_RUNTIME_KIND_UNSPECIFIED",
+            Self::Docker => "RECIPE_RUNTIME_KIND_DOCKER",
+            Self::Wasmtime => "RECIPE_RUNTIME_KIND_WASMTIME",
+            Self::Link => "RECIPE_RUNTIME_KIND_LINK",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "RECIPE_RUNTIME_KIND_UNSPECIFIED" => Some(Self::Unspecified),
+            "RECIPE_RUNTIME_KIND_DOCKER" => Some(Self::Docker),
+            "RECIPE_RUNTIME_KIND_WASMTIME" => Some(Self::Wasmtime),
+            "RECIPE_RUNTIME_KIND_LINK" => Some(Self::Link),
             _ => None,
         }
     }
@@ -1769,6 +1881,55 @@ pub mod fungi_daemon_client {
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "ListServices"));
             self.inner.unary(req, path, codec).await
         }
+        /// Lists official service recipes known to the local daemon.
+        pub async fn list_recipes(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ListRecipesRequest>,
+        ) -> std::result::Result<tonic::Response<super::ListRecipesResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/ListRecipes");
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "ListRecipes"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Returns detailed metadata and audit paths for one official service recipe.
+        pub async fn get_recipe(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetRecipeRequest>,
+        ) -> std::result::Result<tonic::Response<super::GetRecipeResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/GetRecipe");
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "GetRecipe"));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Resolves one official recipe into a concrete manifest for local or remote pull.
+        pub async fn resolve_recipe(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ResolveRecipeRequest>,
+        ) -> std::result::Result<tonic::Response<super::ResolveRecipeResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/ResolveRecipe");
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "ResolveRecipe"));
+            self.inner.unary(req, path, codec).await
+        }
         /// Lists services published by a remote peer for consumption.
         pub async fn list_peer_catalog(
             &mut self,
@@ -2260,6 +2421,21 @@ pub mod fungi_daemon_server {
             &self,
             request: tonic::Request<super::Empty>,
         ) -> std::result::Result<tonic::Response<super::ListServicesResponse>, tonic::Status>;
+        /// Lists official service recipes known to the local daemon.
+        async fn list_recipes(
+            &self,
+            request: tonic::Request<super::ListRecipesRequest>,
+        ) -> std::result::Result<tonic::Response<super::ListRecipesResponse>, tonic::Status>;
+        /// Returns detailed metadata and audit paths for one official service recipe.
+        async fn get_recipe(
+            &self,
+            request: tonic::Request<super::GetRecipeRequest>,
+        ) -> std::result::Result<tonic::Response<super::GetRecipeResponse>, tonic::Status>;
+        /// Resolves one official recipe into a concrete manifest for local or remote pull.
+        async fn resolve_recipe(
+            &self,
+            request: tonic::Request<super::ResolveRecipeRequest>,
+        ) -> std::result::Result<tonic::Response<super::ResolveRecipeResponse>, tonic::Status>;
         /// Lists services published by a remote peer for consumption.
         async fn list_peer_catalog(
             &self,
@@ -4392,6 +4568,125 @@ pub mod fungi_daemon_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = ListServicesSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/ListRecipes" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListRecipesSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::ListRecipesRequest> for ListRecipesSvc<T> {
+                        type Response = super::ListRecipesResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ListRecipesRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::list_recipes(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListRecipesSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/GetRecipe" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetRecipeSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::GetRecipeRequest> for GetRecipeSvc<T> {
+                        type Response = super::GetRecipeResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetRecipeRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::get_recipe(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetRecipeSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/ResolveRecipe" => {
+                    #[allow(non_camel_case_types)]
+                    struct ResolveRecipeSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon> tonic::server::UnaryService<super::ResolveRecipeRequest>
+                        for ResolveRecipeSvc<T>
+                    {
+                        type Response = super::ResolveRecipeResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ResolveRecipeRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::resolve_recipe(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ResolveRecipeSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

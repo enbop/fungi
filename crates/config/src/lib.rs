@@ -6,6 +6,7 @@ mod init;
 mod libp2p;
 pub mod local_access;
 pub mod paths;
+pub mod recipe_cache;
 mod rpc;
 pub mod runtime;
 pub mod service_cache;

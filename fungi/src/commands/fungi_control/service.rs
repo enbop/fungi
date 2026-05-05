@@ -16,10 +16,11 @@ use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
         AttachServiceAccessRequest, DetachServiceAccessRequest, DeviceInfo, Empty,
-        GetServiceLogsRequest, ListPeerCatalogRequest, ListServiceAccessesRequest,
-        ListServicesResponse, PullServiceRequest, RemotePeerRequest, RemotePullServiceRequest,
-        RemoteServiceControlResponse, RemoteServiceNameRequest, ServiceInstanceResponse,
-        ServiceNameRequest,
+        GetRecipeRequest, GetServiceLogsRequest, ListPeerCatalogRequest, ListRecipesRequest,
+        ListRecipesResponse, ListServiceAccessesRequest, ListServicesResponse, PullServiceRequest,
+        RecipeDetail, RecipeRuntimeKind, RecipeSummary, RemotePeerRequest,
+        RemotePullServiceRequest, RemoteServiceControlResponse, RemoteServiceNameRequest,
+        ResolveRecipeRequest, ServiceInstanceResponse, ServiceNameRequest,
     },
 };
 use serde::Serialize;
@@ -67,6 +68,20 @@ pub enum ServiceCommands {
         target_or_manifest: Option<String>,
         /// Path to a service manifest YAML file when the first argument is a service reference
         manifest: Option<String>,
+        /// Add a service from an official recipe ID instead of a local manifest
+        #[arg(long)]
+        recipe: Option<String>,
+        /// Refresh the official recipe index before resolving the recipe
+        #[arg(long, default_value_t = false)]
+        refresh: bool,
+        /// Skip the recipe confirmation prompt
+        #[arg(long, default_value_t = false)]
+        yes: bool,
+    },
+    /// Inspect official service recipes managed by the local daemon
+    Recipe {
+        #[command(subcommand)]
+        command: ServiceRecipeCommands,
     },
     /// Open a service in the default local app when possible
     Open {
@@ -112,6 +127,23 @@ pub enum ServiceCommands {
     },
 }
 
+#[derive(Subcommand, Debug, Clone)]
+pub enum ServiceRecipeCommands {
+    /// List official service recipes known to the local daemon
+    List {
+        /// Refresh the official recipe index before listing
+        #[arg(long, default_value_t = false)]
+        refresh: bool,
+    },
+    /// Show detailed metadata and audit paths for one official recipe
+    Show {
+        recipe: String,
+        /// Refresh the official recipe index before showing the recipe
+        #[arg(long, default_value_t = false)]
+        refresh: bool,
+    },
+}
+
 pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
@@ -146,7 +178,24 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
         ServiceCommands::Add {
             target_or_manifest,
             manifest,
+            recipe,
+            refresh,
+            yes,
         } => {
+            if let Some(recipe_id) = recipe {
+                add_service_from_recipe(
+                    &mut client,
+                    &args,
+                    device,
+                    target_or_manifest,
+                    manifest,
+                    recipe_id,
+                    refresh,
+                    yes,
+                )
+                .await;
+                return;
+            }
             let add_input = parse_service_add_input(target_or_manifest, manifest);
             let device = resolve_service_device_target(&args, device, add_input.device);
             let target_device_name = device.as_ref().map(resolved_device_display_name);
@@ -213,6 +262,19 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                         }
                     }
                     Err(e) => fatal_grpc(e),
+                }
+            }
+        }
+        ServiceCommands::Recipe { command } => {
+            if device.is_some() {
+                fatal("Recipe commands are local-only. Run them without --device.")
+            }
+            match command {
+                ServiceRecipeCommands::List { refresh } => {
+                    print_service_recipes(&mut client, refresh).await
+                }
+                ServiceRecipeCommands::Show { recipe, refresh } => {
+                    print_service_recipe_detail(&mut client, &recipe, refresh).await
                 }
             }
         }
@@ -639,6 +701,141 @@ fn parse_service_add_input(
     }
 }
 
+fn parse_service_recipe_add_input(
+    target_or_manifest: Option<String>,
+    manifest: Option<String>,
+) -> ServiceAddInput {
+    if manifest.is_some() {
+        fatal(
+            "`fungi service add --recipe <id>` does not accept a manifest path. Use either `--recipe <id> [service@device]` or `service add <manifest.yaml>`.",
+        )
+    }
+
+    let Some(value) = target_or_manifest else {
+        return ServiceAddInput {
+            manifest_path: None,
+            default_name: None,
+            device: None,
+        };
+    };
+
+    if looks_like_manifest_path(&value) {
+        fatal(
+            "With `--recipe`, the positional argument is the service name or `service@device`, not a manifest path.",
+        )
+    }
+
+    let target = parse_service_reference(value);
+    reject_service_entry(&target, "add");
+    ServiceAddInput {
+        manifest_path: None,
+        default_name: Some(target.name),
+        device: target.device,
+    }
+}
+
+async fn add_service_from_recipe(
+    client: &mut RpcClient,
+    args: &CommonArgs,
+    scoped_device: Option<super::shared::ResolvedPeerTarget>,
+    target_or_manifest: Option<String>,
+    manifest: Option<String>,
+    recipe_id: String,
+    refresh: bool,
+    yes: bool,
+) {
+    let add_input = parse_service_recipe_add_input(target_or_manifest, manifest);
+    let device = resolve_service_device_target(args, scoped_device, add_input.device);
+    let target_device_name = device.as_ref().map(resolved_device_display_name);
+    let requested_service_name = add_input.default_name.unwrap_or_default();
+    let req = ResolveRecipeRequest {
+        recipe_id,
+        service_name: requested_service_name.clone(),
+        peer_id: device
+            .as_ref()
+            .map(|device| device.peer_id.clone())
+            .unwrap_or_default(),
+        refresh,
+    };
+    let resolved = match client.resolve_recipe(Request::new(req)).await {
+        Ok(resp) => resp.into_inner(),
+        Err(error) => fatal_grpc(error),
+    };
+    let detail = require_recipe_detail(resolved.detail);
+    let service_name = if requested_service_name.trim().is_empty() {
+        recipe_summary(&detail).id.clone()
+    } else {
+        requested_service_name
+    };
+
+    if !yes {
+        print_recipe_add_review(
+            &detail,
+            &service_name,
+            target_device_name.as_deref(),
+            &resolved.resolved_manifest_path,
+            &resolved.warnings,
+        );
+        if !prompt_yes_no_default("Create this service from the recipe? [Y/n]", true) {
+            println!("Cancelled");
+            return;
+        }
+    } else {
+        print_recipe_warnings(&resolved.warnings);
+    }
+
+    if let Some(device) = device {
+        print_target_device(&device);
+        let req = RemotePullServiceRequest {
+            peer_id: device.peer_id.clone(),
+            manifest_yaml: resolved.manifest_yaml,
+        };
+        match client.remote_pull_service(Request::new(req)).await {
+            Ok(resp) => {
+                let response = resp.into_inner();
+                let service_name = response_service_name(&response);
+                print_remote_service_added(response);
+                refresh_remote_device_services(client, &device.peer_id).await;
+                println!("Use it:");
+                println!(
+                    "  fungi {}@{}",
+                    service_name,
+                    resolved_device_display_name(&device)
+                );
+            }
+            Err(error) => fatal_grpc(error),
+        }
+    } else {
+        let req = PullServiceRequest {
+            manifest_yaml: resolved.manifest_yaml,
+            manifest_base_dir: resolved.manifest_base_dir,
+        };
+        match client.pull_service(Request::new(req)).await {
+            Ok(resp) => print_service_instance(resp.into_inner(), false),
+            Err(error) => fatal_grpc(error),
+        }
+    }
+}
+
+async fn print_service_recipes(client: &mut RpcClient, refresh: bool) {
+    let req = ListRecipesRequest { refresh };
+    match client.list_recipes(Request::new(req)).await {
+        Ok(resp) => print_service_recipe_list_value(resp.into_inner()),
+        Err(error) => fatal_grpc(error),
+    }
+}
+
+async fn print_service_recipe_detail(client: &mut RpcClient, recipe_id: &str, refresh: bool) {
+    let req = GetRecipeRequest {
+        recipe_id: recipe_id.to_string(),
+        refresh,
+    };
+    match client.get_recipe(Request::new(req)).await {
+        Ok(resp) => print_service_recipe_detail_value(&require_recipe_detail(resp.into_inner().detail)),
+        Err(error) => fatal_grpc(error),
+    }
+}
+
 fn looks_like_manifest_path(value: &str) -> bool {
     let value = value.trim();
     let lower = value.to_ascii_lowercase();
@@ -649,6 +846,103 @@ fn looks_like_manifest_path(value: &str) -> bool {
         || value.contains(std::path::MAIN_SEPARATOR)
         || value.contains('/')
         || value.contains('\\')
+}
+
+fn require_recipe_detail(detail: Option<RecipeDetail>) -> RecipeDetail {
+    detail.unwrap_or_else(|| fatal("Recipe response was missing detail payload"))
+}
+
+fn recipe_summary(detail: &RecipeDetail) -> &RecipeSummary {
+    detail
+        .summary
+        .as_ref()
+        .unwrap_or_else(|| fatal("Recipe response was missing summary payload"))
+}
+
+fn recipe_runtime_label(kind: i32) -> &'static str {
+    match RecipeRuntimeKind::try_from(kind) {
+        Ok(RecipeRuntimeKind::Docker) => "docker",
+        Ok(RecipeRuntimeKind::Wasmtime) => "wasmtime",
+        Ok(RecipeRuntimeKind::Link) => "link",
+        _ => "unknown",
+    }
+}
+
+fn print_service_recipe_list_value(resp: ListRecipesResponse) {
+    if resp.recipes.is_empty() {
+        println!("No recipes found");
+        return;
+    }
+
+    for recipe in resp.recipes {
+        println!(
+            "{:<20} {:<9} {} [{}]",
+            recipe.id,
+            recipe_runtime_label(recipe.runtime),
+            recipe.description,
+            recipe.release_version
+        );
+    }
+}
+
+fn print_service_recipe_detail_value(detail: &RecipeDetail) {
+    let summary = recipe_summary(detail);
+    println!("Recipe: {}", summary.id);
+    println!("Name: {}", summary.name);
+    println!("Description: {}", summary.description);
+    println!("Runtime: {}", recipe_runtime_label(summary.runtime));
+    println!("Stability: {}", summary.stability);
+    println!("Source: {}", summary.source_label);
+    println!("Release: {}", summary.release_version);
+    if !detail.tags.is_empty() {
+        println!("Tags: {}", detail.tags.join(", "));
+    }
+    if !detail.homepage.is_empty() {
+        println!("Homepage: {}", detail.homepage);
+    }
+    println!("Cached manifest: {}", detail.cached_manifest_path);
+    if !detail.cached_readme_path.is_empty() {
+        println!("Cached readme: {}", detail.cached_readme_path);
+    }
+    println!("Remote manifest: {}", detail.remote_manifest_url);
+    if !detail.remote_readme_url.is_empty() {
+        println!("Remote readme: {}", detail.remote_readme_url);
+    }
+}
+
+fn print_recipe_add_review(
+    detail: &RecipeDetail,
+    service_name: &str,
+    target_device_name: Option<&str>,
+    resolved_manifest_path: &str,
+    warnings: &[String],
+) {
+    let summary = recipe_summary(detail);
+    println!("Recipe: {}", summary.id);
+    println!("Service name: {}", service_name);
+    println!(
+        "Target: {}",
+        target_device_name.unwrap_or("local node")
+    );
+    println!("Runtime: {}", recipe_runtime_label(summary.runtime));
+    println!("Source: {}", summary.source_label);
+    println!("Release: {}", summary.release_version);
+    println!("Cached manifest: {}", detail.cached_manifest_path);
+    if !detail.cached_readme_path.is_empty() {
+        println!("Cached readme: {}", detail.cached_readme_path);
+    }
+    println!("Resolved manifest: {}", resolved_manifest_path);
+    println!("Remote manifest: {}", detail.remote_manifest_url);
+    if !detail.remote_readme_url.is_empty() {
+        println!("Remote readme: {}", detail.remote_readme_url);
+    }
+    print_recipe_warnings(warnings);
+}
+
+fn print_recipe_warnings(warnings: &[String]) {
+    for warning in warnings {
+        eprintln!("Warning: {warning}");
+    }
 }
 
 fn reject_service_entry(target: &DynamicThingTarget, action: &str) {

@@ -10,7 +10,8 @@ use crate::runtime::{
 };
 use crate::{
     FungiDaemon, LocalRuntimeStatus, ManifestResolutionPolicy, NodeCapabilities,
-    ServiceControlResponse, build_local_node_capabilities, build_local_runtime_status,
+    ResolvedServiceRecipe, ServiceControlResponse, ServiceRecipeDetail, ServiceRecipeRuntime,
+    ServiceRecipeSummary, build_local_node_capabilities, build_local_runtime_status,
 };
 
 impl FungiDaemon {
@@ -225,6 +226,37 @@ impl FungiDaemon {
         self.refresh_peer_services(peer_id).await
     }
 
+    pub async fn list_service_recipes(&self, refresh: bool) -> Result<Vec<ServiceRecipeSummary>> {
+        let fungi_dir = self.config_fungi_dir()?;
+        crate::recipes::list_official_service_recipes(&fungi_dir, refresh).await
+    }
+
+    pub async fn get_service_recipe(
+        &self,
+        recipe_id: &str,
+        refresh: bool,
+    ) -> Result<ServiceRecipeDetail> {
+        let fungi_dir = self.config_fungi_dir()?;
+        crate::recipes::get_official_service_recipe(&fungi_dir, recipe_id, refresh).await
+    }
+
+    pub async fn resolve_service_recipe(
+        &self,
+        recipe_id: &str,
+        service_name: Option<&str>,
+        target_peer_id: Option<PeerId>,
+        refresh: bool,
+    ) -> Result<ResolvedServiceRecipe> {
+        let fungi_dir = self.config_fungi_dir()?;
+        let mut resolved =
+            crate::recipes::resolve_official_service_recipe(&fungi_dir, recipe_id, service_name, refresh)
+                .await?;
+        resolved.warnings = self
+            .build_service_recipe_runtime_warnings(resolved.detail.summary.runtime, target_peer_id)
+            .await;
+        Ok(resolved)
+    }
+
     pub fn list_cached_peer_services(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
         let peer_id = peer_id.to_string();
         let fungi_dir = self.config_fungi_dir()?;
@@ -268,6 +300,64 @@ impl FungiDaemon {
         self.node_capabilities_control()
             .discover_peer_capabilities(peer_id)
             .await
+    }
+
+    async fn build_service_recipe_runtime_warnings(
+        &self,
+        runtime: ServiceRecipeRuntime,
+        target_peer_id: Option<PeerId>,
+    ) -> Vec<String> {
+        match target_peer_id {
+            Some(peer_id) => self
+                .build_remote_recipe_runtime_warnings(runtime, peer_id)
+                .await,
+            None => self.build_local_recipe_runtime_warnings(runtime),
+        }
+    }
+
+    fn build_local_recipe_runtime_warnings(&self, runtime: ServiceRecipeRuntime) -> Vec<String> {
+        let status = self.local_runtime_status();
+        match runtime {
+            ServiceRecipeRuntime::Docker => runtime_status_warning(
+                "Docker",
+                status.docker.config_enabled,
+                status.docker.detected,
+                status.docker.active,
+            ),
+            ServiceRecipeRuntime::Wasmtime => runtime_status_warning(
+                "Wasmtime",
+                status.wasmtime.config_enabled,
+                status.wasmtime.detected,
+                status.wasmtime.active,
+            ),
+            ServiceRecipeRuntime::Link => Vec::new(),
+        }
+    }
+
+    async fn build_remote_recipe_runtime_warnings(
+        &self,
+        runtime: ServiceRecipeRuntime,
+        peer_id: PeerId,
+    ) -> Vec<String> {
+        let label = peer_id.to_string();
+        let capabilities = match self.get_peer_capability_summary(peer_id).await {
+            Ok(capabilities) => capabilities,
+            Err(error) => {
+                return vec![format!(
+                    "Could not verify runtime compatibility for target device {label}: {error}"
+                )]
+            }
+        };
+
+        match runtime {
+            ServiceRecipeRuntime::Docker if !capabilities.runtimes.docker => {
+                vec![format!("Target device {label} does not report Docker runtime support")]
+            }
+            ServiceRecipeRuntime::Wasmtime if !capabilities.runtimes.wasmtime => {
+                vec![format!("Target device {label} does not report Wasmtime runtime support")]
+            }
+            _ => Vec::new(),
+        }
     }
 
     pub async fn remote_pull_service(
@@ -337,4 +427,22 @@ impl FungiDaemon {
         }
         Ok(response)
     }
+}
+
+fn runtime_status_warning(
+    runtime_name: &str,
+    config_enabled: bool,
+    detected: bool,
+    active: bool,
+) -> Vec<String> {
+    if active {
+        return Vec::new();
+    }
+    if !config_enabled {
+        return vec![format!("{runtime_name} runtime is disabled in local config")];
+    }
+    if !detected {
+        return vec![format!("{runtime_name} runtime does not appear to be available locally")];
+    }
+    vec![format!("{runtime_name} runtime is configured but not active locally")]
 }

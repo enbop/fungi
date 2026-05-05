@@ -2,6 +2,7 @@ mod api;
 mod controls;
 mod daemon;
 mod node_capabilities;
+mod recipes;
 pub mod runtime;
 mod service_control;
 mod service_state;
@@ -18,6 +19,9 @@ pub use daemon::FungiDaemon;
 pub use node_capabilities::{
     LocalRuntimeAvailability, LocalRuntimeStatus, NodeCapabilities, NodeRuntimeCapabilities,
     build_local_node_capabilities, build_local_runtime_status,
+};
+pub use recipes::{
+    ResolvedServiceRecipe, ServiceRecipeDetail, ServiceRecipeRuntime, ServiceRecipeSummary,
 };
 pub use runtime::{
     CatalogService, CatalogServiceEndpoint, ManifestResolutionPolicy, RuntimeControl, RuntimeKind,
