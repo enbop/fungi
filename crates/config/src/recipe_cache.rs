@@ -1,9 +1,9 @@
 use std::{
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     time::SystemTime,
 };
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
@@ -42,8 +42,9 @@ impl RecipeCache {
         }
         let raw = std::fs::read_to_string(&path)
             .with_context(|| format!("failed to read recipe cache metadata: {}", path.display()))?;
-        let entry: CachedOfficialRelease = serde_json::from_str(&raw)
-            .with_context(|| format!("failed to parse recipe cache metadata: {}", path.display()))?;
+        let entry: CachedOfficialRelease = serde_json::from_str(&raw).with_context(|| {
+            format!("failed to parse recipe cache metadata: {}", path.display())
+        })?;
         Ok(Some(entry.release_version))
     }
 
@@ -68,12 +69,16 @@ impl RecipeCache {
         self.release_dir(release_version).join("index.json")
     }
 
-    pub fn manifest_asset_path(&self, release_version: &str, asset_name: &str) -> PathBuf {
-        self.assets_dir(release_version).join(asset_name)
+    pub fn manifest_asset_path(&self, release_version: &str, asset_name: &str) -> Result<PathBuf> {
+        Ok(self
+            .assets_dir(release_version)
+            .join(validate_asset_name(asset_name)?))
     }
 
-    pub fn readme_asset_path(&self, release_version: &str, asset_name: &str) -> PathBuf {
-        self.assets_dir(release_version).join(asset_name)
+    pub fn readme_asset_path(&self, release_version: &str, asset_name: &str) -> Result<PathBuf> {
+        Ok(self
+            .assets_dir(release_version)
+            .join(validate_asset_name(asset_name)?))
     }
 
     pub fn write_index(&self, release_version: &str, bytes: &[u8]) -> Result<PathBuf> {
@@ -88,7 +93,7 @@ impl RecipeCache {
         asset_name: &str,
         bytes: &[u8],
     ) -> Result<PathBuf> {
-        let path = self.assets_dir(release_version).join(asset_name);
+        let path = self.manifest_asset_path(release_version, asset_name)?;
         self.write_bytes(&path, bytes)?;
         Ok(path)
     }
@@ -114,7 +119,10 @@ impl RecipeCache {
     pub fn ensure_asset_dir(&self, release_version: &str) -> Result<PathBuf> {
         let dir = self.assets_dir(release_version);
         std::fs::create_dir_all(&dir).with_context(|| {
-            format!("failed to create recipe asset cache directory: {}", dir.display())
+            format!(
+                "failed to create recipe asset cache directory: {}",
+                dir.display()
+            )
         })?;
         Ok(dir)
     }
@@ -134,11 +142,29 @@ impl RecipeCache {
     fn write_bytes(&self, path: &Path, bytes: &[u8]) -> Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).with_context(|| {
-                format!("failed to create recipe cache directory: {}", parent.display())
+                format!(
+                    "failed to create recipe cache directory: {}",
+                    parent.display()
+                )
             })?;
         }
         std::fs::write(path, bytes)
             .with_context(|| format!("failed to write recipe cache file: {}", path.display()))
+    }
+}
+
+pub fn validate_asset_name(asset_name: &str) -> Result<&str> {
+    if asset_name.is_empty() {
+        bail!("recipe asset name cannot be empty");
+    }
+    if asset_name.contains('/') || asset_name.contains('\\') {
+        bail!("recipe asset name must be a single file name: `{asset_name}`");
+    }
+
+    let mut components = Path::new(asset_name).components();
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(_)), None) => Ok(asset_name),
+        _ => bail!("recipe asset name must be a single file name: `{asset_name}`"),
     }
 }
 
@@ -163,17 +189,47 @@ mod tests {
         let cache = RecipeCache::apply_from_dir(dir.path()).unwrap();
 
         cache.set_latest_release_version("v0.3.1").unwrap();
-        let index_path = cache.write_index("v0.3.1", br#"{"schemaVersion":1}"#).unwrap();
+        let index_path = cache
+            .write_index("v0.3.1", br#"{"schemaVersion":1}"#)
+            .unwrap();
         let manifest_path = cache
-            .write_asset("v0.3.1", "ssh-tunnel.manifest.yaml", b"apiVersion: fungi.rs/v1alpha1\n")
+            .write_asset(
+                "v0.3.1",
+                "ssh-tunnel.manifest.yaml",
+                b"apiVersion: fungi.rs/v1alpha1\n",
+            )
             .unwrap();
         let resolved_path = cache
-            .write_resolved_manifest("v0.3.1", "ssh-tunnel", "home-ssh-tunnel", "apiVersion: fungi.rs/v1alpha1\n")
+            .write_resolved_manifest(
+                "v0.3.1",
+                "ssh-tunnel",
+                "home-ssh-tunnel",
+                "apiVersion: fungi.rs/v1alpha1\n",
+            )
             .unwrap();
 
-        assert_eq!(cache.latest_release_version().unwrap().as_deref(), Some("v0.3.1"));
+        assert_eq!(
+            cache.latest_release_version().unwrap().as_deref(),
+            Some("v0.3.1")
+        );
         assert!(index_path.exists());
         assert!(manifest_path.exists());
         assert!(resolved_path.exists());
+    }
+
+    #[test]
+    fn rejects_asset_names_with_path_traversal() {
+        let dir = TempDir::new().unwrap();
+        let cache = RecipeCache::apply_from_dir(dir.path()).unwrap();
+
+        let error = cache
+            .write_asset("v0.3.1", "../escape.yaml", b"bad")
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("recipe asset name must be a single file name")
+        );
     }
 }

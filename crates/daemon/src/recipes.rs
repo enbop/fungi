@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
-use fungi_config::recipe_cache::RecipeCache;
+use fungi_config::recipe_cache::{RecipeCache, validate_asset_name};
 use serde::Deserialize;
 
 use crate::ServiceManifestDocument;
@@ -107,12 +107,13 @@ pub async fn resolve_official_service_recipe(
     let loaded = load_official_recipe_index(fungi_dir, refresh).await?;
     let recipe = loaded.find_recipe(recipe_id)?;
     let detail = build_recipe_detail(&loaded, recipe).await?;
-    let manifest_yaml = std::fs::read_to_string(&detail.cached_manifest_path).with_context(|| {
-        format!(
-            "failed to read cached recipe manifest: {}",
-            detail.cached_manifest_path.display()
-        )
-    })?;
+    let manifest_yaml =
+        std::fs::read_to_string(&detail.cached_manifest_path).with_context(|| {
+            format!(
+                "failed to read cached recipe manifest: {}",
+                detail.cached_manifest_path.display()
+            )
+        })?;
     let mut manifest_doc: ServiceManifestDocument = serde_yaml::from_str(&manifest_yaml)
         .with_context(|| {
             format!(
@@ -178,9 +179,9 @@ async fn build_recipe_detail(
     )
     .await?;
     let cached_readme_path = match &recipe.readme_asset {
-        Some(readme_asset) => Some(
-            ensure_cached_asset(&loaded.cache, &loaded.release_version, readme_asset).await?,
-        ),
+        Some(readme_asset) => {
+            Some(ensure_cached_asset(&loaded.cache, &loaded.release_version, readme_asset).await?)
+        }
         None => None,
     };
 
@@ -190,11 +191,12 @@ async fn build_recipe_detail(
         homepage: recipe.homepage.clone(),
         cached_manifest_path,
         cached_readme_path,
-        remote_manifest_url: release_asset_url(&loaded.release_version, &recipe.manifest_asset),
+        remote_manifest_url: release_asset_url(&loaded.release_version, &recipe.manifest_asset)?,
         remote_readme_url: recipe
             .readme_asset
             .as_ref()
-            .map(|asset| release_asset_url(&loaded.release_version, asset)),
+            .map(|asset| release_asset_url(&loaded.release_version, asset))
+            .transpose()?,
     })
 }
 
@@ -214,10 +216,18 @@ async fn load_official_recipe_index(
         _ => refresh_latest_official_recipe_index(&cache).await?,
     };
     let index_path = cache.index_path(&release_version);
-    let raw = std::fs::read_to_string(&index_path)
-        .with_context(|| format!("failed to read cached recipe index: {}", index_path.display()))?;
-    let index: OfficialRecipeIndex = serde_json::from_str(&raw)
-        .with_context(|| format!("failed to parse cached recipe index: {}", index_path.display()))?;
+    let raw = std::fs::read_to_string(&index_path).with_context(|| {
+        format!(
+            "failed to read cached recipe index: {}",
+            index_path.display()
+        )
+    })?;
+    let index: OfficialRecipeIndex = serde_json::from_str(&raw).with_context(|| {
+        format!(
+            "failed to parse cached recipe index: {}",
+            index_path.display()
+        )
+    })?;
 
     Ok(LoadedOfficialRecipeIndex {
         release_version,
@@ -234,7 +244,7 @@ async fn refresh_latest_official_recipe_index(cache: &RecipeCache) -> Result<Str
         .context("latest official recipe release request failed")?;
     let release_version = release_version_from_release_page_url(latest_release_response.url())?;
 
-    let response = reqwest::get(release_asset_url(&release_version, "index.json"))
+    let response = reqwest::get(release_asset_url(&release_version, "index.json")?)
         .await
         .context("failed to fetch official recipe index")?
         .error_for_status()
@@ -253,12 +263,17 @@ async fn ensure_cached_asset(
     release_version: &str,
     asset_name: &str,
 ) -> Result<PathBuf> {
-    let path = cache.manifest_asset_path(release_version, asset_name);
-    if path.exists() && path.metadata().map(|metadata| metadata.len() > 0).unwrap_or(false) {
+    let path = cache.manifest_asset_path(release_version, asset_name)?;
+    if path.exists()
+        && path
+            .metadata()
+            .map(|metadata| metadata.len() > 0)
+            .unwrap_or(false)
+    {
         return Ok(path);
     }
 
-    let response = reqwest::get(release_asset_url(release_version, asset_name))
+    let response = reqwest::get(release_asset_url(release_version, asset_name)?)
         .await
         .with_context(|| format!("failed to fetch recipe asset `{asset_name}`"))?
         .error_for_status()
@@ -270,10 +285,11 @@ async fn ensure_cached_asset(
     cache.write_asset(release_version, asset_name, bytes.as_ref())
 }
 
-fn release_asset_url(release_version: &str, asset_name: &str) -> String {
-    format!(
+fn release_asset_url(release_version: &str, asset_name: &str) -> Result<String> {
+    let asset_name = validate_asset_name(asset_name)?;
+    Ok(format!(
         "https://github.com/{OFFICIAL_RECIPE_SOURCE_LABEL}/releases/download/{release_version}/{asset_name}"
-    )
+    ))
 }
 
 fn release_version_from_release_page_url(url: &reqwest::Url) -> Result<String> {
@@ -314,7 +330,10 @@ mod tests {
 
     #[test]
     fn maps_tcp_recipe_runtime_to_link() {
-        assert_eq!(parse_recipe_runtime("tcp").unwrap(), ServiceRecipeRuntime::Link);
+        assert_eq!(
+            parse_recipe_runtime("tcp").unwrap(),
+            ServiceRecipeRuntime::Link
+        );
     }
 
     #[test]
@@ -324,6 +343,9 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(release_version_from_release_page_url(&url).unwrap(), "v0.3.1");
+        assert_eq!(
+            release_version_from_release_page_url(&url).unwrap(),
+            "v0.3.1"
+        );
     }
 }

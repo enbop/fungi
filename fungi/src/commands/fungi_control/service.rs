@@ -831,7 +831,9 @@ async fn print_service_recipe_detail(client: &mut RpcClient, recipe_id: &str, re
         refresh,
     };
     match client.get_recipe(Request::new(req)).await {
-        Ok(resp) => print_service_recipe_detail_value(&require_recipe_detail(resp.into_inner().detail)),
+        Ok(resp) => {
+            print_service_recipe_detail_value(&require_recipe_detail(resp.into_inner().detail))
+        }
         Err(error) => fatal_grpc(error),
     }
 }
@@ -920,10 +922,7 @@ fn print_recipe_add_review(
     let summary = recipe_summary(detail);
     println!("Recipe: {}", summary.id);
     println!("Service name: {}", service_name);
-    println!(
-        "Target: {}",
-        target_device_name.unwrap_or("local node")
-    );
+    println!("Target: {}", target_device_name.unwrap_or("local node"));
     println!("Runtime: {}", recipe_runtime_label(summary.runtime));
     println!("Source: {}", summary.source_label);
     println!("Release: {}", summary.release_version);

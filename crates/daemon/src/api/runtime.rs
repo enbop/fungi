@@ -248,9 +248,13 @@ impl FungiDaemon {
         refresh: bool,
     ) -> Result<ResolvedServiceRecipe> {
         let fungi_dir = self.config_fungi_dir()?;
-        let mut resolved =
-            crate::recipes::resolve_official_service_recipe(&fungi_dir, recipe_id, service_name, refresh)
-                .await?;
+        let mut resolved = crate::recipes::resolve_official_service_recipe(
+            &fungi_dir,
+            recipe_id,
+            service_name,
+            refresh,
+        )
+        .await?;
         resolved.warnings = self
             .build_service_recipe_runtime_warnings(resolved.detail.summary.runtime, target_peer_id)
             .await;
@@ -308,9 +312,10 @@ impl FungiDaemon {
         target_peer_id: Option<PeerId>,
     ) -> Vec<String> {
         match target_peer_id {
-            Some(peer_id) => self
-                .build_remote_recipe_runtime_warnings(runtime, peer_id)
-                .await,
+            Some(peer_id) => {
+                self.build_remote_recipe_runtime_warnings(runtime, peer_id)
+                    .await
+            }
             None => self.build_local_recipe_runtime_warnings(runtime),
         }
     }
@@ -345,16 +350,20 @@ impl FungiDaemon {
             Err(error) => {
                 return vec![format!(
                     "Could not verify runtime compatibility for target device {label}: {error}"
-                )]
+                )];
             }
         };
 
         match runtime {
             ServiceRecipeRuntime::Docker if !capabilities.runtimes.docker => {
-                vec![format!("Target device {label} does not report Docker runtime support")]
+                vec![format!(
+                    "Target device {label} does not report Docker runtime support"
+                )]
             }
             ServiceRecipeRuntime::Wasmtime if !capabilities.runtimes.wasmtime => {
-                vec![format!("Target device {label} does not report Wasmtime runtime support")]
+                vec![format!(
+                    "Target device {label} does not report Wasmtime runtime support"
+                )]
             }
             _ => Vec::new(),
         }
@@ -439,10 +448,16 @@ fn runtime_status_warning(
         return Vec::new();
     }
     if !config_enabled {
-        return vec![format!("{runtime_name} runtime is disabled in local config")];
+        return vec![format!(
+            "{runtime_name} runtime is disabled in local config"
+        )];
     }
     if !detected {
-        return vec![format!("{runtime_name} runtime does not appear to be available locally")];
+        return vec![format!(
+            "{runtime_name} runtime does not appear to be available locally"
+        )];
     }
-    vec![format!("{runtime_name} runtime is configured but not active locally")]
+    vec![format!(
+        "{runtime_name} runtime is configured but not active locally"
+    )]
 }
