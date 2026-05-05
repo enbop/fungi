@@ -3,6 +3,7 @@ use fungi::commands::{
     Commands, FungiArgs,
     fungi_control::{
         DeviceAddressCommands, DeviceCommands, DeviceInput, ServiceArgs, ServiceCommands,
+        ServiceRecipeCommands,
     },
 };
 
@@ -24,6 +25,7 @@ fn parses_service_add_with_device() {
             Some(ServiceCommands::Add {
                 target_or_manifest,
                 manifest,
+                ..
             }),
         ..
     }) = args.command
@@ -47,6 +49,7 @@ fn parses_interactive_service_add() {
             Some(ServiceCommands::Add {
                 target_or_manifest,
                 manifest,
+                ..
             }),
         ..
     }) = args.command
@@ -78,6 +81,7 @@ fn parses_service_add_reference_for_interactive_creator() {
             Some(ServiceCommands::Add {
                 target_or_manifest,
                 manifest,
+                ..
             }),
         ..
     }) = args.command
@@ -102,6 +106,7 @@ fn parses_service_add_reference_then_manifest() {
             Some(ServiceCommands::Add {
                 target_or_manifest,
                 manifest,
+                ..
             }),
         ..
     }) = args.command
@@ -112,6 +117,69 @@ fn parses_service_add_reference_then_manifest() {
     assert!(device.device.is_none());
     assert_eq!(target_or_manifest.as_deref(), Some("ssh@nas"));
     assert_eq!(manifest.as_deref(), Some("ssh.service.yaml"));
+}
+
+#[test]
+fn parses_service_add_recipe_flags() {
+    let args = FungiArgs::try_parse_from([
+        "fungi",
+        "service",
+        "add",
+        "home-ssh@nas",
+        "--recipe",
+        "ssh-tunnel",
+        "--refresh",
+        "--yes",
+    ])
+    .unwrap();
+
+    let Commands::Service(ServiceArgs {
+        command:
+            Some(ServiceCommands::Add {
+                target_or_manifest,
+                manifest,
+                recipe,
+                refresh,
+                yes,
+            }),
+        ..
+    }) = args.command
+    else {
+        panic!("expected service add command");
+    };
+
+    assert_eq!(target_or_manifest.as_deref(), Some("home-ssh@nas"));
+    assert!(manifest.is_none());
+    assert_eq!(recipe.as_deref(), Some("ssh-tunnel"));
+    assert!(refresh);
+    assert!(yes);
+}
+
+#[test]
+fn parses_service_recipe_show() {
+    let args = FungiArgs::try_parse_from([
+        "fungi",
+        "service",
+        "recipe",
+        "show",
+        "code-server",
+        "--refresh",
+    ])
+    .unwrap();
+
+    let Commands::Service(ServiceArgs {
+        command:
+            Some(ServiceCommands::Recipe {
+                command: ServiceRecipeCommands::Show { recipe, refresh },
+            }),
+        ..
+    }) = args.command
+    else {
+        panic!("expected service recipe show command");
+    };
+
+    assert_eq!(recipe, "code-server");
+    assert!(refresh);
 }
 
 #[test]

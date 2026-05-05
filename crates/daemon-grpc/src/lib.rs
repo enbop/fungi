@@ -67,6 +67,41 @@ fn proto_runtime_kind(kind: i32) -> Result<Option<fungi_daemon::RuntimeKind>, St
     }
 }
 
+fn proto_recipe_runtime_kind(kind: fungi_daemon::ServiceRecipeRuntime) -> i32 {
+    match kind {
+        fungi_daemon::ServiceRecipeRuntime::Docker => RecipeRuntimeKind::Docker as i32,
+        fungi_daemon::ServiceRecipeRuntime::Wasmtime => RecipeRuntimeKind::Wasmtime as i32,
+        fungi_daemon::ServiceRecipeRuntime::Link => RecipeRuntimeKind::Link as i32,
+    }
+}
+
+fn proto_recipe_summary(summary: fungi_daemon::ServiceRecipeSummary) -> RecipeSummary {
+    RecipeSummary {
+        id: summary.id,
+        name: summary.name,
+        description: summary.description,
+        runtime: proto_recipe_runtime_kind(summary.runtime),
+        stability: summary.stability,
+        source_label: summary.source_label,
+        release_version: summary.release_version,
+    }
+}
+
+fn proto_recipe_detail(detail: fungi_daemon::ServiceRecipeDetail) -> RecipeDetail {
+    RecipeDetail {
+        summary: Some(proto_recipe_summary(detail.summary)),
+        tags: detail.tags,
+        homepage: detail.homepage.unwrap_or_default(),
+        cached_manifest_path: detail.cached_manifest_path.display().to_string(),
+        cached_readme_path: detail
+            .cached_readme_path
+            .map(|path| path.display().to_string())
+            .unwrap_or_default(),
+        remote_manifest_url: detail.remote_manifest_url,
+        remote_readme_url: detail.remote_readme_url.unwrap_or_default(),
+    }
+}
+
 impl PingPeerError {
     fn new(
         connection_id: impl Into<String>,
@@ -1224,6 +1259,68 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         let services_json = serde_json::to_string(&services)
             .map_err(|e| Status::internal(format!("Failed to serialize services: {e}")))?;
         Ok(Response::new(ListServicesResponse { services_json }))
+    }
+
+    async fn list_recipes(
+        &self,
+        request: Request<ListRecipesRequest>,
+    ) -> Result<Response<ListRecipesResponse>, Status> {
+        let req = request.into_inner();
+        let recipes = self
+            .inner
+            .list_service_recipes(req.refresh)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list recipes: {e}")))?;
+        Ok(Response::new(ListRecipesResponse {
+            recipes: recipes.into_iter().map(proto_recipe_summary).collect(),
+        }))
+    }
+
+    async fn get_recipe(
+        &self,
+        request: Request<GetRecipeRequest>,
+    ) -> Result<Response<GetRecipeResponse>, Status> {
+        let req = request.into_inner();
+        let detail = self
+            .inner
+            .get_service_recipe(&req.recipe_id, req.refresh)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get recipe: {e}")))?;
+        Ok(Response::new(GetRecipeResponse {
+            detail: Some(proto_recipe_detail(detail)),
+        }))
+    }
+
+    async fn resolve_recipe(
+        &self,
+        request: Request<ResolveRecipeRequest>,
+    ) -> Result<Response<ResolveRecipeResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = if req.peer_id.trim().is_empty() {
+            None
+        } else {
+            Some(
+                PeerId::from_str(&req.peer_id)
+                    .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?,
+            )
+        };
+        let service_name = if req.service_name.trim().is_empty() {
+            None
+        } else {
+            Some(req.service_name.as_str())
+        };
+        let resolved = self
+            .inner
+            .resolve_service_recipe(&req.recipe_id, service_name, peer_id, req.refresh)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to resolve recipe: {e}")))?;
+        Ok(Response::new(ResolveRecipeResponse {
+            detail: Some(proto_recipe_detail(resolved.detail)),
+            manifest_yaml: resolved.manifest_yaml,
+            manifest_base_dir: resolved.manifest_base_dir.display().to_string(),
+            resolved_manifest_path: resolved.resolved_manifest_path.display().to_string(),
+            warnings: resolved.warnings,
+        }))
     }
 
     async fn list_peer_catalog(

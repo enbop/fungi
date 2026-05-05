@@ -178,6 +178,15 @@ service FungiDaemon {
   // Lists all pulled services on the local node, including stopped ones.
   rpc ListServices(Empty) returns (ListServicesResponse) {}
 
+  // Lists official service recipes known to the local daemon.
+  rpc ListRecipes(ListRecipesRequest) returns (ListRecipesResponse) {}
+
+  // Returns detailed metadata and audit paths for one official service recipe.
+  rpc GetRecipe(GetRecipeRequest) returns (GetRecipeResponse) {}
+
+  // Resolves one official recipe into a concrete manifest for local or remote pull.
+  rpc ResolveRecipe(ResolveRecipeRequest) returns (ResolveRecipeResponse) {}
+
     // Lists services published by a remote peer for consumption.
   rpc ListPeerCatalog(ListPeerCatalogRequest)
   returns (ListPeerCatalogResponse) {}
@@ -593,6 +602,59 @@ message ServiceLogsResponse {
 }
 
 message ListServicesResponse { string services_json = 1; }
+
+enum RecipeRuntimeKind {
+  RECIPE_RUNTIME_KIND_UNSPECIFIED = 0;
+  RECIPE_RUNTIME_KIND_DOCKER      = 1;
+  RECIPE_RUNTIME_KIND_WASMTIME    = 2;
+  RECIPE_RUNTIME_KIND_LINK        = 3;
+}
+
+message RecipeSummary {
+  string            id              = 1;
+  string            name            = 2;
+  string            description     = 3;
+  RecipeRuntimeKind runtime         = 4;
+  string            stability       = 5;
+  string            source_label    = 6;
+  string            release_version = 7;
+}
+
+message RecipeDetail {
+  RecipeSummary   summary              = 1;
+  repeated string tags                 = 2;
+  string          homepage             = 3;
+  string          cached_manifest_path = 4;
+  string          cached_readme_path   = 5;
+  string          remote_manifest_url  = 6;
+  string          remote_readme_url    = 7;
+}
+
+message ListRecipesRequest { bool refresh = 1; }
+
+message ListRecipesResponse { repeated RecipeSummary recipes = 1; }
+
+message GetRecipeRequest {
+  string recipe_id = 1;
+  bool   refresh   = 2;
+}
+
+message GetRecipeResponse { RecipeDetail detail = 1; }
+
+message ResolveRecipeRequest {
+  string recipe_id    = 1;
+  string service_name = 2;
+  string peer_id      = 3;
+  bool   refresh      = 4;
+}
+
+message ResolveRecipeResponse {
+  RecipeDetail    detail                 = 1;
+  string          manifest_yaml          = 2;
+  string          manifest_base_dir      = 3;
+  string          resolved_manifest_path = 4;
+  repeated string warnings               = 5;
+}
 
 message ListPeerCatalogRequest {
   string peer_id = 1;

@@ -28,7 +28,7 @@ pub use relay_config::{RelayCommands, execute_relay};
 pub use security::{SecurityCommands, execute_security};
 pub use service::{
     DynamicThingInvocation, DynamicThingTarget, ServiceArgs, ServiceCommands,
-    execute_dynamic_thing, execute_service, fatal_dynamic_builtin_typo,
+    ServiceRecipeCommands, execute_dynamic_thing, execute_service, fatal_dynamic_builtin_typo,
     parse_dynamic_thing_invocation, parse_dynamic_thing_target,
 };
 pub use shared::{DeviceInput, PeerInput};
