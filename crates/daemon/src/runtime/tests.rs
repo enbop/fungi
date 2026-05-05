@@ -413,11 +413,71 @@ spec:
 "#;
 
     let manifest = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
-    let expose = manifest.expose.expect("expected expose config");
+    let expose = manifest.expose.as_ref().expect("expected expose config");
     assert_eq!(expose.transport.kind, ServiceExposeTransportKind::Tcp);
-    let usage = expose.usage.expect("expected usage config");
+    let usage = expose.usage.as_ref().expect("expected usage config");
     assert_eq!(usage.kind, ServiceExposeUsageKind::Web);
     assert_eq!(usage.path.as_deref(), Some("/"));
+}
+
+#[test]
+fn parse_manifest_expose_maps_icon_url_and_catalog_id() {
+    let yaml = r#"
+apiVersion: fungi.rs/v1alpha1
+kind: Service
+metadata:
+    name: filebrowser
+spec:
+    run:
+        docker:
+            image: filebrowser/filebrowser:latest
+    entries:
+        http:
+            port: 80
+            usage: web
+            path: /
+            iconUrl: https://example.test/icon.svg
+            catalogId: io.example.filebrowser
+"#;
+
+    let manifest = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
+    let expose = manifest.expose.as_ref().expect("expected expose config");
+
+    assert_eq!(
+        expose.icon_url.as_deref(),
+        Some("https://example.test/icon.svg")
+    );
+    assert_eq!(expose.catalog_id.as_deref(), Some("io.example.filebrowser"));
+
+    let rendered = service_manifest_to_yaml(&manifest).unwrap();
+    assert!(rendered.contains("iconUrl: https://example.test/icon.svg"));
+    assert!(rendered.contains("catalogId: io.example.filebrowser"));
+}
+
+#[test]
+fn parse_manifest_rejects_mismatched_multi_entry_expose_metadata() {
+    let yaml = r#"
+apiVersion: fungi.rs/v1alpha1
+kind: Service
+metadata:
+    name: multi
+spec:
+    run:
+        docker:
+            image: example/multi:latest
+    entries:
+        api:
+            port: 8081
+            usage: tcp
+        web:
+            port: 8080
+            usage: web
+            path: /
+"#;
+
+    let error = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp"))
+        .expect_err("per-entry expose metadata is not supported yet");
+    assert!(error.to_string().contains("expose metadata must match"));
 }
 
 #[test]

@@ -239,10 +239,10 @@ pub struct ServiceManifestEntry {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
-    #[serde(rename = "catalogId")]
+    #[serde(rename = "iconUrl")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon_url: Option<String>,
-    #[serde(rename = "iconUrl")]
+    #[serde(rename = "catalogId")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub catalog_id: Option<String>,
 }

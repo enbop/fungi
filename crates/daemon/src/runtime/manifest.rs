@@ -474,21 +474,48 @@ fn parse_manifest_entry(
 fn parse_manifest_entries_expose(
     entries: &BTreeMap<String, ServiceManifestEntry>,
 ) -> Result<Option<ServiceExpose>> {
-    let Some((_name, entry)) = entries.iter().next() else {
+    let Some((first_name, first_entry)) = entries.iter().next() else {
         return Ok(None);
     };
-    let usage = entry.usage.map(|kind| ServiceExposeUsage {
+    let first_metadata = entry_expose_metadata(first_entry);
+    for (name, entry) in entries.iter().skip(1) {
+        let metadata = entry_expose_metadata(entry);
+        if metadata != first_metadata {
+            bail!(
+                "spec.entries.{name} expose metadata must match spec.entries.{first_name}; per-entry usage/path/iconUrl/catalogId is not supported yet"
+            );
+        }
+    }
+
+    let usage = first_metadata.usage.map(|kind| ServiceExposeUsage {
         kind: entry_usage_to_manifest_usage(kind),
-        path: normalize_optional(entry.path.clone()),
+        path: first_metadata.path.clone(),
     });
     Ok(Some(ServiceExpose {
         transport: ServiceExposeTransport {
             kind: ServiceExposeTransportKind::Tcp,
         },
         usage,
+        icon_url: first_metadata.icon_url.clone(),
+        catalog_id: first_metadata.catalog_id.clone(),
+    }))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EntryExposeMetadata {
+    usage: Option<ServiceManifestEntryUsageKind>,
+    path: Option<String>,
+    icon_url: Option<String>,
+    catalog_id: Option<String>,
+}
+
+fn entry_expose_metadata(entry: &ServiceManifestEntry) -> EntryExposeMetadata {
+    EntryExposeMetadata {
+        usage: entry.usage,
+        path: normalize_optional(entry.path.clone()),
         icon_url: normalize_optional(entry.icon_url.clone()),
         catalog_id: normalize_optional(entry.catalog_id.clone()),
-    }))
+    }
 }
 
 fn parse_tcp_target(value: &str, field_name: &str) -> Result<(String, u16)> {
