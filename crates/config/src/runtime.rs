@@ -48,6 +48,19 @@ impl Runtime {
         }
         Ok(normalized)
     }
+
+    pub fn default_allowed_host_paths(fungi_dir: &Path) -> Vec<PathBuf> {
+        let paths = FungiPaths::from_fungi_home(fungi_dir);
+        vec![paths.appdata_root(), paths.user_root()]
+    }
+
+    pub fn effective_allowed_host_paths(&self, fungi_dir: &Path) -> Vec<PathBuf> {
+        let mut paths = Self::default_allowed_host_paths(fungi_dir);
+        paths.extend(self.allowed_host_paths.clone());
+        paths.sort();
+        paths.dedup();
+        paths
+    }
 }
 
 fn is_sensitive_fungi_path(path: &Path, fungi_dir: &Path) -> Result<bool> {
@@ -92,6 +105,24 @@ mod tests {
         assert!(runtime.docker_enabled());
         assert!(runtime.wasmtime_enabled());
         assert!(runtime.allowed_host_paths.is_empty());
+    }
+
+    #[test]
+    fn runtime_effective_allowed_host_paths_include_default_roots() {
+        let fungi_home = test_fungi_home();
+        let runtime = Runtime::default();
+        let mut expected = vec![
+            fungi_home.join("appdata"),
+            fungi_home
+                .parent()
+                .unwrap()
+                .join(crate::paths::user_root_dir_name_for_channel(
+                    crate::dist_channel(),
+                )),
+        ];
+        expected.sort();
+
+        assert_eq!(runtime.effective_allowed_host_paths(&fungi_home), expected);
     }
 
     #[test]

@@ -5,7 +5,6 @@ use std::{
 };
 
 use anyhow::Result;
-use fungi_config::paths::FungiPaths;
 use fungi_config::runtime::Runtime as RuntimeConfig;
 use fungi_docker_agent::{
     AgentPolicy, ContainerDetails, ContainerLogs, ContainerSpec, DockerAgent, LogsOptions,
@@ -34,8 +33,7 @@ impl DockerControl {
             return Ok(None);
         };
 
-        let paths = FungiPaths::from_fungi_home(fungi_home);
-        let default_allowed_host_paths = vec![paths.appdata_root(), paths.user_root()];
+        let default_allowed_host_paths = RuntimeConfig::default_allowed_host_paths(fungi_home);
 
         Ok(Some(Self {
             policy: Arc::new(Mutex::new(build_agent_policy(

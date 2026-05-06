@@ -334,11 +334,15 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         _request: Request<Empty>,
     ) -> Result<Response<RuntimeConfigResponse>, Status> {
         let config = self.inner.get_runtime_config();
+        let fungi_dir = self
+            .inner
+            .config_fungi_dir()
+            .map_err(|e| Status::internal(format!("Failed to resolve fungi dir: {e}")))?;
         Ok(Response::new(RuntimeConfigResponse {
             disable_docker: config.disable_docker,
             disable_wasmtime: config.disable_wasmtime,
             allowed_host_paths: config
-                .allowed_host_paths
+                .effective_allowed_host_paths(&fungi_dir)
                 .into_iter()
                 .map(|path| path.to_string_lossy().to_string())
                 .collect(),
