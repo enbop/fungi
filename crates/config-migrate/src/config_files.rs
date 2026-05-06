@@ -24,6 +24,7 @@ pub(crate) fn migrate_config_toml_to_current(staging_root: &Path, fungi_dir: &Pa
         "version".to_string(),
         toml::Value::Integer(CURRENT_FUNGI_DIR_VERSION.into()),
     );
+    table.remove("incoming_allowed_peers");
 
     if let Some(runtime_table) = table.get_mut("runtime").and_then(toml::Value::as_table_mut) {
         runtime_table.remove("allowed_ports");
