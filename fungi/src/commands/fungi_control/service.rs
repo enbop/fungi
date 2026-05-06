@@ -1688,6 +1688,7 @@ fn create_service_manifest_interactively(
                 ServiceManifestEntry {
                     target: Some(format!("{host}:{port}")),
                     port: None,
+                    host_port: None,
                     protocol: None,
                     usage: Some(usage_kind),
                     path: None,

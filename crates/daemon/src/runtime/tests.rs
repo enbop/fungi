@@ -328,6 +328,48 @@ spec:
 }
 
 #[test]
+fn service_manifest_to_yaml_preserves_resolved_auto_host_port() {
+    let yaml = r#"
+apiVersion: fungi.rs/v1alpha1
+kind: Service
+metadata:
+    name: code-server
+spec:
+    run:
+        docker:
+            image: ghcr.io/coder/code-server:4.117.0
+    entries:
+        http:
+            port: 8080
+            usage: web
+"#;
+
+    let manifest =
+        parse_service_manifest_yaml(yaml, Path::new("."), Path::new("/tmp/fungi-home")).unwrap();
+    let resolved_host_port = manifest.ports[0].host_port;
+    assert_eq!(
+        manifest.ports[0].host_port_allocation,
+        ServicePortAllocation::Auto
+    );
+
+    let rendered = service_manifest_to_yaml(&manifest).unwrap();
+    assert!(rendered.contains(&format!("hostPort: {resolved_host_port}")));
+
+    let reparsed = parse_managed_service_manifest_yaml(
+        &rendered,
+        Path::new("."),
+        Path::new("/tmp/fungi-home"),
+        "svc_code_server",
+    )
+    .unwrap();
+    assert_eq!(reparsed.ports[0].host_port, resolved_host_port);
+    assert_eq!(
+        reparsed.ports[0].host_port_allocation,
+        ServicePortAllocation::Fixed
+    );
+}
+
+#[test]
 fn manifest_document_supports_link_service() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1
