@@ -118,7 +118,15 @@ pub enum ServiceCommands {
         tail: Option<String>,
     },
     /// Remove a service by name from this node or another device
-    Remove { name: String },
+    Remove {
+        name: String,
+        /// Remove only the local cached record for a device service
+        #[arg(long, default_value_t = false)]
+        local_only: bool,
+        /// Confirm local-only fallback without prompting
+        #[arg(short, long, default_value_t = false)]
+        yes: bool,
+    },
     /// Deprecated: pull a service manifest onto the local node; use `service add`
     #[command(hide = true)]
     Pull {
@@ -383,7 +391,11 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                 }
             }
         }
-        ServiceCommands::Remove { name } => {
+        ServiceCommands::Remove {
+            name,
+            local_only,
+            yes,
+        } => {
             let target = parse_service_reference(name);
             reject_service_entry(&target, "remove");
             let device = resolve_service_device_target(&args, device, target.device);
@@ -391,14 +403,58 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                 print_target_device(&device);
                 let req = RemoteServiceNameRequest {
                     peer_id: device.peer_id.clone(),
-                    name: target.name,
+                    name: target.name.clone(),
                 };
-                match client.remote_remove_service(Request::new(req)).await {
+                if local_only {
+                    match client.forget_device_service(Request::new(req)).await {
+                        Ok(resp) => {
+                            print_remote_service_result("forgotten locally", resp.into_inner())
+                        }
+                        Err(error) => fatal_grpc(error),
+                    }
+                    return;
+                }
+
+                match client
+                    .remote_remove_service(Request::new(req.clone()))
+                    .await
+                {
                     Ok(resp) => {
                         print_remote_service_result("removed", resp.into_inner());
                         refresh_remote_device_services(&mut client, &device.peer_id).await;
                     }
-                    Err(error) => fatal_grpc(error),
+                    Err(error) => {
+                        if cached_device_service_exists(&mut client, &device.peer_id, &target.name)
+                            .await
+                        {
+                            eprintln!(
+                                "Cannot reach device \"{}\". This service may still exist on that device.",
+                                resolved_device_display_name(&device)
+                            );
+                            let forget = yes
+                                || prompt_yes_no_default(
+                                    &format!(
+                                        "Remove the local cached record for {}@{}? [y/N]",
+                                        target.name,
+                                        resolved_device_display_name(&device)
+                                    ),
+                                    false,
+                                );
+                            if forget {
+                                match client.forget_device_service(Request::new(req)).await {
+                                    Ok(resp) => {
+                                        print_remote_service_result(
+                                            "forgotten locally",
+                                            resp.into_inner(),
+                                        );
+                                        return;
+                                    }
+                                    Err(forget_error) => fatal_grpc(forget_error),
+                                }
+                            }
+                        }
+                        fatal_grpc(error)
+                    }
                 }
             } else {
                 let req = ServiceNameRequest {
@@ -1087,7 +1143,12 @@ fn print_remote_service_added(resp: RemoteServiceControlResponse) {
 
 fn print_remote_service_result(action: &str, resp: RemoteServiceControlResponse) {
     let service_name = response_service_name(&resp);
-    println!("Remote service {action}: {service_name}");
+    if resp.forgotten_locally {
+        println!("Local service record removed: {service_name}");
+        println!("The remote device was not changed; the service may still exist there.");
+    } else {
+        println!("Remote service {action}: {service_name}");
+    }
 }
 
 async fn refresh_remote_device_services(client: &mut RpcClient, peer_id: &str) {
@@ -1278,6 +1339,42 @@ async fn fetch_cached_remote_services(client: &mut RpcClient, peer_id: &str) -> 
         }
         Err(error) => fatal_grpc(error),
     }
+}
+
+async fn fetch_cached_remote_managed_services(
+    client: &mut RpcClient,
+    peer_id: &str,
+) -> Vec<ServiceInstance> {
+    let req = ListDeviceServicesRequest {
+        device_id: peer_id.to_string(),
+        cached: true,
+    };
+    match client.list_device_managed_services(Request::new(req)).await {
+        Ok(resp) => {
+            match serde_json::from_str::<Vec<ServiceInstance>>(&resp.into_inner().services_json) {
+                Ok(services) => services,
+                Err(error) => fatal(format!(
+                    "Failed to decode cached remote managed services: {error}"
+                )),
+            }
+        }
+        Err(error) => fatal_grpc(error),
+    }
+}
+
+async fn cached_device_service_exists(
+    client: &mut RpcClient,
+    peer_id: &str,
+    service_name: &str,
+) -> bool {
+    fetch_cached_remote_managed_services(client, peer_id)
+        .await
+        .iter()
+        .any(|service| service.name == service_name)
+        || fetch_cached_remote_services(client, peer_id)
+            .await
+            .iter()
+            .any(|service| service.service_name == service_name)
 }
 
 async fn inspect_remote_service(

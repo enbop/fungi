@@ -38,6 +38,27 @@ impl FungiDaemon {
         let current_devices_config = self.devices().lock().clone();
         let updated_devices_config = current_devices_config.remove_device(&peer_id)?;
         *self.devices().lock() = updated_devices_config;
+
+        self.untrust_device(peer_id)?;
+        self.remove_device_local_service_state(peer_id)?;
+        Ok(())
+    }
+
+    fn remove_device_local_service_state(&self, peer_id: PeerId) -> Result<()> {
+        for access in self.list_service_accesses(Some(peer_id)) {
+            let _ = self.detach_service_access_by_match(peer_id, &access.service_name);
+        }
+
+        let fungi_dir = self.config_fungi_dir()?;
+        let published =
+            fungi_config::service_cache::ServiceCache::apply_published_services_from_dir(
+                &fungi_dir,
+            )?;
+        let managed =
+            fungi_config::service_cache::ServiceCache::apply_managed_services_from_dir(&fungi_dir)?;
+        let peer_id = peer_id.to_string();
+        let _ = published.remove_device_services(&peer_id)?;
+        let _ = managed.remove_device_services(&peer_id)?;
         Ok(())
     }
 

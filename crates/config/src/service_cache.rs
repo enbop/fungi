@@ -78,6 +78,17 @@ impl ServiceCache {
             .with_context(|| format!("failed to write remote services cache: {}", path.display()))
     }
 
+    pub fn remove_device_services(&self, peer_id: &str) -> Result<bool> {
+        let path = self.device_cache_path(peer_id);
+        if !path.exists() {
+            return Ok(false);
+        }
+        std::fs::remove_file(&path).with_context(|| {
+            format!("failed to remove remote services cache: {}", path.display())
+        })?;
+        Ok(true)
+    }
+
     fn device_cache_path(&self, peer_id: &str) -> PathBuf {
         self.root_dir.join(format!("{peer_id}.json"))
     }
@@ -142,5 +153,19 @@ mod tests {
                 .join("peer-a.json")
                 .exists()
         );
+    }
+
+    #[test]
+    fn removes_device_services_cache_file() {
+        let dir = TempDir::new().unwrap();
+        let cache = ServiceCache::apply_managed_services_from_dir(dir.path()).unwrap();
+
+        cache
+            .set_device_services_json("peer-a".to_string(), "[{\"managed\":true}]".to_string())
+            .unwrap();
+
+        assert!(cache.remove_device_services("peer-a").unwrap());
+        assert!(!cache.remove_device_services("peer-a").unwrap());
+        assert_eq!(cache.get_device_services_json("peer-a").unwrap(), None);
     }
 }

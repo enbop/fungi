@@ -384,6 +384,40 @@ impl FungiDaemon {
         Ok(true)
     }
 
+    fn remove_cached_device_published_service(
+        &self,
+        device_id: PeerId,
+        name: &str,
+    ) -> Result<bool> {
+        let mut services = self.list_cached_device_published_services(device_id)?;
+        let before = services.len();
+        services.retain(|service| service.service_name != name);
+        if services.len() == before {
+            return Ok(false);
+        }
+
+        self.save_cached_device_published_services(device_id, &services)?;
+        Ok(true)
+    }
+
+    pub fn forget_device_service(
+        &self,
+        device_id: PeerId,
+        name: &str,
+    ) -> Result<ServiceControlResponse> {
+        let removed_managed = self.remove_cached_device_managed_service(device_id, name)?;
+        let removed_published = self.remove_cached_device_published_service(device_id, name)?;
+        if !(removed_managed || removed_published) {
+            anyhow::bail!("cached service not found for device: {name}");
+        }
+
+        let _ = self.detach_service_access_by_match(device_id, name);
+        Ok(ServiceControlResponse::success_forgotten_locally(
+            None,
+            name.to_string(),
+        ))
+    }
+
     pub fn local_node_capabilities(&self) -> NodeCapabilities {
         let config = self.config().lock().clone();
         build_local_node_capabilities(&config, self.runtime_control())
@@ -520,20 +554,10 @@ impl FungiDaemon {
         peer_id: PeerId,
         name: String,
     ) -> Result<ServiceControlResponse> {
-        let response = match self
+        let response = self
             .service_control_protocol_control()
             .remove_peer_service(peer_id, name.clone())
-            .await
-        {
-            Ok(response) => response,
-            Err(error) => {
-                if self.remove_cached_device_managed_service(peer_id, &name)? {
-                    let _ = self.detach_service_access_by_match(peer_id, &name);
-                    return Ok(ServiceControlResponse::success(None, name));
-                }
-                return Err(error);
-            }
-        };
+            .await?;
         let service_key = response
             .service
             .as_ref()

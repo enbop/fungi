@@ -219,6 +219,10 @@ service FungiDaemon {
   rpc RemoteRemoveService(RemoteServiceNameRequest)
   returns (RemoteServiceControlResponse) {}
 
+    // Forgets a cached service record for a device without mutating the remote device.
+  rpc ForgetDeviceService(RemoteServiceNameRequest)
+  returns (RemoteServiceControlResponse) {}
+
     // Compatibility alias for pulled services on a remote peer, including stopped ones.
   rpc RemoteListServices(RemotePeerRequest)
   returns (ListServicesResponse) {}
@@ -692,7 +696,10 @@ message RemoteServiceNameRequest {
 
 message RemotePeerRequest { string peer_id = 1; }
 
-message RemoteServiceControlResponse { string service_name = 1; }
+message RemoteServiceControlResponse {
+  string service_name      = 1;
+  bool   forgotten_locally = 2;
+}
 
 message AttachServiceAccessRequest {
   string peer_id      = 1;

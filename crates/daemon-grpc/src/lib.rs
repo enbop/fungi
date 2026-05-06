@@ -1423,6 +1423,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 .service
                 .map(|service| service.name)
                 .unwrap_or_default(),
+            forgotten_locally: response.forgotten_locally,
         }))
     }
 
@@ -1445,6 +1446,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 .service
                 .map(|service| service.name)
                 .unwrap_or_default(),
+            forgotten_locally: response.forgotten_locally,
         }))
     }
 
@@ -1467,6 +1469,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 .service
                 .map(|service| service.name)
                 .unwrap_or_default(),
+            forgotten_locally: response.forgotten_locally,
         }))
     }
 
@@ -1489,6 +1492,29 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 .service
                 .map(|service| service.name)
                 .unwrap_or_default(),
+            forgotten_locally: response.forgotten_locally,
+        }))
+    }
+
+    async fn forget_device_service(
+        &self,
+        request: Request<RemoteServiceNameRequest>,
+    ) -> Result<Response<RemoteServiceControlResponse>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        let response = self
+            .inner
+            .forget_device_service(peer_id, &req.name)
+            .map_err(|e| Status::internal(format!("Failed to forget device service: {e}")))?;
+
+        Ok(Response::new(RemoteServiceControlResponse {
+            service_name: response
+                .service
+                .map(|service| service.name)
+                .unwrap_or_default(),
+            forgotten_locally: response.forgotten_locally,
         }))
     }
 

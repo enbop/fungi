@@ -754,6 +754,8 @@ pub struct RemotePeerRequest {
 pub struct RemoteServiceControlResponse {
     #[prost(string, tag = "1")]
     pub service_name: ::prost::alloc::string::String,
+    #[prost(bool, tag = "2")]
+    pub forgotten_locally: bool,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AttachServiceAccessRequest {
@@ -2096,6 +2098,26 @@ pub mod fungi_daemon_client {
             ));
             self.inner.unary(req, path, codec).await
         }
+        /// Forgets a cached service record for a device without mutating the remote device.
+        pub async fn forget_device_service(
+            &mut self,
+            request: impl tonic::IntoRequest<super::RemoteServiceNameRequest>,
+        ) -> std::result::Result<tonic::Response<super::RemoteServiceControlResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/ForgetDeviceService",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "ForgetDeviceService",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
         /// Compatibility alias for pulled services on a remote peer, including stopped ones.
         pub async fn remote_list_services(
             &mut self,
@@ -2523,6 +2545,11 @@ pub mod fungi_daemon_server {
         ) -> std::result::Result<tonic::Response<super::RemoteServiceControlResponse>, tonic::Status>;
         /// Removes a service on a remote peer by service name.
         async fn remote_remove_service(
+            &self,
+            request: tonic::Request<super::RemoteServiceNameRequest>,
+        ) -> std::result::Result<tonic::Response<super::RemoteServiceControlResponse>, tonic::Status>;
+        /// Forgets a cached service record for a device without mutating the remote device.
+        async fn forget_device_service(
             &self,
             request: tonic::Request<super::RemoteServiceNameRequest>,
         ) -> std::result::Result<tonic::Response<super::RemoteServiceControlResponse>, tonic::Status>;
@@ -5082,6 +5109,48 @@ pub mod fungi_daemon_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = RemoteRemoveServiceSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/ForgetDeviceService" => {
+                    #[allow(non_camel_case_types)]
+                    struct ForgetDeviceServiceSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::RemoteServiceNameRequest>
+                        for ForgetDeviceServiceSvc<T>
+                    {
+                        type Response = super::RemoteServiceControlResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::RemoteServiceNameRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::forget_device_service(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ForgetDeviceServiceSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
