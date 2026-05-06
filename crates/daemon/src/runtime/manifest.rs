@@ -285,9 +285,7 @@ fn manifest_entries_to_document(
             _ => ServiceManifestEntry {
                 target: None,
                 port: Some(port.service_port),
-                host_port: (port.host_port_allocation == ServicePortAllocation::Auto
-                    || port.host_port != port.service_port)
-                    .then_some(port.host_port),
+                host_port: Some(port.host_port),
                 protocol,
                 usage,
                 path: path.clone(),
@@ -470,7 +468,9 @@ fn parse_manifest_entry(
                     if host_port == 0 {
                         bail!("spec.entries.{name}.hostPort must be greater than 0");
                     }
-                    reserved_host_ports.insert(host_port);
+                    if !reserved_host_ports.insert(host_port) {
+                        bail!("spec.entries.{name}.hostPort {host_port} is already reserved");
+                    }
                     ResolvedManifestHostPort {
                         port: host_port,
                         allocation: ServicePortAllocation::Fixed,
