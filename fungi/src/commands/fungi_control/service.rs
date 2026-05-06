@@ -758,6 +758,7 @@ async fn add_service_from_recipe(
             .unwrap_or_default(),
         refresh,
     };
+    eprintln!("Resolving recipe; downloading recipe assets if needed...");
     let resolved = match client.resolve_recipe(Request::new(req)).await {
         Ok(resp) => resp.into_inner(),
         Err(error) => fatal_grpc(error),
@@ -787,6 +788,7 @@ async fn add_service_from_recipe(
 
     if let Some(device) = device {
         print_target_device(&device);
+        print_recipe_runtime_wait_notice(&detail);
         let req = RemotePullServiceRequest {
             peer_id: device.peer_id.clone(),
             manifest_yaml: resolved.manifest_yaml,
@@ -796,6 +798,14 @@ async fn add_service_from_recipe(
                 let response = resp.into_inner();
                 let service_name = response_service_name(&response);
                 print_remote_service_added(response);
+                let req = RemoteServiceNameRequest {
+                    peer_id: device.peer_id.clone(),
+                    name: service_name.clone(),
+                };
+                match client.remote_start_service(Request::new(req)).await {
+                    Ok(resp) => print_remote_service_result("started", resp.into_inner()),
+                    Err(error) => fatal_grpc(error),
+                }
                 refresh_remote_device_services(client, &device.peer_id).await;
                 println!("Use it:");
                 println!(
@@ -807,12 +817,22 @@ async fn add_service_from_recipe(
             Err(error) => fatal_grpc(error),
         }
     } else {
+        print_recipe_runtime_wait_notice(&detail);
         let req = PullServiceRequest {
             manifest_yaml: resolved.manifest_yaml,
             manifest_base_dir: resolved.manifest_base_dir,
         };
         match client.pull_service(Request::new(req)).await {
-            Ok(resp) => print_service_instance(resp.into_inner(), false),
+            Ok(resp) => {
+                let instance = decode_service_instance(resp.into_inner());
+                let name = instance.name.clone();
+                print_service_instance_value(instance, false);
+                let req = ServiceNameRequest { runtime: 0, name };
+                match client.start_service(Request::new(req)).await {
+                    Ok(_) => println!("Service started"),
+                    Err(error) => fatal_grpc(error),
+                }
+            }
             Err(error) => fatal_grpc(error),
         }
     }
@@ -820,6 +840,7 @@ async fn add_service_from_recipe(
 
 async fn print_service_recipes(client: &mut RpcClient, refresh: bool) {
     let req = ListRecipesRequest { refresh };
+    eprintln!("Loading official service recipes; downloading the index if needed...");
     match client.list_recipes(Request::new(req)).await {
         Ok(resp) => print_service_recipe_list_value(resp.into_inner()),
         Err(error) => fatal_grpc(error),
@@ -831,6 +852,7 @@ async fn print_service_recipe_detail(client: &mut RpcClient, recipe_id: &str, re
         recipe_id: recipe_id.to_string(),
         refresh,
     };
+    eprintln!("Loading recipe metadata; downloading recipe assets if needed...");
     match client.get_recipe(Request::new(req)).await {
         Ok(resp) => {
             print_service_recipe_detail_value(&require_recipe_detail(resp.into_inner().detail))
@@ -896,15 +918,21 @@ fn print_recipe_add_review(
     detail: &RecipeDetail,
     service_name: &str,
     target_device_name: Option<&str>,
-    resolved_manifest_path: &str,
+    _resolved_manifest_path: &str,
     warnings: &[String],
 ) {
     let summary = recipe_summary(detail);
     println!("Recipe: {}", summary.id);
+    println!("Description: {}", summary.description);
+    println!("Runtime: {}", recipe_runtime_label(summary.runtime));
+    println!("Source: {}", summary.source_label);
+    println!("Release: {}", summary.release_version);
     println!("Service name: {}", service_name);
     println!("Target: {}", target_device_name.unwrap_or("local node"));
-    print_recipe_metadata_with_options(detail, false);
-    println!("Resolved manifest: {}", resolved_manifest_path);
+    println!(
+        "Audit paths: run `fungi service recipe show {}` to inspect cached and remote recipe assets.",
+        summary.id
+    );
     print_recipe_warnings(warnings);
 }
 
@@ -941,6 +969,23 @@ fn print_recipe_metadata_with_options(detail: &RecipeDetail, include_name: bool)
 fn print_recipe_warnings(warnings: &[String]) {
     for warning in warnings {
         eprintln!("Warning: {warning}");
+    }
+}
+
+fn print_recipe_runtime_wait_notice(detail: &RecipeDetail) {
+    let summary = recipe_summary(detail);
+    match RecipeRuntimeKind::try_from(summary.runtime) {
+        Ok(RecipeRuntimeKind::Docker) => {
+            eprintln!(
+                "Preparing Docker service; the first run may take a while while the image is pulled..."
+            );
+        }
+        Ok(RecipeRuntimeKind::Wasmtime) => {
+            eprintln!(
+                "Preparing Wasmtime service; downloading the component if it is not cached..."
+            );
+        }
+        _ => {}
     }
 }
 
@@ -1140,7 +1185,7 @@ async fn print_service_overview(client: &mut RpcClient, verbose: bool, refresh: 
 
             let attached = list_accesses(client, &device.peer_id).await;
             rows.extend(services.into_iter().map(|service| {
-                ServiceOverviewRow::from_remote_service(service, &device, &attached, verbose)
+                ServiceOverviewRow::from_remote_service(service, &device, &attached, verbose, false)
             }));
         }
     } else {
@@ -1153,7 +1198,9 @@ async fn print_service_overview(client: &mut RpcClient, verbose: bool, refresh: 
                 }));
             } else {
                 rows.extend(cached_services.into_iter().map(|service| {
-                    ServiceOverviewRow::from_remote_service(service, &device, &accesses, verbose)
+                    ServiceOverviewRow::from_remote_service(
+                        service, &device, &accesses, verbose, true,
+                    )
                 }));
             }
         }
@@ -1928,6 +1975,7 @@ impl ServiceOverviewRow {
         device: &DeviceInfo,
         attached: &[ServiceAccess],
         verbose: bool,
+        cached: bool,
     ) -> Self {
         let device_name = device_display_name(device);
         let attached_access = attached
@@ -1977,7 +2025,11 @@ impl ServiceOverviewRow {
             device: device_name,
             kind: "remote".to_string(),
             usage: service_usage_label(service.usage.as_ref()).to_string(),
-            state: service.status.state,
+            state: if cached {
+                "cached".to_string()
+            } else {
+                service.status.state
+            },
             entries,
             note: attached_access.map(|_| "attached".to_string()),
         }

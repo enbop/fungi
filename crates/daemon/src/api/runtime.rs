@@ -370,6 +370,20 @@ impl FungiDaemon {
         Ok(())
     }
 
+    fn remove_cached_device_managed_service(&self, device_id: PeerId, name: &str) -> Result<bool> {
+        let current_json = self.list_cached_device_managed_services_json(device_id)?;
+        let mut services: Vec<ServiceInstance> = serde_json::from_str(&current_json)?;
+        let before = services.len();
+        services.retain(|service| service.name != name);
+        if services.len() == before {
+            return Ok(false);
+        }
+
+        let updated_json = serde_json::to_string(&services)?;
+        self.save_cached_device_managed_services_json(device_id, &updated_json)?;
+        Ok(true)
+    }
+
     pub fn local_node_capabilities(&self) -> NodeCapabilities {
         let config = self.config().lock().clone();
         build_local_node_capabilities(&config, self.runtime_control())
@@ -506,10 +520,20 @@ impl FungiDaemon {
         peer_id: PeerId,
         name: String,
     ) -> Result<ServiceControlResponse> {
-        let response = self
+        let response = match self
             .service_control_protocol_control()
-            .remove_peer_service(peer_id, name)
-            .await?;
+            .remove_peer_service(peer_id, name.clone())
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => {
+                if self.remove_cached_device_managed_service(peer_id, &name)? {
+                    let _ = self.detach_service_access_by_match(peer_id, &name);
+                    return Ok(ServiceControlResponse::success(None, name));
+                }
+                return Err(error);
+            }
+        };
         let service_key = response
             .service
             .as_ref()

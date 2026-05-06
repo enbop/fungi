@@ -325,6 +325,7 @@ impl FungiDaemon {
 
     async fn restore_service_endpoint_listeners(&self) -> Result<()> {
         let mut listening_rules = self.tcp_tunneling_control.get_listening_rules();
+        let mut restored_protocols = std::collections::BTreeSet::new();
 
         for service in self.runtime_control.list_services().await? {
             if !service.status.running {
@@ -332,35 +333,27 @@ impl FungiDaemon {
             }
 
             for endpoint in service.exposed_endpoints {
-                let already_present = listening_rules.iter().any(|(_, rule)| {
-                    rule.host == "127.0.0.1"
-                        && rule.port == endpoint.host_port
-                        && rule.protocol.as_deref() == Some(endpoint.protocol.as_str())
-                });
-                if already_present {
-                    continue;
-                }
+                restore_service_endpoint_listener(
+                    &self.tcp_tunneling_control,
+                    &mut listening_rules,
+                    &mut restored_protocols,
+                    endpoint.host_port,
+                    endpoint.protocol,
+                )
+                .await;
+            }
+        }
 
-                let rule = fungi_config::tcp_tunneling::ListeningRule {
-                    host: "127.0.0.1".to_string(),
-                    port: endpoint.host_port,
-                    protocol: Some(endpoint.protocol),
-                };
-
-                match self
-                    .tcp_tunneling_control
-                    .add_listening_rule(rule.clone())
-                    .await
-                {
-                    Ok(rule_id) => listening_rules.push((rule_id, rule)),
-                    Err(error) => {
-                        log::warn!(
-                            "Failed to restore service endpoint listener on 127.0.0.1:{}: {}",
-                            endpoint.host_port,
-                            error
-                        );
-                    }
-                }
+        for manifest in self.runtime_control.desired_running_service_manifests() {
+            for endpoint in crate::runtime::service_expose_endpoint_bindings(&manifest) {
+                restore_service_endpoint_listener(
+                    &self.tcp_tunneling_control,
+                    &mut listening_rules,
+                    &mut restored_protocols,
+                    endpoint.host_port,
+                    endpoint.protocol,
+                )
+                .await;
             }
         }
 
@@ -527,7 +520,7 @@ impl FungiDaemon {
         Ok(())
     }
 
-    pub(crate) fn config_fungi_dir(&self) -> Result<PathBuf> {
+    pub fn config_fungi_dir(&self) -> Result<PathBuf> {
         self.config
             .lock()
             .config_file_path()
@@ -850,6 +843,41 @@ mod tests {
                 vec!["/ip4/192.168.1.7/tcp/4001".to_string()]
             )])
         );
+    }
+}
+
+async fn restore_service_endpoint_listener(
+    tcp_tunneling_control: &TcpTunnelingControl,
+    listening_rules: &mut Vec<(String, fungi_config::tcp_tunneling::ListeningRule)>,
+    restored_protocols: &mut BTreeSet<String>,
+    host_port: u16,
+    protocol: String,
+) {
+    let protocol_key = protocol.clone();
+    let already_present = listening_rules.iter().any(|(_, rule)| {
+        rule.host == "127.0.0.1"
+            && rule.port == host_port
+            && rule.protocol.as_deref() == Some(protocol_key.as_str())
+    });
+    if already_present || !restored_protocols.insert(format!("{host_port}:{protocol_key}")) {
+        return;
+    }
+
+    let rule = fungi_config::tcp_tunneling::ListeningRule {
+        host: "127.0.0.1".to_string(),
+        port: host_port,
+        protocol: Some(protocol),
+    };
+
+    match tcp_tunneling_control.add_listening_rule(rule.clone()).await {
+        Ok(rule_id) => listening_rules.push((rule_id, rule)),
+        Err(error) => {
+            log::warn!(
+                "Failed to restore service endpoint listener on 127.0.0.1:{}: {}",
+                host_port,
+                error
+            );
+        }
     }
 }
 
