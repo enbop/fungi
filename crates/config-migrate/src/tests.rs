@@ -145,6 +145,28 @@ fn migrates_legacy_config_transactionally_without_copying_unrelated_side_files()
 }
 
 #[test]
+fn migration_removes_legacy_incoming_allowed_peers_from_config() {
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join(CONFIG_FILE),
+        concat!(
+            "incoming_allowed_peers = [\"16Uiu2HAmUSNEhHAAhJsWZU16U8kaBqqXwCPbty8q243amnT2FWe8\"]\n",
+            "\n",
+            "[rpc]\n",
+            "listen_address = \"127.0.0.1:6601\"\n",
+        ),
+    )
+    .unwrap();
+
+    let report = migrate_if_needed(dir.path()).unwrap();
+
+    assert!(report.changed);
+    let migrated_config = fs::read_to_string(dir.path().join(CONFIG_FILE)).unwrap();
+    assert!(migrated_config.contains("version = 2"));
+    assert!(!migrated_config.contains("incoming_allowed_peers"));
+}
+
+#[test]
 fn migrates_legacy_address_book_to_devices_file() {
     let dir = TempDir::new().unwrap();
     fs::write(

@@ -275,6 +275,7 @@ fn manifest_entries_to_document(
             ServiceSource::TcpLink { host, port } => ServiceManifestEntry {
                 target: Some(format!("{host}:{port}")),
                 port: None,
+                host_port: None,
                 protocol,
                 usage,
                 path: path.clone(),
@@ -284,6 +285,7 @@ fn manifest_entries_to_document(
             _ => ServiceManifestEntry {
                 target: None,
                 port: Some(port.service_port),
+                host_port: Some(port.host_port),
                 protocol,
                 usage,
                 path: path.clone(),
@@ -434,11 +436,14 @@ fn parse_manifest_entry(
         bail!("spec.entries.{name}.protocol currently supports only tcp");
     }
 
-    match (entry.target.as_deref(), entry.port) {
-        (Some(_), Some(_)) => {
+    match (entry.target.as_deref(), entry.port, entry.host_port) {
+        (Some(_), Some(_), _) => {
             bail!("spec.entries.{name} must use either target or port, not both");
         }
-        (Some(target), None) => {
+        (Some(_), None, Some(_)) => {
+            bail!("spec.entries.{name}.hostPort cannot be used with target");
+        }
+        (Some(target), None, None) => {
             if runtime != RuntimeKind::Link {
                 bail!("spec.entries.{name}.target cannot be used when spec.run is set");
             }
@@ -451,14 +456,28 @@ fn parse_manifest_entry(
                 protocol,
             })
         }
-        (None, Some(service_port)) => {
+        (None, Some(service_port), host_port) => {
             if runtime == RuntimeKind::Link {
                 bail!("spec.entries.{name}.port cannot be used without spec.run");
             }
             if service_port == 0 {
                 bail!("spec.entries.{name}.port must be greater than 0");
             }
-            let resolved_port = allocate_auto_host_port(protocol, reserved_host_ports)?;
+            let resolved_port = match host_port {
+                Some(host_port) => {
+                    if host_port == 0 {
+                        bail!("spec.entries.{name}.hostPort must be greater than 0");
+                    }
+                    if !reserved_host_ports.insert(host_port) {
+                        bail!("spec.entries.{name}.hostPort {host_port} is already reserved");
+                    }
+                    ResolvedManifestHostPort {
+                        port: host_port,
+                        allocation: ServicePortAllocation::Fixed,
+                    }
+                }
+                None => allocate_auto_host_port(protocol, reserved_host_ports)?,
+            };
             Ok(ServicePort {
                 name: Some(name),
                 host_port: resolved_port.port,
@@ -467,7 +486,8 @@ fn parse_manifest_entry(
                 protocol,
             })
         }
-        (None, None) => bail!("spec.entries.{name} requires target or port"),
+        (None, None, Some(_)) => bail!("spec.entries.{name}.hostPort requires port"),
+        (None, None, None) => bail!("spec.entries.{name} requires target or port"),
     }
 }
 

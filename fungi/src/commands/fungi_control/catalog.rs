@@ -2,7 +2,7 @@ use clap::Subcommand;
 use fungi_daemon::{CatalogService, ServiceAccess, ServiceExposeUsageKind};
 use fungi_daemon_grpc::{
     Request,
-    fungi_daemon_grpc::{ListPeerCatalogRequest, ListServiceAccessesRequest},
+    fungi_daemon_grpc::{ListDeviceServicesRequest, ListServiceAccessesRequest},
 };
 use serde::Serialize;
 
@@ -201,11 +201,14 @@ async fn discover_services(
     >,
     peer_id: &str,
 ) -> Vec<CatalogService> {
-    let req = ListPeerCatalogRequest {
-        peer_id: peer_id.to_string(),
+    let req = ListDeviceServicesRequest {
+        device_id: peer_id.to_string(),
         cached: false,
     };
-    match client.list_peer_catalog(Request::new(req)).await {
+    match client
+        .list_device_published_services(Request::new(req))
+        .await
+    {
         Ok(resp) => {
             match serde_json::from_str::<Vec<CatalogService>>(&resp.into_inner().services_json) {
                 Ok(services) => services,

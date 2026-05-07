@@ -16,11 +16,11 @@ use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
         AttachServiceAccessRequest, DetachServiceAccessRequest, DeviceInfo, Empty,
-        GetRecipeRequest, GetServiceLogsRequest, ListPeerCatalogRequest, ListRecipesRequest,
+        GetRecipeRequest, GetServiceLogsRequest, ListDeviceServicesRequest, ListRecipesRequest,
         ListRecipesResponse, ListServiceAccessesRequest, ListServicesResponse, PullServiceRequest,
-        RecipeDetail, RecipeRuntimeKind, RecipeSummary, RemotePeerRequest,
-        RemotePullServiceRequest, RemoteServiceControlResponse, RemoteServiceNameRequest,
-        ResolveRecipeRequest, ServiceInstanceResponse, ServiceNameRequest,
+        RecipeDetail, RecipeRuntimeKind, RecipeSummary, RemotePullServiceRequest,
+        RemoteServiceControlResponse, RemoteServiceNameRequest, ResolveRecipeRequest,
+        ServiceInstanceResponse, ServiceNameRequest,
     },
 };
 use serde::Serialize;
@@ -118,7 +118,15 @@ pub enum ServiceCommands {
         tail: Option<String>,
     },
     /// Remove a service by name from this node or another device
-    Remove { name: String },
+    Remove {
+        name: String,
+        /// Remove only the local cached record for a device service
+        #[arg(long, default_value_t = false)]
+        local_only: bool,
+        /// Confirm local-only fallback without prompting
+        #[arg(short, long, default_value_t = false)]
+        yes: bool,
+    },
     /// Deprecated: pull a service manifest onto the local node; use `service add`
     #[command(hide = true)]
     Pull {
@@ -164,10 +172,11 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
         ServiceCommands::List { verbose, refresh } => {
             if let Some(device) = device {
                 print_target_device(&device);
-                let req = RemotePeerRequest {
-                    peer_id: device.peer_id,
+                let req = ListDeviceServicesRequest {
+                    device_id: device.peer_id,
+                    cached: false,
                 };
-                match client.remote_list_services(Request::new(req)).await {
+                match client.list_device_managed_services(Request::new(req)).await {
                     Ok(resp) => print_service_instances(resp.into_inner(), verbose),
                     Err(error) => fatal_grpc(error),
                 }
@@ -382,7 +391,11 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                 }
             }
         }
-        ServiceCommands::Remove { name } => {
+        ServiceCommands::Remove {
+            name,
+            local_only,
+            yes,
+        } => {
             let target = parse_service_reference(name);
             reject_service_entry(&target, "remove");
             let device = resolve_service_device_target(&args, device, target.device);
@@ -390,14 +403,58 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                 print_target_device(&device);
                 let req = RemoteServiceNameRequest {
                     peer_id: device.peer_id.clone(),
-                    name: target.name,
+                    name: target.name.clone(),
                 };
-                match client.remote_remove_service(Request::new(req)).await {
+                if local_only {
+                    match client.forget_device_service(Request::new(req)).await {
+                        Ok(resp) => {
+                            print_remote_service_result("forgotten locally", resp.into_inner())
+                        }
+                        Err(error) => fatal_grpc(error),
+                    }
+                    return;
+                }
+
+                match client
+                    .remote_remove_service(Request::new(req.clone()))
+                    .await
+                {
                     Ok(resp) => {
                         print_remote_service_result("removed", resp.into_inner());
                         refresh_remote_device_services(&mut client, &device.peer_id).await;
                     }
-                    Err(error) => fatal_grpc(error),
+                    Err(error) => {
+                        if cached_device_service_exists(&mut client, &device.peer_id, &target.name)
+                            .await
+                        {
+                            eprintln!(
+                                "Cannot reach device \"{}\". This service may still exist on that device.",
+                                resolved_device_display_name(&device)
+                            );
+                            let forget = yes
+                                || prompt_yes_no_default(
+                                    &format!(
+                                        "Remove the local cached record for {}@{}? [y/N]",
+                                        target.name,
+                                        resolved_device_display_name(&device)
+                                    ),
+                                    false,
+                                );
+                            if forget {
+                                match client.forget_device_service(Request::new(req)).await {
+                                    Ok(resp) => {
+                                        print_remote_service_result(
+                                            "forgotten locally",
+                                            resp.into_inner(),
+                                        );
+                                        return;
+                                    }
+                                    Err(forget_error) => fatal_grpc(forget_error),
+                                }
+                            }
+                        }
+                        fatal_grpc(error)
+                    }
                 }
             } else {
                 let req = ServiceNameRequest {
@@ -757,6 +814,7 @@ async fn add_service_from_recipe(
             .unwrap_or_default(),
         refresh,
     };
+    eprintln!("Resolving recipe; downloading recipe assets if needed...");
     let resolved = match client.resolve_recipe(Request::new(req)).await {
         Ok(resp) => resp.into_inner(),
         Err(error) => fatal_grpc(error),
@@ -786,6 +844,7 @@ async fn add_service_from_recipe(
 
     if let Some(device) = device {
         print_target_device(&device);
+        print_recipe_runtime_wait_notice(&detail);
         let req = RemotePullServiceRequest {
             peer_id: device.peer_id.clone(),
             manifest_yaml: resolved.manifest_yaml,
@@ -795,6 +854,14 @@ async fn add_service_from_recipe(
                 let response = resp.into_inner();
                 let service_name = response_service_name(&response);
                 print_remote_service_added(response);
+                let req = RemoteServiceNameRequest {
+                    peer_id: device.peer_id.clone(),
+                    name: service_name.clone(),
+                };
+                match client.remote_start_service(Request::new(req)).await {
+                    Ok(resp) => print_remote_service_result("started", resp.into_inner()),
+                    Err(error) => fatal_grpc(error),
+                }
                 refresh_remote_device_services(client, &device.peer_id).await;
                 println!("Use it:");
                 println!(
@@ -806,12 +873,22 @@ async fn add_service_from_recipe(
             Err(error) => fatal_grpc(error),
         }
     } else {
+        print_recipe_runtime_wait_notice(&detail);
         let req = PullServiceRequest {
             manifest_yaml: resolved.manifest_yaml,
             manifest_base_dir: resolved.manifest_base_dir,
         };
         match client.pull_service(Request::new(req)).await {
-            Ok(resp) => print_service_instance(resp.into_inner(), false),
+            Ok(resp) => {
+                let instance = decode_service_instance(resp.into_inner());
+                let name = instance.name.clone();
+                print_service_instance_value(instance, false);
+                let req = ServiceNameRequest { runtime: 0, name };
+                match client.start_service(Request::new(req)).await {
+                    Ok(_) => println!("Service started"),
+                    Err(error) => fatal_grpc(error),
+                }
+            }
             Err(error) => fatal_grpc(error),
         }
     }
@@ -819,6 +896,7 @@ async fn add_service_from_recipe(
 
 async fn print_service_recipes(client: &mut RpcClient, refresh: bool) {
     let req = ListRecipesRequest { refresh };
+    eprintln!("Loading official service recipes; downloading the index if needed...");
     match client.list_recipes(Request::new(req)).await {
         Ok(resp) => print_service_recipe_list_value(resp.into_inner()),
         Err(error) => fatal_grpc(error),
@@ -830,6 +908,7 @@ async fn print_service_recipe_detail(client: &mut RpcClient, recipe_id: &str, re
         recipe_id: recipe_id.to_string(),
         refresh,
     };
+    eprintln!("Loading recipe metadata; downloading recipe assets if needed...");
     match client.get_recipe(Request::new(req)).await {
         Ok(resp) => {
             print_service_recipe_detail_value(&require_recipe_detail(resp.into_inner().detail))
@@ -895,15 +974,21 @@ fn print_recipe_add_review(
     detail: &RecipeDetail,
     service_name: &str,
     target_device_name: Option<&str>,
-    resolved_manifest_path: &str,
+    _resolved_manifest_path: &str,
     warnings: &[String],
 ) {
     let summary = recipe_summary(detail);
     println!("Recipe: {}", summary.id);
+    println!("Description: {}", summary.description);
+    println!("Runtime: {}", recipe_runtime_label(summary.runtime));
+    println!("Source: {}", summary.source_label);
+    println!("Release: {}", summary.release_version);
     println!("Service name: {}", service_name);
     println!("Target: {}", target_device_name.unwrap_or("local node"));
-    print_recipe_metadata_with_options(detail, false);
-    println!("Resolved manifest: {}", resolved_manifest_path);
+    println!(
+        "Audit paths: run `fungi service recipe show {}` to inspect cached and remote recipe assets.",
+        summary.id
+    );
     print_recipe_warnings(warnings);
 }
 
@@ -940,6 +1025,23 @@ fn print_recipe_metadata_with_options(detail: &RecipeDetail, include_name: bool)
 fn print_recipe_warnings(warnings: &[String]) {
     for warning in warnings {
         eprintln!("Warning: {warning}");
+    }
+}
+
+fn print_recipe_runtime_wait_notice(detail: &RecipeDetail) {
+    let summary = recipe_summary(detail);
+    match RecipeRuntimeKind::try_from(summary.runtime) {
+        Ok(RecipeRuntimeKind::Docker) => {
+            eprintln!(
+                "Preparing Docker service; the first run may take a while while the image is pulled..."
+            );
+        }
+        Ok(RecipeRuntimeKind::Wasmtime) => {
+            eprintln!(
+                "Preparing Wasmtime service; downloading the component if it is not cached..."
+            );
+        }
+        _ => {}
     }
 }
 
@@ -1041,7 +1143,12 @@ fn print_remote_service_added(resp: RemoteServiceControlResponse) {
 
 fn print_remote_service_result(action: &str, resp: RemoteServiceControlResponse) {
     let service_name = response_service_name(&resp);
-    println!("Remote service {action}: {service_name}");
+    if resp.forgotten_locally {
+        println!("Local service record removed: {service_name}");
+        println!("The remote device was not changed; the service may still exist there.");
+    } else {
+        println!("Remote service {action}: {service_name}");
+    }
 }
 
 async fn refresh_remote_device_services(client: &mut RpcClient, peer_id: &str) {
@@ -1139,7 +1246,7 @@ async fn print_service_overview(client: &mut RpcClient, verbose: bool, refresh: 
 
             let attached = list_accesses(client, &device.peer_id).await;
             rows.extend(services.into_iter().map(|service| {
-                ServiceOverviewRow::from_remote_service(service, &device, &attached, verbose)
+                ServiceOverviewRow::from_remote_service(service, &device, &attached, verbose, false)
             }));
         }
     } else {
@@ -1152,7 +1259,9 @@ async fn print_service_overview(client: &mut RpcClient, verbose: bool, refresh: 
                 }));
             } else {
                 rows.extend(cached_services.into_iter().map(|service| {
-                    ServiceOverviewRow::from_remote_service(service, &device, &accesses, verbose)
+                    ServiceOverviewRow::from_remote_service(
+                        service, &device, &accesses, verbose, true,
+                    )
                 }));
             }
         }
@@ -1180,10 +1289,11 @@ async fn list_remote_service_instances(
     client: &mut RpcClient,
     peer_id: &str,
 ) -> Vec<ServiceInstance> {
-    let req = RemotePeerRequest {
-        peer_id: peer_id.to_string(),
+    let req = ListDeviceServicesRequest {
+        device_id: peer_id.to_string(),
+        cached: false,
     };
-    match client.remote_list_services(Request::new(req)).await {
+    match client.list_device_managed_services(Request::new(req)).await {
         Ok(resp) => {
             match serde_json::from_str::<Vec<ServiceInstance>>(&resp.into_inner().services_json) {
                 Ok(services) => services,
@@ -1198,11 +1308,14 @@ async fn fetch_remote_services(
     client: &mut RpcClient,
     peer_id: &str,
 ) -> Result<Vec<RemoteService>, String> {
-    let req = ListPeerCatalogRequest {
-        peer_id: peer_id.to_string(),
+    let req = ListDeviceServicesRequest {
+        device_id: peer_id.to_string(),
         cached: false,
     };
-    match client.list_peer_catalog(Request::new(req)).await {
+    match client
+        .list_device_published_services(Request::new(req))
+        .await
+    {
         Ok(resp) => serde_json::from_str::<Vec<RemoteService>>(&resp.into_inner().services_json)
             .map_err(|error| format!("Failed to decode remote services: {error}")),
         Err(error) => Err(error.message().to_string()),
@@ -1210,11 +1323,14 @@ async fn fetch_remote_services(
 }
 
 async fn fetch_cached_remote_services(client: &mut RpcClient, peer_id: &str) -> Vec<RemoteService> {
-    let req = ListPeerCatalogRequest {
-        peer_id: peer_id.to_string(),
+    let req = ListDeviceServicesRequest {
+        device_id: peer_id.to_string(),
         cached: true,
     };
-    match client.list_peer_catalog(Request::new(req)).await {
+    match client
+        .list_device_published_services(Request::new(req))
+        .await
+    {
         Ok(resp) => {
             match serde_json::from_str::<Vec<RemoteService>>(&resp.into_inner().services_json) {
                 Ok(services) => services,
@@ -1223,6 +1339,42 @@ async fn fetch_cached_remote_services(client: &mut RpcClient, peer_id: &str) -> 
         }
         Err(error) => fatal_grpc(error),
     }
+}
+
+async fn fetch_cached_remote_managed_services(
+    client: &mut RpcClient,
+    peer_id: &str,
+) -> Vec<ServiceInstance> {
+    let req = ListDeviceServicesRequest {
+        device_id: peer_id.to_string(),
+        cached: true,
+    };
+    match client.list_device_managed_services(Request::new(req)).await {
+        Ok(resp) => {
+            match serde_json::from_str::<Vec<ServiceInstance>>(&resp.into_inner().services_json) {
+                Ok(services) => services,
+                Err(error) => fatal(format!(
+                    "Failed to decode cached remote managed services: {error}"
+                )),
+            }
+        }
+        Err(error) => fatal_grpc(error),
+    }
+}
+
+async fn cached_device_service_exists(
+    client: &mut RpcClient,
+    peer_id: &str,
+    service_name: &str,
+) -> bool {
+    fetch_cached_remote_managed_services(client, peer_id)
+        .await
+        .iter()
+        .any(|service| service.name == service_name)
+        || fetch_cached_remote_services(client, peer_id)
+            .await
+            .iter()
+            .any(|service| service.service_name == service_name)
 }
 
 async fn inspect_remote_service(
@@ -1633,6 +1785,7 @@ fn create_service_manifest_interactively(
                 ServiceManifestEntry {
                     target: Some(format!("{host}:{port}")),
                     port: None,
+                    host_port: None,
                     protocol: None,
                     usage: Some(usage_kind),
                     path: None,
@@ -1920,6 +2073,7 @@ impl ServiceOverviewRow {
         device: &DeviceInfo,
         attached: &[ServiceAccess],
         verbose: bool,
+        cached: bool,
     ) -> Self {
         let device_name = device_display_name(device);
         let attached_access = attached
@@ -1969,7 +2123,11 @@ impl ServiceOverviewRow {
             device: device_name,
             kind: "remote".to_string(),
             usage: service_usage_label(service.usage.as_ref()).to_string(),
-            state: service.status.state,
+            state: if cached {
+                "cached".to_string()
+            } else {
+                service.status.state
+            },
             entries,
             note: attached_access.map(|_| "attached".to_string()),
         }

@@ -50,6 +50,8 @@ impl ServiceControlRequest {
 pub struct ServiceControlResponse {
     pub request_id: Option<String>,
     pub ok: bool,
+    #[serde(default)]
+    pub forgotten_locally: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service: Option<ServiceControlServiceRef>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -63,6 +65,18 @@ impl ServiceControlResponse {
         Self {
             request_id,
             ok: true,
+            forgotten_locally: false,
+            service: Some(ServiceControlServiceRef { name: service_name }),
+            services_json: None,
+            error: None,
+        }
+    }
+
+    pub fn success_forgotten_locally(request_id: Option<String>, service_name: String) -> Self {
+        Self {
+            request_id,
+            ok: true,
+            forgotten_locally: true,
             service: Some(ServiceControlServiceRef { name: service_name }),
             services_json: None,
             error: None,
@@ -73,6 +87,7 @@ impl ServiceControlResponse {
         Self {
             request_id,
             ok: true,
+            forgotten_locally: false,
             service: None,
             services_json: Some(services_json),
             error: None,
@@ -83,6 +98,7 @@ impl ServiceControlResponse {
         Self {
             request_id,
             ok: false,
+            forgotten_locally: false,
             service: None,
             services_json: None,
             error: Some(ServiceControlError {

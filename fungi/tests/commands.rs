@@ -403,7 +403,12 @@ fn parses_service_remove_with_device() {
 
     let Commands::Service(ServiceArgs {
         device,
-        command: Some(ServiceCommands::Remove { name }),
+        command:
+            Some(ServiceCommands::Remove {
+                name,
+                local_only: _,
+                yes: _,
+            }),
         ..
     }) = args.command
     else {

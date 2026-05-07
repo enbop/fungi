@@ -473,6 +473,17 @@ impl RuntimeControl {
         Ok(())
     }
 
+    pub fn desired_running_service_manifests(&self) -> Vec<ServiceManifest> {
+        self.service_state
+            .lock()
+            .persisted_services()
+            .into_iter()
+            .filter_map(|service| {
+                (service.desired_state == DesiredServiceState::Running).then_some(service.manifest)
+            })
+            .collect()
+    }
+
     fn docker_provider(&self) -> Result<&DockerRuntimeProvider> {
         self.docker
             .as_ref()

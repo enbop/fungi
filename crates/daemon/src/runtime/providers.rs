@@ -226,9 +226,9 @@ impl WasmtimeRuntimeProvider {
 }
 
 fn with_default_mount_roots(fungi_home: &Path, mut paths: Vec<PathBuf>) -> Vec<PathBuf> {
-    let fungi_paths = FungiPaths::from_fungi_home(fungi_home);
-    paths.push(fungi_paths.appdata_root());
-    paths.push(fungi_paths.user_root());
+    paths.extend(fungi_config::runtime::Runtime::default_allowed_host_paths(
+        fungi_home,
+    ));
     paths.sort();
     paths.dedup();
     paths

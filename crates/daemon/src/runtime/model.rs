@@ -230,6 +230,9 @@ pub struct ServiceManifestEntry {
     pub target: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
+    #[serde(rename = "hostPort", alias = "host_port")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_port: Option<u16>,
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protocol: Option<ServicePortProtocol>,
