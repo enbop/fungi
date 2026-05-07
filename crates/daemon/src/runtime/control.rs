@@ -36,6 +36,13 @@ pub struct RuntimeControl {
     service_state: Arc<Mutex<ServiceStateStore>>,
 }
 
+#[derive(Debug, Clone)]
+pub struct AppliedService {
+    pub instance: ServiceInstance,
+    pub previous_manifest: Option<ServiceManifest>,
+    pub desired_state: DesiredServiceState,
+}
+
 impl RuntimeControl {
     pub fn new(
         runtime_root: PathBuf,
@@ -91,36 +98,78 @@ impl RuntimeControl {
     }
 
     pub async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
-        self.pull_with_local_service_id(manifest, None).await
+        Ok(self
+            .apply_with_local_service_id(manifest, None)
+            .await?
+            .instance)
     }
 
-    async fn pull_with_local_service_id(
+    pub async fn apply(&self, manifest: &ServiceManifest) -> Result<AppliedService> {
+        self.apply_with_local_service_id(manifest, None).await
+    }
+
+    async fn apply_with_local_service_id(
         &self,
         manifest: &ServiceManifest,
         local_service_id: Option<&str>,
-    ) -> Result<ServiceInstance> {
+    ) -> Result<AppliedService> {
         self.ensure_runtime_enabled(manifest.runtime)?;
-        {
-            let services = self.service_index.lock();
-            if services.contains_key(&manifest.name) {
-                bail!("service already exists: {}", manifest.name);
-            }
-        }
 
-        let resolved_local_service_id = match local_service_id {
-            Some(local_service_id) => local_service_id.to_string(),
-            None => self
-                .service_state
-                .lock()
-                .preview_local_service_id(&manifest.name)?,
+        let previous_service = { self.service_state.lock().persisted_service(&manifest.name) };
+        let previous_manifest = previous_service
+            .as_ref()
+            .map(|service| service.manifest.clone());
+        let desired_state = previous_service
+            .as_ref()
+            .map(|service| service.desired_state)
+            .unwrap_or(DesiredServiceState::Stopped);
+        let previous_runtime = previous_manifest.as_ref().map(|manifest| manifest.runtime);
+        let replacing_existing =
+            previous_service.is_some() || self.service_index.lock().contains_key(&manifest.name);
+
+        let resolved_local_service_id = if let Some(service) = previous_service.as_ref() {
+            if let Some(requested_local_service_id) = local_service_id
+                && requested_local_service_id != service.local_service_id
+            {
+                bail!(
+                    "local_service_id mismatch for service '{}': expected '{}', got '{}'",
+                    manifest.name,
+                    service.local_service_id,
+                    requested_local_service_id
+                );
+            }
+            service.local_service_id.clone()
+        } else {
+            match local_service_id {
+                Some(local_service_id) => local_service_id.to_string(),
+                None => self
+                    .service_state
+                    .lock()
+                    .preview_local_service_id(&manifest.name)?,
+            }
         };
+
+        if let Some(previous_runtime) = previous_runtime {
+            if desired_state == DesiredServiceState::Running {
+                self.stop_runtime_only(previous_runtime, &manifest.name)
+                    .await?;
+            }
+            self.remove_runtime_only(previous_runtime, &manifest.name, &resolved_local_service_id)
+                .await?;
+        }
 
         let instance = match manifest.runtime {
             RuntimeKind::Docker => self.docker_provider()?.pull(manifest).await,
             RuntimeKind::Wasmtime => {
-                self.wasmtime
-                    .pull_with_local_service_id(manifest, &resolved_local_service_id)
-                    .await
+                if replacing_existing {
+                    self.wasmtime
+                        .replace_with_local_service_id(manifest, &resolved_local_service_id)
+                        .await
+                } else {
+                    self.wasmtime
+                        .pull_with_local_service_id(manifest, &resolved_local_service_id)
+                        .await
+                }
             }
             RuntimeKind::Link => Ok(self.link_instance_from_manifest(manifest, false)),
         }?;
@@ -131,28 +180,35 @@ impl RuntimeControl {
         self.service_manifests
             .lock()
             .insert(manifest.name.clone(), manifest.clone());
-        self.persist_service(
-            manifest,
-            DesiredServiceState::Stopped,
-            Some(&resolved_local_service_id),
-        )?;
-        Ok(enrich_instance_from_manifest(instance, manifest))
+        self.persist_service(manifest, desired_state, Some(&resolved_local_service_id))?;
+
+        let mut instance = enrich_instance_from_manifest(instance, manifest);
+        if desired_state == DesiredServiceState::Running {
+            self.start(manifest.runtime, &manifest.name).await?;
+            instance = self.inspect(manifest.runtime, &manifest.name).await?;
+        }
+
+        Ok(AppliedService {
+            instance,
+            previous_manifest,
+            desired_state,
+        })
     }
 
-    pub async fn pull_manifest_yaml(
+    pub async fn apply_manifest_yaml(
         &self,
         content: &str,
         base_dir: &Path,
         fungi_home: &Path,
         policy: &ManifestResolutionPolicy,
-    ) -> Result<ServiceInstance> {
+    ) -> Result<AppliedService> {
         let manifest_name = peek_service_manifest_name(content)?;
         let local_service_id = {
             self.service_state
                 .lock()
                 .preview_local_service_id(&manifest_name)?
         };
-        let used_host_ports = self.reserved_host_ports();
+        let used_host_ports = self.reserved_host_ports_except(&manifest_name);
         let path_roots = ManifestPathRoots::for_local_service_id(fungi_home, &local_service_id);
         let manifest = parse_service_manifest_yaml_with_policy_for_service_paths(
             content,
@@ -162,8 +218,21 @@ impl RuntimeControl {
             policy,
             &used_host_ports,
         )?;
-        self.pull_with_local_service_id(&manifest, Some(&local_service_id))
+        self.apply_with_local_service_id(&manifest, Some(&local_service_id))
             .await
+    }
+
+    pub async fn pull_manifest_yaml(
+        &self,
+        content: &str,
+        base_dir: &Path,
+        fungi_home: &Path,
+        policy: &ManifestResolutionPolicy,
+    ) -> Result<ServiceInstance> {
+        Ok(self
+            .apply_manifest_yaml(content, base_dir, fungi_home, policy)
+            .await?
+            .instance)
     }
 
     pub fn resolve_manifest_yaml(
@@ -549,11 +618,80 @@ impl RuntimeControl {
     }
 
     fn reserved_host_ports(&self) -> BTreeSet<u16> {
+        self.reserved_host_ports_except("")
+    }
+
+    fn reserved_host_ports_except(&self, service_name: &str) -> BTreeSet<u16> {
         self.service_manifests
             .lock()
             .values()
+            .filter(|manifest| manifest.name != service_name)
             .flat_map(|manifest| manifest.ports.iter().map(|port| port.host_port))
             .collect()
+    }
+
+    async fn stop_runtime_only(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
+        let stop_result = match runtime {
+            RuntimeKind::Docker => self.docker_provider()?.stop(name).await,
+            RuntimeKind::Wasmtime => self.wasmtime.stop(name).await,
+            RuntimeKind::Link => Ok(()),
+        };
+
+        match stop_result {
+            Ok(()) => Ok(()),
+            Err(error)
+                if runtime == RuntimeKind::Docker && is_missing_docker_container_error(&error) =>
+            {
+                log::warn!(
+                    "Docker service '{}' is already missing during apply stop; replacing local state only",
+                    name
+                );
+                Ok(())
+            }
+            Err(error)
+                if runtime == RuntimeKind::Wasmtime
+                    && error.to_string().contains("wasmtime service not found") =>
+            {
+                log::warn!(
+                    "Wasmtime service '{}' was not running during apply stop: {}",
+                    name,
+                    error
+                );
+                Ok(())
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn remove_runtime_only(
+        &self,
+        runtime: RuntimeKind,
+        name: &str,
+        local_service_id: &str,
+    ) -> Result<()> {
+        let remove_result = match runtime {
+            RuntimeKind::Docker => self.docker_provider()?.remove(name).await,
+            RuntimeKind::Wasmtime => {
+                self.wasmtime
+                    .remove_with_local_service_id(name, local_service_id)
+                    .await
+            }
+            RuntimeKind::Link => Ok(()),
+        };
+
+        match remove_result {
+            Ok(()) => Ok(()),
+            Err(error)
+                if runtime == RuntimeKind::Docker && is_missing_docker_container_error(&error) =>
+            {
+                log::warn!(
+                    "Docker service '{}' is already missing during apply remove; replacing local state only",
+                    name
+                );
+                Ok(())
+            }
+            Err(error) => Err(error),
+        }
     }
 
     fn link_instance_from_manifest(

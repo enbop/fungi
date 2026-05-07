@@ -510,6 +510,111 @@ async fn wasmtime_provider_downloads_remote_component() {
     drop(server);
 }
 
+#[tokio::test]
+async fn runtime_control_apply_reuses_local_id_and_restages_wasmtime_component() {
+    let temp_dir = TempDir::new().unwrap();
+    let fungi_home = temp_dir.path().join("fungi-home");
+    let component_v1 = temp_dir.path().join("component-v1.wasm");
+    let component_v2 = temp_dir.path().join("component-v2.wasm");
+    fs::write(&component_v1, b"wasm-v1").unwrap();
+    fs::write(&component_v2, b"wasm-v2").unwrap();
+    let launcher = create_fake_launcher(temp_dir.path()).unwrap();
+
+    let control = RuntimeControl::new(
+        fungi_home.join("runtime"),
+        launcher,
+        fungi_home.clone(),
+        None,
+        fungi_home.join("services"),
+        vec![temp_dir.path().to_path_buf()],
+        true,
+    )
+    .unwrap();
+
+    let manifest_v1 = format!(
+        r#"
+apiVersion: fungi.rs/v1alpha1
+kind: Service
+metadata:
+  name: demo
+spec:
+  run:
+    wasmtime:
+      file: {}
+  entries:
+    main:
+      port: 8080
+"#,
+        component_v1.display()
+    );
+    let applied_v1 = control
+        .apply_manifest_yaml(
+            &manifest_v1,
+            temp_dir.path(),
+            &fungi_home,
+            &ManifestResolutionPolicy::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(applied_v1.instance.name, "demo");
+
+    let local_service_id = fs::read_dir(fungi_home.join("services"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .to_string();
+    let staged_component = fungi_home
+        .join("artifacts/services")
+        .join(&local_service_id)
+        .join("component.wasm");
+    assert_eq!(fs::read(&staged_component).unwrap(), b"wasm-v1");
+
+    control.start_by_name("demo").await.unwrap();
+
+    let manifest_v2 = format!(
+        r#"
+apiVersion: fungi.rs/v1alpha1
+kind: Service
+metadata:
+  name: demo
+spec:
+  run:
+    wasmtime:
+      file: {}
+  entries:
+    main:
+      port: 8080
+"#,
+        component_v2.display()
+    );
+    let applied_v2 = control
+        .apply_manifest_yaml(
+            &manifest_v2,
+            temp_dir.path(),
+            &fungi_home,
+            &ManifestResolutionPolicy::default(),
+        )
+        .await
+        .unwrap();
+
+    assert!(applied_v2.previous_manifest.is_some());
+    assert_eq!(
+        fs::read_dir(fungi_home.join("services"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .file_name()
+            .to_string_lossy(),
+        local_service_id
+    );
+    assert_eq!(fs::read(&staged_component).unwrap(), b"wasm-v2");
+    assert!(applied_v2.instance.status.running);
+}
+
 #[test]
 fn parse_manifest_expose_defaults_service_identity() {
     let yaml = r#"
