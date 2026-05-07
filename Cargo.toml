@@ -13,6 +13,7 @@ members = [
     "crates/fs",
     "crates/daemon-grpc",
     "crates/tests",
+    "crates/lab",
 ]
 
 [workspace.package]

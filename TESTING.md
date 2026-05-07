@@ -48,3 +48,19 @@ cargo test                         # everything
 cargo build --bin fungi
 cargo run --package fungi-tests --bin test-relay-config-cli
 ```
+
+## Local CLI lab
+
+Use `fungi-lab` when you want an interactive, real-process A/B environment instead of a one-off test binary. It starts one local relay plus two daemons, disables community relays, saves both devices, and defaults to trusting node A on node B so A can test services on B.
+
+```bash
+cargo build -p fungi -p fungi-lab
+./target/debug/fungi-lab start
+
+./target/debug/fungi -f target/tmp_a service list
+./target/debug/fungi -f target/tmp_b device trusted
+
+./target/debug/fungi-lab node stop b
+./target/debug/fungi-lab node start b
+./target/debug/fungi-lab stop
+```
