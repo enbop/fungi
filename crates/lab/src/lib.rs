@@ -10,6 +10,7 @@ use std::{
     thread::{self, JoinHandle},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use sysinfo::{Pid, Process, Signal, System};
 
 const STATE_FILE: &str = "state.json";
 const MANAGER_LOG: &str = "manager.log";
@@ -152,6 +153,13 @@ pub enum NodeCommand {
     Start { node: NodeName },
     Stop { node: NodeName },
     Restart { node: NodeName },
+}
+
+#[derive(Clone, Debug)]
+struct ProcessSpec {
+    label: &'static str,
+    exe: Option<PathBuf>,
+    cmd_contains: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -434,10 +442,12 @@ fn start_background_lab(args: StartArgs) -> Result<()> {
 
     if root.join(STATE_FILE).exists() {
         let state = read_state(&root)?;
-        if args.no_replace && process_is_running(state.manager_pid) {
+        if args.no_replace
+            && process_is_running(state.manager_pid, &state.process_spec_for_manager())
+        {
             bail!("local lab is already running. Use `fungi-lab stop` first.");
         }
-        let _ = stop_lab(&state);
+        stop_lab(&state).context("failed to stop previous local lab; refusing to start over it")?;
     }
 
     fs::create_dir_all(&root)?;
@@ -536,24 +546,33 @@ fn print_status(args: StatusArgs) -> Result<()> {
     println!("  root: {}", state.root.display());
     println!("  ready: {}", state.ready);
     println!("  expires_at_epoch_secs: {}", state.expires_at_epoch_secs);
-    print_process("manager", state.manager_pid, None, None);
+    print_process(
+        "manager",
+        state.manager_pid,
+        None,
+        None,
+        &state.process_spec_for_manager(),
+    );
     print_process(
         "relay",
         state.relay.pid,
         Some(&state.relay.peer_id),
         Some(&state.relay.log),
+        &state.process_spec_for_relay(),
     );
     print_process(
         "node-a",
         state.node_a.pid,
         Some(&state.node_a.peer_id),
         Some(&state.node_a.log),
+        &state.process_spec_for_node(NodeName::A),
     );
     print_process(
         "node-b",
         state.node_b.pid,
         Some(&state.node_b.peer_id),
         Some(&state.node_b.log),
+        &state.process_spec_for_node(NodeName::B),
     );
     println!(
         "  fungi a: {} -f {}",
@@ -571,6 +590,13 @@ fn print_status(args: StatusArgs) -> Result<()> {
 fn stop_default_lab() -> Result<()> {
     let state = read_state(&default_root()?)?;
     stop_lab(&state)?;
+    let mut state = state;
+    state.ready = false;
+    state.manager_pid = None;
+    state.relay.pid = None;
+    state.node_a.pid = None;
+    state.node_b.pid = None;
+    let _ = write_state(&state);
     println!("Stopped Fungi local lab processes.");
     Ok(())
 }
@@ -617,13 +643,14 @@ fn manage_node(command: NodeCommand) -> Result<()> {
     let mut state = read_state(&root)?;
     match command {
         NodeCommand::Stop { node } => {
+            let spec = state.process_spec_for_node(node);
             let node_state = state.node_mut(node);
-            stop_pid(node_state.pid, true)?;
+            stop_pid(node_state.pid, &spec, true)?;
             node_state.pid = None;
         }
         NodeCommand::Start { node } => {
             let current_pid = state.node(node).pid;
-            if process_is_running(current_pid) {
+            if process_is_running(current_pid, &state.process_spec_for_node(node)) {
                 println!("node {:?} is already running.", node);
                 return Ok(());
             }
@@ -632,8 +659,9 @@ fn manage_node(command: NodeCommand) -> Result<()> {
         }
         NodeCommand::Restart { node } => {
             {
+                let spec = state.process_spec_for_node(node);
                 let node_state = state.node_mut(node);
-                stop_pid(node_state.pid, true)?;
+                stop_pid(node_state.pid, &spec, true)?;
                 node_state.pid = None;
             }
             let updated = start_node(&state, node)?;
@@ -650,18 +678,18 @@ fn manage_relay(command: ProcessCommand) -> Result<()> {
     let mut state = read_state(&root)?;
     match command {
         ProcessCommand::Stop => {
-            stop_pid(state.relay.pid, true)?;
+            stop_pid(state.relay.pid, &state.process_spec_for_relay(), true)?;
             state.relay.pid = None;
         }
         ProcessCommand::Start => {
-            if process_is_running(state.relay.pid) {
+            if process_is_running(state.relay.pid, &state.process_spec_for_relay()) {
                 println!("relay is already running.");
                 return Ok(());
             }
             state.relay = restart_relay_from_state(&state)?;
         }
         ProcessCommand::Restart => {
-            stop_pid(state.relay.pid, true)?;
+            stop_pid(state.relay.pid, &state.process_spec_for_relay(), true)?;
             state.relay.pid = None;
             state.relay = restart_relay_from_state(&state)?;
         }
@@ -864,11 +892,19 @@ fn stop_lab(state: &LabState) -> Result<()> {
 }
 
 fn stop_lab_processes(state: &LabState, from_manager: bool) -> Result<()> {
-    stop_pid(state.node_a.pid, true)?;
-    stop_pid(state.node_b.pid, true)?;
-    stop_pid(state.relay.pid, true)?;
+    stop_pid(
+        state.node_a.pid,
+        &state.process_spec_for_node(NodeName::A),
+        true,
+    )?;
+    stop_pid(
+        state.node_b.pid,
+        &state.process_spec_for_node(NodeName::B),
+        true,
+    )?;
+    stop_pid(state.relay.pid, &state.process_spec_for_relay(), true)?;
     if !from_manager {
-        stop_pid(state.manager_pid, true)?;
+        stop_pid(state.manager_pid, &state.process_spec_for_manager(), true)?;
     }
     Ok(())
 }
@@ -1126,64 +1162,98 @@ fn write_state(state: &LabState) -> Result<()> {
     fs::write(&path, raw).with_context(|| format!("failed to write {}", path.display()))
 }
 
-fn stop_pid(pid: Option<u32>, force: bool) -> Result<()> {
+fn stop_pid(pid: Option<u32>, spec: &ProcessSpec, force: bool) -> Result<()> {
     let Some(pid) = pid else {
         return Ok(());
     };
-    if !process_is_running(Some(pid)) {
+    let Some(system) = system_with_process(pid) else {
         return Ok(());
+    };
+    if !process_matches(&system, pid, spec) {
+        bail!(
+            "refusing to stop pid {pid}: process does not match expected {} lab process",
+            spec.label
+        );
     }
-    #[cfg(unix)]
-    {
-        let _ = Command::new("kill")
-            .arg("-TERM")
-            .arg(pid.to_string())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-        let deadline = Instant::now() + Duration::from_secs(3);
-        while Instant::now() < deadline {
-            if !process_is_running(Some(pid)) {
-                return Ok(());
-            }
-            thread::sleep(Duration::from_millis(100));
+
+    if let Some(process) = system.process(Pid::from_u32(pid)) {
+        let _ = process
+            .kill_with(Signal::Term)
+            .unwrap_or_else(|| process.kill());
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline {
+        if !process_is_running(Some(pid), spec) {
+            return Ok(());
         }
-        if force {
-            let _ = Command::new("kill")
-                .arg("-KILL")
-                .arg(pid.to_string())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status();
-        }
-        return Ok(());
+        thread::sleep(Duration::from_millis(100));
     }
-    #[cfg(not(unix))]
+
+    if force
+        && let Some(system) = system_with_process(pid)
+        && let Some(process) = system.process(Pid::from_u32(pid))
     {
-        let _ = force;
-        bail!("stopping a detached lab process by pid is only implemented on Unix platforms")
+        let _ = process.kill();
     }
+
+    Ok(())
 }
 
-fn process_is_running(pid: Option<u32>) -> bool {
+fn process_is_running(pid: Option<u32>, spec: &ProcessSpec) -> bool {
     let Some(pid) = pid else {
         return false;
     };
-    #[cfg(unix)]
-    {
-        Command::new("kill")
-            .arg("-0")
-            .arg(pid.to_string())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|status| status.success())
-            .unwrap_or(false)
+    system_with_process(pid)
+        .map(|system| process_matches(&system, pid, spec))
+        .unwrap_or(false)
+}
+
+fn system_with_process(pid: u32) -> Option<System> {
+    let system = System::new_all();
+    if system.process(Pid::from_u32(pid)).is_some() {
+        Some(system)
+    } else {
+        None
     }
-    #[cfg(not(unix))]
-    {
-        let _ = pid;
-        false
+}
+
+fn process_matches(system: &System, pid: u32, spec: &ProcessSpec) -> bool {
+    let Some(process) = system.process(Pid::from_u32(pid)) else {
+        return false;
+    };
+    process_matches_exe(process, spec) && process_matches_cmd(process, spec)
+}
+
+fn process_matches_exe(process: &Process, spec: &ProcessSpec) -> bool {
+    let Some(expected_exe) = &spec.exe else {
+        return true;
+    };
+    let Some(actual_exe) = process.exe() else {
+        return false;
+    };
+    paths_match(actual_exe, expected_exe)
+}
+
+fn process_matches_cmd(process: &Process, spec: &ProcessSpec) -> bool {
+    let cmd = process
+        .cmd()
+        .iter()
+        .map(|part| part.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join(" ");
+    spec.cmd_contains
+        .iter()
+        .all(|expected| cmd.contains(expected))
+}
+
+fn paths_match(left: &Path, right: &Path) -> bool {
+    if left == right {
+        return true;
+    }
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
     }
 }
 
@@ -1227,8 +1297,14 @@ fn print_started_summary(state: &LabState) {
     );
 }
 
-fn print_process(name: &str, pid: Option<u32>, peer_id: Option<&str>, log: Option<&Path>) {
-    let state = if process_is_running(pid) {
+fn print_process(
+    name: &str,
+    pid: Option<u32>,
+    peer_id: Option<&str>,
+    log: Option<&Path>,
+    spec: &ProcessSpec,
+) {
+    let state = if process_is_running(pid, spec) {
         "running"
     } else {
         "stopped"
@@ -1337,6 +1413,44 @@ impl LabState {
             NodeName::B => &mut self.node_b,
         }
     }
+
+    fn process_spec_for_manager(&self) -> ProcessSpec {
+        ProcessSpec {
+            label: "manager",
+            exe: None,
+            cmd_contains: vec![
+                "fungi-lab".to_string(),
+                "manager".to_string(),
+                self.root.display().to_string(),
+            ],
+        }
+    }
+
+    fn process_spec_for_relay(&self) -> ProcessSpec {
+        ProcessSpec {
+            label: "relay",
+            exe: Some(self.fungi_bin.clone()),
+            cmd_contains: vec![
+                "daemon".to_string(),
+                "relay-server".to_string(),
+                self.relay.tcp_port.to_string(),
+                self.relay.udp_port.to_string(),
+            ],
+        }
+    }
+
+    fn process_spec_for_node(&self, node: NodeName) -> ProcessSpec {
+        let node = self.node(node);
+        ProcessSpec {
+            label: if node.name == "a" { "node-a" } else { "node-b" },
+            exe: Some(self.fungi_bin.clone()),
+            cmd_contains: vec![
+                "--fungi-dir".to_string(),
+                node.dir.display().to_string(),
+                "daemon".to_string(),
+            ],
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1345,9 +1459,9 @@ mod tests {
 
     #[test]
     fn generated_node_config_disables_community_relays() {
-        let dir = tempfile_dir();
+        let dir = tempfile::tempdir().unwrap();
         write_node_config(
-            &dir,
+            dir.path(),
             1111,
             2222,
             3333,
@@ -1355,7 +1469,7 @@ mod tests {
         )
         .unwrap();
 
-        let content = fs::read_to_string(dir.join("config.toml")).unwrap();
+        let content = fs::read_to_string(dir.path().join("config.toml")).unwrap();
         assert!(content.contains("listen_address = \"127.0.0.1:1111\""));
         assert!(content.contains("listen_tcp_port = 2222"));
         assert!(content.contains("listen_udp_port = 3333"));
@@ -1371,16 +1485,5 @@ mod tests {
             parse_peer_id(&format!("Local Peer ID: {peer_id}")),
             Some(peer_id.to_string())
         );
-    }
-
-    fn tempfile_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "fungi-lab-test-{}-{}",
-            std::process::id(),
-            epoch_secs()
-        ));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
     }
 }
