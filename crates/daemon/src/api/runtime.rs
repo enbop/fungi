@@ -320,6 +320,14 @@ impl FungiDaemon {
         Ok(())
     }
 
+    fn invalidate_cached_device_published_services(&self, device_id: PeerId) -> Result<bool> {
+        let fungi_dir = self.config_fungi_dir()?;
+        let cache = fungi_config::service_cache::ServiceCache::apply_published_services_from_dir(
+            &fungi_dir,
+        )?;
+        cache.remove_device_services(&device_id.to_string())
+    }
+
     pub fn list_cached_device_managed_services_json(&self, device_id: PeerId) -> Result<String> {
         let fungi_dir = self.config_fungi_dir()?;
         let cache =
@@ -368,6 +376,55 @@ impl FungiDaemon {
             fungi_config::service_cache::ServiceCache::apply_managed_services_from_dir(&fungi_dir)?;
         cache.set_device_services_json(device_id.to_string(), services_json.to_string())?;
         Ok(())
+    }
+
+    fn invalidate_cached_device_managed_services(&self, device_id: PeerId) -> Result<bool> {
+        let fungi_dir = self.config_fungi_dir()?;
+        let cache =
+            fungi_config::service_cache::ServiceCache::apply_managed_services_from_dir(&fungi_dir)?;
+        cache.remove_device_services(&device_id.to_string())
+    }
+
+    async fn refresh_or_invalidate_device_managed_services(&self, device_id: PeerId) {
+        if let Err(refresh_error) = self.refresh_device_managed_services(device_id).await {
+            log::warn!(
+                "Failed to refresh cached managed services for device {device_id} after remote mutation: {refresh_error}; invalidating cache"
+            );
+            if let Err(invalidate_error) = self.invalidate_cached_device_managed_services(device_id)
+            {
+                log::warn!(
+                    "Failed to invalidate cached managed services for device {device_id}: {invalidate_error}"
+                );
+            }
+        }
+    }
+
+    async fn refresh_or_invalidate_device_published_services(&self, device_id: PeerId) {
+        if let Err(refresh_error) = self.refresh_device_published_services(device_id).await {
+            log::warn!(
+                "Failed to refresh cached published services for device {device_id} after remote mutation: {refresh_error}; invalidating cache"
+            );
+            if let Err(invalidate_error) =
+                self.invalidate_cached_device_published_services(device_id)
+            {
+                log::warn!(
+                    "Failed to invalidate cached published services for device {device_id}: {invalidate_error}"
+                );
+            }
+        }
+    }
+
+    async fn reconcile_remote_service_caches(
+        &self,
+        device_id: PeerId,
+        published_services_may_change: bool,
+    ) {
+        self.refresh_or_invalidate_device_managed_services(device_id)
+            .await;
+        if published_services_may_change {
+            self.refresh_or_invalidate_device_published_services(device_id)
+                .await;
+        }
     }
 
     fn remove_cached_device_managed_service(&self, device_id: PeerId, name: &str) -> Result<bool> {
@@ -506,7 +563,7 @@ impl FungiDaemon {
             .service_control_protocol_control()
             .pull_peer_service(peer_id, manifest_yaml)
             .await?;
-        let _ = self.refresh_device_managed_services(peer_id).await;
+        self.reconcile_remote_service_caches(peer_id, false).await;
         Ok(response)
     }
 
@@ -519,7 +576,7 @@ impl FungiDaemon {
             .service_control_protocol_control()
             .start_peer_service(peer_id, name)
             .await?;
-        let _ = self.refresh_device_managed_services(peer_id).await;
+        self.reconcile_remote_service_caches(peer_id, true).await;
         Ok(response)
     }
 
@@ -545,7 +602,7 @@ impl FungiDaemon {
         if !service_key.is_empty() {
             let _ = self.detach_service_access_by_match(peer_id, &service_key);
         }
-        let _ = self.refresh_device_managed_services(peer_id).await;
+        self.reconcile_remote_service_caches(peer_id, true).await;
         Ok(response)
     }
 
@@ -567,7 +624,7 @@ impl FungiDaemon {
         if !service_key.is_empty() {
             let _ = self.detach_service_access_by_match(peer_id, &service_key);
         }
-        let _ = self.refresh_device_managed_services(peer_id).await;
+        self.reconcile_remote_service_caches(peer_id, true).await;
         Ok(response)
     }
 }
@@ -594,4 +651,75 @@ fn runtime_status_warning(
     vec![format!(
         "{runtime_name} runtime is configured but not active locally"
     )]
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test_support::TestDaemon;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn invalidates_managed_and_published_service_caches_for_device() {
+        let daemon = TestDaemon::spawn().await.unwrap();
+        let peer_id = PeerId::random();
+        let fungi_dir = daemon.daemon().config_fungi_dir().unwrap();
+        let managed_cache =
+            fungi_config::service_cache::ServiceCache::apply_managed_services_from_dir(&fungi_dir)
+                .unwrap();
+        let published_cache =
+            fungi_config::service_cache::ServiceCache::apply_published_services_from_dir(
+                &fungi_dir,
+            )
+            .unwrap();
+
+        managed_cache
+            .set_device_services_json(peer_id.to_string(), "[{\"name\":\"svc-a\"}]".to_string())
+            .unwrap();
+        published_cache
+            .set_device_services_json(
+                peer_id.to_string(),
+                "[{\"service_name\":\"svc-a\"}]".to_string(),
+            )
+            .unwrap();
+
+        assert!(
+            managed_cache
+                .get_device_services_json(&peer_id.to_string())
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            published_cache
+                .get_device_services_json(&peer_id.to_string())
+                .unwrap()
+                .is_some()
+        );
+
+        assert!(
+            daemon
+                .daemon()
+                .invalidate_cached_device_managed_services(peer_id)
+                .unwrap()
+        );
+        assert!(
+            daemon
+                .daemon()
+                .invalidate_cached_device_published_services(peer_id)
+                .unwrap()
+        );
+
+        assert!(
+            managed_cache
+                .get_device_services_json(&peer_id.to_string())
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            published_cache
+                .get_device_services_json(&peer_id.to_string())
+                .unwrap()
+                .is_none()
+        );
+    }
 }
