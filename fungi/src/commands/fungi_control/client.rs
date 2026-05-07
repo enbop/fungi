@@ -23,7 +23,7 @@ pub async fn get_rpc_client(
             Ok(resp) => {
                 let remote_config_path =
                     std::path::PathBuf::from(resp.into_inner().config_file_path);
-                if remote_config_path == expected_config_path {
+                if config_paths_match(&remote_config_path, &expected_config_path) {
                     Some(client)
                 } else {
                     log::warn!(
@@ -50,5 +50,32 @@ pub async fn get_rpc_client(
             );
             None
         }
+    }
+}
+
+fn config_paths_match(left: &std::path::Path, right: &std::path::Path) -> bool {
+    if left == right {
+        return true;
+    }
+
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::config_paths_match;
+
+    #[test]
+    fn config_path_match_accepts_relative_and_absolute_paths() {
+        let cwd = std::env::current_dir().unwrap();
+        let dir = tempfile::tempdir_in(&cwd).unwrap();
+        let relative = dir.path().strip_prefix(&cwd).unwrap().join("config.toml");
+        let absolute = cwd.join(&relative);
+        std::fs::write(&absolute, "").unwrap();
+
+        assert!(config_paths_match(&relative, &absolute));
     }
 }
