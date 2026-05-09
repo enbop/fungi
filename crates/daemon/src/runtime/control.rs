@@ -108,6 +108,16 @@ impl RuntimeControl {
         self.apply_with_local_service_id(manifest, None).await
     }
 
+    #[cfg(test)]
+    pub(crate) fn seed_in_memory_service_for_test(&self, manifest: ServiceManifest) {
+        self.service_index
+            .lock()
+            .insert(manifest.name.clone(), manifest.runtime);
+        self.service_manifests
+            .lock()
+            .insert(manifest.name.clone(), manifest);
+    }
+
     async fn apply_with_local_service_id(
         &self,
         manifest: &ServiceManifest,
@@ -116,16 +126,22 @@ impl RuntimeControl {
         self.ensure_runtime_enabled(manifest.runtime)?;
 
         let previous_service = { self.service_state.lock().persisted_service(&manifest.name) };
+        let in_memory_manifest = self.service_manifests.lock().get(&manifest.name).cloned();
+        let in_memory_runtime = self.service_index.lock().get(&manifest.name).copied();
         let previous_manifest = previous_service
             .as_ref()
-            .map(|service| service.manifest.clone());
+            .map(|service| service.manifest.clone())
+            .or(in_memory_manifest);
         let desired_state = previous_service
             .as_ref()
             .map(|service| service.desired_state)
             .unwrap_or(DesiredServiceState::Stopped);
-        let previous_runtime = previous_manifest.as_ref().map(|manifest| manifest.runtime);
+        let previous_runtime = previous_manifest
+            .as_ref()
+            .map(|manifest| manifest.runtime)
+            .or(in_memory_runtime);
         let replacing_existing =
-            previous_service.is_some() || self.service_index.lock().contains_key(&manifest.name);
+            previous_service.is_some() || previous_manifest.is_some() || previous_runtime.is_some();
 
         let resolved_local_service_id = if let Some(service) = previous_service.as_ref() {
             if let Some(requested_local_service_id) = local_service_id
