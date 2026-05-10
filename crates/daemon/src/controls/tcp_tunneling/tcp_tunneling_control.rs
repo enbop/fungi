@@ -143,12 +143,7 @@ impl TcpTunnelingControl {
             .try_into()
             .map_err(|e| anyhow::anyhow!("Invalid local socket address: {}", e))?;
 
-        let listening_protocol = StreamProtocol::try_from_owned(
-            rule.protocol
-                .clone()
-                .unwrap_or_else(|| format!("{}/{}", FUNGI_TUNNEL_PROTOCOL, rule.port)),
-        )
-        .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
+        let listening_protocol = listening_protocol(&rule)?;
 
         log::info!("Adding listening rule: {local_addr} for {listening_protocol}");
 
@@ -179,7 +174,11 @@ impl TcpTunnelingControl {
     pub fn remove_listening_rule(&self, rule_id: &str) -> Result<()> {
         let mut rules = self.listening_rules.lock();
         if let Some(rule_state) = rules.remove(rule_id) {
+            let listening_protocol = listening_protocol(&rule_state.rule)?;
+
             log::info!("Removing listening rule: {rule_id}");
+            self.swarm_control
+                .stop_accepting_incoming_streams(&listening_protocol);
             rule_state.cancellation_token.cancel();
             rule_state.task_handle.abort();
             Ok(())
@@ -221,6 +220,10 @@ impl TcpTunnelingControl {
             let mut listening_rules = self.listening_rules.lock();
             for (rule_id, rule_state) in listening_rules.drain() {
                 log::info!("Stopping listening rule: {rule_id}");
+                if let Ok(protocol) = listening_protocol(&rule_state.rule) {
+                    self.swarm_control
+                        .stop_accepting_incoming_streams(&protocol);
+                }
                 rule_state.cancellation_token.cancel();
                 rule_state.task_handle.abort();
             }
@@ -256,6 +259,15 @@ impl TcpTunnelingControl {
             None => format!("listen_{}:{}", rule.host, rule.port),
         }
     }
+}
+
+fn listening_protocol(rule: &ListeningRule) -> Result<StreamProtocol> {
+    StreamProtocol::try_from_owned(
+        rule.protocol
+            .clone()
+            .unwrap_or_else(|| format!("{}/{}", FUNGI_TUNNEL_PROTOCOL, rule.port)),
+    )
+    .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))
 }
 
 fn sanitize_rule_component(value: &str) -> String {

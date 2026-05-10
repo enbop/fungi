@@ -120,6 +120,11 @@ impl SwarmControl {
         stream_control.listen(protocol)
     }
 
+    pub fn stop_accepting_incoming_streams(&self, protocol: &StreamProtocol) -> bool {
+        let mut stream_control = self.stream_control.clone();
+        stream_control.unlisten(protocol)
+    }
+
     pub async fn ping_connection(
         &self,
         connection_id: ConnectionId,
