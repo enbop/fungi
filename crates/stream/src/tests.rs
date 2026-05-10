@@ -69,6 +69,20 @@ async fn open_stream_rejects_unknown_connection_id() {
     assert!(matches!(error, OpenStreamError::ConnectionNotFound(_)));
 }
 
+#[test]
+fn unlisten_allows_immediate_reregister_for_same_protocol() {
+    let behaviour = Behaviour::new_allow_all();
+    let mut control = behaviour.new_control();
+
+    let incoming = control.listen(PROTOCOL).unwrap();
+    assert!(control.listen(PROTOCOL).is_err());
+
+    assert!(control.unlisten(&PROTOCOL));
+
+    let _replacement = control.listen(PROTOCOL).unwrap();
+    drop(incoming);
+}
+
 #[tokio::test]
 async fn open_stream_uses_explicit_connection_and_reports_listener_connection_id() {
     let mut swarm1 = Swarm::new_ephemeral_tokio(|_| Behaviour::new(shared_allow_list([])));

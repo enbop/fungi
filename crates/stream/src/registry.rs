@@ -63,6 +63,10 @@ impl Registry {
         Ok(IncomingStreams::new(receiver))
     }
 
+    pub(crate) fn unregister_listener(&mut self, protocol: &StreamProtocol) -> bool {
+        self.listeners.remove(protocol).is_some()
+    }
+
     pub(crate) fn supported_inbound_protocols(&mut self) -> Vec<StreamProtocol> {
         self.listeners
             .retain(|_, registration| !registration.sender.is_closed());
