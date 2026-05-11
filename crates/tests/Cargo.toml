@@ -24,6 +24,10 @@ path = "src/bin/test_relay_runtime_cli.rs"
 name = "test-allowlist-relay-ping-cli"
 path = "src/bin/test_allowlist_relay_ping_cli.rs"
 
+[[bin]]
+name = "test-service-apply-cli"
+path = "src/bin/test_service_apply_cli.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 log = { workspace = true }

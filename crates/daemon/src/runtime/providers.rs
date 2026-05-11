@@ -190,6 +190,30 @@ impl WasmtimeRuntimeProvider {
         manifest: &ServiceManifest,
         local_service_id: &str,
     ) -> Result<ServiceInstance> {
+        self.apply_with_local_service_id(manifest, local_service_id, false)
+            .await
+    }
+
+    pub(crate) async fn replace_with_local_service_id(
+        &self,
+        manifest: &ServiceManifest,
+        local_service_id: &str,
+    ) -> Result<ServiceInstance> {
+        self.apply_with_local_service_id(manifest, local_service_id, true)
+            .await
+    }
+
+    async fn apply_with_local_service_id(
+        &self,
+        manifest: &ServiceManifest,
+        local_service_id: &str,
+        replace_existing: bool,
+    ) -> Result<ServiceInstance> {
+        if replace_existing {
+            self.remove_with_local_service_id(&manifest.name, local_service_id)
+                .await?;
+        }
+
         let allowed_host_paths = self.allowed_host_paths.lock().clone();
         let state = build_wasmtime_state(
             &self.runtime_root,

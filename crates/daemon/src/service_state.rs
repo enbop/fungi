@@ -162,6 +162,11 @@ impl ServiceStateStore {
         self.state.values().cloned().collect()
     }
 
+    pub fn persisted_service(&self, service_name: &str) -> Option<PersistedService> {
+        let local_service_id = self.name_index.get(service_name)?;
+        self.state.get(local_service_id).cloned()
+    }
+
     pub fn desired_state(&self, service_name: &str) -> Option<DesiredServiceState> {
         let local_service_id = self.name_index.get(service_name)?;
         self.state

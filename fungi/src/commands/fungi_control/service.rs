@@ -74,7 +74,7 @@ pub enum ServiceCommands {
         /// Refresh the official recipe index before resolving the recipe
         #[arg(long, default_value_t = false)]
         refresh: bool,
-        /// Skip the recipe confirmation prompt
+        /// Skip service apply confirmation prompts
         #[arg(long, default_value_t = false)]
         yes: bool,
     },
@@ -208,7 +208,7 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             let add_input = parse_service_add_input(target_or_manifest, manifest);
             let device = resolve_service_device_target(&args, device, add_input.device);
             let target_device_name = device.as_ref().map(resolved_device_display_name);
-            let created = if let Some(manifest_path) = add_input.manifest_path.as_deref() {
+            let mut created = if let Some(manifest_path) = add_input.manifest_path.as_deref() {
                 read_manifest_yaml_file(manifest_path)
             } else {
                 create_service_manifest_interactively(
@@ -216,6 +216,9 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                     add_input.default_name.as_deref(),
                 )
             };
+            apply_manifest_name_override(&mut created, add_input.default_name.as_deref());
+            confirm_apply_if_existing(&mut client, device.as_ref(), &created.manifest_yaml, yes)
+                .await;
             if let Some(device) = device {
                 print_target_device(&device);
                 let req = RemotePullServiceRequest {
@@ -226,7 +229,7 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                     Ok(resp) => {
                         let response = resp.into_inner();
                         let service_name = response_service_name(&response);
-                        print_remote_service_added(response);
+                        print_remote_service_applied(response);
                         if created.start_now {
                             let req = RemoteServiceNameRequest {
                                 peer_id: device.peer_id.clone(),
@@ -834,13 +837,15 @@ async fn add_service_from_recipe(
             &resolved.resolved_manifest_path,
             &resolved.warnings,
         );
-        if !prompt_yes_no_default("Create this service from the recipe? [Y/n]", true) {
+        if !prompt_yes_no_default("Apply this service from the recipe? [Y/n]", true) {
             println!("Cancelled");
             return;
         }
     } else {
         print_recipe_warnings(&resolved.warnings);
     }
+
+    confirm_apply_if_existing(client, device.as_ref(), &resolved.manifest_yaml, yes).await;
 
     if let Some(device) = device {
         print_target_device(&device);
@@ -853,7 +858,7 @@ async fn add_service_from_recipe(
             Ok(resp) => {
                 let response = resp.into_inner();
                 let service_name = response_service_name(&response);
-                print_remote_service_added(response);
+                print_remote_service_applied(response);
                 let req = RemoteServiceNameRequest {
                     peer_id: device.peer_id.clone(),
                     name: service_name.clone(),
@@ -1136,9 +1141,9 @@ fn response_service_name(resp: &RemoteServiceControlResponse) -> String {
     service_name.to_string()
 }
 
-fn print_remote_service_added(resp: RemoteServiceControlResponse) {
+fn print_remote_service_applied(resp: RemoteServiceControlResponse) {
     let service_name = response_service_name(&resp);
-    println!("Remote service added: {service_name}");
+    println!("Remote service applied: {service_name}");
 }
 
 fn print_remote_service_result(action: &str, resp: RemoteServiceControlResponse) {
@@ -1711,6 +1716,103 @@ pub(crate) fn read_manifest_yaml_file(path: &str) -> CreatedServiceManifest {
         manifest_yaml,
         manifest_base_dir,
         start_now: false,
+    }
+}
+
+fn apply_manifest_name_override(created: &mut CreatedServiceManifest, service_name: Option<&str>) {
+    let Some(service_name) = service_name.map(str::trim).filter(|name| !name.is_empty()) else {
+        return;
+    };
+
+    let mut document = parse_service_manifest_document(&created.manifest_yaml);
+    document.metadata.name = service_name.to_string();
+    created.manifest_yaml = serde_yaml::to_string(&document)
+        .unwrap_or_else(|error| fatal(format!("Failed to encode service manifest: {error}")));
+}
+
+fn parse_service_manifest_document(manifest_yaml: &str) -> ServiceManifestDocument {
+    serde_yaml::from_str(manifest_yaml)
+        .unwrap_or_else(|error| fatal(format!("Failed to parse service manifest: {error}")))
+}
+
+fn manifest_name_and_runtime(manifest_yaml: &str) -> (String, RuntimeKind) {
+    let document = parse_service_manifest_document(manifest_yaml);
+    let name = document.metadata.name.trim().to_string();
+    if name.is_empty() {
+        fatal("Service manifest metadata.name must not be empty")
+    }
+
+    let runtime = match document.spec.run {
+        Some(run) => {
+            if run.docker.is_some() {
+                RuntimeKind::Docker
+            } else if run.wasmtime.is_some() {
+                RuntimeKind::Wasmtime
+            } else {
+                RuntimeKind::Link
+            }
+        }
+        None => RuntimeKind::Link,
+    };
+    (name, runtime)
+}
+
+async fn confirm_apply_if_existing(
+    client: &mut RpcClient,
+    device: Option<&super::shared::ResolvedPeerTarget>,
+    manifest_yaml: &str,
+    yes: bool,
+) {
+    if yes {
+        return;
+    }
+
+    let (service_name, new_runtime) = manifest_name_and_runtime(manifest_yaml);
+    let existing = match device {
+        Some(device) => list_remote_service_instances(client, &device.peer_id)
+            .await
+            .into_iter()
+            .find(|service| service.name == service_name),
+        None => list_local_service_instances(client)
+            .await
+            .into_iter()
+            .find(|service| service.name == service_name),
+    };
+
+    let Some(existing) = existing else {
+        return;
+    };
+
+    let proceed = if existing.runtime != new_runtime {
+        println!(
+            "Service {} will change runtime: {} -> {}.",
+            service_name,
+            runtime_kind_label(existing.runtime),
+            runtime_kind_label(new_runtime)
+        );
+        println!("App data will be kept; runtime artifacts will be replaced.");
+        prompt_yes_no_default("Continue? [Y/n]", true)
+    } else {
+        prompt_yes_no_default(
+            &format!(
+                "Service {} already exists. Apply new manifest and replace its runtime? [Y/n]",
+                service_name
+            ),
+            true,
+        )
+    };
+
+    if !proceed {
+        println!("Cancelled");
+        std::process::exit(0);
+    }
+}
+
+fn runtime_kind_label(runtime: RuntimeKind) -> &'static str {
+    match runtime {
+        RuntimeKind::Docker => "docker",
+        RuntimeKind::Wasmtime => "wasmtime",
+        RuntimeKind::Link => "link",
     }
 }
 
@@ -2619,6 +2721,31 @@ mod tests {
         assert_eq!(input.manifest_path.as_deref(), Some("ssh.service.yaml"));
         assert_eq!(input.default_name.as_deref(), Some("ssh"));
         assert!(matches!(input.device, Some(DeviceInput::Name(name)) if name == "nas"));
+    }
+
+    #[test]
+    fn apply_manifest_name_override_rewrites_metadata_name() {
+        let mut created = CreatedServiceManifest {
+            manifest_yaml: r#"
+apiVersion: fungi.rs/v1alpha1
+kind: Service
+metadata:
+  name: webdav
+spec:
+  entries:
+    ssh:
+      target: 127.0.0.1:22
+"#
+            .to_string(),
+            manifest_base_dir: String::new(),
+            start_now: false,
+        };
+
+        apply_manifest_name_override(&mut created, Some("documents"));
+
+        let (name, runtime) = manifest_name_and_runtime(&created.manifest_yaml);
+        assert_eq!(name, "documents");
+        assert_eq!(runtime, RuntimeKind::Link);
     }
 
     fn service_access(endpoints: Vec<ServiceAccessEndpoint>) -> ServiceAccess {

@@ -15,7 +15,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use crate::controls::TcpTunnelingControl;
 use crate::{
     ManifestResolutionPolicy, RuntimeControl, ServiceControlRequest, ServiceControlResponse,
-    ServiceManifest, service_expose_endpoint_bindings,
+    ServiceManifest, service_expose_endpoint_bindings, service_state::DesiredServiceState,
 };
 
 const MAX_CONTROL_FRAME_LEN: usize = 2 * 1024 * 1024;
@@ -190,10 +190,55 @@ impl ServiceControlProtocolControl {
         let result = match request {
             ServiceControlRequest::PullService { manifest_yaml, .. } => {
                 let policy = self.manifest_resolution_policy();
-                self.runtime_control
-                    .pull_manifest_yaml(&manifest_yaml, &self.fungi_home, &self.fungi_home, &policy)
+                match self
+                    .runtime_control
+                    .apply_manifest_yaml(
+                        &manifest_yaml,
+                        &self.fungi_home,
+                        &self.fungi_home,
+                        &policy,
+                    )
                     .await
-                    .map(|instance| instance.name)
+                {
+                    Ok(applied) => {
+                        if applied.desired_state == DesiredServiceState::Running {
+                            match self
+                                .sync_service_endpoint_listeners_for_manifest(
+                                    applied.previous_manifest.as_ref(),
+                                    false,
+                                )
+                                .await
+                            {
+                                Ok(()) => {}
+                                Err(error) => {
+                                    return ServiceControlResponse::error(
+                                        request_id.clone(),
+                                        "execution_failed",
+                                        error.to_string(),
+                                    );
+                                }
+                            }
+                            match self
+                                .sync_service_endpoint_listeners_by_name(
+                                    &applied.instance.name,
+                                    true,
+                                )
+                                .await
+                            {
+                                Ok(()) => {}
+                                Err(error) => {
+                                    return ServiceControlResponse::error(
+                                        request_id.clone(),
+                                        "execution_failed",
+                                        error.to_string(),
+                                    );
+                                }
+                            }
+                        }
+                        Ok(applied.instance.name)
+                    }
+                    Err(error) => Err(error),
+                }
             }
             ServiceControlRequest::ListServices { .. } => {
                 let services = self.runtime_control.list_services().await;

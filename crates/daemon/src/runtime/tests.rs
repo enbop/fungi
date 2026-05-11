@@ -1,4 +1,5 @@
 use super::*;
+use crate::service_state::DesiredServiceState;
 use anyhow::Result;
 use fungi_config::paths::FungiPaths;
 use fungi_docker_agent::DockerAgentError;
@@ -510,6 +511,199 @@ async fn wasmtime_provider_downloads_remote_component() {
     drop(server);
 }
 
+#[tokio::test]
+async fn runtime_control_apply_reuses_local_id_and_restages_wasmtime_component() {
+    let temp_dir = TempDir::new().unwrap();
+    let fungi_home = temp_dir.path().join("fungi-home");
+    let component_v1 = temp_dir.path().join("component-v1.wasm");
+    let component_v2 = temp_dir.path().join("component-v2.wasm");
+    fs::write(&component_v1, b"wasm-v1").unwrap();
+    fs::write(&component_v2, b"wasm-v2").unwrap();
+    let launcher = create_fake_launcher(temp_dir.path()).unwrap();
+
+    let control = RuntimeControl::new(
+        fungi_home.join("runtime"),
+        launcher,
+        fungi_home.clone(),
+        None,
+        fungi_home.join("services"),
+        vec![temp_dir.path().to_path_buf()],
+        true,
+    )
+    .unwrap();
+
+    let manifest_v1 = format!(
+        r#"
+apiVersion: fungi.rs/v1alpha1
+kind: Service
+metadata:
+  name: demo
+spec:
+  run:
+    wasmtime:
+      file: {}
+  entries:
+    main:
+      port: 8080
+"#,
+        component_v1.display()
+    );
+    let applied_v1 = control
+        .apply_manifest_yaml(
+            &manifest_v1,
+            temp_dir.path(),
+            &fungi_home,
+            &ManifestResolutionPolicy::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(applied_v1.instance.name, "demo");
+
+    let local_service_id = fs::read_dir(fungi_home.join("services"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .to_string();
+    let staged_component = fungi_home
+        .join("artifacts/services")
+        .join(&local_service_id)
+        .join("component.wasm");
+    assert_eq!(fs::read(&staged_component).unwrap(), b"wasm-v1");
+
+    control.start_by_name("demo").await.unwrap();
+
+    let manifest_v2 = format!(
+        r#"
+apiVersion: fungi.rs/v1alpha1
+kind: Service
+metadata:
+  name: demo
+spec:
+  run:
+    wasmtime:
+      file: {}
+  entries:
+    main:
+      port: 8080
+"#,
+        component_v2.display()
+    );
+    let applied_v2 = control
+        .apply_manifest_yaml(
+            &manifest_v2,
+            temp_dir.path(),
+            &fungi_home,
+            &ManifestResolutionPolicy::default(),
+        )
+        .await
+        .unwrap();
+
+    assert!(applied_v2.previous_manifest.is_some());
+    assert_eq!(
+        fs::read_dir(fungi_home.join("services"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .file_name()
+            .to_string_lossy(),
+        local_service_id
+    );
+    assert_eq!(fs::read(&staged_component).unwrap(), b"wasm-v2");
+    assert!(applied_v2.instance.status.running);
+}
+
+#[tokio::test]
+async fn runtime_control_apply_uses_in_memory_manifest_when_persisted_state_is_missing() {
+    let temp_dir = TempDir::new().unwrap();
+    let fungi_home = temp_dir.path().join("fungi-home");
+    let control = RuntimeControl::new(
+        fungi_home.join("runtime"),
+        PathBuf::from("/bin/echo"),
+        fungi_home.clone(),
+        None,
+        fungi_home.join("services"),
+        Vec::new(),
+        false,
+    )
+    .unwrap();
+
+    let previous_manifest = link_manifest("demo", "127.0.0.1", 22);
+    control.seed_in_memory_service_for_test(previous_manifest);
+
+    let applied = control
+        .apply(&link_manifest("demo", "127.0.0.1", 23))
+        .await
+        .unwrap();
+
+    assert!(matches!(
+        applied.previous_manifest.unwrap().source,
+        ServiceSource::TcpLink { ref host, port } if host == "127.0.0.1" && port == 22
+    ));
+    assert_eq!(applied.desired_state, DesiredServiceState::Stopped);
+    assert_eq!(applied.instance.source, "127.0.0.1:23");
+}
+
+#[tokio::test]
+async fn apply_manifest_yaml_allows_same_service_fixed_host_port_reapply_only() {
+    let temp_dir = TempDir::new().unwrap();
+    let fungi_home = temp_dir.path().join("fungi-home");
+    let component = temp_dir.path().join("component.wasm");
+    fs::write(&component, b"wasm").unwrap();
+    let launcher = create_fake_launcher(temp_dir.path()).unwrap();
+
+    let control = RuntimeControl::new(
+        fungi_home.join("runtime"),
+        launcher,
+        fungi_home.clone(),
+        None,
+        fungi_home.join("services"),
+        vec![temp_dir.path().to_path_buf()],
+        true,
+    )
+    .unwrap();
+
+    let demo_manifest = wasmtime_manifest_yaml("demo", &component, 19100);
+    control
+        .apply_manifest_yaml(
+            &demo_manifest,
+            temp_dir.path(),
+            &fungi_home,
+            &ManifestResolutionPolicy::default(),
+        )
+        .await
+        .unwrap();
+    control
+        .apply_manifest_yaml(
+            &demo_manifest,
+            temp_dir.path(),
+            &fungi_home,
+            &ManifestResolutionPolicy::default(),
+        )
+        .await
+        .unwrap();
+
+    let error = control
+        .apply_manifest_yaml(
+            &wasmtime_manifest_yaml("other", &component, 19100),
+            temp_dir.path(),
+            &fungi_home,
+            &ManifestResolutionPolicy::default(),
+        )
+        .await
+        .err()
+        .expect("different service should not reuse a fixed hostPort");
+
+    assert!(
+        error
+            .to_string()
+            .contains("spec.entries.main.hostPort 19100 is already reserved")
+    );
+}
+
 #[test]
 fn parse_manifest_expose_defaults_service_identity() {
     let yaml = r#"
@@ -702,4 +896,49 @@ async fn spawn_http_server(body: Vec<u8>) -> TestHttpServer {
     TestHttpServer {
         url: format!("http://{addr}/app.wasm"),
     }
+}
+
+fn link_manifest(name: &str, host: &str, port: u16) -> ServiceManifest {
+    ServiceManifest {
+        name: name.to_string(),
+        runtime: RuntimeKind::Link,
+        source: ServiceSource::TcpLink {
+            host: host.to_string(),
+            port,
+        },
+        expose: None,
+        env: BTreeMap::new(),
+        mounts: Vec::new(),
+        ports: vec![ServicePort {
+            name: Some("main".to_string()),
+            host_port: port,
+            host_port_allocation: ServicePortAllocation::Fixed,
+            service_port: port,
+            protocol: ServicePortProtocol::Tcp,
+        }],
+        command: Vec::new(),
+        entrypoint: Vec::new(),
+        working_dir: None,
+        labels: BTreeMap::new(),
+    }
+}
+
+fn wasmtime_manifest_yaml(name: &str, component: &Path, host_port: u16) -> String {
+    format!(
+        r#"
+apiVersion: fungi.rs/v1alpha1
+kind: Service
+metadata:
+  name: {name}
+spec:
+  run:
+    wasmtime:
+      file: {}
+  entries:
+    main:
+      port: 8080
+      hostPort: {host_port}
+"#,
+        component.display()
+    )
 }

@@ -8,6 +8,7 @@ use crate::runtime::{
     CatalogService, RuntimeKind, ServiceInstance, ServiceLogs, ServiceLogsOptions, ServiceManifest,
     service_expose_endpoint_bindings,
 };
+use crate::service_state::DesiredServiceState;
 use crate::{
     FungiDaemon, LocalRuntimeStatus, ManifestResolutionPolicy, NodeCapabilities,
     ResolvedServiceRecipe, ServiceControlResponse, ServiceRecipeDetail, ServiceRecipeRuntime,
@@ -117,7 +118,17 @@ impl FungiDaemon {
     }
 
     pub async fn pull_service(&self, manifest: ServiceManifest) -> Result<ServiceInstance> {
-        self.runtime_control().pull(&manifest).await
+        let applied = self.runtime_control().apply(&manifest).await?;
+        if applied.desired_state == DesiredServiceState::Running {
+            self.sync_service_endpoint_listeners_for_manifest(
+                applied.previous_manifest.as_ref(),
+                false,
+            )
+            .await?;
+            self.sync_service_endpoint_listeners_by_name(&applied.instance.name, true)
+                .await?;
+        }
+        Ok(applied.instance)
     }
 
     pub async fn pull_service_from_manifest_yaml(
@@ -128,9 +139,20 @@ impl FungiDaemon {
         let fungi_home = self.fungi_home_dir();
         let base_dir = manifest_base_dir.unwrap_or_else(|| fungi_home.clone());
         let policy = self.manifest_resolution_policy();
-        self.runtime_control()
-            .pull_manifest_yaml(&manifest_yaml, &base_dir, &fungi_home, &policy)
-            .await
+        let applied = self
+            .runtime_control()
+            .apply_manifest_yaml(&manifest_yaml, &base_dir, &fungi_home, &policy)
+            .await?;
+        if applied.desired_state == DesiredServiceState::Running {
+            self.sync_service_endpoint_listeners_for_manifest(
+                applied.previous_manifest.as_ref(),
+                false,
+            )
+            .await?;
+            self.sync_service_endpoint_listeners_by_name(&applied.instance.name, true)
+                .await?;
+        }
+        Ok(applied.instance)
     }
 
     pub async fn start_service(&self, runtime: RuntimeKind, name: String) -> Result<()> {
@@ -563,7 +585,7 @@ impl FungiDaemon {
             .service_control_protocol_control()
             .pull_peer_service(peer_id, manifest_yaml)
             .await?;
-        self.reconcile_remote_service_caches(peer_id, false).await;
+        self.reconcile_remote_service_caches(peer_id, true).await;
         Ok(response)
     }
 
