@@ -10,7 +10,7 @@ use crate::{
     model::{
         APPLY_ROLLBACK_DIR_NAME, BACKUP_ROOT_DIR, CURRENT_FUNGI_DIR_VERSION, DEVICES_FILE,
         DetectedVersion, LEGACY_ADDRESS_BOOK_FILE, LEGACY_SERVICE_STATE_FILE, MigrationPlan,
-        STAGING_DIR_PREFIX,
+        STAGING_DIR_PREFIX, TRUSTED_DEVICES_FILE,
     },
 };
 
@@ -126,6 +126,10 @@ pub(crate) fn validate_migrated_dir(staging_root: &Path, plan: &MigrationPlan) -
         if !staging_root.join(DEVICES_FILE).exists() {
             bail!("Migration validation failed; devices.toml was not created in staging");
         }
+    }
+
+    if plan.migrate_incoming_allowed_peers && !staging_root.join(TRUSTED_DEVICES_FILE).exists() {
+        bail!("Migration validation failed; trusted_devices.toml was not created in staging");
     }
 
     if plan.migrate_legacy_managed_services && staging_root.join(LEGACY_SERVICE_STATE_FILE).exists()
