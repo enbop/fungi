@@ -20,8 +20,10 @@ use tokio::{
 };
 
 use super::helpers::{
-    docker_spec_from_manifest, ensure_manifest_mount_dirs, is_missing_docker_container_error,
+    build_wasmtime_command, docker_spec_from_manifest, ensure_manifest_mount_dirs,
+    is_missing_docker_container_error,
 };
+use super::providers::WasmtimeServiceState;
 
 #[test]
 fn docker_manifest_maps_to_container_spec() {
@@ -148,7 +150,17 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
         source: ServiceSource::WasmtimeFile {
             component: component.clone(),
         },
-        expose: None,
+        expose: Some(ServiceExpose {
+            transport: ServiceExposeTransport {
+                kind: ServiceExposeTransportKind::Tcp,
+            },
+            usage: Some(ServiceExposeUsage {
+                kind: ServiceExposeUsageKind::Web,
+                path: Some("/".into()),
+            }),
+            icon_url: None,
+            catalog_id: None,
+        }),
         env: BTreeMap::new(),
         mounts: vec![ServiceMount {
             host_path: temp_dir.path().join("data"),
@@ -198,6 +210,9 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
     }
     assert!(logs.text.contains("fake-launcher"));
     assert!(logs.text.contains("serve"));
+    assert!(logs.text.contains("-Stcp"));
+    assert!(logs.text.contains("-Sinherit-network"));
+    assert!(logs.text.contains("-Sallow-ip-name-lookup"));
 
     provider.stop("demo-service").await.unwrap();
     let stopped = provider.inspect("demo-service").await.unwrap();
@@ -205,6 +220,64 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
 
     provider.remove("demo-service").await.unwrap();
     assert!(provider.inspect("demo-service").await.is_err());
+}
+
+#[test]
+fn wasmtime_tcp_entry_runs_command_with_network_permissions() {
+    let temp_dir = TempDir::new().unwrap();
+    let component = temp_dir.path().join("demo.wasm");
+    let manifest = ServiceManifest {
+        name: "tcp-service".into(),
+        runtime: RuntimeKind::Wasmtime,
+        source: ServiceSource::WasmtimeFile {
+            component: component.clone(),
+        },
+        expose: Some(ServiceExpose {
+            transport: ServiceExposeTransport {
+                kind: ServiceExposeTransportKind::Tcp,
+            },
+            usage: Some(ServiceExposeUsage {
+                kind: ServiceExposeUsageKind::Raw,
+                path: None,
+            }),
+            icon_url: None,
+            catalog_id: None,
+        }),
+        env: BTreeMap::new(),
+        mounts: Vec::new(),
+        ports: vec![ServicePort {
+            name: Some("socks5".into()),
+            host_port: 18081,
+            host_port_allocation: ServicePortAllocation::Fixed,
+            service_port: 1080,
+            protocol: ServicePortProtocol::Tcp,
+        }],
+        command: vec!["--listen".into(), "127.0.0.1:1080".into()],
+        entrypoint: Vec::new(),
+        working_dir: None,
+        labels: BTreeMap::new(),
+    };
+    let state = WasmtimeServiceState {
+        manifest,
+        source_display: component.display().to_string(),
+        staged_component_path: component,
+        service_dir: temp_dir.path().join("service"),
+        runtime_dir: temp_dir.path().join("runtime"),
+        log_file_path: temp_dir.path().join("runtime.log"),
+        child: None,
+        last_exit_code: None,
+    };
+
+    let command = build_wasmtime_command(Path::new("/bin/fungi"), temp_dir.path(), &state).unwrap();
+    let debug = format!("{command:?}");
+
+    assert!(debug.contains("\"run\""));
+    assert!(!debug.contains("\"serve\""));
+    assert!(debug.contains("\"-Scli\""));
+    assert!(debug.contains("\"-Stcp\""));
+    assert!(debug.contains("\"-Sinherit-network\""));
+    assert!(debug.contains("\"-Sallow-ip-name-lookup\""));
+    assert!(debug.contains("\"--listen\""));
 }
 
 #[test]

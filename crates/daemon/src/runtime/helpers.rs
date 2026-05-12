@@ -251,14 +251,18 @@ pub(crate) fn build_wasmtime_command(
     command.arg("--fungi-dir");
     command.arg(fungi_home.as_os_str());
 
-    let is_http_service = !state.manifest.ports.is_empty();
-    if is_http_service {
+    if should_serve_wasmtime_http(&state.manifest) {
         let port = state.manifest.ports[0].host_port;
         command.arg("serve");
         command.arg(format!("--addr=127.0.0.1:{port}"));
-        command.arg("-Scli");
     } else {
         command.arg("run");
+    }
+    command.arg("-Scli");
+    if has_tcp_ports(&state.manifest) {
+        command.arg("-Stcp");
+        command.arg("-Sinherit-network");
+        command.arg("-Sallow-ip-name-lookup");
     }
 
     for mount in &state.manifest.mounts {
@@ -282,6 +286,24 @@ pub(crate) fn build_wasmtime_command(
     }
     command.envs(&state.manifest.env);
     Ok(command)
+}
+
+fn should_serve_wasmtime_http(manifest: &ServiceManifest) -> bool {
+    matches!(
+        manifest
+            .expose
+            .as_ref()
+            .and_then(|expose| expose.usage.as_ref())
+            .map(|usage| usage.kind),
+        Some(ServiceExposeUsageKind::Web)
+    )
+}
+
+fn has_tcp_ports(manifest: &ServiceManifest) -> bool {
+    manifest
+        .ports
+        .iter()
+        .any(|port| port.protocol == ServicePortProtocol::Tcp)
 }
 
 pub(crate) fn refresh_child_state(state: &mut WasmtimeServiceState) -> Result<()> {
