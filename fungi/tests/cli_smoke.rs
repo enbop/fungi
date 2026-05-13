@@ -65,10 +65,11 @@ fn cli_prefers_existing_dynamic_service_over_builtin_typo_hint() {
     let _daemon = start_daemon(home.path());
     let _peer = wait_peer_id(home.path());
 
-    run_cli_with_input(
+    let manifest = write_link_service_manifest(home.path(), "devices", target, "raw");
+    let manifest_path = manifest.to_string_lossy();
+    run_cli(
         home.path(),
-        ["service", "add"],
-        &format!("\ndevices\n127.0.0.1:{target}\ntcp\n\nn\n"),
+        ["service", "apply", "--start", manifest_path.as_ref()],
     );
 
     let output = run_cli_result(home.path(), ["devices"], "");
@@ -128,10 +129,20 @@ fn cli_can_create_and_access_remote_tcp_tunnel_service() {
         stream.write_all(b"pong").unwrap();
     });
 
-    run_cli_with_input(
+    let manifest = write_link_service_manifest(a.path(), "test-tcp", target_port, "raw");
+    let manifest_path = manifest.to_string_lossy();
+    run_cli(
         a.path(),
-        ["service", "add", "test-tcp@b"],
-        &format!("\n\n127.0.0.1:{target_port}\n\n\n\n"),
+        [
+            "service",
+            "--device",
+            "b",
+            "apply",
+            "--name",
+            "test-tcp",
+            "--start",
+            manifest_path.as_ref(),
+        ],
     );
     assert!(
         a.path()
@@ -181,6 +192,36 @@ fn init_fungi_dir(path: &std::path::Path, rpc_port: u16, swarm_port: u16) {
     config.file_transfer.proxy_ftp.enabled = false;
     config.file_transfer.proxy_webdav.enabled = false;
     config.save_to_file().unwrap();
+}
+
+fn write_link_service_manifest(
+    dir: &std::path::Path,
+    name: &str,
+    port: u16,
+    client_kind: &str,
+) -> std::path::PathBuf {
+    let path = dir.join(format!("{name}.fungi.md"));
+    std::fs::write(
+        &path,
+        format!(
+            r#"---
+fungi: service/v1
+name: {name}
+publish:
+  main:
+    tcp:
+      host: 127.0.0.1
+      port: {port}
+    client:
+      kind: {client_kind}
+---
+
+# {name}
+"#
+        ),
+    )
+    .unwrap();
+    path
 }
 
 fn start_daemon(path: &std::path::Path) -> DaemonChild {

@@ -30,6 +30,7 @@ fn docker_manifest_maps_to_container_spec() {
     let manifest = ServiceManifest {
         name: "filebrowser".into(),
         runtime: RuntimeKind::Docker,
+        run_mode: ServiceRunMode::Command,
         source: ServiceSource::Docker {
             image: "filebrowser/filebrowser:latest".into(),
         },
@@ -65,6 +66,7 @@ fn ensure_manifest_mount_dirs_creates_missing_host_paths() {
     let manifest = ServiceManifest {
         name: "mount-test".into(),
         runtime: RuntimeKind::Wasmtime,
+        run_mode: ServiceRunMode::Command,
         source: ServiceSource::WasmtimeFile {
             component: temp_dir.path().join("demo.wasm"),
         },
@@ -115,6 +117,7 @@ fn docker_manifest_rejects_wrong_source_type() {
     let manifest = ServiceManifest {
         name: "bad".into(),
         runtime: RuntimeKind::Docker,
+        run_mode: ServiceRunMode::Command,
         source: ServiceSource::WasmtimeFile {
             component: PathBuf::from("/tmp/app.wasm"),
         },
@@ -147,6 +150,7 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
     let manifest = ServiceManifest {
         name: "demo-service".into(),
         runtime: RuntimeKind::Wasmtime,
+        run_mode: ServiceRunMode::Http,
         source: ServiceSource::WasmtimeFile {
             component: component.clone(),
         },
@@ -229,6 +233,7 @@ fn wasmtime_tcp_entry_runs_command_with_network_permissions() {
     let manifest = ServiceManifest {
         name: "tcp-service".into(),
         runtime: RuntimeKind::Wasmtime,
+        run_mode: ServiceRunMode::Command,
         source: ServiceSource::WasmtimeFile {
             component: component.clone(),
         },
@@ -373,6 +378,126 @@ spec:
     assert_eq!(
         manifest.working_dir,
         Some(paths.user_home().to_string_lossy().to_string())
+    );
+}
+
+#[test]
+fn fungi_service_file_maps_docker_workload_port_and_workspace_mount() {
+    let content = r#"---
+fungi: service/v1
+name: code-server
+run:
+  provider: docker
+  source:
+    image: ghcr.io/coder/code-server:4.117.0
+  args:
+    - --bind-addr
+    - 0.0.0.0:8080
+  mounts:
+    - from: $fungi.workspace
+      to: /home/coder/project
+publish:
+  http:
+    tcp:
+      port: 8080
+    client:
+      kind: web
+      path: /
+---
+
+# code-server
+"#;
+
+    let fungi_home = PathBuf::from("/tmp/fungi-home");
+    let paths = FungiPaths::from_fungi_home(&fungi_home);
+    let manifest = parse_service_manifest_yaml(content, Path::new("."), &fungi_home).unwrap();
+
+    assert_eq!(manifest.name, "code-server");
+    assert_eq!(manifest.runtime, RuntimeKind::Docker);
+    assert_eq!(manifest.run_mode, ServiceRunMode::Command);
+    assert_eq!(manifest.mounts[0].host_path, paths.user_home());
+    assert_eq!(manifest.ports[0].service_port, 8080);
+    assert_eq!(
+        manifest.ports[0].host_port_allocation,
+        ServicePortAllocation::Auto
+    );
+    assert_eq!(
+        manifest
+            .expose
+            .as_ref()
+            .unwrap()
+            .usage
+            .as_ref()
+            .unwrap()
+            .kind,
+        ServiceExposeUsageKind::Web
+    );
+}
+
+#[test]
+fn fungi_service_file_maps_wasmtime_http_mode_to_serve_intent() {
+    let content = r#"
+fungi: service/v1
+name: filebrowser-lite
+run:
+  provider: wasmtime
+  mode: http
+  source:
+    url: https://example.test/filebrowser.wasm
+publish:
+  http:
+    tcp:
+      port: 8082
+    client:
+      kind: web
+      path: /
+"#;
+
+    let manifest =
+        parse_service_manifest_yaml(content, Path::new("."), Path::new("/tmp/fungi-home")).unwrap();
+
+    assert_eq!(manifest.runtime, RuntimeKind::Wasmtime);
+    assert_eq!(manifest.run_mode, ServiceRunMode::Http);
+    assert_eq!(manifest.ports[0].host_port, 8082);
+    assert_eq!(
+        manifest.ports[0].host_port_allocation,
+        ServicePortAllocation::Fixed
+    );
+}
+
+#[test]
+fn fungi_service_file_without_run_maps_to_link_service() {
+    let content = r#"
+fungi: service/v1
+name: ssh-tunnel
+publish:
+  ssh:
+    tcp:
+      host: 127.0.0.1
+      port: 22
+    client:
+      kind: ssh
+"#;
+
+    let manifest =
+        parse_service_manifest_yaml(content, Path::new("."), Path::new("/tmp/fungi-home")).unwrap();
+
+    assert_eq!(manifest.runtime, RuntimeKind::Link);
+    assert!(matches!(
+        manifest.source,
+        ServiceSource::TcpLink { ref host, port } if host == "127.0.0.1" && port == 22
+    ));
+    assert_eq!(manifest.ports[0].host_port, 22);
+    assert_eq!(
+        manifest
+            .expose
+            .as_ref()
+            .unwrap()
+            .usage
+            .as_ref()
+            .unwrap()
+            .kind,
+        ServiceExposeUsageKind::Ssh
     );
 }
 
@@ -557,6 +682,7 @@ async fn wasmtime_provider_downloads_remote_component() {
     let manifest = ServiceManifest {
         name: "download-service".into(),
         runtime: RuntimeKind::Wasmtime,
+        run_mode: ServiceRunMode::Command,
         source: ServiceSource::WasmtimeUrl {
             url: server.url.clone(),
         },
@@ -975,6 +1101,7 @@ fn link_manifest(name: &str, host: &str, port: u16) -> ServiceManifest {
     ServiceManifest {
         name: name.to_string(),
         runtime: RuntimeKind::Link,
+        run_mode: ServiceRunMode::Command,
         source: ServiceSource::TcpLink {
             host: host.to_string(),
             port,

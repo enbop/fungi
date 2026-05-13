@@ -8,58 +8,53 @@ use fungi::commands::{
 };
 
 #[test]
-fn parses_service_add_with_device() {
+fn parses_service_apply_with_device() {
     let args = FungiArgs::try_parse_from([
         "fungi",
         "service",
         "--device",
         "laptop",
-        "add",
-        "demo.service.yaml",
+        "apply",
+        "demo.fungi.md",
     ])
     .unwrap();
 
     let Commands::Service(ServiceArgs {
         device,
-        command:
-            Some(ServiceCommands::Add {
-                target_or_manifest,
-                manifest,
-                ..
-            }),
+        command: Some(ServiceCommands::Apply { manifest, name, .. }),
         ..
     }) = args.command
     else {
-        panic!("expected service add command");
+        panic!("expected service apply command");
     };
 
-    assert_eq!(target_or_manifest.as_deref(), Some("demo.service.yaml"));
-    assert!(manifest.is_none());
+    assert_eq!(manifest.as_deref(), Some("demo.fungi.md"));
+    assert!(name.is_none());
     assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "laptop"));
 }
 
 #[test]
-fn parses_interactive_service_add() {
-    let args =
-        FungiArgs::try_parse_from(["fungi", "service", "--device", "laptop", "add"]).unwrap();
+fn parses_service_apply_name_override() {
+    let args = FungiArgs::try_parse_from([
+        "fungi",
+        "service",
+        "apply",
+        "webdav.fungi.md",
+        "--name",
+        "docs-webdav",
+    ])
+    .unwrap();
 
     let Commands::Service(ServiceArgs {
-        device,
-        command:
-            Some(ServiceCommands::Add {
-                target_or_manifest,
-                manifest,
-                ..
-            }),
+        command: Some(ServiceCommands::Apply { manifest, name, .. }),
         ..
     }) = args.command
     else {
-        panic!("expected service add command");
+        panic!("expected service apply command");
     };
 
-    assert!(target_or_manifest.is_none());
-    assert!(manifest.is_none());
-    assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "laptop"));
+    assert_eq!(manifest.as_deref(), Some("webdav.fungi.md"));
+    assert_eq!(name.as_deref(), Some("docs-webdav"));
 }
 
 #[test]
@@ -72,86 +67,57 @@ fn parses_migrate_command() {
 }
 
 #[test]
-fn parses_service_add_reference_for_interactive_creator() {
-    let args = FungiArgs::try_parse_from(["fungi", "service", "add", "ssh@nas"]).unwrap();
+fn rejects_service_apply_reference_then_manifest_sugar() {
+    let result =
+        FungiArgs::try_parse_from(["fungi", "service", "apply", "ssh@nas", "ssh.service.yaml"]);
 
-    let Commands::Service(ServiceArgs {
-        device,
-        command:
-            Some(ServiceCommands::Add {
-                target_or_manifest,
-                manifest,
-                ..
-            }),
-        ..
-    }) = args.command
-    else {
-        panic!("expected service add command");
-    };
-
-    assert!(device.device.is_none());
-    assert_eq!(target_or_manifest.as_deref(), Some("ssh@nas"));
-    assert!(manifest.is_none());
+    assert!(result.is_err());
 }
 
 #[test]
-fn parses_service_add_reference_then_manifest() {
-    let args =
-        FungiArgs::try_parse_from(["fungi", "service", "add", "ssh@nas", "ssh.service.yaml"])
-            .unwrap();
-
-    let Commands::Service(ServiceArgs {
-        device,
-        command:
-            Some(ServiceCommands::Add {
-                target_or_manifest,
-                manifest,
-                ..
-            }),
-        ..
-    }) = args.command
-    else {
-        panic!("expected service add command");
-    };
-
-    assert!(device.device.is_none());
-    assert_eq!(target_or_manifest.as_deref(), Some("ssh@nas"));
-    assert_eq!(manifest.as_deref(), Some("ssh.service.yaml"));
-}
-
-#[test]
-fn parses_service_add_recipe_flags() {
+fn parses_service_apply_recipe_flags() {
     let args = FungiArgs::try_parse_from([
         "fungi",
         "service",
-        "add",
-        "home-ssh@nas",
+        "--device",
+        "nas",
+        "apply",
         "--recipe",
         "ssh-tunnel",
+        "--name",
+        "home-ssh",
         "--refresh",
+        "--dry-run",
+        "--start",
         "--yes",
     ])
     .unwrap();
 
     let Commands::Service(ServiceArgs {
+        device,
         command:
-            Some(ServiceCommands::Add {
-                target_or_manifest,
+            Some(ServiceCommands::Apply {
                 manifest,
+                name,
                 recipe,
                 refresh,
+                dry_run,
+                start,
                 yes,
             }),
         ..
     }) = args.command
     else {
-        panic!("expected service add command");
+        panic!("expected service apply command");
     };
 
-    assert_eq!(target_or_manifest.as_deref(), Some("home-ssh@nas"));
+    assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "nas"));
     assert!(manifest.is_none());
+    assert_eq!(name.as_deref(), Some("home-ssh"));
     assert_eq!(recipe.as_deref(), Some("ssh-tunnel"));
     assert!(refresh);
+    assert!(dry_run);
+    assert!(start);
     assert!(yes);
 }
 
@@ -666,7 +632,8 @@ fn service_help_hides_pull_shortcut_from_main_path() {
         .expect("service command exists");
     let help = service.render_long_help().to_string();
 
-    assert!(help.contains("  add"));
+    assert!(help.contains("  apply"));
+    assert!(!help.contains("  add"));
     assert!(help.contains("  open"));
     assert!(help.contains("  connect"));
     assert!(!help.contains("  pull"));

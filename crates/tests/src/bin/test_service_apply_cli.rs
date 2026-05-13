@@ -274,21 +274,22 @@ where
 }
 
 fn add_service(fungi_bin: &Path, fungi_dir: &Path, target: &str, manifest: &Path) -> Result<()> {
-    let output = run_cli(
-        fungi_bin,
-        fungi_dir,
-        [
-            "service",
-            "add",
-            "--yes",
-            target,
-            manifest
-                .to_str()
-                .context("manifest path is not valid utf-8")?,
-        ],
-    )?;
+    let (name, device) = target
+        .split_once('@')
+        .map(|(name, device)| (name, Some(device)))
+        .unwrap_or((target, None));
+    let manifest = manifest
+        .to_str()
+        .context("manifest path is not valid utf-8")?;
+    let mut args = vec!["service", "apply", "--yes", "--name", name];
+    if let Some(device) = device {
+        args.push("--device");
+        args.push(device);
+    }
+    args.push(manifest);
+    let output = run_cli(fungi_bin, fungi_dir, args)?;
     if !output.contains("Remote service applied:") && !output.contains("\"name\":") {
-        bail!("unexpected add output:\n{output}");
+        bail!("unexpected apply output:\n{output}");
     }
     Ok(())
 }

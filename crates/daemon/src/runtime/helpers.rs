@@ -289,14 +289,7 @@ pub(crate) fn build_wasmtime_command(
 }
 
 fn should_serve_wasmtime_http(manifest: &ServiceManifest) -> bool {
-    matches!(
-        manifest
-            .expose
-            .as_ref()
-            .and_then(|expose| expose.usage.as_ref())
-            .map(|usage| usage.kind),
-        Some(ServiceExposeUsageKind::Web)
-    )
+    manifest.run_mode == ServiceRunMode::Http
 }
 
 fn has_tcp_ports(manifest: &ServiceManifest) -> bool {

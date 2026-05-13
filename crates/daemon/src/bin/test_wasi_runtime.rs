@@ -1,7 +1,7 @@
 use clap::Parser;
 use fungi_daemon::{
     RuntimeControl, RuntimeKind, ServiceLogsOptions, ServiceManifest, ServiceMount, ServicePort,
-    ServicePortProtocol, ServiceSource,
+    ServicePortProtocol, ServiceRunMode, ServiceSource,
 };
 use std::{
     collections::BTreeMap,
@@ -69,6 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manifest = ServiceManifest {
         name: args.name.clone(),
         runtime: RuntimeKind::Wasmtime,
+        run_mode: ServiceRunMode::Command,
         source,
         expose: None,
         env: BTreeMap::new(),

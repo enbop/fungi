@@ -443,7 +443,8 @@ fn local_service_id_from_service_dir(service_dir: &Path) -> Result<String> {
 mod tests {
     use super::*;
     use crate::runtime::{
-        RuntimeKind, ServicePort, ServicePortAllocation, ServicePortProtocol, ServiceSource,
+        RuntimeKind, ServicePort, ServicePortAllocation, ServicePortProtocol, ServiceRunMode,
+        ServiceSource,
     };
     use fungi_config::paths::FungiPaths;
 
@@ -456,6 +457,7 @@ mod tests {
         let manifest = ServiceManifest {
             name: "demo".into(),
             runtime: RuntimeKind::Docker,
+            run_mode: ServiceRunMode::Command,
             source: ServiceSource::Docker {
                 image: "nginx:latest".into(),
             },
@@ -519,6 +521,7 @@ mod tests {
         let manifest = ServiceManifest {
             name: "demo".into(),
             runtime: RuntimeKind::Docker,
+            run_mode: ServiceRunMode::Command,
             source: ServiceSource::Docker {
                 image: "nginx:latest".into(),
             },

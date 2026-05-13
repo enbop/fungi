@@ -55,6 +55,15 @@ pub fn parse_service_manifest_yaml_with_policy(
     policy: &ManifestResolutionPolicy,
     used_host_ports: &BTreeSet<u16>,
 ) -> Result<ServiceManifest> {
+    if let Some(document) = parse_fungi_service_document(content)? {
+        return document.into_service_manifest_for_node(
+            base_dir,
+            fungi_home,
+            policy,
+            used_host_ports,
+        );
+    }
+
     let document: ServiceManifestDocument =
         serde_yaml::from_str(content).context("Failed to parse service manifest YAML")?;
     document.into_service_manifest_for_node(base_dir, fungi_home, policy, used_host_ports)
@@ -68,6 +77,16 @@ pub(crate) fn parse_service_manifest_yaml_with_policy_for_service_paths(
     policy: &ManifestResolutionPolicy,
     used_host_ports: &BTreeSet<u16>,
 ) -> Result<ServiceManifest> {
+    if let Some(document) = parse_fungi_service_document(content)? {
+        return document.into_service_manifest_for_node_with_service_paths(
+            base_dir,
+            fungi_home,
+            path_roots,
+            policy,
+            used_host_ports,
+        );
+    }
+
     let document: ServiceManifestDocument =
         serde_yaml::from_str(content).context("Failed to parse service manifest YAML")?;
     document.into_service_manifest_for_node_with_service_paths(
@@ -79,10 +98,38 @@ pub(crate) fn parse_service_manifest_yaml_with_policy_for_service_paths(
     )
 }
 
-pub(crate) fn peek_service_manifest_name(content: &str) -> Result<String> {
+pub fn peek_service_manifest_name(content: &str) -> Result<String> {
+    if let Some(document) = parse_fungi_service_document(content)? {
+        return normalize_non_empty(&document.name, "name");
+    }
+
     let document: ServiceManifestDocument =
         serde_yaml::from_str(content).context("Failed to parse service manifest YAML")?;
     normalize_non_empty(&document.metadata.name, "metadata.name")
+}
+
+pub fn service_manifest_with_name_override(content: &str, service_name: &str) -> Result<String> {
+    let service_name = normalize_non_empty(service_name, "service name")?;
+    if let Some(front_matter) = split_front_matter(content)? {
+        let mut document: FungiServiceDocument = serde_yaml::from_str(front_matter.yaml)
+            .context("Failed to parse Fungi service front matter")?;
+        document.name = service_name;
+        let yaml = serde_yaml::to_string(&document)
+            .context("Failed to encode Fungi service front matter")?;
+        return Ok(format!("---\n{}---\n{}", yaml, front_matter.body));
+    }
+
+    if content.trim_start().starts_with("fungi:") {
+        let mut document: FungiServiceDocument =
+            serde_yaml::from_str(content).context("Failed to parse Fungi service YAML")?;
+        document.name = service_name;
+        return serde_yaml::to_string(&document).context("Failed to encode Fungi service YAML");
+    }
+
+    let mut document: ServiceManifestDocument =
+        serde_yaml::from_str(content).context("Failed to parse service manifest YAML")?;
+    document.metadata.name = service_name;
+    serde_yaml::to_string(&document).context("Failed to encode service manifest YAML")
 }
 
 pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
@@ -98,6 +145,7 @@ pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
             wasmtime: Some(ServiceManifestWasmtimeRun {
                 file: Some(component.display().to_string()),
                 url: None,
+                mode: (manifest.run_mode == ServiceRunMode::Http).then_some(ServiceRunMode::Http),
             }),
         }),
         ServiceSource::WasmtimeUrl { url } => Some(ServiceManifestRun {
@@ -105,6 +153,7 @@ pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
             wasmtime: Some(ServiceManifestWasmtimeRun {
                 file: None,
                 url: Some(url.clone()),
+                mode: (manifest.run_mode == ServiceRunMode::Http).then_some(ServiceRunMode::Http),
             }),
         }),
         ServiceSource::TcpLink { .. } => None,
@@ -208,6 +257,7 @@ impl ServiceManifestDocument {
         Ok(ServiceManifest {
             name: service_name.clone(),
             runtime: runtime_and_source.runtime,
+            run_mode: runtime_and_source.run_mode,
             source: runtime_and_source.source,
             expose,
             env: spec.env,
@@ -237,7 +287,447 @@ impl ServiceManifestDocument {
 
 struct RuntimeAndSource {
     runtime: RuntimeKind,
+    run_mode: ServiceRunMode,
     source: ServiceSource,
+}
+
+#[derive(Debug, Clone)]
+struct FrontMatter<'a> {
+    yaml: &'a str,
+    body: &'a str,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FungiServiceDocument {
+    fungi: String,
+    name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    run: Option<FungiServiceRun>,
+    publish: BTreeMap<String, FungiServicePublishEntry>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FungiServiceRun {
+    provider: FungiServiceProvider,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    mode: Option<FungiServiceRunMode>,
+    source: FungiServiceSource,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    args: Vec<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    env: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    mounts: Vec<FungiServiceMount>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum FungiServiceProvider {
+    Docker,
+    Wasmtime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum FungiServiceRunMode {
+    Http,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FungiServiceSource {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    file: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    image: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FungiServiceMount {
+    from: String,
+    to: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FungiServicePublishEntry {
+    tcp: FungiServiceTcp,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    client: Option<FungiServiceClient>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FungiServiceTcp {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    host: Option<String>,
+    port: u16,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FungiServiceClient {
+    kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
+}
+
+fn parse_fungi_service_document(content: &str) -> Result<Option<FungiServiceDocument>> {
+    if let Some(front_matter) = split_front_matter(content)? {
+        let document = serde_yaml::from_str(front_matter.yaml)
+            .context("Failed to parse Fungi service front matter")?;
+        return Ok(Some(document));
+    }
+
+    if content.trim_start().starts_with("fungi:") {
+        let document =
+            serde_yaml::from_str(content).context("Failed to parse Fungi service YAML")?;
+        return Ok(Some(document));
+    }
+
+    Ok(None)
+}
+
+fn split_front_matter(content: &str) -> Result<Option<FrontMatter<'_>>> {
+    let Some(rest) = content
+        .strip_prefix("---\n")
+        .or_else(|| content.strip_prefix("---\r\n"))
+    else {
+        return Ok(None);
+    };
+
+    let mut offset = 0;
+    for line in rest.split_inclusive('\n') {
+        let trimmed = line.trim_end_matches(['\r', '\n']);
+        if trimmed == "---" {
+            let body = &rest[offset + line.len()..];
+            return Ok(Some(FrontMatter {
+                yaml: &rest[..offset],
+                body,
+            }));
+        }
+        offset += line.len();
+    }
+
+    bail!("Fungi service file front matter is missing closing ---")
+}
+
+impl FungiServiceDocument {
+    fn into_service_manifest_for_node(
+        self,
+        base_dir: &Path,
+        fungi_home: &Path,
+        policy: &ManifestResolutionPolicy,
+        used_host_ports: &BTreeSet<u16>,
+    ) -> Result<ServiceManifest> {
+        let service_name = normalize_non_empty(&self.name, "name")?;
+        let path_roots = ManifestPathRoots::for_local_service_id(fungi_home, &service_name);
+        self.into_service_manifest_for_node_with_service_paths(
+            base_dir,
+            fungi_home,
+            &path_roots,
+            policy,
+            used_host_ports,
+        )
+    }
+
+    fn into_service_manifest_for_node_with_service_paths(
+        self,
+        base_dir: &Path,
+        fungi_home: &Path,
+        path_roots: &ManifestPathRoots,
+        _policy: &ManifestResolutionPolicy,
+        used_host_ports: &BTreeSet<u16>,
+    ) -> Result<ServiceManifest> {
+        if self.fungi != "service/v1" {
+            bail!("unsupported fungi service format: {}", self.fungi);
+        }
+
+        let service_name = normalize_non_empty(&self.name, "name")?;
+        if self.publish.is_empty() {
+            bail!("service file requires at least one publish entry");
+        }
+
+        let mut reserved_host_ports = used_host_ports.clone();
+        let FungiServiceDocument {
+            fungi: _,
+            name: _,
+            run,
+            publish,
+        } = self;
+
+        let (runtime_and_source, env, mounts, command) = match run {
+            Some(run) => {
+                let runtime_and_source =
+                    parse_fungi_run(&run, &publish, base_dir, fungi_home, path_roots)?;
+                let env = run.env;
+                let mounts = run
+                    .mounts
+                    .into_iter()
+                    .map(|mount| ServiceMount {
+                        host_path: resolve_manifest_path(
+                            &mount.from,
+                            base_dir,
+                            fungi_home,
+                            path_roots,
+                        ),
+                        runtime_path: mount.to,
+                    })
+                    .collect();
+                (runtime_and_source, env, mounts, run.args)
+            }
+            None => (
+                parse_fungi_link_run(&publish)?,
+                BTreeMap::new(),
+                Vec::new(),
+                Vec::new(),
+            ),
+        };
+
+        let ports = parse_fungi_publish_entries(
+            &publish,
+            runtime_and_source.runtime,
+            &mut reserved_host_ports,
+        )?;
+        let expose = parse_fungi_publish_expose(&publish);
+
+        Ok(ServiceManifest {
+            name: service_name,
+            runtime: runtime_and_source.runtime,
+            run_mode: runtime_and_source.run_mode,
+            source: runtime_and_source.source,
+            expose,
+            env,
+            mounts,
+            ports,
+            command,
+            entrypoint: Vec::new(),
+            working_dir: None,
+            labels: BTreeMap::new(),
+        })
+    }
+}
+
+fn parse_fungi_run(
+    run: &FungiServiceRun,
+    publish: &BTreeMap<String, FungiServicePublishEntry>,
+    base_dir: &Path,
+    fungi_home: &Path,
+    path_roots: &ManifestPathRoots,
+) -> Result<RuntimeAndSource> {
+    for (name, entry) in publish {
+        if entry.tcp.port == 0 {
+            bail!("publish.{name}.tcp.port must be greater than 0");
+        }
+    }
+
+    match run.provider {
+        FungiServiceProvider::Docker => {
+            if run.mode.is_some() {
+                bail!("run.mode is currently supported only with provider: wasmtime");
+            }
+            let image = exactly_one_source(&run.source, "run.source", SourceField::Image)?;
+            Ok(RuntimeAndSource {
+                runtime: RuntimeKind::Docker,
+                run_mode: ServiceRunMode::Command,
+                source: ServiceSource::Docker { image },
+            })
+        }
+        FungiServiceProvider::Wasmtime => {
+            let source = match (
+                normalize_optional(run.source.file.clone()),
+                normalize_optional(run.source.url.clone()),
+                normalize_optional(run.source.image.clone()),
+            ) {
+                (Some(file), None, None) => ServiceSource::WasmtimeFile {
+                    component: resolve_manifest_path(&file, base_dir, fungi_home, path_roots),
+                },
+                (None, Some(url), None) => ServiceSource::WasmtimeUrl { url },
+                (None, None, Some(_)) => {
+                    bail!("provider: wasmtime requires source.url or source.file, not source.image")
+                }
+                (None, None, None) => {
+                    bail!("provider: wasmtime requires source.url or source.file")
+                }
+                _ => bail!("provider: wasmtime accepts exactly one of source.url or source.file"),
+            };
+            Ok(RuntimeAndSource {
+                runtime: RuntimeKind::Wasmtime,
+                run_mode: match run.mode {
+                    Some(FungiServiceRunMode::Http) => ServiceRunMode::Http,
+                    None => ServiceRunMode::Command,
+                },
+                source,
+            })
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum SourceField {
+    Image,
+}
+
+fn exactly_one_source(
+    source: &FungiServiceSource,
+    field_name: &str,
+    expected: SourceField,
+) -> Result<String> {
+    let url = normalize_optional(source.url.clone());
+    let file = normalize_optional(source.file.clone());
+    let image = normalize_optional(source.image.clone());
+    let source_count =
+        usize::from(url.is_some()) + usize::from(file.is_some()) + usize::from(image.is_some());
+    if source_count != 1 {
+        bail!("{field_name} must set exactly one of url, file, or image");
+    }
+
+    match expected {
+        SourceField::Image => image.ok_or_else(|| {
+            anyhow::anyhow!("provider: docker requires source.image, not source.url or source.file")
+        }),
+    }
+}
+
+fn parse_fungi_link_run(
+    publish: &BTreeMap<String, FungiServicePublishEntry>,
+) -> Result<RuntimeAndSource> {
+    if publish.len() != 1 {
+        bail!("service files without run currently support exactly one publish entry");
+    }
+    let (name, entry) = publish.iter().next().expect("publish is non-empty");
+    let host = normalize_fungi_tcp_host(
+        entry.tcp.host.as_deref(),
+        &format!("publish.{name}.tcp.host"),
+    )?;
+    if !matches!(host.as_str(), "127.0.0.1" | "localhost") {
+        bail!("publish.{name}.tcp.host currently supports only 127.0.0.1 or localhost");
+    }
+    if entry.tcp.port == 0 {
+        bail!("publish.{name}.tcp.port must be greater than 0");
+    }
+    Ok(RuntimeAndSource {
+        runtime: RuntimeKind::Link,
+        run_mode: ServiceRunMode::Command,
+        source: ServiceSource::TcpLink {
+            host,
+            port: entry.tcp.port,
+        },
+    })
+}
+
+fn parse_fungi_publish_entries(
+    publish: &BTreeMap<String, FungiServicePublishEntry>,
+    runtime: RuntimeKind,
+    reserved_host_ports: &mut BTreeSet<u16>,
+) -> Result<Vec<ServicePort>> {
+    publish
+        .iter()
+        .map(|(name, entry)| parse_fungi_publish_entry(name, entry, runtime, reserved_host_ports))
+        .collect()
+}
+
+fn parse_fungi_publish_entry(
+    name: &str,
+    entry: &FungiServicePublishEntry,
+    runtime: RuntimeKind,
+    reserved_host_ports: &mut BTreeSet<u16>,
+) -> Result<ServicePort> {
+    let name = normalize_non_empty(name, "publish entry key")?;
+    let service_port = entry.tcp.port;
+    if service_port == 0 {
+        bail!("publish.{name}.tcp.port must be greater than 0");
+    }
+
+    match runtime {
+        RuntimeKind::Docker => {
+            if entry.tcp.host.is_some() {
+                bail!("publish.{name}.tcp.host is not used with provider: docker; omit it");
+            }
+            let resolved_port =
+                allocate_auto_host_port(ServicePortProtocol::Tcp, reserved_host_ports)?;
+            Ok(ServicePort {
+                name: Some(name),
+                host_port: resolved_port.port,
+                host_port_allocation: resolved_port.allocation,
+                service_port,
+                protocol: ServicePortProtocol::Tcp,
+            })
+        }
+        RuntimeKind::Wasmtime | RuntimeKind::Link => {
+            let host = normalize_fungi_tcp_host(
+                entry.tcp.host.as_deref(),
+                &format!("publish.{name}.tcp.host"),
+            )?;
+            if !matches!(host.as_str(), "127.0.0.1" | "localhost") {
+                bail!("publish.{name}.tcp.host currently supports only 127.0.0.1 or localhost");
+            }
+            if !reserved_host_ports.insert(service_port) {
+                bail!("publish.{name}.tcp.port {service_port} is already reserved");
+            }
+            Ok(ServicePort {
+                name: Some(name),
+                host_port: service_port,
+                host_port_allocation: ServicePortAllocation::Fixed,
+                service_port,
+                protocol: ServicePortProtocol::Tcp,
+            })
+        }
+    }
+}
+
+fn normalize_fungi_tcp_host(value: Option<&str>, field_name: &str) -> Result<String> {
+    match value {
+        Some(value) => normalize_non_empty(value, field_name),
+        None => Ok("127.0.0.1".to_string()),
+    }
+}
+
+fn parse_fungi_publish_expose(
+    publish: &BTreeMap<String, FungiServicePublishEntry>,
+) -> Option<ServiceExpose> {
+    let mut selected_usage = None;
+    let mut selected_path = None;
+
+    for entry in publish.values() {
+        let Some(client) = &entry.client else {
+            continue;
+        };
+        let kind = client.kind.trim().to_ascii_lowercase();
+        match kind.as_str() {
+            "web" => {
+                selected_usage = Some(ServiceExposeUsageKind::Web);
+                selected_path = normalize_optional(client.path.clone());
+                break;
+            }
+            "ssh" if selected_usage.is_none() => {
+                selected_usage = Some(ServiceExposeUsageKind::Ssh);
+                selected_path = None;
+            }
+            _ if selected_usage.is_none() => {
+                selected_usage = Some(ServiceExposeUsageKind::Raw);
+                selected_path = None;
+            }
+            _ => {}
+        }
+    }
+
+    Some(ServiceExpose {
+        transport: ServiceExposeTransport {
+            kind: ServiceExposeTransportKind::Tcp,
+        },
+        usage: selected_usage.map(|kind| ServiceExposeUsage {
+            kind,
+            path: selected_path,
+        }),
+        icon_url: None,
+        catalog_id: None,
+    })
 }
 
 fn manifest_entries_to_document(
@@ -348,34 +838,40 @@ fn parse_runtime_run(
             let image = normalize_non_empty(&docker.image, "spec.run.docker.image")?;
             Ok(RuntimeAndSource {
                 runtime: RuntimeKind::Docker,
+                run_mode: ServiceRunMode::Command,
                 source: ServiceSource::Docker { image },
             })
         }
-        (None, Some(wasmtime)) => match (wasmtime.file, wasmtime.url) {
-            (Some(file), None) => Ok(RuntimeAndSource {
-                runtime: RuntimeKind::Wasmtime,
-                source: ServiceSource::WasmtimeFile {
-                    component: resolve_manifest_path(&file, base_dir, fungi_home, path_roots),
-                },
-            }),
-            (None, Some(url)) => {
-                let url = normalize_non_empty(&url, "spec.run.wasmtime.url")?;
-                Ok(RuntimeAndSource {
+        (None, Some(wasmtime)) => {
+            let ServiceManifestWasmtimeRun { file, url, mode } = wasmtime;
+            match (file, url) {
+                (Some(file), None) => Ok(RuntimeAndSource {
                     runtime: RuntimeKind::Wasmtime,
-                    source: ServiceSource::WasmtimeUrl { url },
-                })
+                    run_mode: mode.unwrap_or_default(),
+                    source: ServiceSource::WasmtimeFile {
+                        component: resolve_manifest_path(&file, base_dir, fungi_home, path_roots),
+                    },
+                }),
+                (None, Some(url)) => {
+                    let url = normalize_non_empty(&url, "spec.run.wasmtime.url")?;
+                    Ok(RuntimeAndSource {
+                        runtime: RuntimeKind::Wasmtime,
+                        run_mode: mode.unwrap_or_default(),
+                        source: ServiceSource::WasmtimeUrl { url },
+                    })
+                }
+                (Some(_), Some(_)) => {
+                    bail!(
+                        "wasmtime service manifest accepts only one of spec.run.wasmtime.file or spec.run.wasmtime.url"
+                    )
+                }
+                (None, None) => {
+                    bail!(
+                        "wasmtime service manifest requires spec.run.wasmtime.file or spec.run.wasmtime.url"
+                    )
+                }
             }
-            (Some(_), Some(_)) => {
-                bail!(
-                    "wasmtime service manifest accepts only one of spec.run.wasmtime.file or spec.run.wasmtime.url"
-                )
-            }
-            (None, None) => {
-                bail!(
-                    "wasmtime service manifest requires spec.run.wasmtime.file or spec.run.wasmtime.url"
-                )
-            }
-        },
+        }
         (Some(_), Some(_)) => {
             bail!("service manifest accepts only one runtime under spec.run")
         }
@@ -409,6 +905,7 @@ fn parse_tcp_tunnel_run(
     }
     Ok(RuntimeAndSource {
         runtime: RuntimeKind::Link,
+        run_mode: ServiceRunMode::Command,
         source: ServiceSource::TcpLink { host, port },
     })
 }
@@ -685,6 +1182,10 @@ fn resolve_manifest_path_string(
     let user_root_value = path_roots.user_root_dir.to_string_lossy();
     let user_home_value = path_roots.user_home_dir.to_string_lossy();
     let expanded = path
+        .replace("$fungi.service.artifacts", &service_artifacts_value)
+        .replace("$fungi.service.data", &service_appdata_value)
+        .replace("$fungi.workspace", &user_home_value)
+        .replace("$fungi.root", &user_root_value)
         .replace("${FUNGI_HOME}", &fungi_home_value)
         .replace("$FUNGI_HOME", &fungi_home_value)
         .replace("${fungi_home}", &fungi_home_value)
