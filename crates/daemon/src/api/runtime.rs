@@ -542,7 +542,7 @@ impl FungiDaemon {
                 status.wasmtime.detected,
                 status.wasmtime.active,
             ),
-            ServiceRecipeRuntime::Link => Vec::new(),
+            ServiceRecipeRuntime::Tcp => Vec::new(),
         }
     }
 

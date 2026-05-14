@@ -30,9 +30,10 @@ pub use runtime::{
     ServiceLogs, ServiceLogsOptions, ServiceManifest, ServiceManifestDockerRun,
     ServiceManifestDocument, ServiceManifestEntry, ServiceManifestEntryUsageKind,
     ServiceManifestMetadata, ServiceManifestRun, ServiceManifestSpec, ServiceManifestWasmtimeRun,
-    ServiceMount, ServicePort, ServicePortAllocation, ServicePortProtocol, ServiceSource,
-    ServiceStatus, load_service_manifest_yaml_file, parse_service_manifest_yaml,
-    service_expose_endpoint_bindings,
+    ServiceMount, ServicePort, ServicePortAllocation, ServicePortProtocol, ServiceRunMode,
+    ServiceSource, ServiceStatus, load_service_manifest_yaml_file, parse_service_manifest_yaml,
+    peek_service_manifest_name, service_expose_endpoint_bindings,
+    service_manifest_with_name_override,
 };
 pub use service_control::{
     ServiceControlError, ServiceControlRequest, ServiceControlResponse, ServiceControlServiceRef,

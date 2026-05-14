@@ -825,7 +825,7 @@ pub enum RecipeRuntimeKind {
     Unspecified = 0,
     Docker = 1,
     Wasmtime = 2,
-    Link = 3,
+    Tcp = 3,
 }
 impl RecipeRuntimeKind {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -837,7 +837,7 @@ impl RecipeRuntimeKind {
             Self::Unspecified => "RECIPE_RUNTIME_KIND_UNSPECIFIED",
             Self::Docker => "RECIPE_RUNTIME_KIND_DOCKER",
             Self::Wasmtime => "RECIPE_RUNTIME_KIND_WASMTIME",
-            Self::Link => "RECIPE_RUNTIME_KIND_LINK",
+            Self::Tcp => "RECIPE_RUNTIME_KIND_TCP",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -846,7 +846,7 @@ impl RecipeRuntimeKind {
             "RECIPE_RUNTIME_KIND_UNSPECIFIED" => Some(Self::Unspecified),
             "RECIPE_RUNTIME_KIND_DOCKER" => Some(Self::Docker),
             "RECIPE_RUNTIME_KIND_WASMTIME" => Some(Self::Wasmtime),
-            "RECIPE_RUNTIME_KIND_LINK" => Some(Self::Link),
+            "RECIPE_RUNTIME_KIND_TCP" => Some(Self::Tcp),
             _ => None,
         }
     }

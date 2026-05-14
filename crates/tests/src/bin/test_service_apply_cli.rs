@@ -60,26 +60,26 @@ fn main() -> Result<()> {
     let node_b = repo.join("target/tmp_b");
 
     println!("\n=== Local apply lifecycle ===");
-    add_service(&fungi_bin, &node_a, LOCAL_SERVICE, &local_v116)?;
+    apply_service(&fungi_bin, &node_a, LOCAL_SERVICE, &local_v116)?;
     assert_service(&fungi_bin, &node_a, LOCAL_SERVICE, false, &["http"])?;
     start_service(&fungi_bin, &node_a, LOCAL_SERVICE)?;
-    add_service(&fungi_bin, &node_a, LOCAL_SERVICE, &local_v117)?;
+    apply_service(&fungi_bin, &node_a, LOCAL_SERVICE, &local_v117)?;
     assert_service(&fungi_bin, &node_a, LOCAL_SERVICE, true, &["http"])?;
-    add_service(&fungi_bin, &node_a, LOCAL_SERVICE, &local_v117)?;
+    apply_service(&fungi_bin, &node_a, LOCAL_SERVICE, &local_v117)?;
     assert_service(&fungi_bin, &node_a, LOCAL_SERVICE, true, &["http"])?;
 
     println!("\n=== Local stopped update and entry replacement ===");
     stop_service(&fungi_bin, &node_a, LOCAL_SERVICE)?;
-    add_service(&fungi_bin, &node_a, LOCAL_SERVICE, &local_v116)?;
+    apply_service(&fungi_bin, &node_a, LOCAL_SERVICE, &local_v116)?;
     assert_service(&fungi_bin, &node_a, LOCAL_SERVICE, false, &["http"])?;
     start_service(&fungi_bin, &node_a, LOCAL_SERVICE)?;
-    add_service(&fungi_bin, &node_a, LOCAL_SERVICE, &local_v117_web)?;
+    apply_service(&fungi_bin, &node_a, LOCAL_SERVICE, &local_v117_web)?;
     assert_service(&fungi_bin, &node_a, LOCAL_SERVICE, true, &["web"])?;
-    add_service(&fungi_bin, &node_a, LOCAL_SERVICE, &local_v117)?;
+    apply_service(&fungi_bin, &node_a, LOCAL_SERVICE, &local_v117)?;
     assert_service(&fungi_bin, &node_a, LOCAL_SERVICE, true, &["http"])?;
 
     println!("\n=== Remote apply lifecycle ===");
-    add_service(
+    apply_service(
         &fungi_bin,
         &node_a,
         &format!("{REMOTE_SERVICE}@b"),
@@ -87,14 +87,14 @@ fn main() -> Result<()> {
     )?;
     assert_service(&fungi_bin, &node_b, REMOTE_SERVICE, false, &["http"])?;
     start_service(&fungi_bin, &node_a, &format!("{REMOTE_SERVICE}@b"))?;
-    add_service(
+    apply_service(
         &fungi_bin,
         &node_a,
         &format!("{REMOTE_SERVICE}@b"),
         &local_v117,
     )?;
     assert_service(&fungi_bin, &node_b, REMOTE_SERVICE, true, &["http"])?;
-    add_service(
+    apply_service(
         &fungi_bin,
         &node_a,
         &format!("{REMOTE_SERVICE}@b"),
@@ -104,7 +104,7 @@ fn main() -> Result<()> {
 
     println!("\n=== Remote stopped update and entry replacement ===");
     stop_service(&fungi_bin, &node_a, &format!("{REMOTE_SERVICE}@b"))?;
-    add_service(
+    apply_service(
         &fungi_bin,
         &node_a,
         &format!("{REMOTE_SERVICE}@b"),
@@ -112,14 +112,14 @@ fn main() -> Result<()> {
     )?;
     assert_service(&fungi_bin, &node_b, REMOTE_SERVICE, false, &["http"])?;
     start_service(&fungi_bin, &node_a, &format!("{REMOTE_SERVICE}@b"))?;
-    add_service(
+    apply_service(
         &fungi_bin,
         &node_a,
         &format!("{REMOTE_SERVICE}@b"),
         &local_v117_web,
     )?;
     assert_service(&fungi_bin, &node_b, REMOTE_SERVICE, true, &["web"])?;
-    add_service(
+    apply_service(
         &fungi_bin,
         &node_a,
         &format!("{REMOTE_SERVICE}@b"),
@@ -273,22 +273,24 @@ where
     Ok(stdout)
 }
 
-fn add_service(fungi_bin: &Path, fungi_dir: &Path, target: &str, manifest: &Path) -> Result<()> {
-    let output = run_cli(
-        fungi_bin,
-        fungi_dir,
-        [
-            "service",
-            "add",
-            "--yes",
-            target,
-            manifest
-                .to_str()
-                .context("manifest path is not valid utf-8")?,
-        ],
-    )?;
+fn apply_service(fungi_bin: &Path, fungi_dir: &Path, target: &str, manifest: &Path) -> Result<()> {
+    let (name, device) = target
+        .split_once('@')
+        .map(|(name, device)| (name, Some(device)))
+        .unwrap_or((target, None));
+    let manifest = manifest
+        .to_str()
+        .context("manifest path is not valid utf-8")?;
+    let mut args = vec!["service"];
+    if let Some(device) = device {
+        args.push("--device");
+        args.push(device);
+    }
+    args.extend(["apply", "--yes", "--name", name]);
+    args.push(manifest);
+    let output = run_cli(fungi_bin, fungi_dir, args)?;
     if !output.contains("Remote service applied:") && !output.contains("\"name\":") {
-        bail!("unexpected add output:\n{output}");
+        bail!("unexpected apply output:\n{output}");
     }
     Ok(())
 }

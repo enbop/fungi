@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result, bail};
 use fungi_config::recipe_cache::{RecipeCache, validate_asset_name};
 use serde::Deserialize;
 
-use crate::ServiceManifestDocument;
+use crate::{peek_service_manifest_name, service_manifest_with_name_override};
 
 const OFFICIAL_RECIPE_SOURCE_LABEL: &str = "enbop/fungi-service-recipes";
 const OFFICIAL_RECIPE_LATEST_RELEASE_URL: &str =
@@ -14,7 +14,7 @@ const OFFICIAL_RECIPE_LATEST_RELEASE_URL: &str =
 pub enum ServiceRecipeRuntime {
     Docker,
     Wasmtime,
-    Link,
+    Tcp,
 }
 
 #[derive(Debug, Clone)]
@@ -114,21 +114,21 @@ pub async fn resolve_official_service_recipe(
                 detail.cached_manifest_path.display()
             )
         })?;
-    let mut manifest_doc: ServiceManifestDocument = serde_yaml::from_str(&manifest_yaml)
-        .with_context(|| {
+    let resolved_name = resolved_service_name(recipe, service_name);
+    let resolved_manifest_yaml =
+        service_manifest_with_name_override(&manifest_yaml, &resolved_name).with_context(|| {
             format!(
-                "failed to parse recipe manifest: {}",
+                "failed to resolve recipe manifest: {}",
                 detail.cached_manifest_path.display()
             )
         })?;
-    manifest_doc.metadata.name = resolved_service_name(recipe, service_name);
-    let resolved_manifest_yaml = serde_yaml::to_string(&manifest_doc)
-        .context("failed to serialize resolved recipe manifest")?;
+    let resolved_name = peek_service_manifest_name(&resolved_manifest_yaml)
+        .context("failed to read resolved recipe service name")?;
 
     let resolved_manifest_path = loaded.cache.write_resolved_manifest(
         &loaded.release_version,
         &recipe.id,
-        &manifest_doc.metadata.name,
+        &resolved_name,
         &resolved_manifest_yaml,
     )?;
     let manifest_base_dir = loaded.cache.ensure_asset_dir(&loaded.release_version)?;
@@ -310,7 +310,7 @@ fn parse_recipe_runtime(value: &str) -> Result<ServiceRecipeRuntime> {
     match value.trim().to_ascii_lowercase().as_str() {
         "docker" => Ok(ServiceRecipeRuntime::Docker),
         "wasmtime" => Ok(ServiceRecipeRuntime::Wasmtime),
-        "tcp" | "link" => Ok(ServiceRecipeRuntime::Link),
+        "tcp" => Ok(ServiceRecipeRuntime::Tcp),
         other => bail!("unsupported recipe runtime `{other}`"),
     }
 }
@@ -329,10 +329,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn maps_tcp_recipe_runtime_to_link() {
+    fn maps_tcp_recipe_runtime_to_tcp() {
         assert_eq!(
             parse_recipe_runtime("tcp").unwrap(),
-            ServiceRecipeRuntime::Link
+            ServiceRecipeRuntime::Tcp
         );
     }
 

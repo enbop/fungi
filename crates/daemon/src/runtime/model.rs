@@ -7,13 +7,15 @@ use serde::{Deserialize, Serialize};
 pub enum RuntimeKind {
     Docker,
     Wasmtime,
-    Link,
+    External,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceManifest {
     pub name: String,
     pub runtime: RuntimeKind,
+    #[serde(default)]
+    pub run_mode: ServiceRunMode,
     pub source: ServiceSource,
     pub expose: Option<ServiceExpose>,
     pub env: BTreeMap<String, String>,
@@ -25,12 +27,20 @@ pub struct ServiceManifest {
     pub labels: BTreeMap<String, String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ServiceRunMode {
+    #[default]
+    Command,
+    Http,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServiceSource {
     Docker { image: String },
     WasmtimeFile { component: PathBuf },
     WasmtimeUrl { url: String },
-    TcpLink { host: String, port: u16 },
+    ExistingTcp { host: String, port: u16 },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -222,6 +232,8 @@ pub struct ServiceManifestWasmtimeRun {
     pub file: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<ServiceRunMode>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

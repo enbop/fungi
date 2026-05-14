@@ -619,7 +619,7 @@ enum RecipeRuntimeKind {
   RECIPE_RUNTIME_KIND_UNSPECIFIED = 0;
   RECIPE_RUNTIME_KIND_DOCKER      = 1;
   RECIPE_RUNTIME_KIND_WASMTIME    = 2;
-  RECIPE_RUNTIME_KIND_LINK        = 3;
+  RECIPE_RUNTIME_KIND_TCP         = 3;
 }
 
 message RecipeSummary {

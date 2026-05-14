@@ -71,7 +71,7 @@ fn proto_recipe_runtime_kind(kind: fungi_daemon::ServiceRecipeRuntime) -> i32 {
     match kind {
         fungi_daemon::ServiceRecipeRuntime::Docker => RecipeRuntimeKind::Docker as i32,
         fungi_daemon::ServiceRecipeRuntime::Wasmtime => RecipeRuntimeKind::Wasmtime as i32,
-        fungi_daemon::ServiceRecipeRuntime::Link => RecipeRuntimeKind::Link as i32,
+        fungi_daemon::ServiceRecipeRuntime::Tcp => RecipeRuntimeKind::Tcp as i32,
     }
 }
 
