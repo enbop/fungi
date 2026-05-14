@@ -533,7 +533,7 @@ impl FungiServiceDocument {
             runtime_and_source.runtime,
             &mut reserved_host_ports,
         )?;
-        let expose = parse_fungi_publish_expose(&publish);
+        let expose = parse_fungi_publish_expose(&publish)?;
 
         Ok(ServiceManifest {
             name: service_name,
@@ -729,44 +729,55 @@ fn normalize_fungi_tcp_host(value: Option<&str>, field_name: &str) -> Result<Str
 
 fn parse_fungi_publish_expose(
     publish: &BTreeMap<String, FungiServicePublishEntry>,
-) -> Option<ServiceExpose> {
-    let mut selected_usage = None;
-    let mut selected_path = None;
-
-    for entry in publish.values() {
-        let Some(client) = &entry.client else {
-            continue;
-        };
-        let kind = client.kind.trim().to_ascii_lowercase();
-        match kind.as_str() {
-            "web" => {
-                selected_usage = Some(ServiceExposeUsageKind::Web);
-                selected_path = normalize_optional(client.path.clone());
-                break;
-            }
-            "ssh" if selected_usage.is_none() => {
-                selected_usage = Some(ServiceExposeUsageKind::Ssh);
-                selected_path = None;
-            }
-            _ if selected_usage.is_none() => {
-                selected_usage = Some(ServiceExposeUsageKind::Raw);
-                selected_path = None;
-            }
-            _ => {}
+) -> Result<Option<ServiceExpose>> {
+    let Some((first_name, first_entry)) = publish.iter().next() else {
+        return Ok(None);
+    };
+    let first_metadata = fungi_client_expose_metadata(first_entry);
+    for (name, entry) in publish.iter().skip(1) {
+        let metadata = fungi_client_expose_metadata(entry);
+        if metadata != first_metadata {
+            bail!(
+                "publish.{name}.client metadata must match publish.{first_name}.client; per-entry client handling is not supported yet"
+            );
         }
     }
 
-    Some(ServiceExpose {
+    let usage = first_metadata.usage.map(|kind| ServiceExposeUsage {
+        kind,
+        path: first_metadata.path.clone(),
+    });
+    Ok(Some(ServiceExpose {
         transport: ServiceExposeTransport {
             kind: ServiceExposeTransportKind::Tcp,
         },
-        usage: selected_usage.map(|kind| ServiceExposeUsage {
-            kind,
-            path: selected_path,
-        }),
+        usage,
         icon_url: None,
         catalog_id: None,
-    })
+    }))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FungiClientExposeMetadata {
+    usage: Option<ServiceExposeUsageKind>,
+    path: Option<String>,
+}
+
+fn fungi_client_expose_metadata(entry: &FungiServicePublishEntry) -> FungiClientExposeMetadata {
+    let usage = entry.client.as_ref().map(|client| {
+        let kind = client.kind.trim().to_ascii_lowercase();
+        match kind.as_str() {
+            "web" => ServiceExposeUsageKind::Web,
+            "ssh" => ServiceExposeUsageKind::Ssh,
+            _ => ServiceExposeUsageKind::Raw,
+        }
+    });
+    let path = entry.client.as_ref().and_then(|client| {
+        (usage == Some(ServiceExposeUsageKind::Web))
+            .then(|| normalize_optional(client.path.clone()))
+            .flatten()
+    });
+    FungiClientExposeMetadata { usage, path }
 }
 
 fn manifest_entries_to_document(

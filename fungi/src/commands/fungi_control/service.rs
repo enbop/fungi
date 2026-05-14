@@ -983,8 +983,8 @@ fn print_remote_apply_next_steps(
         println!("Use it:");
         println!("  fungi {target}");
     } else {
-        println!("Apply does not start stopped services by default.");
-        println!("Start it when ready:");
+        println!("Apply finished without --start.");
+        println!("If this is a new or stopped service, start it when ready:");
         println!("  fungi service start {target}");
     }
 }

@@ -254,7 +254,13 @@ pub(crate) fn build_wasmtime_command(
     command.arg(fungi_home.as_os_str());
 
     if should_serve_wasmtime_http(&state.manifest) {
-        let port = state.manifest.ports[0].host_port;
+        let port = state
+            .manifest
+            .ports
+            .iter()
+            .find(|port| port.protocol == ServicePortProtocol::Tcp)
+            .map(|port| port.host_port)
+            .ok_or_else(|| anyhow::anyhow!("wasmtime http mode requires at least one TCP port"))?;
         command.arg("serve");
         command.arg(format!("--addr=127.0.0.1:{port}"));
     } else {

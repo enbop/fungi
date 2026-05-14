@@ -55,6 +55,58 @@ fn cli_suggests_builtin_command_for_dynamic_typo_without_config() {
 }
 
 #[test]
+fn service_apply_dry_run_prints_resolved_intent() {
+    let home = TempDir::new().unwrap();
+    let rpc = reserve_port();
+    let swarm = reserve_port();
+
+    init_fungi_dir(home.path(), rpc, swarm);
+    let _daemon = start_daemon(home.path());
+    let _peer = wait_peer_id(home.path());
+    let manifest = write_wasmtime_dry_run_manifest(home.path());
+    let manifest_path = manifest.to_string_lossy();
+
+    let output = run_cli_result(
+        home.path(),
+        [
+            "service",
+            "apply",
+            "--dry-run",
+            "--start",
+            manifest_path.as_ref(),
+        ],
+        "",
+    );
+
+    assert!(
+        output.status.success(),
+        "dry-run failed\nstdout:\n{}\nstderr:\n{}",
+        output.stdout,
+        output.stderr
+    );
+    assert_eq!(output.stderr, "");
+    assert!(output.stdout.contains("Service: dry-run-wasi"));
+    assert!(output.stdout.contains("Run:\n  runtime: wasmtime"));
+    assert!(output.stdout.contains("  invocation: run"));
+    assert!(output.stdout.contains("Mounts:"));
+    assert!(output.stdout.contains(" -> /"));
+    assert!(
+        output
+            .stdout
+            .contains("Publish:\n  main: tcp service:8080 daemon:8080 (fixed)")
+    );
+    assert!(output.stdout.contains("Runtime grants:"));
+    assert!(output.stdout.contains("  - tcp"));
+    assert!(output.stdout.contains("Warnings:"));
+    assert!(
+        output
+            .stdout
+            .contains("$fungi.root exposes the full Fungi user root")
+    );
+    assert!(output.stdout.contains("After apply: start service"));
+}
+
+#[test]
 fn cli_prefers_existing_dynamic_service_over_builtin_typo_hint() {
     let home = TempDir::new().unwrap();
     let rpc = reserve_port();
@@ -218,6 +270,40 @@ publish:
 
 # {name}
 "#
+        ),
+    )
+    .unwrap();
+    path
+}
+
+fn write_wasmtime_dry_run_manifest(dir: &std::path::Path) -> std::path::PathBuf {
+    let component = dir.join("dry-run.wasm");
+    std::fs::write(&component, b"wasm").unwrap();
+    let path = dir.join("dry-run-wasi.fungi.md");
+    std::fs::write(
+        &path,
+        format!(
+            r#"---
+fungi: service/v1
+name: dry-run-wasi
+run:
+  provider: wasmtime
+  source:
+    file: {}
+  mounts:
+    - from: $fungi.root
+      to: /
+publish:
+  main:
+    tcp:
+      port: 8080
+    client:
+      kind: raw
+---
+
+# dry-run-wasi
+"#,
+            component.display()
         ),
     )
     .unwrap();

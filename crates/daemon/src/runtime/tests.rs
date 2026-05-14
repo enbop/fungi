@@ -290,6 +290,53 @@ fn wasmtime_tcp_entry_runs_command_with_network_permissions() {
 }
 
 #[test]
+fn wasmtime_http_mode_without_tcp_port_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let component = temp_dir.path().join("demo.wasm");
+    let manifest = ServiceManifest {
+        name: "http-service".into(),
+        runtime: RuntimeKind::Wasmtime,
+        run_mode: ServiceRunMode::Http,
+        source: ServiceSource::WasmtimeFile {
+            component: component.clone(),
+        },
+        expose: Some(ServiceExpose {
+            transport: ServiceExposeTransport {
+                kind: ServiceExposeTransportKind::Tcp,
+            },
+            usage: Some(ServiceExposeUsage {
+                kind: ServiceExposeUsageKind::Web,
+                path: Some("/".into()),
+            }),
+            icon_url: None,
+            catalog_id: None,
+        }),
+        env: BTreeMap::new(),
+        mounts: Vec::new(),
+        ports: Vec::new(),
+        command: Vec::new(),
+        entrypoint: Vec::new(),
+        working_dir: None,
+        labels: BTreeMap::new(),
+    };
+    let state = WasmtimeServiceState {
+        manifest,
+        source_display: component.display().to_string(),
+        staged_component_path: component,
+        service_dir: temp_dir.path().join("service"),
+        runtime_dir: temp_dir.path().join("runtime"),
+        log_file_path: temp_dir.path().join("runtime.log"),
+        child: None,
+        last_exit_code: None,
+    };
+
+    let error = build_wasmtime_command(Path::new("/bin/fungi"), temp_dir.path(), &state)
+        .expect_err("http mode without a TCP port should be rejected");
+
+    assert!(error.to_string().contains("requires at least one TCP port"));
+}
+
+#[test]
 fn manifest_document_supports_user_home_and_auto_host_port() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1
@@ -503,6 +550,35 @@ publish:
             .kind,
         ServiceExposeUsageKind::Ssh
     );
+}
+
+#[test]
+fn fungi_service_file_rejects_mixed_client_metadata() {
+    let content = r#"
+fungi: service/v1
+name: mixed
+run:
+  provider: docker
+  source:
+    image: example/mixed:latest
+publish:
+  web:
+    tcp:
+      port: 8080
+    client:
+      kind: web
+      path: /
+  ssh:
+    tcp:
+      port: 22
+    client:
+      kind: ssh
+"#;
+
+    let error = parse_service_manifest_yaml(content, Path::new("."), Path::new("/tmp/fungi-home"))
+        .expect_err("mixed client metadata should be rejected");
+
+    assert!(error.to_string().contains("client metadata must match"));
 }
 
 #[test]
