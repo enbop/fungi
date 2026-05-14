@@ -256,12 +256,7 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                             }
                         }
                         refresh_remote_device_services(&mut client, &device.peer_id).await;
-                        println!("Use it:");
-                        println!(
-                            "  fungi {}@{}",
-                            service_name,
-                            resolved_device_display_name(&device)
-                        );
+                        print_remote_apply_next_steps(&service_name, &device, created.start_now);
                     }
                     Err(error) => fatal_grpc(error),
                 }
@@ -811,12 +806,7 @@ async fn apply_service_from_recipe(
                     }
                 }
                 refresh_remote_device_services(client, &device.peer_id).await;
-                println!("Use it:");
-                println!(
-                    "  fungi {}@{}",
-                    service_name,
-                    resolved_device_display_name(&device)
-                );
+                print_remote_apply_next_steps(&service_name, &device, start);
             }
             Err(error) => fatal_grpc(error),
         }
@@ -980,6 +970,22 @@ fn print_recipe_runtime_wait_notice(detail: &RecipeDetail) {
             );
         }
         _ => {}
+    }
+}
+
+fn print_remote_apply_next_steps(
+    service_name: &str,
+    device: &super::shared::ResolvedPeerTarget,
+    started: bool,
+) {
+    let target = format!("{}@{}", service_name, resolved_device_display_name(device));
+    if started {
+        println!("Use it:");
+        println!("  fungi {target}");
+    } else {
+        println!("Apply does not start stopped services by default.");
+        println!("Start it when ready:");
+        println!("  fungi service start {target}");
     }
 }
 
@@ -1662,7 +1668,7 @@ fn manifest_base_dir_path(created: &CreatedServiceManifest) -> std::path::PathBu
 
 fn print_service_apply_dry_run(created: &CreatedServiceManifest, args: &CommonArgs) {
     let base_dir = manifest_base_dir_path(created);
-    let fungi_home = args.fungi_dir();
+    let fungi_home = manifest_parse_fungi_home(args);
     let manifest = parse_service_manifest_yaml(&created.manifest_yaml, &base_dir, &fungi_home)
         .unwrap_or_else(|error| fatal(format!("Failed to parse service manifest: {error}")));
     let mut warnings = Vec::new();
@@ -1755,10 +1761,22 @@ fn manifest_name_and_runtime(
     args: &CommonArgs,
 ) -> (String, RuntimeKind) {
     let base_dir = manifest_base_dir_path(created);
-    let fungi_home = args.fungi_dir();
+    let fungi_home = manifest_parse_fungi_home(args);
     let manifest = parse_service_manifest_yaml(&created.manifest_yaml, &base_dir, &fungi_home)
         .unwrap_or_else(|error| fatal(format!("Failed to parse service manifest: {error}")));
     (manifest.name, manifest.runtime)
+}
+
+fn manifest_parse_fungi_home(args: &CommonArgs) -> std::path::PathBuf {
+    let fungi_home = args.fungi_dir();
+    if fungi_home.is_absolute() {
+        fungi_home
+    } else {
+        match std::env::current_dir() {
+            Ok(current_dir) => current_dir.join(fungi_home),
+            Err(_) => fungi_home,
+        }
+    }
 }
 
 async fn confirm_apply_if_existing(
@@ -2586,6 +2604,22 @@ publish:
 
         let name = fungi_daemon::peek_service_manifest_name(&created.manifest_yaml).unwrap();
         assert_eq!(name, "documents");
+    }
+
+    #[test]
+    fn manifest_parse_fungi_home_absolutizes_relative_fungi_dir() {
+        let current_dir = std::env::current_dir().unwrap();
+        let args = CommonArgs {
+            fungi_dir: Some("target/tmp_a".to_string()),
+            dynamic_device: None,
+            #[cfg(target_os = "android")]
+            default_device_name: String::new(),
+        };
+
+        assert_eq!(
+            manifest_parse_fungi_home(&args),
+            current_dir.join("target/tmp_a")
+        );
     }
 
     fn service_access(endpoints: Vec<ServiceAccessEndpoint>) -> ServiceAccess {
