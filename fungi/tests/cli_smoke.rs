@@ -65,7 +65,7 @@ fn cli_prefers_existing_dynamic_service_over_builtin_typo_hint() {
     let _daemon = start_daemon(home.path());
     let _peer = wait_peer_id(home.path());
 
-    let manifest = write_link_service_manifest(home.path(), "devices", target, "raw");
+    let manifest = write_existing_tcp_service_manifest(home.path(), "devices", target, "raw");
     let manifest_path = manifest.to_string_lossy();
     run_cli(
         home.path(),
@@ -129,7 +129,7 @@ fn cli_can_create_and_access_remote_tcp_tunnel_service() {
         stream.write_all(b"pong").unwrap();
     });
 
-    let manifest = write_link_service_manifest(a.path(), "test-tcp", target_port, "raw");
+    let manifest = write_existing_tcp_service_manifest(a.path(), "test-tcp", target_port, "raw");
     let manifest_path = manifest.to_string_lossy();
     run_cli(
         a.path(),
@@ -194,7 +194,7 @@ fn init_fungi_dir(path: &std::path::Path, rpc_port: u16, swarm_port: u16) {
     config.save_to_file().unwrap();
 }
 
-fn write_link_service_manifest(
+fn write_existing_tcp_service_manifest(
     dir: &std::path::Path,
     name: &str,
     port: u16,

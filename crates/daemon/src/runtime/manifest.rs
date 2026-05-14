@@ -151,7 +151,7 @@ pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
                 mode: (manifest.run_mode == ServiceRunMode::Http).then_some(ServiceRunMode::Http),
             }),
         }),
-        ServiceSource::TcpLink { .. } => None,
+        ServiceSource::ExistingTcp { .. } => None,
     };
     let entries = manifest_entries_to_document(manifest);
 
@@ -521,7 +521,7 @@ impl FungiServiceDocument {
                 (runtime_and_source, env, mounts, run.args)
             }
             None => (
-                parse_fungi_link_run(&publish)?,
+                parse_fungi_existing_tcp_run(&publish)?,
                 BTreeMap::new(),
                 Vec::new(),
                 Vec::new(),
@@ -633,7 +633,7 @@ fn exactly_one_source(
     }
 }
 
-fn parse_fungi_link_run(
+fn parse_fungi_existing_tcp_run(
     publish: &BTreeMap<String, FungiServicePublishEntry>,
 ) -> Result<RuntimeAndSource> {
     if publish.len() != 1 {
@@ -651,9 +651,9 @@ fn parse_fungi_link_run(
         bail!("publish.{name}.tcp.port must be greater than 0");
     }
     Ok(RuntimeAndSource {
-        runtime: RuntimeKind::Link,
+        runtime: RuntimeKind::External,
         run_mode: ServiceRunMode::Command,
-        source: ServiceSource::TcpLink {
+        source: ServiceSource::ExistingTcp {
             host,
             port: entry.tcp.port,
         },
@@ -698,7 +698,7 @@ fn parse_fungi_publish_entry(
                 protocol: ServicePortProtocol::Tcp,
             })
         }
-        RuntimeKind::Wasmtime | RuntimeKind::Link => {
+        RuntimeKind::Wasmtime | RuntimeKind::External => {
             let host = normalize_fungi_tcp_host(
                 entry.tcp.host.as_deref(),
                 &format!("publish.{name}.tcp.host"),
@@ -801,7 +801,7 @@ fn manifest_entries_to_document(
         let name = port.name.clone().unwrap_or(fallback_name);
         let protocol = (port.protocol != ServicePortProtocol::Tcp).then_some(port.protocol);
         let entry = match &manifest.source {
-            ServiceSource::TcpLink { host, port } => ServiceManifestEntry {
+            ServiceSource::ExistingTcp { host, port } => ServiceManifestEntry {
                 target: Some(format!("{host}:{port}")),
                 port: None,
                 host_port: None,
@@ -852,7 +852,7 @@ fn parse_manifest_run(
 ) -> Result<RuntimeAndSource> {
     match run {
         Some(run) => parse_runtime_run(run, entries, base_dir, fungi_home, path_roots),
-        None => parse_tcp_tunnel_run(entries),
+        None => parse_existing_tcp_run(entries),
     }
 }
 
@@ -918,11 +918,11 @@ fn parse_runtime_run(
     }
 }
 
-fn parse_tcp_tunnel_run(
+fn parse_existing_tcp_run(
     entries: &BTreeMap<String, ServiceManifestEntry>,
 ) -> Result<RuntimeAndSource> {
     if entries.len() != 1 {
-        bail!("tcp tunnel service manifests currently support exactly one entry");
+        bail!("service manifests without spec.run currently support exactly one TCP entry");
     }
     let (name, entry) = entries.iter().next().expect("entries is non-empty");
     if entry.target.is_some() && entry.port.is_some() {
@@ -943,9 +943,9 @@ fn parse_tcp_tunnel_run(
         bail!("spec.entries.{name}.target currently supports only 127.0.0.1 or localhost");
     }
     Ok(RuntimeAndSource {
-        runtime: RuntimeKind::Link,
+        runtime: RuntimeKind::External,
         run_mode: ServiceRunMode::Command,
-        source: ServiceSource::TcpLink { host, port },
+        source: ServiceSource::ExistingTcp { host, port },
     })
 }
 
@@ -980,7 +980,7 @@ fn parse_manifest_entry(
             bail!("spec.entries.{name}.hostPort cannot be used with target");
         }
         (Some(target), None, None) => {
-            if runtime != RuntimeKind::Link {
+            if runtime != RuntimeKind::External {
                 bail!("spec.entries.{name}.target cannot be used when spec.run is set");
             }
             let (_host, port) = parse_tcp_target(target, &format!("spec.entries.{name}.target"))?;
@@ -993,7 +993,7 @@ fn parse_manifest_entry(
             })
         }
         (None, Some(service_port), host_port) => {
-            if runtime == RuntimeKind::Link {
+            if runtime == RuntimeKind::External {
                 bail!("spec.entries.{name}.port cannot be used without spec.run");
             }
             if service_port == 0 {

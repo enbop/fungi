@@ -71,7 +71,9 @@ fn ensure_wasmtime_manifest(manifest: &ServiceManifest) -> Result<()> {
             Ok(())
         }
         ServiceSource::Docker { .. } => bail!("wasmtime runtime requires a wasm component source"),
-        ServiceSource::TcpLink { .. } => bail!("wasmtime runtime requires a wasm component source"),
+        ServiceSource::ExistingTcp { .. } => {
+            bail!("wasmtime runtime requires a wasm component source")
+        }
     }
 }
 
@@ -184,7 +186,7 @@ async fn stage_wasmtime_component(
                 )
             })?;
         }
-        ServiceSource::Docker { .. } | ServiceSource::TcpLink { .. } => {
+        ServiceSource::Docker { .. } | ServiceSource::ExistingTcp { .. } => {
             bail!("invalid wasmtime source type")
         }
     }
@@ -391,7 +393,7 @@ fn service_instance_id(runtime: RuntimeKind, name: &str) -> String {
     let runtime_name = match runtime {
         RuntimeKind::Docker => "docker",
         RuntimeKind::Wasmtime => "wasmtime",
-        RuntimeKind::Link => "link",
+        RuntimeKind::External => "external",
     };
     format!("{runtime_name}:{name}")
 }
@@ -401,7 +403,7 @@ fn source_display(source: &ServiceSource) -> String {
         ServiceSource::Docker { image } => image.clone(),
         ServiceSource::WasmtimeFile { component } => component.display().to_string(),
         ServiceSource::WasmtimeUrl { url } => url.clone(),
-        ServiceSource::TcpLink { host, port } => format!("{host}:{port}"),
+        ServiceSource::ExistingTcp { host, port } => format!("{host}:{port}"),
     }
 }
 

@@ -872,7 +872,7 @@ fn recipe_runtime_label(kind: i32) -> &'static str {
     match RecipeRuntimeKind::try_from(kind) {
         Ok(RecipeRuntimeKind::Docker) => "docker",
         Ok(RecipeRuntimeKind::Wasmtime) => "wasmtime",
-        Ok(RecipeRuntimeKind::Link) => "link",
+        Ok(RecipeRuntimeKind::Tcp) => "tcp",
         _ => "unknown",
     }
 }
@@ -1675,7 +1675,11 @@ fn print_service_apply_dry_run(created: &CreatedServiceManifest, args: &CommonAr
 
     println!("Service: {}", manifest.name);
     println!("Run:");
-    println!("  runtime: {}", runtime_kind_label(manifest.runtime));
+    if manifest.runtime == RuntimeKind::External {
+        println!("  none");
+    } else {
+        println!("  runtime: {}", runtime_kind_label(manifest.runtime));
+    }
     if manifest.runtime == RuntimeKind::Wasmtime {
         println!("  mode: {}", wasmtime_run_mode_label(manifest.run_mode));
         println!(
@@ -1835,7 +1839,7 @@ fn runtime_kind_label(runtime: RuntimeKind) -> &'static str {
     match runtime {
         RuntimeKind::Docker => "docker",
         RuntimeKind::Wasmtime => "wasmtime",
-        RuntimeKind::Link => "link",
+        RuntimeKind::External => "external",
     }
 }
 

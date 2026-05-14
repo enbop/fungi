@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub enum RuntimeKind {
     Docker,
     Wasmtime,
-    Link,
+    External,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,7 +40,7 @@ pub enum ServiceSource {
     Docker { image: String },
     WasmtimeFile { component: PathBuf },
     WasmtimeUrl { url: String },
-    TcpLink { host: String, port: u16 },
+    ExistingTcp { host: String, port: u16 },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -470,7 +470,7 @@ publish:
 }
 
 #[test]
-fn fungi_service_file_without_run_maps_to_link_service() {
+fn fungi_service_file_without_run_maps_to_external_tcp_service() {
     let content = r#"
 fungi: service/v1
 name: ssh-tunnel
@@ -486,10 +486,10 @@ publish:
     let manifest =
         parse_service_manifest_yaml(content, Path::new("."), Path::new("/tmp/fungi-home")).unwrap();
 
-    assert_eq!(manifest.runtime, RuntimeKind::Link);
+    assert_eq!(manifest.runtime, RuntimeKind::External);
     assert!(matches!(
         manifest.source,
-        ServiceSource::TcpLink { ref host, port } if host == "127.0.0.1" && port == 22
+        ServiceSource::ExistingTcp { ref host, port } if host == "127.0.0.1" && port == 22
     ));
     assert_eq!(manifest.ports[0].host_port, 22);
     assert_eq!(
@@ -523,7 +523,7 @@ publish:
         parse_service_manifest_yaml(content, Path::new("."), Path::new("/tmp/fungi-home")).unwrap();
 
     assert_eq!(manifest.name, "ssh-tunnel");
-    assert_eq!(manifest.runtime, RuntimeKind::Link);
+    assert_eq!(manifest.runtime, RuntimeKind::External);
 }
 
 #[test]
@@ -686,7 +686,7 @@ spec:
 }
 
 #[test]
-fn manifest_document_supports_link_service() {
+fn manifest_document_supports_external_tcp_service() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1
 kind: Service
@@ -702,10 +702,10 @@ spec:
     let manifest =
         parse_service_manifest_yaml(yaml, Path::new("."), Path::new("/tmp/fungi-home")).unwrap();
 
-    assert_eq!(manifest.runtime, RuntimeKind::Link);
+    assert_eq!(manifest.runtime, RuntimeKind::External);
     assert!(matches!(
         manifest.source,
-        ServiceSource::TcpLink { ref host, port } if host == "127.0.0.1" && port == 22
+        ServiceSource::ExistingTcp { ref host, port } if host == "127.0.0.1" && port == 22
     ));
     assert_eq!(manifest.ports[0].name.as_deref(), Some("ssh"));
 }
@@ -873,17 +873,17 @@ async fn runtime_control_apply_uses_in_memory_manifest_when_persisted_state_is_m
     )
     .unwrap();
 
-    let previous_manifest = link_manifest("demo", "127.0.0.1", 22);
+    let previous_manifest = existing_tcp_manifest("demo", "127.0.0.1", 22);
     control.seed_in_memory_service_for_test(previous_manifest);
 
     let applied = control
-        .apply(&link_manifest("demo", "127.0.0.1", 23))
+        .apply(&existing_tcp_manifest("demo", "127.0.0.1", 23))
         .await
         .unwrap();
 
     assert!(matches!(
         applied.previous_manifest.unwrap().source,
-        ServiceSource::TcpLink { ref host, port } if host == "127.0.0.1" && port == 22
+        ServiceSource::ExistingTcp { ref host, port } if host == "127.0.0.1" && port == 22
     ));
     assert_eq!(applied.desired_state, DesiredServiceState::Stopped);
     assert_eq!(applied.instance.source, "127.0.0.1:23");
@@ -1140,12 +1140,12 @@ async fn spawn_http_server(body: Vec<u8>) -> TestHttpServer {
     }
 }
 
-fn link_manifest(name: &str, host: &str, port: u16) -> ServiceManifest {
+fn existing_tcp_manifest(name: &str, host: &str, port: u16) -> ServiceManifest {
     ServiceManifest {
         name: name.to_string(),
-        runtime: RuntimeKind::Link,
+        runtime: RuntimeKind::External,
         run_mode: ServiceRunMode::Command,
-        source: ServiceSource::TcpLink {
+        source: ServiceSource::ExistingTcp {
             host: host.to_string(),
             port,
         },

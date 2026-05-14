@@ -14,7 +14,7 @@ const OFFICIAL_RECIPE_LATEST_RELEASE_URL: &str =
 pub enum ServiceRecipeRuntime {
     Docker,
     Wasmtime,
-    Link,
+    Tcp,
 }
 
 #[derive(Debug, Clone)]
@@ -310,7 +310,7 @@ fn parse_recipe_runtime(value: &str) -> Result<ServiceRecipeRuntime> {
     match value.trim().to_ascii_lowercase().as_str() {
         "docker" => Ok(ServiceRecipeRuntime::Docker),
         "wasmtime" => Ok(ServiceRecipeRuntime::Wasmtime),
-        "tcp" | "link" => Ok(ServiceRecipeRuntime::Link),
+        "tcp" => Ok(ServiceRecipeRuntime::Tcp),
         other => bail!("unsupported recipe runtime `{other}`"),
     }
 }
@@ -329,10 +329,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn maps_tcp_recipe_runtime_to_link() {
+    fn maps_tcp_recipe_runtime_to_tcp() {
         assert_eq!(
             parse_recipe_runtime("tcp").unwrap(),
-            ServiceRecipeRuntime::Link
+            ServiceRecipeRuntime::Tcp
         );
     }
 

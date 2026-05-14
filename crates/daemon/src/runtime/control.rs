@@ -89,7 +89,7 @@ impl RuntimeControl {
         match runtime {
             RuntimeKind::Docker => self.docker.is_some(),
             RuntimeKind::Wasmtime => self.wasmtime_enabled,
-            RuntimeKind::Link => true,
+            RuntimeKind::External => true,
         }
     }
 
@@ -187,7 +187,7 @@ impl RuntimeControl {
                         .await
                 }
             }
-            RuntimeKind::Link => Ok(self.link_instance_from_manifest(manifest, false)),
+            RuntimeKind::External => Ok(self.external_instance_from_manifest(manifest, false)),
         }?;
 
         self.service_index
@@ -274,7 +274,7 @@ impl RuntimeControl {
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.start(name).await,
             RuntimeKind::Wasmtime => self.wasmtime.start(name).await,
-            RuntimeKind::Link => Ok(()),
+            RuntimeKind::External => Ok(()),
         }?;
         self.set_desired_state(name, DesiredServiceState::Running)
     }
@@ -284,7 +284,7 @@ impl RuntimeControl {
         let stop_result = match runtime {
             RuntimeKind::Docker => self.docker_provider()?.stop(name).await,
             RuntimeKind::Wasmtime => self.wasmtime.stop(name).await,
-            RuntimeKind::Link => Ok(()),
+            RuntimeKind::External => Ok(()),
         };
 
         match stop_result {
@@ -312,7 +312,7 @@ impl RuntimeControl {
                     .remove_with_local_service_id(name, &local_service_id)
                     .await
             }
-            RuntimeKind::Link => Ok(()),
+            RuntimeKind::External => Ok(()),
         };
 
         match remove_result {
@@ -465,7 +465,7 @@ impl RuntimeControl {
         let inspect_result = match runtime {
             RuntimeKind::Docker => self.docker_provider()?.inspect(name).await,
             RuntimeKind::Wasmtime => self.wasmtime.inspect(name).await,
-            RuntimeKind::Link => {
+            RuntimeKind::External => {
                 let manifest = self
                     .get_service_manifest(name)
                     .ok_or_else(|| anyhow::anyhow!("service not found: {name}"))?;
@@ -474,7 +474,7 @@ impl RuntimeControl {
                     .lock()
                     .desired_state(name)
                     .is_some_and(|state| state == DesiredServiceState::Running);
-                return Ok(self.link_instance_from_manifest(&manifest, running));
+                return Ok(self.external_instance_from_manifest(&manifest, running));
             }
         };
 
@@ -513,7 +513,7 @@ impl RuntimeControl {
         match runtime {
             RuntimeKind::Docker => self.docker_provider()?.logs(name, options).await,
             RuntimeKind::Wasmtime => self.wasmtime.logs(name, options).await,
-            RuntimeKind::Link => bail!("link services do not have runtime logs"),
+            RuntimeKind::External => bail!("external TCP services do not have runtime logs"),
         }
     }
 
@@ -587,7 +587,7 @@ impl RuntimeControl {
                     bail!("wasmtime runtime is disabled in config");
                 }
             }
-            RuntimeKind::Link => {}
+            RuntimeKind::External => {}
         }
         Ok(())
     }
@@ -650,7 +650,7 @@ impl RuntimeControl {
         let stop_result = match runtime {
             RuntimeKind::Docker => self.docker_provider()?.stop(name).await,
             RuntimeKind::Wasmtime => self.wasmtime.stop(name).await,
-            RuntimeKind::Link => Ok(()),
+            RuntimeKind::External => Ok(()),
         };
 
         match stop_result {
@@ -692,7 +692,7 @@ impl RuntimeControl {
                     .remove_with_local_service_id(name, local_service_id)
                     .await
             }
-            RuntimeKind::Link => Ok(()),
+            RuntimeKind::External => Ok(()),
         };
 
         match remove_result {
@@ -710,18 +710,18 @@ impl RuntimeControl {
         }
     }
 
-    fn link_instance_from_manifest(
+    fn external_instance_from_manifest(
         &self,
         manifest: &ServiceManifest,
         running: bool,
     ) -> ServiceInstance {
         ServiceInstance {
-            id: format!("link:{}", manifest.name),
-            runtime: RuntimeKind::Link,
+            id: format!("external:{}", manifest.name),
+            runtime: RuntimeKind::External,
             name: manifest.name.clone(),
             source: match &manifest.source {
-                ServiceSource::TcpLink { host, port } => format!("{host}:{port}"),
-                _ => "link".to_string(),
+                ServiceSource::ExistingTcp { host, port } => format!("{host}:{port}"),
+                _ => "external".to_string(),
             },
             labels: manifest.labels.clone(),
             ports: manifest.ports.clone(),
