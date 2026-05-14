@@ -274,15 +274,19 @@ fn wasmtime_tcp_entry_runs_command_with_network_permissions() {
     };
 
     let command = build_wasmtime_command(Path::new("/bin/fungi"), temp_dir.path(), &state).unwrap();
-    let debug = format!("{command:?}");
+    let args = command
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
 
-    assert!(debug.contains("\"run\""));
-    assert!(!debug.contains("\"serve\""));
-    assert!(debug.contains("\"-Scli\""));
-    assert!(debug.contains("\"-Stcp\""));
-    assert!(debug.contains("\"-Sinherit-network\""));
-    assert!(debug.contains("\"-Sallow-ip-name-lookup\""));
-    assert!(debug.contains("\"--listen\""));
+    assert!(args.iter().any(|arg| arg == "run"));
+    assert!(!args.iter().any(|arg| arg == "serve"));
+    assert!(args.iter().any(|arg| arg == "-Scli"));
+    assert!(args.iter().any(|arg| arg == "-Stcp"));
+    assert!(args.iter().any(|arg| arg == "-Sinherit-network"));
+    assert!(args.iter().any(|arg| arg == "-Sallow-ip-name-lookup"));
+    assert!(args.iter().any(|arg| arg == "--listen"));
 }
 
 #[test]
@@ -499,6 +503,45 @@ publish:
             .kind,
         ServiceExposeUsageKind::Ssh
     );
+}
+
+#[test]
+fn fungi_service_yaml_allows_yaml_document_start_without_front_matter_close() {
+    let content = r#"---
+fungi: service/v1
+name: ssh-tunnel
+publish:
+  ssh:
+    tcp:
+      host: 127.0.0.1
+      port: 22
+    client:
+      kind: ssh
+"#;
+
+    let manifest =
+        parse_service_manifest_yaml(content, Path::new("."), Path::new("/tmp/fungi-home")).unwrap();
+
+    assert_eq!(manifest.name, "ssh-tunnel");
+    assert_eq!(manifest.runtime, RuntimeKind::Link);
+}
+
+#[test]
+fn fungi_service_yaml_parse_error_keeps_field_detail() {
+    let content = r#"
+fungi: service/v1
+name: broken
+publish:
+  main:
+    tcp: {}
+"#;
+
+    let error = parse_service_manifest_yaml(content, Path::new("."), Path::new("/tmp/fungi-home"))
+        .expect_err("missing tcp.port should be reported");
+    let message = error.to_string();
+
+    assert!(message.contains("Failed to parse Fungi service YAML"));
+    assert!(message.contains("missing field `port`"));
 }
 
 #[test]

@@ -64,8 +64,7 @@ pub fn parse_service_manifest_yaml_with_policy(
         );
     }
 
-    let document: ServiceManifestDocument =
-        serde_yaml::from_str(content).context("Failed to parse service manifest YAML")?;
+    let document = parse_legacy_service_manifest_yaml(content, "service manifest YAML")?;
     document.into_service_manifest_for_node(base_dir, fungi_home, policy, used_host_ports)
 }
 
@@ -87,8 +86,7 @@ pub(crate) fn parse_service_manifest_yaml_with_policy_for_service_paths(
         );
     }
 
-    let document: ServiceManifestDocument =
-        serde_yaml::from_str(content).context("Failed to parse service manifest YAML")?;
+    let document = parse_legacy_service_manifest_yaml(content, "service manifest YAML")?;
     document.into_service_manifest_for_node_with_service_paths(
         base_dir,
         fungi_home,
@@ -103,31 +101,28 @@ pub fn peek_service_manifest_name(content: &str) -> Result<String> {
         return normalize_non_empty(&document.name, "name");
     }
 
-    let document: ServiceManifestDocument =
-        serde_yaml::from_str(content).context("Failed to parse service manifest YAML")?;
+    let document = parse_legacy_service_manifest_yaml(content, "service manifest YAML")?;
     normalize_non_empty(&document.metadata.name, "metadata.name")
 }
 
 pub fn service_manifest_with_name_override(content: &str, service_name: &str) -> Result<String> {
     let service_name = normalize_non_empty(service_name, "service name")?;
     if let Some(front_matter) = split_front_matter(content)? {
-        let mut document: FungiServiceDocument = serde_yaml::from_str(front_matter.yaml)
-            .context("Failed to parse Fungi service front matter")?;
+        let mut document =
+            parse_fungi_service_yaml(front_matter.yaml, "Fungi service front matter")?;
         document.name = service_name;
         let yaml = serde_yaml::to_string(&document)
             .context("Failed to encode Fungi service front matter")?;
         return Ok(format!("---\n{}---\n{}", yaml, front_matter.body));
     }
 
-    if content.trim_start().starts_with("fungi:") {
-        let mut document: FungiServiceDocument =
-            serde_yaml::from_str(content).context("Failed to parse Fungi service YAML")?;
+    if should_parse_as_fungi_service_yaml(content) {
+        let mut document = parse_fungi_service_yaml(content, "Fungi service YAML")?;
         document.name = service_name;
         return serde_yaml::to_string(&document).context("Failed to encode Fungi service YAML");
     }
 
-    let mut document: ServiceManifestDocument =
-        serde_yaml::from_str(content).context("Failed to parse service manifest YAML")?;
+    let mut document = parse_legacy_service_manifest_yaml(content, "service manifest YAML")?;
     document.metadata.name = service_name;
     serde_yaml::to_string(&document).context("Failed to encode service manifest YAML")
 }
@@ -379,14 +374,12 @@ struct FungiServiceClient {
 
 fn parse_fungi_service_document(content: &str) -> Result<Option<FungiServiceDocument>> {
     if let Some(front_matter) = split_front_matter(content)? {
-        let document = serde_yaml::from_str(front_matter.yaml)
-            .context("Failed to parse Fungi service front matter")?;
+        let document = parse_fungi_service_yaml(front_matter.yaml, "Fungi service front matter")?;
         return Ok(Some(document));
     }
 
-    if content.trim_start().starts_with("fungi:") {
-        let document =
-            serde_yaml::from_str(content).context("Failed to parse Fungi service YAML")?;
+    if should_parse_as_fungi_service_yaml(content) {
+        let document = parse_fungi_service_yaml(content, "Fungi service YAML")?;
         return Ok(Some(document));
     }
 
@@ -414,7 +407,53 @@ fn split_front_matter(content: &str) -> Result<Option<FrontMatter<'_>>> {
         offset += line.len();
     }
 
+    if serde_yaml::from_str::<serde_yaml::Value>(content).is_ok() {
+        return Ok(None);
+    }
+
     bail!("Fungi service file front matter is missing closing ---")
+}
+
+fn parse_fungi_service_yaml(yaml: &str, label: &str) -> Result<FungiServiceDocument> {
+    serde_yaml::from_str(yaml).map_err(|error| format_yaml_parse_error(label, error))
+}
+
+fn parse_legacy_service_manifest_yaml(yaml: &str, label: &str) -> Result<ServiceManifestDocument> {
+    serde_yaml::from_str(yaml).map_err(|error| format_yaml_parse_error(label, error))
+}
+
+fn format_yaml_parse_error(label: &str, error: serde_yaml::Error) -> anyhow::Error {
+    if let Some(location) = error.location() {
+        anyhow::anyhow!(
+            "Failed to parse {label} at line {}, column {}: {error}",
+            location.line(),
+            location.column()
+        )
+    } else {
+        anyhow::anyhow!("Failed to parse {label}: {error}")
+    }
+}
+
+fn should_parse_as_fungi_service_yaml(content: &str) -> bool {
+    let trimmed = content.trim_start();
+    if trimmed.starts_with("fungi:") {
+        return true;
+    }
+    if !trimmed.starts_with("---") {
+        return false;
+    }
+
+    match serde_yaml::from_str::<serde_yaml::Value>(content) {
+        Ok(serde_yaml::Value::Mapping(mapping)) => {
+            let fungi_key = serde_yaml::Value::String("fungi".to_string());
+            mapping.contains_key(&fungi_key)
+        }
+        Ok(_) => false,
+        Err(_) => trimmed.lines().take(32).any(|line| {
+            let line = line.trim_start();
+            line.starts_with("fungi:")
+        }),
+    }
 }
 
 impl FungiServiceDocument {

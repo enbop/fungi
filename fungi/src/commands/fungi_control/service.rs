@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use std::process::Command;
 
 use clap::{Args, Subcommand};
-use fungi_config::{FungiConfig, FungiDir};
+use fungi_config::{FungiConfig, FungiDir, paths::FungiPaths};
 use fungi_daemon::{
     CatalogService, RuntimeKind, ServiceAccess, ServiceExposeUsageKind, ServiceInstance,
     ServicePortProtocol, parse_service_manifest_yaml, service_manifest_with_name_override,
@@ -61,12 +61,17 @@ pub enum ServiceCommands {
     /// Apply a service file to this node or another device
     Apply {
         /// Path to a .fungi.md service file
+        #[arg(
+            value_name = "SERVICE_FILE",
+            required_unless_present = "recipe",
+            conflicts_with = "recipe"
+        )]
         manifest: Option<String>,
         /// Override the service instance name from the service file
         #[arg(long)]
         name: Option<String>,
         /// Apply a service from an official recipe ID instead of a local file
-        #[arg(long)]
+        #[arg(long, conflicts_with = "manifest")]
         recipe: Option<String>,
         /// Refresh the official recipe index before resolving the recipe
         #[arg(long, default_value_t = false)]
@@ -196,6 +201,11 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             start,
             yes,
         } => {
+            if manifest.is_some() && recipe.is_some() {
+                fatal(
+                    "`fungi service apply` accepts either a service file path or --recipe <id>, not both",
+                );
+            }
             if let Some(recipe_id) = recipe {
                 apply_service_from_recipe(
                     &mut client,
@@ -1655,6 +1665,7 @@ fn print_service_apply_dry_run(created: &CreatedServiceManifest, args: &CommonAr
     let fungi_home = args.fungi_dir();
     let manifest = parse_service_manifest_yaml(&created.manifest_yaml, &base_dir, &fungi_home)
         .unwrap_or_else(|error| fatal(format!("Failed to parse service manifest: {error}")));
+    let mut warnings = Vec::new();
 
     println!("Service: {}", manifest.name);
     println!("Run:");
@@ -1669,6 +1680,19 @@ fn print_service_apply_dry_run(created: &CreatedServiceManifest, args: &CommonAr
                 "run"
             }
         );
+    }
+    if !manifest.mounts.is_empty() {
+        println!("Mounts:");
+        let user_root = FungiPaths::from_fungi_home(&fungi_home).user_root();
+        for mount in &manifest.mounts {
+            println!("  {} -> {}", mount.host_path.display(), mount.runtime_path);
+            if mount.host_path == user_root {
+                warnings.push(
+                    "$fungi.root exposes the full Fungi user root; prefer $fungi.workspace when possible."
+                        .to_string(),
+                );
+            }
+        }
     }
     println!("Publish:");
     for port in &manifest.ports {
@@ -1693,8 +1717,14 @@ fn print_service_apply_dry_run(created: &CreatedServiceManifest, args: &CommonAr
         println!("  - tcp");
         println!("  - inherited network");
         println!("  - DNS lookup");
+        warnings
+            .push("Wasmtime TCP services currently receive broad host network access.".to_string());
+    }
+    if !warnings.is_empty() {
         println!("Warnings:");
-        println!("  - Wasmtime TCP services currently receive broad host network access.");
+        for warning in warnings {
+            println!("  - {warning}");
+        }
     }
     if created.start_now {
         println!("After apply: start service");

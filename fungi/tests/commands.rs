@@ -122,6 +122,27 @@ fn parses_service_apply_recipe_flags() {
 }
 
 #[test]
+fn rejects_service_apply_recipe_with_manifest() {
+    let result = FungiArgs::try_parse_from([
+        "fungi",
+        "service",
+        "apply",
+        "--recipe",
+        "ssh-tunnel",
+        "ssh.fungi.md",
+    ]);
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn rejects_service_apply_without_manifest_or_recipe() {
+    let result = FungiArgs::try_parse_from(["fungi", "service", "apply"]);
+
+    assert!(result.is_err());
+}
+
+#[test]
 fn parses_service_recipe_show() {
     let args = FungiArgs::try_parse_from([
         "fungi",
