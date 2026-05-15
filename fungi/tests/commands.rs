@@ -592,6 +592,20 @@ fn parses_device_trust() {
 }
 
 #[test]
+fn parses_device_remove_by_name() {
+    let args = FungiArgs::try_parse_from(["fungi", "device", "remove", "nas"]).unwrap();
+
+    let Commands::Device(device_args) = args.command else {
+        panic!("expected device command");
+    };
+    let Some(DeviceCommands::Remove { device }) = device_args.command else {
+        panic!("expected device remove command");
+    };
+
+    assert_eq!(device, "nas");
+}
+
+#[test]
 fn parses_device_address_add() {
     let args = FungiArgs::try_parse_from([
         "fungi",
@@ -702,4 +716,5 @@ fn service_command_help_prefers_device_language() {
     assert!(!help.contains("--on"));
     assert!(!help.contains("--peer"));
     assert!(!help.contains("Peer ID"));
+    assert!(!help.contains("this node"));
 }

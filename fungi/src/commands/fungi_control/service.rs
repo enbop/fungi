@@ -1,9 +1,12 @@
-use std::io::{self, Write};
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use std::process::Command;
+use std::{
+    collections::BTreeSet,
+    io::{self, Write},
+};
 
 use clap::{Args, Subcommand};
-use fungi_config::{FungiConfig, FungiDir, paths::FungiPaths};
+use fungi_config::{FungiConfig, FungiDir, paths::FungiPaths, service_cache::ServiceCache};
 use fungi_daemon::{
     CatalogService, RuntimeKind, ServiceAccess, ServiceExposeUsageKind, ServiceInstance,
     ServicePortProtocol, parse_service_manifest_yaml, service_manifest_with_instance_name,
@@ -49,7 +52,7 @@ pub struct ServiceArgs {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum ServiceCommands {
-    /// List services on this node or another device
+    /// List services on this device or another device
     List {
         /// Show detailed output
         #[arg(short, long, default_value_t = false)]
@@ -58,7 +61,7 @@ pub enum ServiceCommands {
         #[arg(long, default_value_t = false)]
         refresh: bool,
     },
-    /// Apply a service file to this node or another device
+    /// Apply a service file to this device or another device
     Apply {
         /// Service instance target to create or update
         #[arg(value_name = "NAME[@DEVICE]")]
@@ -107,11 +110,11 @@ pub enum ServiceCommands {
     Disconnect { service: String },
     /// Change a service setting
     Set { service: String, setting: String },
-    /// Start a service by name on this node or another device
+    /// Start a service by name on this device or another device
     Start { name: String },
-    /// Stop a service by name on this node or another device
+    /// Stop a service by name on this device or another device
     Stop { name: String },
-    /// Inspect a service by name on this node or another device
+    /// Inspect a service by name on this device or another device
     Inspect {
         name: String,
         /// Show detailed output
@@ -124,7 +127,7 @@ pub enum ServiceCommands {
         #[arg(long)]
         tail: Option<String>,
     },
-    /// Remove a service by name from this node or another device
+    /// Remove a service by name from this device or another device
     Remove {
         name: String,
         /// Remove only the local cached record for a device service
@@ -192,7 +195,13 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                     Err(error) => fatal_grpc(error),
                 }
             } else {
-                print_service_overview(&mut client, verbose, service_args.refresh || refresh).await;
+                print_service_overview(
+                    &args,
+                    &mut client,
+                    verbose,
+                    service_args.refresh || refresh,
+                )
+                .await;
             }
         }
         ServiceCommands::Apply {
@@ -416,7 +425,12 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                         refresh_remote_device_services(&mut client, &device.peer_id).await;
                     }
                     Err(error) => {
-                        if cached_device_service_exists(&mut client, &device.peer_id, &target.name)
+                        if is_remote_device_reachability_error(&error)
+                            && cached_device_service_exists(
+                                &mut client,
+                                &device.peer_id,
+                                &target.name,
+                            )
                             .await
                         {
                             eprintln!(
@@ -912,7 +926,7 @@ fn print_recipe_add_review(
     println!("Source: {}", summary.source_label);
     println!("Release: {}", summary.release_version);
     println!("Service name: {}", service_name);
-    println!("Target: {}", target_device_name.unwrap_or("local node"));
+    println!("Target: {}", target_device_name.unwrap_or("this device"));
     println!(
         "Audit paths: run `fungi service recipe show {}` to inspect cached and remote recipe assets.",
         summary.id
@@ -1152,9 +1166,20 @@ fn print_remote_service_result(action: &str, resp: RemoteServiceControlResponse)
     }
 }
 
+fn is_remote_device_reachability_error(error: &tonic::Status) -> bool {
+    let message = error.message();
+    message.contains("Failed to open service-control stream")
+        || message.contains("Failed to write service-control request")
+        || message.contains("Failed to read service-control response")
+        || message.contains("No connections available to peer")
+}
+
 async fn refresh_remote_device_services(client: &mut RpcClient, peer_id: &str) {
+    if let Err(error) = fetch_remote_managed_services(client, peer_id).await {
+        eprintln!("Warning: failed to refresh remote managed service cache: {error}");
+    }
     if let Err(error) = fetch_remote_services(client, peer_id).await {
-        eprintln!("Warning: failed to refresh remote service cache: {error}");
+        eprintln!("Warning: failed to refresh remote published service cache: {error}");
     }
 }
 
@@ -1224,7 +1249,12 @@ async fn find_local_service(client: &mut RpcClient, service: &str) -> Option<Ser
         .find(|instance| instance.name == service || instance.id == service)
 }
 
-async fn print_service_overview(client: &mut RpcClient, verbose: bool, refresh: bool) {
+async fn print_service_overview(
+    args: &CommonArgs,
+    client: &mut RpcClient,
+    verbose: bool,
+    refresh: bool,
+) {
     let mut rows = Vec::new();
 
     let local_services = list_local_service_instances(client).await;
@@ -1237,39 +1267,90 @@ async fn print_service_overview(client: &mut RpcClient, verbose: bool, refresh: 
     let devices = list_saved_devices(client).await;
     if refresh {
         for device in devices {
-            let services = match fetch_remote_services(client, &device.peer_id).await {
-                Ok(services) => services,
-                Err(error) => {
-                    rows.push(ServiceOverviewRow::remote_unavailable(&device, error));
-                    continue;
-                }
-            };
-
             let attached = list_accesses(client, &device.peer_id).await;
-            rows.extend(services.into_iter().map(|service| {
-                ServiceOverviewRow::from_remote_service(service, &device, &attached, verbose, false)
-            }));
+            let managed = fetch_remote_managed_services(client, &device.peer_id).await;
+            let published = fetch_remote_services(client, &device.peer_id).await;
+            add_remote_service_overview_rows(
+                &mut rows, &device, &attached, managed, published, verbose, false,
+            );
         }
     } else {
         for device in devices {
             let accesses = list_accesses(client, &device.peer_id).await;
-            let cached_services = fetch_cached_remote_services(client, &device.peer_id).await;
-            if cached_services.is_empty() {
+            let cached_published = load_cached_remote_services(args, &device.peer_id);
+            let cached_managed = load_cached_remote_managed_services(args, &device.peer_id);
+            if cached_published.is_none() && cached_managed.is_none() {
                 rows.extend(accesses.into_iter().map(|access| {
                     ServiceOverviewRow::from_cached_access(access, &device, verbose)
                 }));
             } else {
-                rows.extend(cached_services.into_iter().map(|service| {
-                    ServiceOverviewRow::from_remote_service(
-                        service, &device, &accesses, verbose, true,
-                    )
-                }));
+                add_cached_remote_service_overview_rows(
+                    &mut rows,
+                    &device,
+                    &accesses,
+                    cached_managed.unwrap_or_default(),
+                    cached_published.unwrap_or_default(),
+                    verbose,
+                    true,
+                );
             }
         }
     }
 
     rows.sort_by(|left, right| left.reference.cmp(&right.reference));
     print_service_overview_rows(&rows);
+}
+
+fn add_remote_service_overview_rows(
+    rows: &mut Vec<ServiceOverviewRow>,
+    device: &DeviceInfo,
+    attached: &[ServiceAccess],
+    managed: Result<Vec<ServiceInstance>, String>,
+    published: Result<Vec<RemoteService>, String>,
+    verbose: bool,
+    cached: bool,
+) {
+    match (managed, published) {
+        (Err(managed_error), Err(published_error)) => {
+            rows.push(ServiceOverviewRow::remote_unavailable(
+                device,
+                format!("{managed_error}; {published_error}"),
+            ));
+        }
+        (managed, published) => {
+            let managed = managed.unwrap_or_default();
+            let published = published.unwrap_or_default();
+            add_cached_remote_service_overview_rows(
+                rows, device, attached, managed, published, verbose, cached,
+            );
+        }
+    }
+}
+
+fn add_cached_remote_service_overview_rows(
+    rows: &mut Vec<ServiceOverviewRow>,
+    device: &DeviceInfo,
+    attached: &[ServiceAccess],
+    managed: Vec<ServiceInstance>,
+    published: Vec<RemoteService>,
+    verbose: bool,
+    cached: bool,
+) {
+    let mut published_names = BTreeSet::new();
+    for service in published {
+        published_names.insert(service.service_name.clone());
+        rows.push(ServiceOverviewRow::from_remote_service(
+            service, device, attached, verbose, cached,
+        ));
+    }
+
+    for service in managed {
+        if !published_names.contains(&service.name) {
+            rows.push(ServiceOverviewRow::from_remote_managed_service(
+                service, device, attached, verbose,
+            ));
+        }
+    }
 }
 
 async fn list_local_service_instances(client: &mut RpcClient) -> Vec<ServiceInstance> {
@@ -1290,18 +1371,24 @@ async fn list_remote_service_instances(
     client: &mut RpcClient,
     peer_id: &str,
 ) -> Vec<ServiceInstance> {
+    match fetch_remote_managed_services(client, peer_id).await {
+        Ok(services) => services,
+        Err(error) => fatal(error),
+    }
+}
+
+async fn fetch_remote_managed_services(
+    client: &mut RpcClient,
+    peer_id: &str,
+) -> Result<Vec<ServiceInstance>, String> {
     let req = ListDeviceServicesRequest {
         device_id: peer_id.to_string(),
         cached: false,
     };
     match client.list_device_managed_services(Request::new(req)).await {
-        Ok(resp) => {
-            match serde_json::from_str::<Vec<ServiceInstance>>(&resp.into_inner().services_json) {
-                Ok(services) => services,
-                Err(error) => fatal(format!("Failed to decode remote service list: {error}")),
-            }
-        }
-        Err(error) => fatal_grpc(error),
+        Ok(resp) => serde_json::from_str::<Vec<ServiceInstance>>(&resp.into_inner().services_json)
+            .map_err(|error| format!("Failed to decode remote managed services: {error}")),
+        Err(error) => Err(error.message().to_string()),
     }
 }
 
@@ -1361,6 +1448,53 @@ async fn fetch_cached_remote_managed_services(
         }
         Err(error) => fatal_grpc(error),
     }
+}
+
+fn load_cached_remote_services(args: &CommonArgs, peer_id: &str) -> Option<Vec<RemoteService>> {
+    let cache = ServiceCache::apply_published_services_from_dir(&args.fungi_dir())
+        .unwrap_or_else(|error| fatal(format!("Failed to load remote service cache: {error}")));
+    let Some(services_json) = cache
+        .get_device_services_json(peer_id)
+        .unwrap_or_else(|error| fatal(format!("Failed to read remote service cache: {error}")))
+    else {
+        return None;
+    };
+
+    Some(
+        serde_json::from_str::<Vec<RemoteService>>(&services_json).unwrap_or_else(|error| {
+            fatal(format!("Failed to decode cached remote services: {error}"))
+        }),
+    )
+}
+
+fn load_cached_remote_managed_services(
+    args: &CommonArgs,
+    peer_id: &str,
+) -> Option<Vec<ServiceInstance>> {
+    let cache =
+        ServiceCache::apply_managed_services_from_dir(&args.fungi_dir()).unwrap_or_else(|error| {
+            fatal(format!(
+                "Failed to load remote managed service cache: {error}"
+            ))
+        });
+    let Some(services_json) = cache
+        .get_device_services_json(peer_id)
+        .unwrap_or_else(|error| {
+            fatal(format!(
+                "Failed to read remote managed service cache: {error}"
+            ))
+        })
+    else {
+        return None;
+    };
+
+    Some(
+        serde_json::from_str::<Vec<ServiceInstance>>(&services_json).unwrap_or_else(|error| {
+            fatal(format!(
+                "Failed to decode cached remote managed services: {error}"
+            ))
+        }),
+    )
 }
 
 async fn cached_device_service_exists(
@@ -2279,6 +2413,64 @@ impl ServiceOverviewRow {
         }
     }
 
+    fn from_remote_managed_service(
+        service: ServiceInstance,
+        device: &DeviceInfo,
+        attached: &[ServiceAccess],
+        verbose: bool,
+    ) -> Self {
+        let device_name = device_display_name(device);
+        let attached_access = attached
+            .iter()
+            .find(|access| access.service_name == service.name);
+        let entries = match attached_access {
+            Some(access) => access
+                .endpoints
+                .iter()
+                .map(|endpoint| {
+                    let remote_port = format_remote_port(endpoint.remote_port);
+                    if verbose {
+                        format!(
+                            "{} {}:{} -> {}:{}",
+                            endpoint.name,
+                            endpoint.local_host,
+                            endpoint.local_port,
+                            device_name,
+                            remote_port
+                        )
+                    } else {
+                        format!(
+                            "{} {}:{} -> {}:{}",
+                            endpoint.name,
+                            endpoint.local_host,
+                            endpoint.local_port,
+                            device_name,
+                            remote_port
+                        )
+                    }
+                })
+                .collect(),
+            None => service
+                .ports
+                .iter()
+                .map(|port| {
+                    let name = port.name.clone().unwrap_or_else(|| "main".to_string());
+                    format!("{name} remote:{}:{}", device_name, port.service_port)
+                })
+                .collect(),
+        };
+
+        Self {
+            reference: format!("{}@{}", service.name, device_name),
+            device: device_name,
+            kind: "remote".to_string(),
+            usage: local_service_usage_label(&service),
+            state: service.status.state,
+            entries,
+            note: attached_access.map(|_| "attached".to_string()),
+        }
+    }
+
     fn remote_unavailable(device: &DeviceInfo, error: String) -> Self {
         let device_name = device_display_name(device);
         Self {
@@ -2703,6 +2895,38 @@ mod tests {
     }
 
     #[test]
+    fn remote_managed_overview_row_keeps_stopped_state() {
+        let mut instance = service_instance(vec![service_port("web", 28080)]);
+        instance.status = ServiceStatus {
+            state: "exited".to_string(),
+            running: false,
+        };
+        let device = device_info("nas");
+
+        let row = ServiceOverviewRow::from_remote_managed_service(instance, &device, &[], false);
+
+        assert_eq!(row.reference, "demo@nas");
+        assert_eq!(row.device, "nas");
+        assert_eq!(row.kind, "remote");
+        assert_eq!(row.usage, "web");
+        assert_eq!(row.state, "exited");
+        assert_eq!(row.entries, vec!["web remote:nas:80"]);
+    }
+
+    #[test]
+    fn remove_fallback_only_handles_reachability_errors() {
+        let unreachable = tonic::Status::internal(
+            "Failed to remove remote service: Failed to open service-control stream to peer abc: No connections available to peer abc",
+        );
+        let execution_failed = tonic::Status::internal(
+            "Failed to remove remote service: execution_failed: container is starting",
+        );
+
+        assert!(is_remote_device_reachability_error(&unreachable));
+        assert!(!is_remote_device_reachability_error(&execution_failed));
+    }
+
+    #[test]
     fn parse_dynamic_thing_target_supports_device_and_entry() {
         let target = parse_dynamic_thing_target("filebrowser@nas/admin".to_string()).unwrap();
 
@@ -2827,6 +3051,21 @@ publish:
                 state: "running".to_string(),
                 running: true,
             },
+        }
+    }
+
+    fn device_info(name: &str) -> DeviceInfo {
+        DeviceInfo {
+            peer_id: "peer".to_string(),
+            name: name.to_string(),
+            hostname: String::new(),
+            os: String::new(),
+            public_ip: String::new(),
+            private_ips: Vec::new(),
+            created_at: 0,
+            last_connected: 0,
+            version: String::new(),
+            multiaddrs: Vec::new(),
         }
     }
 

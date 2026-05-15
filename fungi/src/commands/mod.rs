@@ -82,7 +82,7 @@ pub enum Commands {
     /// Manage runtime safety boundary settings
     #[command(subcommand, visible_alias = "sec")]
     Security(fungi_control::SecurityCommands),
-    /// Manage services on this node or your devices
+    /// Manage services on this device or another device
     #[command(visible_alias = "svc")]
     Service(fungi_control::ServiceArgs),
     /// Browse published remote services

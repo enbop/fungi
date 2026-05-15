@@ -271,6 +271,27 @@ fn cli_can_create_and_access_remote_tcp_tunnel_service() {
     assert_eq!(&response, b"pong");
 
     server.join().unwrap();
+
+    run_cli(a.path(), ["service", "stop", "test-tcp@b"]);
+    let output = run_cli(a.path(), ["service"]);
+    assert!(
+        output.stdout.contains("test-tcp@b"),
+        "stopped remote service should remain visible\n{}",
+        output.stdout
+    );
+    assert!(
+        output.stdout.contains("stopped"),
+        "stopped remote service should keep its state\n{}",
+        output.stdout
+    );
+
+    run_cli(a.path(), ["device", "remove", "b"]);
+    let output = run_cli(a.path(), ["device"]);
+    assert!(
+        !output.stdout.contains(" - b "),
+        "device remove should accept saved device names\n{}",
+        output.stdout
+    );
 }
 
 fn init_fungi_dir(path: &std::path::Path, rpc_port: u16, swarm_port: u16) {
