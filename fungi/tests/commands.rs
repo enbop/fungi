@@ -15,46 +15,50 @@ fn parses_service_apply_with_device() {
         "--device",
         "laptop",
         "apply",
+        "demo",
         "demo.fungi.md",
     ])
     .unwrap();
 
     let Commands::Service(ServiceArgs {
         device,
-        command: Some(ServiceCommands::Apply { manifest, name, .. }),
+        command: Some(ServiceCommands::Apply {
+            target, manifest, ..
+        }),
         ..
     }) = args.command
     else {
         panic!("expected service apply command");
     };
 
+    assert_eq!(target.as_deref(), Some("demo"));
     assert_eq!(manifest.as_deref(), Some("demo.fungi.md"));
-    assert!(name.is_none());
     assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "laptop"));
 }
 
 #[test]
-fn parses_service_apply_name_override() {
+fn parses_service_apply_target_with_manifest() {
     let args = FungiArgs::try_parse_from([
         "fungi",
         "service",
         "apply",
-        "webdav.fungi.md",
-        "--name",
         "docs-webdav",
+        "webdav.fungi.md",
     ])
     .unwrap();
 
     let Commands::Service(ServiceArgs {
-        command: Some(ServiceCommands::Apply { manifest, name, .. }),
+        command: Some(ServiceCommands::Apply {
+            target, manifest, ..
+        }),
         ..
     }) = args.command
     else {
         panic!("expected service apply command");
     };
 
+    assert_eq!(target.as_deref(), Some("docs-webdav"));
     assert_eq!(manifest.as_deref(), Some("webdav.fungi.md"));
-    assert_eq!(name.as_deref(), Some("docs-webdav"));
 }
 
 #[test]
@@ -67,11 +71,11 @@ fn parses_migrate_command() {
 }
 
 #[test]
-fn rejects_service_apply_reference_then_manifest_sugar() {
+fn parses_service_apply_reference_then_manifest() {
     let result =
         FungiArgs::try_parse_from(["fungi", "service", "apply", "ssh@nas", "ssh.service.yaml"]);
 
-    assert!(result.is_err());
+    assert!(result.is_ok());
 }
 
 #[test]
@@ -79,13 +83,10 @@ fn parses_service_apply_recipe_flags() {
     let args = FungiArgs::try_parse_from([
         "fungi",
         "service",
-        "--device",
-        "nas",
         "apply",
+        "home-ssh@nas",
         "--recipe",
         "ssh-tunnel",
-        "--name",
-        "home-ssh",
         "--refresh",
         "--dry-run",
         "--start",
@@ -97,9 +98,10 @@ fn parses_service_apply_recipe_flags() {
         device,
         command:
             Some(ServiceCommands::Apply {
+                target,
                 manifest,
-                name,
                 recipe,
+                create,
                 refresh,
                 dry_run,
                 start,
@@ -111,10 +113,11 @@ fn parses_service_apply_recipe_flags() {
         panic!("expected service apply command");
     };
 
-    assert!(matches!(device.device, Some(DeviceInput::Name(name)) if name == "nas"));
+    assert!(device.device.is_none());
+    assert_eq!(target.as_deref(), Some("home-ssh@nas"));
     assert!(manifest.is_none());
-    assert_eq!(name.as_deref(), Some("home-ssh"));
     assert_eq!(recipe.as_deref(), Some("ssh-tunnel"));
+    assert!(!create);
     assert!(refresh);
     assert!(dry_run);
     assert!(start);
@@ -127,6 +130,7 @@ fn rejects_service_apply_recipe_with_manifest() {
         "fungi",
         "service",
         "apply",
+        "home-ssh",
         "--recipe",
         "ssh-tunnel",
         "ssh.fungi.md",
@@ -136,10 +140,35 @@ fn rejects_service_apply_recipe_with_manifest() {
 }
 
 #[test]
-fn rejects_service_apply_without_manifest_or_recipe() {
+fn parses_service_apply_without_args_for_runtime_usage_message() {
     let result = FungiArgs::try_parse_from(["fungi", "service", "apply"]);
 
-    assert!(result.is_err());
+    assert!(result.is_ok());
+}
+
+#[test]
+fn parses_service_apply_create_without_target() {
+    let args = FungiArgs::try_parse_from(["fungi", "service", "apply", "--create"]).unwrap();
+
+    let Commands::Service(ServiceArgs {
+        command:
+            Some(ServiceCommands::Apply {
+                target,
+                manifest,
+                recipe,
+                create,
+                ..
+            }),
+        ..
+    }) = args.command
+    else {
+        panic!("expected service apply command");
+    };
+
+    assert!(target.is_none());
+    assert!(manifest.is_none());
+    assert!(recipe.is_none());
+    assert!(create);
 }
 
 #[test]

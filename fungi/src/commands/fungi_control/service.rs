@@ -6,7 +6,7 @@ use clap::{Args, Subcommand};
 use fungi_config::{FungiConfig, FungiDir, paths::FungiPaths};
 use fungi_daemon::{
     CatalogService, RuntimeKind, ServiceAccess, ServiceExposeUsageKind, ServiceInstance,
-    ServicePortProtocol, parse_service_manifest_yaml, service_manifest_with_name_override,
+    ServicePortProtocol, parse_service_manifest_yaml, service_manifest_with_instance_name,
 };
 use fungi_daemon_grpc::{
     Request,
@@ -60,19 +60,18 @@ pub enum ServiceCommands {
     },
     /// Apply a service file to this node or another device
     Apply {
+        /// Service instance target to create or update
+        #[arg(value_name = "NAME[@DEVICE]")]
+        target: Option<String>,
         /// Path to a .fungi.md service file
-        #[arg(
-            value_name = "SERVICE_FILE",
-            required_unless_present = "recipe",
-            conflicts_with = "recipe"
-        )]
+        #[arg(value_name = "SERVICE_FILE", conflicts_with_all = ["recipe", "create"])]
         manifest: Option<String>,
-        /// Override the service instance name from the service file
-        #[arg(long)]
-        name: Option<String>,
         /// Apply a service from an official recipe ID instead of a local file
-        #[arg(long, conflicts_with = "manifest")]
+        #[arg(long, conflicts_with_all = ["manifest", "create"])]
         recipe: Option<String>,
+        /// Create a simple service interactively
+        #[arg(long, conflicts_with_all = ["manifest", "recipe"], default_value_t = false)]
+        create: bool,
         /// Refresh the official recipe index before resolving the recipe
         #[arg(long, default_value_t = false)]
         refresh: bool,
@@ -161,6 +160,15 @@ pub enum ServiceRecipeCommands {
 }
 
 pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
+    let command = service_args
+        .command
+        .clone()
+        .unwrap_or(ServiceCommands::List {
+            verbose: false,
+            refresh: false,
+        });
+    validate_service_command_before_connect(&command);
+
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
         None => fatal("Cannot connect to Fungi daemon. Is it running?"),
@@ -170,11 +178,6 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
         Ok(device) => device,
         Err(error) => fatal(error),
     };
-
-    let command = service_args.command.unwrap_or(ServiceCommands::List {
-        verbose: false,
-        refresh: false,
-    });
 
     match command {
         ServiceCommands::List { verbose, refresh } => {
@@ -193,25 +196,53 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             }
         }
         ServiceCommands::Apply {
+            target,
             manifest,
-            name,
             recipe,
+            create,
             refresh,
             dry_run,
             start,
             yes,
         } => {
+            if !create && target.is_none() {
+                fatal(
+                    "`fungi service apply` requires a service target. Use `fungi service apply <name[@device]> <file>`, `fungi service apply <name[@device]> --recipe <id>`, or `fungi service apply --create`.",
+                );
+            }
             if manifest.is_some() && recipe.is_some() {
                 fatal(
                     "`fungi service apply` accepts either a service file path or --recipe <id>, not both",
                 );
             }
+            if create {
+                if manifest.is_some() || recipe.is_some() {
+                    fatal(
+                        "`fungi service apply --create` cannot be combined with a service file or --recipe <id>",
+                    );
+                }
+                let target = target.map(parse_service_reference);
+                let (service_name, target_device, mut created) =
+                    create_tcp_service_interactively(target, start);
+                let device = resolve_service_device_target(&args, device, target_device);
+                apply_manifest_instance_name(&mut created, &service_name);
+                if dry_run {
+                    print_service_apply_dry_run(&created, &args);
+                    return;
+                }
+                apply_created_service(&mut client, &args, device, created, yes).await;
+                return;
+            }
+            let target = parse_service_reference(target.expect("apply target is present"));
+            reject_service_entry(&target, "apply");
+            let device = resolve_service_device_target(&args, device, target.device);
+            let service_name = target.name;
             if let Some(recipe_id) = recipe {
                 apply_service_from_recipe(
                     &mut client,
                     &args,
                     device,
-                    name,
+                    service_name,
                     recipe_id,
                     refresh,
                     dry_run,
@@ -222,68 +253,18 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                 return;
             }
             let Some(manifest_path) = manifest else {
-                fatal("`fungi service apply` requires a service file path or --recipe <id>");
+                fatal(
+                    "`fungi service apply` requires a service file path, --recipe <id>, or --create",
+                );
             };
             let mut created = read_manifest_yaml_file(&manifest_path);
             created.start_now = start;
-            apply_manifest_name_override(&mut created, name.as_deref());
+            apply_manifest_instance_name(&mut created, &service_name);
             if dry_run {
                 print_service_apply_dry_run(&created, &args);
                 return;
             }
-            confirm_apply_if_existing(&mut client, device.as_ref(), &created, &args, yes).await;
-            if let Some(device) = device {
-                print_target_device(&device);
-                let req = RemotePullServiceRequest {
-                    peer_id: device.peer_id.clone(),
-                    manifest_yaml: created.manifest_yaml,
-                };
-                match client.remote_pull_service(Request::new(req)).await {
-                    Ok(resp) => {
-                        let response = resp.into_inner();
-                        let service_name = response_service_name(&response);
-                        print_remote_service_applied(response);
-                        if created.start_now {
-                            let req = RemoteServiceNameRequest {
-                                peer_id: device.peer_id.clone(),
-                                name: service_name.clone(),
-                            };
-                            match client.remote_start_service(Request::new(req)).await {
-                                Ok(resp) => {
-                                    print_remote_service_result("started", resp.into_inner())
-                                }
-                                Err(error) => fatal_grpc(error),
-                            }
-                        }
-                        refresh_remote_device_services(&mut client, &device.peer_id).await;
-                        print_remote_apply_next_steps(&service_name, &device, created.start_now);
-                    }
-                    Err(error) => fatal_grpc(error),
-                }
-            } else {
-                let req = PullServiceRequest {
-                    manifest_yaml: created.manifest_yaml,
-                    manifest_base_dir: created.manifest_base_dir,
-                };
-                match client.pull_service(Request::new(req)).await {
-                    Ok(resp) => {
-                        let instance = decode_service_instance(resp.into_inner());
-                        let name = instance.name.clone();
-                        print_service_instance_value(instance, false);
-                        if created.start_now {
-                            let req = ServiceNameRequest {
-                                runtime: 0,
-                                name: name.clone(),
-                            };
-                            match client.start_service(Request::new(req)).await {
-                                Ok(_) => println!("Service started"),
-                                Err(e) => fatal_grpc(e),
-                            }
-                        }
-                    }
-                    Err(e) => fatal_grpc(e),
-                }
-            }
+            apply_created_service(&mut client, &args, device, created, yes).await;
         }
         ServiceCommands::Recipe { command } => {
             if device.is_some() {
@@ -584,6 +565,31 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
     }
 }
 
+fn validate_service_command_before_connect(command: &ServiceCommands) {
+    if let ServiceCommands::Apply {
+        target,
+        manifest,
+        recipe,
+        create,
+        ..
+    } = command
+    {
+        if *create {
+            return;
+        }
+        if target.is_none() {
+            fatal(
+                "`fungi service apply` requires a service target. Use `fungi service apply <name[@device]> <file>`, `fungi service apply <name[@device]> --recipe <id>`, or `fungi service apply --create` to create interactively.",
+            );
+        }
+        if manifest.is_none() && recipe.is_none() {
+            fatal(
+                "`fungi service apply` requires a service file path or --recipe <id>. Use --create to create interactively.",
+            );
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DynamicThingInvocation {
     pub target: DynamicThingTarget,
@@ -719,7 +725,7 @@ async fn apply_service_from_recipe(
     client: &mut RpcClient,
     args: &CommonArgs,
     scoped_device: Option<super::shared::ResolvedPeerTarget>,
-    requested_name: Option<String>,
+    service_name: String,
     recipe_id: String,
     refresh: bool,
     dry_run: bool,
@@ -728,10 +734,9 @@ async fn apply_service_from_recipe(
 ) {
     let device = scoped_device;
     let target_device_name = device.as_ref().map(resolved_device_display_name);
-    let requested_service_name = requested_name.unwrap_or_default();
     let req = ResolveRecipeRequest {
         recipe_id,
-        service_name: requested_service_name.clone(),
+        service_name: service_name.clone(),
         peer_id: device
             .as_ref()
             .map(|device| device.peer_id.clone())
@@ -744,11 +749,6 @@ async fn apply_service_from_recipe(
         Err(error) => fatal_grpc(error),
     };
     let detail = require_recipe_detail(resolved.detail);
-    let service_name = if requested_service_name.trim().is_empty() {
-        recipe_summary(&detail).id.clone()
-    } else {
-        requested_service_name
-    };
 
     if dry_run {
         let created = CreatedServiceManifest {
@@ -986,6 +986,63 @@ fn print_remote_apply_next_steps(
         println!("Apply finished without --start.");
         println!("If this is a new or stopped service, start it when ready:");
         println!("  fungi service start {target}");
+    }
+}
+
+async fn apply_created_service(
+    client: &mut RpcClient,
+    args: &CommonArgs,
+    device: Option<super::shared::ResolvedPeerTarget>,
+    created: CreatedServiceManifest,
+    yes: bool,
+) {
+    confirm_apply_if_existing(client, device.as_ref(), &created, args, yes).await;
+    if let Some(device) = device {
+        print_target_device(&device);
+        let req = RemotePullServiceRequest {
+            peer_id: device.peer_id.clone(),
+            manifest_yaml: created.manifest_yaml,
+        };
+        match client.remote_pull_service(Request::new(req)).await {
+            Ok(resp) => {
+                let response = resp.into_inner();
+                let applied_service_name = response_service_name(&response);
+                print_remote_service_applied(response);
+                if created.start_now {
+                    let req = RemoteServiceNameRequest {
+                        peer_id: device.peer_id.clone(),
+                        name: applied_service_name.clone(),
+                    };
+                    match client.remote_start_service(Request::new(req)).await {
+                        Ok(resp) => print_remote_service_result("started", resp.into_inner()),
+                        Err(error) => fatal_grpc(error),
+                    }
+                }
+                refresh_remote_device_services(client, &device.peer_id).await;
+                print_remote_apply_next_steps(&applied_service_name, &device, created.start_now);
+            }
+            Err(error) => fatal_grpc(error),
+        }
+    } else {
+        let req = PullServiceRequest {
+            manifest_yaml: created.manifest_yaml,
+            manifest_base_dir: created.manifest_base_dir,
+        };
+        match client.pull_service(Request::new(req)).await {
+            Ok(resp) => {
+                let instance = decode_service_instance(resp.into_inner());
+                let name = instance.name.clone();
+                print_service_instance_value(instance, false);
+                if created.start_now {
+                    let req = ServiceNameRequest { runtime: 0, name };
+                    match client.start_service(Request::new(req)).await {
+                        Ok(_) => println!("Service started"),
+                        Err(error) => fatal_grpc(error),
+                    }
+                }
+            }
+            Err(error) => fatal_grpc(error),
+        }
     }
 }
 
@@ -1658,6 +1715,76 @@ pub(crate) fn read_manifest_yaml_file(path: &str) -> CreatedServiceManifest {
     }
 }
 
+fn create_tcp_service_interactively(
+    target: Option<DynamicThingTarget>,
+    start_flag: bool,
+) -> (String, Option<DeviceInput>, CreatedServiceManifest) {
+    if let Some(target) = &target {
+        reject_service_entry(target, "apply");
+    }
+    let service_name = match target.as_ref() {
+        Some(target) => target.name.clone(),
+        None => prompt_required("Service instance name"),
+    };
+    let target_device = match target {
+        Some(target) => target.device,
+        None => {
+            let value = prompt("Target device (blank for this device)");
+            let value = value.trim();
+            if value.is_empty() {
+                None
+            } else {
+                Some(
+                    value
+                        .parse::<DeviceInput>()
+                        .unwrap_or_else(|error| fatal(format!("Invalid target device: {error}"))),
+                )
+            }
+        }
+    };
+    let host = prompt_with_default("Local host on target device", "127.0.0.1");
+    let port = prompt_required("Local TCP port")
+        .parse::<u16>()
+        .unwrap_or_else(|error| fatal(format!("Invalid TCP port: {error}")));
+    if port == 0 {
+        fatal("Local TCP port must be greater than 0")
+    }
+    let client_kind = prompt_with_default("Client kind (raw, ssh, web, webdav)", "raw");
+    let default_entry = match client_kind.trim().to_ascii_lowercase().as_str() {
+        "ssh" => "ssh",
+        "web" => "http",
+        "webdav" => "webdav",
+        _ => "main",
+    };
+    let entry = prompt_with_default("Entry name", default_entry);
+    let client_path = if client_kind.trim().eq_ignore_ascii_case("web") {
+        Some(prompt_with_default("Web path", "/"))
+    } else {
+        None
+    };
+    let start_now = start_flag || prompt_yes_no_default("Start after apply? [Y/n]", true);
+    let mut manifest_yaml = format!(
+        "fungi: service/v1\nid: external-tcp\n\npublish:\n  {}:\n    tcp:\n      host: {}\n      port: {}\n    client:\n      kind: {}\n",
+        yaml_key(&entry),
+        yaml_scalar(&host),
+        port,
+        yaml_scalar(&client_kind)
+    );
+    if let Some(path) = client_path {
+        manifest_yaml.push_str(&format!("      path: {}\n", yaml_scalar(&path)));
+    }
+
+    (
+        service_name,
+        target_device,
+        CreatedServiceManifest {
+            manifest_yaml,
+            manifest_base_dir: String::new(),
+            start_now,
+        },
+    )
+}
+
 fn manifest_base_dir_path(created: &CreatedServiceManifest) -> std::path::PathBuf {
     if created.manifest_base_dir.trim().is_empty() {
         std::path::PathBuf::from(".")
@@ -1750,14 +1877,10 @@ fn wasmtime_run_mode_label(mode: fungi_daemon::ServiceRunMode) -> &'static str {
     }
 }
 
-fn apply_manifest_name_override(created: &mut CreatedServiceManifest, service_name: Option<&str>) {
-    let Some(service_name) = service_name.map(str::trim).filter(|name| !name.is_empty()) else {
-        return;
-    };
-
+fn apply_manifest_instance_name(created: &mut CreatedServiceManifest, service_name: &str) {
     created.manifest_yaml =
-        service_manifest_with_name_override(&created.manifest_yaml, service_name)
-            .unwrap_or_else(|error| fatal(format!("Failed to override service name: {error}")));
+        service_manifest_with_instance_name(&created.manifest_yaml, service_name)
+            .unwrap_or_else(|error| fatal(format!("Failed to set service instance name: {error}")));
 }
 
 fn manifest_name_and_runtime(
@@ -1870,6 +1993,32 @@ fn prompt(label: &str) -> String {
         .read_line(&mut value)
         .unwrap_or_else(|error| fatal(format!("Failed to read input: {error}")));
     value
+}
+
+fn prompt_required(label: &str) -> String {
+    let value = prompt(label);
+    let value = value.trim();
+    if value.is_empty() {
+        fatal(format!("{label} is required"))
+    }
+    value.to_string()
+}
+
+fn yaml_key(value: &str) -> String {
+    let value = value.trim();
+    if !value.is_empty()
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
+    {
+        value.to_string()
+    } else {
+        yaml_scalar(value)
+    }
+}
+
+fn yaml_scalar(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
 }
 
 fn usage_kind_label(kind: ServiceExposeUsageKind) -> &'static str {
@@ -2584,11 +2733,11 @@ mod tests {
     }
 
     #[test]
-    fn apply_manifest_name_override_rewrites_fungi_service_name() {
+    fn apply_manifest_instance_name_sets_fungi_service_name() {
         let mut created = CreatedServiceManifest {
             manifest_yaml: r#"---
 fungi: service/v1
-name: webdav
+id: webdav
 publish:
   ssh:
     tcp:
@@ -2604,7 +2753,7 @@ publish:
             start_now: false,
         };
 
-        apply_manifest_name_override(&mut created, Some("documents"));
+        apply_manifest_instance_name(&mut created, "documents");
 
         let name = fungi_daemon::peek_service_manifest_name(&created.manifest_yaml).unwrap();
         assert_eq!(name, "documents");

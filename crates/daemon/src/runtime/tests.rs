@@ -436,7 +436,7 @@ spec:
 fn fungi_service_file_maps_docker_workload_port_and_workspace_mount() {
     let content = r#"---
 fungi: service/v1
-name: code-server
+id: code-server
 run:
   provider: docker
   source:
@@ -489,7 +489,7 @@ publish:
 fn fungi_service_file_maps_wasmtime_http_mode_to_serve_intent() {
     let content = r#"
 fungi: service/v1
-name: filebrowser-lite
+id: filebrowser-lite
 run:
   provider: wasmtime
   mode: http
@@ -520,7 +520,7 @@ publish:
 fn fungi_service_file_without_run_maps_to_external_tcp_service() {
     let content = r#"
 fungi: service/v1
-name: ssh-tunnel
+id: ssh-tunnel
 publish:
   ssh:
     tcp:
@@ -556,7 +556,7 @@ publish:
 fn fungi_service_file_rejects_mixed_client_metadata() {
     let content = r#"
 fungi: service/v1
-name: mixed
+id: mixed
 run:
   provider: docker
   source:
@@ -585,7 +585,7 @@ publish:
 fn fungi_service_yaml_allows_yaml_document_start_without_front_matter_close() {
     let content = r#"---
 fungi: service/v1
-name: ssh-tunnel
+id: ssh-tunnel
 publish:
   ssh:
     tcp:
@@ -606,7 +606,7 @@ publish:
 fn fungi_service_yaml_parse_error_keeps_field_detail() {
     let content = r#"
 fungi: service/v1
-name: broken
+id: broken
 publish:
   main:
     tcp: {}

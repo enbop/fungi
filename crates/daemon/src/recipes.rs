@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result, bail};
 use fungi_config::recipe_cache::{RecipeCache, validate_asset_name};
 use serde::Deserialize;
 
-use crate::{peek_service_manifest_name, service_manifest_with_name_override};
+use crate::{peek_service_manifest_name, service_manifest_with_instance_name};
 
 const OFFICIAL_RECIPE_SOURCE_LABEL: &str = "enbop/fungi-service-recipes";
 const OFFICIAL_RECIPE_LATEST_RELEASE_URL: &str =
@@ -116,7 +116,7 @@ pub async fn resolve_official_service_recipe(
         })?;
     let resolved_name = resolved_service_name(recipe, service_name);
     let resolved_manifest_yaml =
-        service_manifest_with_name_override(&manifest_yaml, &resolved_name).with_context(|| {
+        service_manifest_with_instance_name(&manifest_yaml, &resolved_name).with_context(|| {
             format!(
                 "failed to resolve recipe manifest: {}",
                 detail.cached_manifest_path.display()

@@ -71,6 +71,7 @@ fn service_apply_dry_run_prints_resolved_intent() {
         [
             "service",
             "apply",
+            "dry-run-wasi",
             "--dry-run",
             "--start",
             manifest_path.as_ref(),
@@ -121,7 +122,13 @@ fn cli_prefers_existing_dynamic_service_over_builtin_typo_hint() {
     let manifest_path = manifest.to_string_lossy();
     run_cli(
         home.path(),
-        ["service", "apply", "--start", manifest_path.as_ref()],
+        [
+            "service",
+            "apply",
+            "devices",
+            "--start",
+            manifest_path.as_ref(),
+        ],
     );
 
     let output = run_cli_result(home.path(), ["devices"], "");
@@ -132,6 +139,44 @@ fn cli_prefers_existing_dynamic_service_over_builtin_typo_hint() {
         output.stderr,
         "No web entry is available for this service\n"
     );
+}
+
+#[test]
+fn cli_can_interactively_create_local_tcp_service() {
+    let home = TempDir::new().unwrap();
+    let rpc = reserve_port();
+    let swarm = reserve_port();
+    let target = reserve_port();
+
+    init_fungi_dir(home.path(), rpc, swarm);
+    let _daemon = start_daemon(home.path());
+    let _peer = wait_peer_id(home.path());
+
+    let target_listener = TcpListener::bind(("127.0.0.1", target)).unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = target_listener.accept().unwrap();
+        let mut buf = [0_u8; 4];
+        stream.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"ping");
+        stream.write_all(b"pong").unwrap();
+    });
+
+    let input = format!("\n{target}\nraw\n\ny\n");
+    run_cli_with_input(
+        home.path(),
+        ["service", "apply", "created-raw", "--create", "--yes"],
+        &input,
+    );
+
+    let output = run_cli(home.path(), ["service", "connect", "created-raw"]);
+    let local_addr = output.stdout.trim();
+    let mut stream = connect_with_retry(&local_addr, Duration::from_secs(5));
+    stream.write_all(b"ping").unwrap();
+    let mut response = [0_u8; 4];
+    stream.read_exact(&mut response).unwrap();
+    assert_eq!(&response, b"pong");
+
+    server.join().unwrap();
 }
 
 #[test]
@@ -190,7 +235,6 @@ fn cli_can_create_and_access_remote_tcp_tunnel_service() {
             "--device",
             "b",
             "apply",
-            "--name",
             "test-tcp",
             "--start",
             manifest_path.as_ref(),
@@ -258,7 +302,7 @@ fn write_existing_tcp_service_manifest(
         format!(
             r#"---
 fungi: service/v1
-name: {name}
+id: {name}
 publish:
   main:
     tcp:
@@ -285,7 +329,7 @@ fn write_wasmtime_dry_run_manifest(dir: &std::path::Path) -> std::path::PathBuf 
         format!(
             r#"---
 fungi: service/v1
-name: dry-run-wasi
+id: dry-run-wasi
 run:
   provider: wasmtime
   source:
