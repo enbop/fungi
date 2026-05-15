@@ -296,10 +296,7 @@ struct FrontMatter<'a> {
 #[serde(deny_unknown_fields)]
 struct FungiServiceDocument {
     fungi: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
+    id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     instance: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -463,12 +460,7 @@ fn should_parse_as_fungi_service_yaml(content: &str) -> bool {
 
 impl FungiServiceDocument {
     fn definition_id(&self) -> Result<String> {
-        self.id
-            .as_deref()
-            .or(self.name.as_deref())
-            .map(|value| normalize_non_empty(value, "id"))
-            .transpose()?
-            .ok_or_else(|| anyhow::anyhow!("service file requires id"))
+        normalize_non_empty(&self.id, "id")
     }
 
     fn service_name(&self) -> Result<String> {
@@ -479,9 +471,6 @@ impl FungiServiceDocument {
     }
 
     fn set_instance_name(&mut self, service_name: String) {
-        if self.id.is_none() {
-            self.id = self.name.take();
-        }
         self.instance = Some(service_name);
     }
 
@@ -524,7 +513,6 @@ impl FungiServiceDocument {
         let FungiServiceDocument {
             fungi: _,
             id: _,
-            name: _,
             instance: _,
             run,
             publish,

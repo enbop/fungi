@@ -621,6 +621,27 @@ publish:
 }
 
 #[test]
+fn fungi_service_yaml_rejects_legacy_name_field() {
+    let content = r#"
+fungi: service/v1
+name: old-name
+publish:
+  main:
+    tcp:
+      port: 1080
+    client:
+      kind: raw
+"#;
+
+    let error = parse_service_manifest_yaml(content, Path::new("."), Path::new("/tmp/fungi-home"))
+        .expect_err("Fungi service files should require id instead of name");
+    let message = error.to_string();
+
+    assert!(message.contains("Failed to parse Fungi service YAML"));
+    assert!(message.contains("unknown field `name`"));
+}
+
+#[test]
 fn manifest_document_defaults_missing_host_port_to_auto() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1
