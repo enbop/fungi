@@ -625,12 +625,28 @@ fn service_apply_missing_source_message(target: Option<&str>) -> String {
 
 fn looks_like_service_file_path(value: &str) -> bool {
     let value = value.trim();
-    value.ends_with(".fungi.md")
-        || value.ends_with(".yaml")
-        || value.ends_with(".yml")
-        || value.contains('/')
-        || value.starts_with('.')
-        || value.starts_with('~')
+    let lower = value.to_ascii_lowercase();
+    lower.ends_with(".fungi.md")
+        || lower.ends_with(".yaml")
+        || lower.ends_with(".yml")
+        || value.starts_with('/')
+        || value.starts_with("~/")
+        || value.starts_with("./")
+        || value.starts_with("../")
+        || value.starts_with('\\')
+        || value.starts_with("~\\")
+        || value.starts_with(".\\")
+        || value.starts_with("..\\")
+        || value.contains('\\')
+        || looks_like_windows_drive_path(value)
+}
+
+fn looks_like_windows_drive_path(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'/' | b'\\')
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1304,10 +1320,19 @@ async fn print_service_overview(
             );
         }
     } else {
+        let published_cache = ServiceCache::apply_published_services_from_dir(&args.fungi_dir())
+            .unwrap_or_else(|error| fatal(format!("Failed to load remote service cache: {error}")));
+        let managed_cache = ServiceCache::apply_managed_services_from_dir(&args.fungi_dir())
+            .unwrap_or_else(|error| {
+                fatal(format!(
+                    "Failed to load remote managed service cache: {error}"
+                ))
+            });
         for device in devices {
             let accesses = list_accesses(client, &device.peer_id).await;
-            let cached_published = load_cached_remote_services(args, &device.peer_id);
-            let cached_managed = load_cached_remote_managed_services(args, &device.peer_id);
+            let cached_published = load_cached_remote_services(&published_cache, &device.peer_id);
+            let cached_managed =
+                load_cached_remote_managed_services(&managed_cache, &device.peer_id);
             if cached_published.is_none() && cached_managed.is_none() {
                 rows.extend(accesses.into_iter().map(|access| {
                     ServiceOverviewRow::from_cached_access(access, &device, verbose)
@@ -1479,9 +1504,7 @@ async fn fetch_cached_remote_managed_services(
     }
 }
 
-fn load_cached_remote_services(args: &CommonArgs, peer_id: &str) -> Option<Vec<RemoteService>> {
-    let cache = ServiceCache::apply_published_services_from_dir(&args.fungi_dir())
-        .unwrap_or_else(|error| fatal(format!("Failed to load remote service cache: {error}")));
+fn load_cached_remote_services(cache: &ServiceCache, peer_id: &str) -> Option<Vec<RemoteService>> {
     let Some(services_json) = cache
         .get_device_services_json(peer_id)
         .unwrap_or_else(|error| fatal(format!("Failed to read remote service cache: {error}")))
@@ -1497,15 +1520,9 @@ fn load_cached_remote_services(args: &CommonArgs, peer_id: &str) -> Option<Vec<R
 }
 
 fn load_cached_remote_managed_services(
-    args: &CommonArgs,
+    cache: &ServiceCache,
     peer_id: &str,
 ) -> Option<Vec<ServiceInstance>> {
-    let cache =
-        ServiceCache::apply_managed_services_from_dir(&args.fungi_dir()).unwrap_or_else(|error| {
-            fatal(format!(
-                "Failed to load remote managed service cache: {error}"
-            ))
-        });
     let Some(services_json) = cache
         .get_device_services_json(peer_id)
         .unwrap_or_else(|error| {
@@ -1657,7 +1674,7 @@ async fn remote_service_unavailable_message(
 ) -> String {
     let managed = find_remote_managed_service(client, peer_id, service_name).await;
     let Some(managed) = managed else {
-        return format!("Remote service not found: {service_name}");
+        return format!("Remote service not found: {service_ref}");
     };
 
     if !managed.status.running {
@@ -2515,7 +2532,7 @@ impl ServiceOverviewRow {
         service: RemoteService,
         device: &DeviceInfo,
         attached: &[ServiceAccess],
-        verbose: bool,
+        _verbose: bool,
         cached: bool,
     ) -> Self {
         let device_name = device_display_name(device);
@@ -2528,25 +2545,14 @@ impl ServiceOverviewRow {
                 .iter()
                 .map(|endpoint| {
                     let remote_port = format_remote_port(endpoint.remote_port);
-                    if verbose {
-                        format!(
-                            "{} {}:{} -> {}:{}",
-                            endpoint.name,
-                            endpoint.local_host,
-                            endpoint.local_port,
-                            device_name,
-                            remote_port
-                        )
-                    } else {
-                        format!(
-                            "{} {}:{} -> {}:{}",
-                            endpoint.name,
-                            endpoint.local_host,
-                            endpoint.local_port,
-                            device_name,
-                            remote_port
-                        )
-                    }
+                    format!(
+                        "{} {}:{} -> {}:{}",
+                        endpoint.name,
+                        endpoint.local_host,
+                        endpoint.local_port,
+                        device_name,
+                        remote_port
+                    )
                 })
                 .collect(),
             None => service
@@ -2580,7 +2586,7 @@ impl ServiceOverviewRow {
         service: ServiceInstance,
         device: &DeviceInfo,
         attached: &[ServiceAccess],
-        verbose: bool,
+        _verbose: bool,
     ) -> Self {
         let device_name = device_display_name(device);
         let attached_access = attached
@@ -2592,25 +2598,14 @@ impl ServiceOverviewRow {
                 .iter()
                 .map(|endpoint| {
                     let remote_port = format_remote_port(endpoint.remote_port);
-                    if verbose {
-                        format!(
-                            "{} {}:{} -> {}:{}",
-                            endpoint.name,
-                            endpoint.local_host,
-                            endpoint.local_port,
-                            device_name,
-                            remote_port
-                        )
-                    } else {
-                        format!(
-                            "{} {}:{} -> {}:{}",
-                            endpoint.name,
-                            endpoint.local_host,
-                            endpoint.local_port,
-                            device_name,
-                            remote_port
-                        )
-                    }
+                    format!(
+                        "{} {}:{} -> {}:{}",
+                        endpoint.name,
+                        endpoint.local_host,
+                        endpoint.local_port,
+                        device_name,
+                        remote_port
+                    )
                 })
                 .collect(),
             None => service
@@ -3087,6 +3082,27 @@ mod tests {
 
         assert!(is_remote_device_reachability_error(&unreachable));
         assert!(!is_remote_device_reachability_error(&execution_failed));
+    }
+
+    #[test]
+    fn service_apply_path_hint_recognizes_windows_paths() {
+        assert!(looks_like_service_file_path(
+            r"C:\Users\alice\service-config"
+        ));
+        assert!(looks_like_service_file_path(
+            r"C:/Users/alice/service-config"
+        ));
+        assert!(looks_like_service_file_path(r".\service-config"));
+        assert!(looks_like_service_file_path(r"..\recipes\demo"));
+        assert!(looks_like_service_file_path(r"\\server\share\demo"));
+    }
+
+    #[test]
+    fn service_apply_path_hint_does_not_treat_entries_as_paths() {
+        assert!(!looks_like_service_file_path("svc@nas/admin"));
+        assert!(!looks_like_service_file_path("svc/admin"));
+        assert!(looks_like_service_file_path("./svc@nas/admin"));
+        assert!(looks_like_service_file_path("recipe.fungi.md"));
     }
 
     #[test]
