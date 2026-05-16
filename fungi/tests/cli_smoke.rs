@@ -323,7 +323,6 @@ fn cli_can_create_and_access_remote_tcp_tunnel_service() {
             "b",
             "apply",
             "test-tcp",
-            "--start",
             manifest_path.as_ref(),
         ],
     );
@@ -336,6 +335,22 @@ fn cli_can_create_and_access_remote_tcp_tunnel_service() {
         "remote service cache should persist outside config.toml"
     );
 
+    let output = run_cli_result(a.path(), ["test-tcp@b"], "");
+    assert!(!output.status.success());
+    assert!(
+        output
+            .stderr
+            .contains("Remote service test-tcp@b exists but is not running"),
+        "{}",
+        output.stderr
+    );
+    assert!(
+        output.stderr.contains("fungi service start test-tcp@b"),
+        "{}",
+        output.stderr
+    );
+
+    run_cli(a.path(), ["service", "start", "test-tcp@b"]);
     let output = run_cli(a.path(), ["test-tcp@b"]);
     let local_addr = extract_local_address(&output.stdout);
     assert!(

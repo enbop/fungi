@@ -477,8 +477,14 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             let device = resolve_service_device_target(&args, device, target.device);
             if let Some(device) = device {
                 print_target_device(&device);
-                let remote_service =
-                    discover_remote_service(&mut client, &device.peer_id, &target.name).await;
+                let service_ref = remote_service_reference(&target.name, &device);
+                let remote_service = discover_remote_service(
+                    &mut client,
+                    &device.peer_id,
+                    &target.name,
+                    &service_ref,
+                )
+                .await;
                 let access = existing_or_attach_access(
                     &mut client,
                     &device.peer_id,
@@ -509,6 +515,9 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             let device = resolve_service_device_target(&args, device, target.device);
             let address = if let Some(device) = device {
                 print_target_device(&device);
+                let service_ref = remote_service_reference(&target.name, &device);
+                discover_remote_service(&mut client, &device.peer_id, &target.name, &service_ref)
+                    .await;
                 let access = existing_or_attach_access(
                     &mut client,
                     &device.peer_id,
@@ -553,8 +562,9 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             let (service, entry, device) =
                 resolve_remote_service_reference(&args, device, service, true, "set");
             print_target_device(&device);
+            let service_ref = remote_service_reference(&service, &device);
             let remote_service =
-                discover_remote_service(&mut client, &device.peer_id, &service).await;
+                discover_remote_service(&mut client, &device.peer_id, &service, &service_ref).await;
             let access = existing_or_attach_access(
                 &mut client,
                 &device.peer_id,
@@ -1612,6 +1622,7 @@ async fn discover_remote_service(
     client: &mut RpcClient,
     peer_id: &str,
     service_name: &str,
+    service_ref: &str,
 ) -> RemoteService {
     if let Some(service) = fetch_cached_remote_services(client, peer_id)
         .await
@@ -1626,10 +1637,69 @@ async fn discover_remote_service(
         Err(error) => fatal(error),
     };
 
-    services
+    if let Some(service) = services
         .into_iter()
         .find(|service| service.service_name == service_name)
-        .unwrap_or_else(|| fatal(format!("Remote service not found: {service_name}")))
+    {
+        return service;
+    }
+
+    let message =
+        remote_service_unavailable_message(client, peer_id, service_name, service_ref).await;
+    fatal(message)
+}
+
+async fn remote_service_unavailable_message(
+    client: &mut RpcClient,
+    peer_id: &str,
+    service_name: &str,
+    service_ref: &str,
+) -> String {
+    let managed = find_remote_managed_service(client, peer_id, service_name).await;
+    let Some(managed) = managed else {
+        return format!("Remote service not found: {service_name}");
+    };
+
+    if !managed.status.running {
+        return format!(
+            "Remote service {service_ref} exists but is not running (state: {}). Start it with:\n  fungi service start {service_ref}",
+            managed.status.state
+        );
+    }
+
+    format!(
+        "Remote service {service_ref} is running but does not publish a connectable endpoint yet."
+    )
+}
+
+async fn find_remote_managed_service(
+    client: &mut RpcClient,
+    peer_id: &str,
+    service_name: &str,
+) -> Option<ServiceInstance> {
+    if let Ok(services) = fetch_remote_managed_services(client, peer_id).await
+        && let Some(service) = services
+            .into_iter()
+            .find(|service| service.name == service_name)
+    {
+        return Some(service);
+    }
+
+    if let Some(service) = fetch_cached_remote_managed_services(client, peer_id)
+        .await
+        .into_iter()
+        .find(|service| service.name == service_name)
+    {
+        return Some(service);
+    }
+    None
+}
+
+fn remote_service_reference(
+    service_name: &str,
+    device: &super::shared::ResolvedPeerTarget,
+) -> String {
+    format!("{service_name}@{}", resolved_device_display_name(device))
 }
 
 fn build_web_url(
