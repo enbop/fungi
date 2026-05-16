@@ -134,6 +134,67 @@ fn service_apply_dry_run_prints_resolved_intent() {
 }
 
 #[test]
+fn service_apply_rejects_mismatched_definition_id() {
+    let home = TempDir::new().unwrap();
+    let rpc = reserve_port();
+    let swarm = reserve_port();
+    let code_server_port = reserve_port();
+    let filebrowser_port = reserve_port();
+
+    init_fungi_dir(home.path(), rpc, swarm);
+    let _daemon = start_daemon(home.path());
+    let _peer = wait_peer_id(home.path());
+
+    let code_server =
+        write_existing_tcp_service_manifest(home.path(), "code-server", code_server_port, "raw");
+    let code_server_path = code_server.to_string_lossy();
+    run_cli(
+        home.path(),
+        [
+            "service",
+            "apply",
+            "code-server",
+            "--yes",
+            code_server_path.as_ref(),
+        ],
+    );
+
+    let filebrowser = write_existing_tcp_service_manifest(
+        home.path(),
+        "filebrowser-lite",
+        filebrowser_port,
+        "raw",
+    );
+    let filebrowser_path = filebrowser.to_string_lossy();
+    let output = run_cli_result(
+        home.path(),
+        [
+            "service",
+            "apply",
+            "code-server",
+            "--yes",
+            filebrowser_path.as_ref(),
+        ],
+        "",
+    );
+
+    assert!(!output.status.success());
+    assert_eq!(output.stdout, "");
+    assert!(
+        output.stderr.contains("definition id `code-server`"),
+        "{}",
+        output.stderr
+    );
+    assert!(
+        output
+            .stderr
+            .contains("new manifest declares `filebrowser-lite`"),
+        "{}",
+        output.stderr
+    );
+}
+
+#[test]
 fn cli_prefers_existing_dynamic_service_over_builtin_typo_hint() {
     let home = TempDir::new().unwrap();
     let rpc = reserve_port();

@@ -13,6 +13,8 @@ pub enum RuntimeKind {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceManifest {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition_id: Option<String>,
     pub runtime: RuntimeKind,
     #[serde(default)]
     pub run_mode: ServiceRunMode,
@@ -122,6 +124,8 @@ pub struct ServiceInstance {
     pub id: String,
     pub runtime: RuntimeKind,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition_id: Option<String>,
     pub source: String,
     pub labels: BTreeMap<String, String>,
     #[serde(default)]
@@ -190,6 +194,9 @@ pub struct ServiceManifestDocument {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ServiceManifestMetadata {
     pub name: String,
+    #[serde(rename = "definitionId")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition_id: Option<String>,
     #[serde(default)]
     pub labels: BTreeMap<String, String>,
 }

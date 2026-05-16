@@ -2036,15 +2036,15 @@ fn apply_manifest_instance_name(created: &mut CreatedServiceManifest, service_na
             .unwrap_or_else(|error| fatal(format!("Failed to set service instance name: {error}")));
 }
 
-fn manifest_name_and_runtime(
+fn manifest_apply_identity(
     created: &CreatedServiceManifest,
     args: &CommonArgs,
-) -> (String, RuntimeKind) {
+) -> (String, RuntimeKind, Option<String>) {
     let base_dir = manifest_base_dir_path(created);
     let fungi_home = manifest_parse_fungi_home(args);
     let manifest = parse_service_manifest_yaml(&created.manifest_yaml, &base_dir, &fungi_home)
         .unwrap_or_else(|error| fatal(format!("Failed to parse service manifest: {error}")));
-    (manifest.name, manifest.runtime)
+    (manifest.name, manifest.runtime, manifest.definition_id)
 }
 
 fn manifest_parse_fungi_home(args: &CommonArgs) -> std::path::PathBuf {
@@ -2066,11 +2066,7 @@ async fn confirm_apply_if_existing(
     args: &CommonArgs,
     yes: bool,
 ) {
-    if yes {
-        return;
-    }
-
-    let (service_name, new_runtime) = manifest_name_and_runtime(created, args);
+    let (service_name, new_runtime, new_definition_id) = manifest_apply_identity(created, args);
     let existing = match device {
         Some(device) => list_remote_service_instances(client, &device.peer_id)
             .await
@@ -2086,6 +2082,18 @@ async fn confirm_apply_if_existing(
         return;
     };
 
+    reject_definition_id_mismatch(&service_name, &existing, new_definition_id.as_deref());
+
+    if yes {
+        print_existing_apply_notice(
+            &service_name,
+            &existing,
+            new_runtime,
+            new_definition_id.as_deref(),
+        );
+        return;
+    }
+
     let proceed = if existing.runtime != new_runtime {
         println!(
             "Service {} will change runtime: {} -> {}.",
@@ -2096,9 +2104,25 @@ async fn confirm_apply_if_existing(
         println!("App data will be kept; runtime artifacts will be replaced.");
         prompt_yes_no_default("Continue? [Y/n]", true)
     } else {
+        match (
+            existing.definition_id.as_deref(),
+            new_definition_id.as_deref(),
+        ) {
+            (Some(definition_id), _) => {
+                println!(
+                    "Service {service_name} already exists with definition id `{definition_id}`."
+                );
+            }
+            (None, Some(definition_id)) => {
+                println!(
+                    "Service {service_name} already exists; the new manifest declares definition id `{definition_id}`."
+                );
+            }
+            (None, None) => {}
+        }
         prompt_yes_no_default(
             &format!(
-                "Service {} already exists. Apply new manifest and replace its runtime? [Y/n]",
+                "Service {} already exists. Apply new manifest and update it? [Y/n]",
                 service_name
             ),
             true,
@@ -2108,6 +2132,56 @@ async fn confirm_apply_if_existing(
     if !proceed {
         println!("Cancelled");
         std::process::exit(0);
+    }
+}
+
+fn reject_definition_id_mismatch(
+    service_name: &str,
+    existing: &ServiceInstance,
+    new_definition_id: Option<&str>,
+) {
+    match (existing.definition_id.as_deref(), new_definition_id) {
+        (Some(existing_id), Some(new_id)) if existing_id != new_id => fatal(format!(
+            "Service {service_name} already exists with definition id `{existing_id}`, but the new manifest declares `{new_id}`.\nRefusing to replace one service definition with another. Use a different NAME[@DEVICE] or remove the existing service first."
+        )),
+        (Some(existing_id), None) => fatal(format!(
+            "Service {service_name} already exists with definition id `{existing_id}`, but the new manifest does not declare a definition id.\nUse a matching .fungi.md service file or remove the existing service first."
+        )),
+        _ => {}
+    }
+}
+
+fn print_existing_apply_notice(
+    service_name: &str,
+    existing: &ServiceInstance,
+    new_runtime: RuntimeKind,
+    new_definition_id: Option<&str>,
+) {
+    if existing.runtime != new_runtime {
+        println!(
+            "Service {} will change runtime: {} -> {}.",
+            service_name,
+            runtime_kind_label(existing.runtime),
+            runtime_kind_label(new_runtime)
+        );
+        println!("App data will be kept; runtime artifacts will be replaced.");
+        return;
+    }
+
+    match (existing.definition_id.as_deref(), new_definition_id) {
+        (Some(definition_id), _) => {
+            println!(
+                "Service {service_name} already exists with definition id `{definition_id}`; applying update."
+            );
+        }
+        (None, Some(definition_id)) => {
+            println!(
+                "Service {service_name} already exists; applying manifest with definition id `{definition_id}`."
+            );
+        }
+        (None, None) => {
+            println!("Service {service_name} already exists; applying update.");
+        }
     }
 }
 
@@ -3062,6 +3136,7 @@ publish:
             id: "docker:demo".to_string(),
             runtime: RuntimeKind::Docker,
             name: "demo".to_string(),
+            definition_id: None,
             source: "demo:latest".to_string(),
             labels: BTreeMap::new(),
             ports,

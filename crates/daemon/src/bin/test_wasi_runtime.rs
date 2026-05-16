@@ -68,6 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let manifest = ServiceManifest {
         name: args.name.clone(),
+        definition_id: None,
         runtime: RuntimeKind::Wasmtime,
         run_mode: ServiceRunMode::Command,
         source,

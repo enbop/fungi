@@ -456,6 +456,7 @@ mod tests {
 
         let manifest = ServiceManifest {
             name: "demo".into(),
+            definition_id: Some("demo-definition".into()),
             runtime: RuntimeKind::Docker,
             run_mode: ServiceRunMode::Command,
             source: ServiceSource::Docker {
@@ -499,6 +500,9 @@ mod tests {
                 .join("state.json")
                 .is_file()
         );
+        let manifest_yaml =
+            fs::read_to_string(services_root.join(&local_service_id).join("service.yaml")).unwrap();
+        assert!(manifest_yaml.contains("definitionId: demo-definition"));
         let paths = FungiPaths::from_fungi_home(dir.path());
         assert!(paths.service_appdata_dir(&local_service_id).is_dir());
         assert!(!dir.path().join("data").join(&local_service_id).exists());
@@ -508,6 +512,10 @@ mod tests {
         assert_eq!(services.len(), 1);
         assert_eq!(services[0].local_service_id, local_service_id);
         assert_eq!(services[0].manifest.name, "demo");
+        assert_eq!(
+            services[0].manifest.definition_id.as_deref(),
+            Some("demo-definition")
+        );
         assert_eq!(services[0].desired_state, DesiredServiceState::Stopped);
     }
 
@@ -520,6 +528,7 @@ mod tests {
 
         let manifest = ServiceManifest {
             name: "demo".into(),
+            definition_id: None,
             runtime: RuntimeKind::Docker,
             run_mode: ServiceRunMode::Command,
             source: ServiceSource::Docker {

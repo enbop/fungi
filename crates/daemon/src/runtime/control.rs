@@ -143,6 +143,10 @@ impl RuntimeControl {
         let replacing_existing =
             previous_service.is_some() || previous_manifest.is_some() || previous_runtime.is_some();
 
+        if let Some(previous_manifest) = previous_manifest.as_ref() {
+            ensure_definition_id_compatible(previous_manifest, manifest)?;
+        }
+
         let resolved_local_service_id = if let Some(service) = previous_service.as_ref() {
             if let Some(requested_local_service_id) = local_service_id
                 && requested_local_service_id != service.local_service_id
@@ -719,6 +723,7 @@ impl RuntimeControl {
             id: format!("external:{}", manifest.name),
             runtime: RuntimeKind::External,
             name: manifest.name.clone(),
+            definition_id: manifest.definition_id.clone(),
             source: match &manifest.source {
                 ServiceSource::ExistingTcp { host, port } => format!("{host}:{port}"),
                 _ => "external".to_string(),
@@ -731,5 +736,28 @@ impl RuntimeControl {
                 running,
             },
         }
+    }
+}
+
+fn ensure_definition_id_compatible(
+    previous: &ServiceManifest,
+    next: &ServiceManifest,
+) -> Result<()> {
+    match (
+        previous.definition_id.as_deref(),
+        next.definition_id.as_deref(),
+    ) {
+        (Some(previous_id), Some(next_id)) if previous_id != next_id => bail!(
+            "service '{}' was created from definition id '{}' and cannot be overwritten with definition id '{}'; use a different service name or remove the existing service first",
+            next.name,
+            previous_id,
+            next_id
+        ),
+        (Some(previous_id), None) => bail!(
+            "service '{}' was created from definition id '{}' and cannot be overwritten by a manifest without a definition id; use a matching .fungi.md service file or remove the existing service first",
+            next.name,
+            previous_id
+        ),
+        _ => Ok(()),
     }
 }

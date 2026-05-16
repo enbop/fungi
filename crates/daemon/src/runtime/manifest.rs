@@ -173,6 +173,7 @@ pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
         kind: "Service".to_string(),
         metadata: ServiceManifestMetadata {
             name: manifest.name.clone(),
+            definition_id: manifest.definition_id.clone(),
             labels: manifest.labels.clone(),
         },
         spec: ServiceManifestSpec {
@@ -247,6 +248,10 @@ impl ServiceManifestDocument {
             spec,
         } = self;
         let service_name = normalize_non_empty(&metadata.name, "metadata.name")?;
+        let definition_id = metadata
+            .definition_id
+            .map(|value| normalize_non_empty(&value, "metadata.definitionId"))
+            .transpose()?;
         let metadata_labels = metadata.labels;
         let mut reserved_host_ports = used_host_ports.clone();
         if spec.entries.is_empty() {
@@ -264,6 +269,7 @@ impl ServiceManifestDocument {
 
         Ok(ServiceManifest {
             name: service_name.clone(),
+            definition_id,
             runtime: runtime_and_source.runtime,
             run_mode: runtime_and_source.run_mode,
             source: runtime_and_source.source,
@@ -517,6 +523,7 @@ impl FungiServiceDocument {
             bail!("unsupported fungi service format: {}", self.fungi);
         }
 
+        let definition_id = self.definition_id()?;
         let service_name = self.service_name()?;
         if self.publish.is_empty() {
             bail!("service file requires at least one publish entry");
@@ -568,6 +575,7 @@ impl FungiServiceDocument {
 
         Ok(ServiceManifest {
             name: service_name,
+            definition_id: Some(definition_id),
             runtime: runtime_and_source.runtime,
             run_mode: runtime_and_source.run_mode,
             source: runtime_and_source.source,
