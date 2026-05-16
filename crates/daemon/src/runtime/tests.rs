@@ -642,6 +642,35 @@ publish:
 }
 
 #[test]
+fn service_manifest_with_instance_name_keeps_front_matter_parseable() {
+    let content = r#"---
+fungi: service/v1
+id: docs
+publish:
+  main:
+    tcp:
+      port: 8080
+    client:
+      kind: raw
+---
+
+# Docs
+"#;
+
+    let rendered = service_manifest_with_instance_name(content, "published-docs").unwrap();
+
+    assert!(!rendered.starts_with("---\n---\n"));
+    assert!(rendered.contains("instance: published-docs"));
+
+    let manifest =
+        parse_service_manifest_yaml(&rendered, Path::new("."), Path::new("/tmp/fungi-home"))
+            .unwrap();
+
+    assert_eq!(manifest.name, "published-docs");
+    assert_eq!(manifest.runtime, RuntimeKind::External);
+}
+
+#[test]
 fn manifest_document_defaults_missing_host_port_to_auto() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1

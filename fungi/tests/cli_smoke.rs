@@ -55,6 +55,32 @@ fn cli_suggests_builtin_command_for_dynamic_typo_without_config() {
 }
 
 #[test]
+fn service_apply_file_without_target_prints_order_hint() {
+    let home = TempDir::new().unwrap();
+    let manifest = home.path().join("demo.fungi.md");
+    let manifest_arg = manifest.to_string_lossy().to_string();
+
+    let output = run_cli_result(home.path(), ["service", "apply", manifest_arg.as_str()], "");
+
+    assert!(!output.status.success());
+    assert_eq!(output.stdout, "");
+    assert!(
+        output
+            .stderr
+            .contains("missing NAME[@DEVICE] before the file"),
+        "{}",
+        output.stderr
+    );
+    assert!(
+        output
+            .stderr
+            .contains("fungi service apply <name[@device]> <file>"),
+        "{}",
+        output.stderr
+    );
+}
+
+#[test]
 fn service_apply_dry_run_prints_resolved_intent() {
     let home = TempDir::new().unwrap();
     let rpc = reserve_port();

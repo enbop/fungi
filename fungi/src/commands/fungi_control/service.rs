@@ -39,6 +39,8 @@ type RpcClient = fungi_daemon_grpc::fungi_daemon_grpc::fungi_daemon_client::Fung
 >;
 type RemoteService = CatalogService;
 
+const SERVICE_APPLY_USAGE: &str = "Use `fungi service apply <name[@device]> <file>`, `fungi service apply <name[@device]> --recipe <id>`, or `fungi service apply --create` to create interactively.";
+
 #[derive(Args, Debug, Clone)]
 pub struct ServiceArgs {
     #[command(flatten)]
@@ -215,9 +217,7 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             yes,
         } => {
             if !create && target.is_none() {
-                fatal(
-                    "`fungi service apply` requires a service target. Use `fungi service apply <name[@device]> <file>`, `fungi service apply <name[@device]> --recipe <id>`, or `fungi service apply --create`.",
-                );
+                fatal(service_apply_missing_target_message());
             }
             if manifest.is_some() && recipe.is_some() {
                 fatal(
@@ -262,9 +262,7 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                 return;
             }
             let Some(manifest_path) = manifest else {
-                fatal(
-                    "`fungi service apply` requires a service file path, --recipe <id>, or --create",
-                );
+                fatal(service_apply_missing_source_message(None));
             };
             let mut created = read_manifest_yaml_file(&manifest_path);
             created.start_now = start;
@@ -592,16 +590,37 @@ fn validate_service_command_before_connect(command: &ServiceCommands) {
             return;
         }
         if target.is_none() {
-            fatal(
-                "`fungi service apply` requires a service target. Use `fungi service apply <name[@device]> <file>`, `fungi service apply <name[@device]> --recipe <id>`, or `fungi service apply --create` to create interactively.",
-            );
+            fatal(service_apply_missing_target_message());
         }
         if manifest.is_none() && recipe.is_none() {
-            fatal(
-                "`fungi service apply` requires a service file path or --recipe <id>. Use --create to create interactively.",
-            );
+            fatal(service_apply_missing_source_message(target.as_deref()));
         }
     }
+}
+
+fn service_apply_missing_target_message() -> String {
+    format!("`fungi service apply` requires NAME[@DEVICE]. {SERVICE_APPLY_USAGE}")
+}
+
+fn service_apply_missing_source_message(target: Option<&str>) -> String {
+    if target.is_some_and(looks_like_service_file_path) {
+        return format!(
+            "`fungi service apply <file>` is missing NAME[@DEVICE] before the file. {SERVICE_APPLY_USAGE}"
+        );
+    }
+    format!(
+        "`fungi service apply` requires both NAME[@DEVICE] and either SERVICE_FILE or --recipe <id>. {SERVICE_APPLY_USAGE}"
+    )
+}
+
+fn looks_like_service_file_path(value: &str) -> bool {
+    let value = value.trim();
+    value.ends_with(".fungi.md")
+        || value.ends_with(".yaml")
+        || value.ends_with(".yml")
+        || value.contains('/')
+        || value.starts_with('.')
+        || value.starts_with('~')
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

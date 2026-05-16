@@ -113,6 +113,7 @@ pub fn service_manifest_with_instance_name(content: &str, service_name: &str) ->
         document.set_instance_name(service_name.to_string());
         let yaml = serde_yaml::to_string(&document)
             .context("Failed to encode Fungi service front matter")?;
+        let yaml = yaml_without_document_start(yaml);
         return Ok(format!("---\n{}---\n{}", yaml, front_matter.body));
     }
 
@@ -125,6 +126,18 @@ pub fn service_manifest_with_instance_name(content: &str, service_name: &str) ->
     let mut document = parse_legacy_service_manifest_yaml(content, "service manifest YAML")?;
     document.metadata.name = service_name;
     serde_yaml::to_string(&document).context("Failed to encode service manifest YAML")
+}
+
+fn yaml_without_document_start(yaml: String) -> String {
+    let mut yaml = yaml
+        .strip_prefix("---\n")
+        .or_else(|| yaml.strip_prefix("---\r\n"))
+        .unwrap_or(&yaml)
+        .to_string();
+    if !yaml.ends_with('\n') {
+        yaml.push('\n');
+    }
+    yaml
 }
 
 pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
