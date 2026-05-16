@@ -179,7 +179,11 @@ impl RuntimeControl {
         }
 
         let instance = match manifest.runtime {
-            RuntimeKind::Docker => self.docker_provider()?.pull(manifest).await,
+            RuntimeKind::Docker => {
+                self.docker_provider()?
+                    .pull_with_container_name(manifest, &resolved_local_service_id)
+                    .await
+            }
             RuntimeKind::Wasmtime => {
                 if replacing_existing {
                     self.wasmtime
@@ -276,7 +280,11 @@ impl RuntimeControl {
         self.ensure_runtime_enabled(runtime)?;
         self.ensure_runtime_service(runtime, name).await?;
         match runtime {
-            RuntimeKind::Docker => self.docker_provider()?.start(name).await,
+            RuntimeKind::Docker => {
+                self.docker_provider()?
+                    .start(&self.docker_runtime_handle_or_name(name))
+                    .await
+            }
             RuntimeKind::Wasmtime => self.wasmtime.start(name).await,
             RuntimeKind::External => Ok(()),
         }?;
@@ -286,7 +294,11 @@ impl RuntimeControl {
     pub async fn stop(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
         let _ = self.ensure_runtime_service(runtime, name).await;
         let stop_result = match runtime {
-            RuntimeKind::Docker => self.docker_provider()?.stop(name).await,
+            RuntimeKind::Docker => {
+                self.docker_provider()?
+                    .stop(&self.docker_runtime_handle_or_name(name))
+                    .await
+            }
             RuntimeKind::Wasmtime => self.wasmtime.stop(name).await,
             RuntimeKind::External => Ok(()),
         };
@@ -309,7 +321,11 @@ impl RuntimeControl {
 
     pub async fn remove(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
         let remove_result = match runtime {
-            RuntimeKind::Docker => self.docker_provider()?.remove(name).await,
+            RuntimeKind::Docker => {
+                self.docker_provider()?
+                    .remove(&self.docker_runtime_handle_or_name(name))
+                    .await
+            }
             RuntimeKind::Wasmtime => {
                 let local_service_id = self.service_state.lock().local_service_id(name)?;
                 self.wasmtime
@@ -467,7 +483,11 @@ impl RuntimeControl {
         }
 
         let inspect_result = match runtime {
-            RuntimeKind::Docker => self.docker_provider()?.inspect(name).await,
+            RuntimeKind::Docker => {
+                self.docker_provider()?
+                    .inspect(&self.docker_runtime_handle_or_name(name))
+                    .await
+            }
             RuntimeKind::Wasmtime => self.wasmtime.inspect(name).await,
             RuntimeKind::External => {
                 let manifest = self
@@ -515,7 +535,11 @@ impl RuntimeControl {
         self.ensure_runtime_enabled(runtime)?;
         self.ensure_runtime_service(runtime, name).await?;
         match runtime {
-            RuntimeKind::Docker => self.docker_provider()?.logs(name, options).await,
+            RuntimeKind::Docker => {
+                self.docker_provider()?
+                    .logs(&self.docker_runtime_handle_or_name(name), options)
+                    .await
+            }
             RuntimeKind::Wasmtime => self.wasmtime.logs(name, options).await,
             RuntimeKind::External => bail!("external TCP services do not have runtime logs"),
         }
@@ -596,6 +620,13 @@ impl RuntimeControl {
         Ok(())
     }
 
+    fn docker_runtime_handle_or_name(&self, name: &str) -> String {
+        self.service_state
+            .lock()
+            .local_service_id(name)
+            .unwrap_or_else(|_| name.to_string())
+    }
+
     async fn ensure_runtime_service(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
         if runtime != RuntimeKind::Wasmtime || self.wasmtime.has_service(name) {
             return Ok(());
@@ -652,7 +683,11 @@ impl RuntimeControl {
 
     async fn stop_runtime_only(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
         let stop_result = match runtime {
-            RuntimeKind::Docker => self.docker_provider()?.stop(name).await,
+            RuntimeKind::Docker => {
+                self.docker_provider()?
+                    .stop(&self.docker_runtime_handle_or_name(name))
+                    .await
+            }
             RuntimeKind::Wasmtime => self.wasmtime.stop(name).await,
             RuntimeKind::External => Ok(()),
         };
@@ -690,7 +725,7 @@ impl RuntimeControl {
         local_service_id: &str,
     ) -> Result<()> {
         let remove_result = match runtime {
-            RuntimeKind::Docker => self.docker_provider()?.remove(name).await,
+            RuntimeKind::Docker => self.docker_provider()?.remove(local_service_id).await,
             RuntimeKind::Wasmtime => {
                 self.wasmtime
                     .remove_with_local_service_id(name, local_service_id)

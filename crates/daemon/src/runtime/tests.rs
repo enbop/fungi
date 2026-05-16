@@ -20,7 +20,7 @@ use tokio::{
 };
 
 use super::helpers::{
-    build_wasmtime_command, docker_spec_from_manifest, ensure_manifest_mount_dirs,
+    build_wasmtime_command, docker_spec_from_manifest_with_name, ensure_manifest_mount_dirs,
     is_missing_docker_container_error,
 };
 use super::providers::WasmtimeServiceState;
@@ -54,10 +54,36 @@ fn docker_manifest_maps_to_container_spec() {
         labels: BTreeMap::new(),
     };
 
-    let spec = docker_spec_from_manifest(&manifest).unwrap();
+    let spec = docker_spec_from_manifest_with_name(&manifest, &manifest.name).unwrap();
     assert_eq!(spec.name.as_deref(), Some("filebrowser"));
     assert_eq!(spec.image, "filebrowser/filebrowser:latest");
     assert_eq!(spec.ports[0].host_port, 8080);
+}
+
+#[test]
+fn docker_manifest_can_use_internal_container_name() {
+    let manifest = ServiceManifest {
+        name: "c".into(),
+        definition_id: Some("code-server".into()),
+        runtime: RuntimeKind::Docker,
+        run_mode: ServiceRunMode::Command,
+        source: ServiceSource::Docker {
+            image: "ghcr.io/coder/code-server:latest".into(),
+        },
+        expose: None,
+        env: BTreeMap::new(),
+        mounts: Vec::new(),
+        ports: Vec::new(),
+        command: Vec::new(),
+        entrypoint: Vec::new(),
+        working_dir: None,
+        labels: BTreeMap::new(),
+    };
+
+    let spec =
+        docker_spec_from_manifest_with_name(&manifest, "svc_01hz7j7n3evh1q4j1a8g9c2d3e").unwrap();
+
+    assert_eq!(spec.name.as_deref(), Some("svc_01hz7j7n3evh1q4j1a8g9c2d3e"));
 }
 
 #[test]
@@ -134,7 +160,7 @@ fn docker_manifest_rejects_wrong_source_type() {
         labels: BTreeMap::new(),
     };
 
-    assert!(docker_spec_from_manifest(&manifest).is_err());
+    assert!(docker_spec_from_manifest_with_name(&manifest, &manifest.name).is_err());
 }
 
 #[tokio::test]

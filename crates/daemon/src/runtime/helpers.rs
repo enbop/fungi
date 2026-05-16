@@ -12,7 +12,10 @@ use super::{
     manifest::service_expose_endpoint_bindings, model::*, providers::WasmtimeServiceState,
 };
 
-pub(crate) fn docker_spec_from_manifest(manifest: &ServiceManifest) -> Result<ContainerSpec> {
+pub(crate) fn docker_spec_from_manifest_with_name(
+    manifest: &ServiceManifest,
+    container_name: &str,
+) -> Result<ContainerSpec> {
     if manifest.runtime != RuntimeKind::Docker {
         bail!("service manifest runtime does not match docker provider")
     }
@@ -22,7 +25,7 @@ pub(crate) fn docker_spec_from_manifest(manifest: &ServiceManifest) -> Result<Co
     };
 
     Ok(ContainerSpec {
-        name: Some(manifest.name.clone()),
+        name: Some(container_name.to_string()),
         image: image.clone(),
         env: manifest.env.clone(),
         mounts: manifest
