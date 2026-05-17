@@ -29,13 +29,8 @@ fungi-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["compat", "io"] }
 anyhow = { workspace = true }
 tarpc = { workspace = true }
-fungi-fs = { workspace = true, features = ["libunftp"] }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
-libunftp = { workspace = true }
-dav-server = { workspace = true }
-hyper = { workspace = true, features = ["http1", "server"] }
-hyper-util = { workspace = true, features = ["tokio"] }
 clap = { workspace = true }
 parking_lot = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }

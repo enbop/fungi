@@ -1,9 +1,8 @@
 mod devices;
-mod file_transfer;
 mod peer;
 mod relay;
 mod runtime;
-mod tcp_tunneling;
+mod service_access;
 mod types;
 
 pub use types::{ServiceAccess, ServiceAccessEndpoint};

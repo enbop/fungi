@@ -677,12 +677,13 @@ fn rejects_service_subcommand_scoped_device() {
 }
 
 #[test]
-fn root_help_marks_tunnel_deprecated_and_hides_service_plumbing_commands() {
+fn root_help_omits_removed_legacy_commands_and_hides_service_plumbing_commands() {
     let help = FungiArgs::command().render_long_help().to_string();
 
     assert!(help.contains("  service"));
-    assert!(help.contains("  tunnel"));
-    assert!(help.contains("Deprecated: manage raw TCP tunneling"));
+    assert!(!help.contains("  tunnel"));
+    assert!(!help.contains("  ft-service"));
+    assert!(!help.contains("  ft-client"));
     assert!(!help.contains("  catalog"));
     assert!(!help.contains("  access"));
     assert!(!help.contains("  peer"));

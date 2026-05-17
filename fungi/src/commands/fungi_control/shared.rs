@@ -229,23 +229,6 @@ fn save_cli_context(args: &CommonArgs, context: &CliContext) -> Result<(), Strin
     std::fs::write(path, raw).map_err(|error| format!("Failed to save CLI context: {error}"))
 }
 
-pub fn parse_address(address: &str) -> Result<(String, u16), String> {
-    let parts: Vec<&str> = address.rsplitn(2, ':').collect();
-    if parts.len() != 2 {
-        return Err(format!(
-            "Invalid address format: {}. Expected format: host:port",
-            address
-        ));
-    }
-
-    let port = parts[0]
-        .parse::<u16>()
-        .map_err(|_| format!("Invalid port number: {}", parts[0]))?;
-    let host = parts[1].to_string();
-
-    Ok((host, port))
-}
-
 pub fn fatal(message: impl std::fmt::Display) -> ! {
     eprintln!("{message}");
     std::process::exit(1);

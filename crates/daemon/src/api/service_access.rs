@@ -11,132 +11,40 @@ use crate::{CatalogServiceEndpoint, FungiDaemon};
 use super::types::{ServiceAccess, ServiceAccessEndpoint};
 
 impl FungiDaemon {
-    pub fn get_tcp_forwarding_rules(
+    pub fn get_service_access_forwarding_rules(
         &self,
     ) -> Vec<(String, fungi_config::tcp_tunneling::ForwardingRule)> {
         self.tcp_tunneling_control().get_forwarding_rules()
     }
 
-    pub fn get_tcp_listening_rules(
+    pub fn get_service_endpoint_listening_rules(
         &self,
     ) -> Vec<(String, fungi_config::tcp_tunneling::ListeningRule)> {
         self.tcp_tunneling_control().get_listening_rules()
     }
 
-    pub async fn add_tcp_forwarding_rule(
+    async fn add_service_access_forwarding_rule(
         &self,
-        local_host: String,
         local_port: u16,
         remote_peer_id: String,
         remote_port: u16,
-    ) -> Result<String> {
-        self.add_tcp_forwarding_rule_with_details(
-            local_host,
-            local_port,
-            remote_peer_id,
-            remote_port,
-            None,
-            None,
-            None,
-            None,
-        )
-        .await
-    }
-
-    pub async fn add_tcp_forwarding_rule_with_details(
-        &self,
-        local_host: String,
-        local_port: u16,
-        remote_peer_id: String,
-        remote_port: u16,
-        remote_protocol: Option<String>,
-        remote_service_id: Option<String>,
-        remote_service_name: Option<String>,
-        remote_service_port_name: Option<String>,
-    ) -> Result<String> {
+        remote_protocol: String,
+        remote_service_name: String,
+        remote_service_port_name: String,
+    ) -> Result<()> {
         let rule = fungi_config::tcp_tunneling::ForwardingRule {
-            local_host,
+            local_host: "127.0.0.1".to_string(),
             local_port,
             remote_peer_id,
-            remote_protocol,
+            remote_protocol: Some(remote_protocol),
             remote_port,
-            remote_service_id,
-            remote_service_name,
-            remote_service_port_name,
+            remote_service_id: None,
+            remote_service_name: Some(remote_service_name),
+            remote_service_port_name: Some(remote_service_port_name),
         };
-        self.add_tcp_forwarding_rule_internal(rule).await
-    }
-
-    pub fn remove_tcp_forwarding_rule(
-        &self,
-        local_host: String,
-        local_port: u16,
-        remote_peer_id: String,
-        remote_port: u16,
-    ) -> Result<()> {
-        self.remove_tcp_forwarding_rule_with_protocol(
-            local_host,
-            local_port,
-            remote_peer_id,
-            remote_port,
-            None,
-        )
-    }
-
-    pub fn remove_tcp_forwarding_rule_with_protocol(
-        &self,
-        local_host: String,
-        local_port: u16,
-        remote_peer_id: String,
-        remote_port: u16,
-        remote_protocol: Option<String>,
-    ) -> Result<()> {
-        let rules = self.tcp_tunneling_control().get_forwarding_rules();
-        let rule_id = rules
-            .iter()
-            .find(|(_, rule)| {
-                rule.local_host == local_host
-                    && rule.local_port == local_port
-                    && rule.remote_peer_id == remote_peer_id
-                    && rule.remote_protocol == remote_protocol
-                    && rule.remote_port == remote_port
-            })
-            .map(|(id, _)| id.clone())
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Forwarding rule not found: {}:{} -> {}:{}",
-                    local_host,
-                    local_port,
-                    remote_peer_id,
-                    remote_port
-                )
-            })?;
-
-        self.remove_tcp_forwarding_rule_internal(&rule_id)
-    }
-
-    pub async fn add_tcp_listening_rule(
-        &self,
-        local_host: String,
-        local_port: u16,
-        _allowed_peers: Vec<String>,
-    ) -> Result<String> {
-        self.add_tcp_listening_rule_with_protocol(local_host, local_port, None)
-            .await
-    }
-
-    pub async fn add_tcp_listening_rule_with_protocol(
-        &self,
-        local_host: String,
-        local_port: u16,
-        protocol: Option<String>,
-    ) -> Result<String> {
-        let rule = fungi_config::tcp_tunneling::ListeningRule {
-            host: local_host,
-            port: local_port,
-            protocol,
-        };
-        self.add_tcp_listening_rule_internal(rule).await
+        self.add_service_access_forwarding_rule_internal(rule)
+            .await?;
+        Ok(())
     }
 
     pub async fn attach_service_access(
@@ -164,7 +72,7 @@ impl FungiDaemon {
         }
 
         let peer_id_string = peer_id.to_string();
-        let existing_rules = self.get_tcp_forwarding_rules();
+        let existing_rules = self.get_service_access_forwarding_rules();
         let mut reserved_local_ports = existing_rules
             .iter()
             .map(|(_, rule)| rule.local_port)
@@ -200,16 +108,14 @@ impl FungiDaemon {
                 {
                     reserved_local_ports.remove(&rule.local_port);
                     ensure_requested_local_port_available(local_port, &reserved_local_ports)?;
-                    self.remove_tcp_forwarding_rule_internal(rule_id)?;
-                    self.add_tcp_forwarding_rule_with_details(
-                        "127.0.0.1".to_string(),
+                    self.remove_service_access_forwarding_rule_internal(rule_id)?;
+                    self.add_service_access_forwarding_rule(
                         local_port,
                         peer_id_string.clone(),
                         remote_port,
-                        Some(endpoint.protocol.clone()),
-                        None,
-                        Some(service.service_name.clone()),
-                        Some(endpoint.name.clone()),
+                        endpoint.protocol.clone(),
+                        service.service_name.clone(),
+                        endpoint.name.clone(),
                     )
                     .await?;
                     reserved_local_ports.insert(local_port);
@@ -243,15 +149,13 @@ impl FungiDaemon {
             reserved_local_ports.insert(local_port);
             let remote_port = catalog_endpoint_listen_port(&endpoint);
 
-            self.add_tcp_forwarding_rule_with_details(
-                "127.0.0.1".to_string(),
+            self.add_service_access_forwarding_rule(
                 local_port,
                 peer_id_string.clone(),
                 remote_port,
-                Some(endpoint.protocol.clone()),
-                None,
-                Some(service.service_name.clone()),
-                Some(endpoint.name.clone()),
+                endpoint.protocol.clone(),
+                service.service_name.clone(),
+                endpoint.name.clone(),
             )
             .await?;
 
@@ -279,7 +183,7 @@ impl FungiDaemon {
     pub fn detach_service_access_by_match(&self, peer_id: PeerId, matcher: &str) -> Result<()> {
         let peer_id_string = peer_id.to_string();
         let rules_to_remove = self
-            .get_tcp_forwarding_rules()
+            .get_service_access_forwarding_rules()
             .into_iter()
             .filter(|(_, rule)| {
                 rule.remote_peer_id == peer_id_string
@@ -290,7 +194,7 @@ impl FungiDaemon {
             .collect::<Vec<_>>();
 
         for rule_id in rules_to_remove {
-            self.remove_tcp_forwarding_rule_internal(&rule_id)?;
+            self.remove_service_access_forwarding_rule_internal(&rule_id)?;
         }
 
         Ok(())
@@ -300,7 +204,7 @@ impl FungiDaemon {
         let peer_filter = peer_id.map(|peer_id| peer_id.to_string());
         let mut grouped = BTreeMap::<(String, String), Vec<ServiceAccessEndpoint>>::new();
 
-        for (_, rule) in self.get_tcp_forwarding_rules() {
+        for (_, rule) in self.get_service_access_forwarding_rules() {
             let Some(service_name) = rule.remote_service_name.clone() else {
                 continue;
             };
@@ -342,30 +246,6 @@ impl FungiDaemon {
                 .then(left.service_name.cmp(&right.service_name))
         });
         services
-    }
-
-    pub fn remove_tcp_listening_rule(&self, local_host: String, local_port: u16) -> Result<()> {
-        self.remove_tcp_listening_rule_with_protocol(local_host, local_port, None)
-    }
-
-    pub fn remove_tcp_listening_rule_with_protocol(
-        &self,
-        local_host: String,
-        local_port: u16,
-        protocol: Option<String>,
-    ) -> Result<()> {
-        let rules = self.tcp_tunneling_control().get_listening_rules();
-        let rule_id = rules
-            .iter()
-            .find(|(_, rule)| {
-                rule.host == local_host && rule.port == local_port && rule.protocol == protocol
-            })
-            .map(|(id, _)| id.clone())
-            .ok_or_else(|| {
-                anyhow::anyhow!("Listening rule not found: {}:{}", local_host, local_port)
-            })?;
-
-        self.remove_tcp_listening_rule_internal(&rule_id)
     }
 }
 

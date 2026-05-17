@@ -8,26 +8,6 @@ This crate contains integration tests for the Fungi project.
 
 ## Available Tests
 
-### TCP Tunneling CLI Tests
-
-Tests the TCP tunneling CLI commands end-to-end.
-
-**Run:**
-```bash
-# From workspace root
-cargo run --package fungi-tests --bin test-tunnel-cli
-
-# Or compile and run directly
-cargo build --package fungi-tests --bin test-tunnel-cli
-./target/debug/test-tunnel-cli
-```
-
-**Prerequisites:**
-- Ensure the `fungi` binary is compiled first:
-  ```bash
-  cargo build --bin fungi
-  ```
-
 ### WASM Service + Remote CLI Smoke
 
 Starts two temporary daemon nodes, uses one as a WASI service provider, and validates:

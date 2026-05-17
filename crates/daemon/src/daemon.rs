@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     env,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    net::{Ipv4Addr, Ipv6Addr},
     path::PathBuf,
     sync::Arc,
     time::Duration,
@@ -10,9 +10,8 @@ use std::{
 use crate::{
     DaemonArgs,
     controls::{
-        DockerControl, FileTransferClientsControl, FileTransferServiceControl,
-        NodeCapabilitiesControl, ServiceControlProtocolControl, ServiceDiscoveryControl,
-        TcpTunnelingControl, mdns::MdnsControl,
+        DockerControl, NodeCapabilitiesControl, ServiceControlProtocolControl,
+        ServiceDiscoveryControl, TcpTunnelingControl, mdns::MdnsControl,
     },
     runtime::{RuntimeControl, wasmtime_runtime_supported},
 };
@@ -21,8 +20,8 @@ use fungi_config::{
     FungiConfig,
     devices::{DeviceInfo, DevicesConfig},
     direct_addresses::DirectAddressCache,
-    file_transfer::{FileTransferClient as FTCConfig, FileTransferService as FTSConfig},
     local_access::LocalAccessConfig,
+    tcp_tunneling::{Forwarding, TcpTunneling},
     trusted_devices::TrustedDevicesConfig,
 };
 use fungi_swarm::{
@@ -38,8 +37,6 @@ const DIRECT_ADDRESS_CACHE_SYNC_INTERVAL: Duration = Duration::from_secs(30);
 #[allow(dead_code)]
 struct TaskHandles {
     swarm_task: JoinHandle<()>,
-    proxy_ftp_task: Arc<Mutex<Option<JoinHandle<()>>>>,
-    proxy_webdav_task: Arc<Mutex<Option<JoinHandle<()>>>>,
     direct_address_cache_sync_task: JoinHandle<()>,
 }
 
@@ -53,8 +50,6 @@ pub struct FungiDaemon {
 
     swarm_control: SwarmControl,
     mdns_control: MdnsControl,
-    fts_control: FileTransferServiceControl,
-    ftc_control: FileTransferClientsControl,
     docker_control: Option<DockerControl>,
     tcp_tunneling_control: TcpTunnelingControl,
     runtime_control: RuntimeControl,
@@ -80,14 +75,6 @@ impl FungiDaemon {
 
     pub fn swarm_control(&self) -> &SwarmControl {
         &self.swarm_control
-    }
-
-    pub fn fts_control(&self) -> &FileTransferServiceControl {
-        &self.fts_control
-    }
-
-    pub fn ftc_control(&self) -> &FileTransferClientsControl {
-        &self.ftc_control
     }
 
     pub fn docker_control(&self) -> Option<&DockerControl> {
@@ -189,12 +176,6 @@ impl FungiDaemon {
         let device_info = mdns_device_info(&config, swarm_control.local_peer_id());
         mdns_control.start(device_info, state.clone())?;
 
-        let fts_control = FileTransferServiceControl::new(swarm_control.clone());
-        Self::init_fts(config.file_transfer.server.clone(), &fts_control).await;
-
-        let ftc_control = FileTransferClientsControl::new(swarm_control.clone());
-        Self::init_ftc(config.file_transfer.client.clone(), ftc_control.clone());
-
         let fungi_home = config
             .config_file_path()
             .parent()
@@ -230,11 +211,13 @@ impl FungiDaemon {
 
         let tcp_tunneling_control = TcpTunnelingControl::new(swarm_control.clone());
         let local_access_config = LocalAccessConfig::apply_from_dir(&fungi_home)?;
-        let mut tcp_tunneling_config = config.tcp_tunneling.clone();
-        tcp_tunneling_config
-            .forwarding
-            .rules
-            .extend(local_access_config.rules.clone());
+        let tcp_tunneling_config = TcpTunneling {
+            forwarding: Forwarding {
+                rules: local_access_config.rules.clone(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         tcp_tunneling_control
             .init_from_config(&tcp_tunneling_config)
             .await;
@@ -247,34 +230,12 @@ impl FungiDaemon {
         );
         service_control_protocol_control.start()?;
 
-        let proxy_ftp_task = if config.file_transfer.proxy_ftp.enabled {
-            Some(tokio::spawn(crate::controls::start_ftp_proxy_service(
-                config.file_transfer.proxy_ftp.host,
-                config.file_transfer.proxy_ftp.port,
-                ftc_control.clone(),
-            )))
-        } else {
-            None
-        };
-
-        let proxy_webdav_task = if config.file_transfer.proxy_webdav.enabled {
-            Some(tokio::spawn(crate::controls::start_webdav_proxy_service(
-                config.file_transfer.proxy_webdav.host,
-                config.file_transfer.proxy_webdav.port,
-                ftc_control.clone(),
-            )))
-        } else {
-            None
-        };
-
         let devices_config = Arc::new(Mutex::new(devices_config));
         let trusted_devices_config = Arc::new(Mutex::new(trusted_devices_config));
         let direct_address_cache = Arc::new(Mutex::new(direct_address_cache));
 
         let task_handles = TaskHandles {
             swarm_task,
-            proxy_ftp_task: Arc::new(Mutex::new(proxy_ftp_task)),
-            proxy_webdav_task: Arc::new(Mutex::new(proxy_webdav_task)),
             direct_address_cache_sync_task: spawn_direct_address_cache_sync_task(
                 swarm_control.clone(),
                 direct_address_cache.clone(),
@@ -288,8 +249,6 @@ impl FungiDaemon {
             args,
             swarm_control,
             mdns_control,
-            fts_control,
-            ftc_control,
             docker_control,
             tcp_tunneling_control,
             runtime_control,
@@ -312,14 +271,6 @@ impl FungiDaemon {
             // _ = self.task_handles.daemon_rpc_task => {
             //     println!("Daemon RPC task is closed");
             // },
-        }
-    }
-
-    async fn init_fts(config: FTSConfig, fts_control: &FileTransferServiceControl) {
-        if config.enabled
-            && let Err(e) = fts_control.add_service(config).await
-        {
-            log::warn!("Failed to add file transfer service: {e}");
         }
     }
 
@@ -360,90 +311,28 @@ impl FungiDaemon {
         Ok(())
     }
 
-    fn init_ftc(clients: Vec<FTCConfig>, ftc_control: FileTransferClientsControl) {
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            for mut client in clients {
-                if !client.enabled {
-                    continue;
-                }
-                if client.name.is_none()
-                    && let Ok(remote_host_name) =
-                        ftc_control.connect_and_get_host_name(client.peer_id).await
-                {
-                    client.name = remote_host_name
-                }
-                ftc_control.add_client(client);
-            }
-        });
-    }
-
-    pub(crate) fn update_ftp_proxy_task(
-        &self,
-        enabled: bool,
-        host: IpAddr,
-        port: u16,
-    ) -> Result<()> {
-        if port == 0 {
-            return Err(anyhow::anyhow!("Port must be greater than 0"));
-        }
-        if let Some(old_task) = self.task_handles.proxy_ftp_task.lock().take()
-            && !old_task.is_finished()
-        {
-            old_task.abort();
-        }
-        if enabled {
-            let task = tokio::spawn(crate::controls::start_ftp_proxy_service(
-                host,
-                port,
-                self.ftc_control.clone(),
-            ));
-            self.task_handles.proxy_ftp_task.lock().replace(task);
-        }
-        Ok(())
-    }
-
-    pub(crate) fn update_webdav_proxy_task(
-        &self,
-        enabled: bool,
-        host: IpAddr,
-        port: u16,
-    ) -> Result<()> {
-        if port == 0 {
-            return Err(anyhow::anyhow!("Port must be greater than 0"));
-        }
-        if let Some(old_task) = self.task_handles.proxy_webdav_task.lock().take()
-            && !old_task.is_finished()
-        {
-            old_task.abort();
-        }
-        if enabled {
-            let task = tokio::spawn(crate::controls::start_webdav_proxy_service(
-                host,
-                port,
-                self.ftc_control.clone(),
-            ));
-            self.task_handles.proxy_webdav_task.lock().replace(task);
-        }
-        Ok(())
-    }
-
-    pub(crate) async fn add_tcp_forwarding_rule_internal(
+    pub(crate) async fn add_service_access_forwarding_rule_internal(
         &self,
         rule: fungi_config::tcp_tunneling::ForwardingRule,
     ) -> Result<String> {
+        ensure_service_access_forwarding_rule(&rule)?;
         let rule_id = self
             .tcp_tunneling_control
             .add_forwarding_rule(rule.clone())
             .await?;
 
-        // Update config file
-        self.update_config_with_forwarding_rule(rule, true)?;
+        if let Err(error) = self.persist_service_access_forwarding_rule(rule, true) {
+            let _ = self.tcp_tunneling_control.remove_forwarding_rule(&rule_id);
+            return Err(error);
+        }
 
         Ok(rule_id)
     }
 
-    pub(crate) fn remove_tcp_forwarding_rule_internal(&self, rule_id: &str) -> Result<()> {
+    pub(crate) fn remove_service_access_forwarding_rule_internal(
+        &self,
+        rule_id: &str,
+    ) -> Result<()> {
         // Get the rule before removing it
         let rules = self.tcp_tunneling_control.get_forwarding_rules();
         let rule = rules
@@ -451,72 +340,28 @@ impl FungiDaemon {
             .find(|(id, _)| id == rule_id)
             .map(|(_, rule)| rule.clone())
             .ok_or_else(|| anyhow::anyhow!("Forwarding rule not found: {}", rule_id))?;
+        ensure_service_access_forwarding_rule(&rule)?;
 
         self.tcp_tunneling_control.remove_forwarding_rule(rule_id)?;
 
-        // Update config file
-        self.update_config_with_forwarding_rule(rule, false)?;
+        self.persist_service_access_forwarding_rule(rule, false)?;
 
         Ok(())
     }
 
-    pub(crate) async fn add_tcp_listening_rule_internal(
-        &self,
-        rule: fungi_config::tcp_tunneling::ListeningRule,
-    ) -> Result<String> {
-        let rule_id = self
-            .tcp_tunneling_control
-            .add_listening_rule(rule.clone())
-            .await?;
-
-        // Update config file
-        self.update_config_with_listening_rule(rule, true)?;
-
-        Ok(rule_id)
-    }
-
-    pub(crate) fn remove_tcp_listening_rule_internal(&self, rule_id: &str) -> Result<()> {
-        // Get the rule before removing it
-        let rules = self.tcp_tunneling_control.get_listening_rules();
-        let rule = rules
-            .iter()
-            .find(|(id, _)| id == rule_id)
-            .map(|(_, rule)| rule.clone())
-            .ok_or_else(|| anyhow::anyhow!("Listening rule not found: {}", rule_id))?;
-
-        self.tcp_tunneling_control.remove_listening_rule(rule_id)?;
-
-        // Update config file
-        self.update_config_with_listening_rule(rule, false)?;
-
-        Ok(())
-    }
-
-    fn update_config_with_forwarding_rule(
+    fn persist_service_access_forwarding_rule(
         &self,
         rule: fungi_config::tcp_tunneling::ForwardingRule,
         add: bool,
     ) -> Result<()> {
-        if rule.remote_service_name.is_some() {
-            let fungi_dir = self.config_fungi_dir()?;
-            let current_access = LocalAccessConfig::apply_from_dir(&fungi_dir)?;
-            if add {
-                current_access.add_forwarding_rule(rule)?;
-            } else {
-                current_access.remove_forwarding_rule(&rule)?;
-            }
-            return Ok(());
-        }
-
-        let current_config = self.config.lock().clone();
-        let updated_config = if add {
-            current_config.add_tcp_forwarding_rule(rule)?
+        ensure_service_access_forwarding_rule(&rule)?;
+        let fungi_dir = self.config_fungi_dir()?;
+        let current_access = LocalAccessConfig::apply_from_dir(&fungi_dir)?;
+        if add {
+            current_access.add_forwarding_rule(rule)?;
         } else {
-            current_config.remove_tcp_forwarding_rule(&rule)?
-        };
-
-        // Update the cached config
-        *self.config.lock() = updated_config;
+            current_access.remove_forwarding_rule(&rule)?;
+        }
         Ok(())
     }
 
@@ -528,23 +373,23 @@ impl FungiDaemon {
             .map(std::path::Path::to_path_buf)
             .ok_or_else(|| anyhow::anyhow!("config file has no parent directory"))
     }
+}
 
-    fn update_config_with_listening_rule(
-        &self,
-        rule: fungi_config::tcp_tunneling::ListeningRule,
-        add: bool,
-    ) -> Result<()> {
-        let current_config = self.config.lock().clone();
-        let updated_config = if add {
-            current_config.add_tcp_listening_rule(rule)?
-        } else {
-            current_config.remove_tcp_listening_rule(&rule)?
-        };
-
-        // Update the cached config
-        *self.config.lock() = updated_config;
-        Ok(())
+fn ensure_service_access_forwarding_rule(
+    rule: &fungi_config::tcp_tunneling::ForwardingRule,
+) -> Result<()> {
+    if rule
+        .remote_service_name
+        .as_deref()
+        .is_none_or(str::is_empty)
+        || rule
+            .remote_service_port_name
+            .as_deref()
+            .is_none_or(str::is_empty)
+    {
+        anyhow::bail!("service access forwarding rules require remote service metadata");
     }
+    Ok(())
 }
 
 fn hydrate_device_addresses(state: &State, devices_config: &DevicesConfig) {
