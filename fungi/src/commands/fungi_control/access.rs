@@ -42,8 +42,15 @@ pub enum AccessCommands {
         #[arg(short, long, default_value_t = false)]
         verbose: bool,
     },
-    /// Remove a local access entry for a published remote service
+    /// Disconnect local access listeners for a published remote service
     Detach {
+        /// Published service name
+        service_name: String,
+        #[command(flatten)]
+        peer: PeerTargetArg,
+    },
+    /// Delete the saved local access entry for a published remote service
+    Forget {
         /// Published service name
         service_name: String,
         #[command(flatten)]
@@ -104,7 +111,22 @@ pub async fn execute_access(args: CommonArgs, cmd: AccessCommands) {
                 service_name,
             };
             match client.detach_service_access(Request::new(req)).await {
-                Ok(_) => println!("Access entry detached"),
+                Ok(_) => println!("Access entry disconnected"),
+                Err(error) => fatal_grpc(error),
+            }
+        }
+        AccessCommands::Forget { service_name, peer } => {
+            let peer = match resolve_required_peer(&args, peer.peer.as_ref()) {
+                Ok(peer) => peer,
+                Err(error) => fatal(error),
+            };
+            print_target_peer(&peer);
+            let req = DetachServiceAccessRequest {
+                peer_id: peer.peer_id,
+                service_name,
+            };
+            match client.forget_service_access(Request::new(req)).await {
+                Ok(_) => println!("Access entry forgotten"),
                 Err(error) => fatal_grpc(error),
             }
         }
@@ -124,7 +146,7 @@ pub async fn execute_access(args: CommonArgs, cmd: AccessCommands) {
             print_target_peer(&peer);
 
             let catalog = discover_catalog_service(&mut client, &peer.peer_id, &service_name).await;
-            let access = existing_or_attach_access(&mut client, &peer.peer_id, &service_name).await;
+            let access = attach_access(&mut client, &peer.peer_id, &service_name).await;
             let urls = build_local_urls(&catalog, &access);
             let Some(url) = urls.into_iter().next() else {
                 fatal("No local URL is available for this access entry")
@@ -177,24 +199,6 @@ async fn attach_access(
         }
         Err(error) => fatal_grpc(error),
     }
-}
-
-async fn existing_or_attach_access(
-    client: &mut fungi_daemon_grpc::fungi_daemon_grpc::fungi_daemon_client::FungiDaemonClient<
-        tonic::transport::Channel,
-    >,
-    peer_id: &str,
-    service_name: &str,
-) -> ServiceAccess {
-    let existing = list_accesses(client, Some(peer_id)).await;
-    if let Some(access) = existing
-        .into_iter()
-        .find(|access| access.service_name == service_name)
-    {
-        return access;
-    }
-
-    attach_access(client, peer_id, service_name).await
 }
 
 async fn discover_catalog_service(

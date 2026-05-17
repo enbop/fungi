@@ -360,6 +360,8 @@ fn cli_can_create_and_access_remote_tcp_service() {
     let access_json =
         std::fs::read_to_string(a.path().join("access").join("local_access.json")).unwrap();
     assert!(access_json.contains("test-tcp"));
+    assert!(access_json.contains("\"records\""));
+    assert!(!access_json.contains("\"rules\""));
     let config_toml = std::fs::read_to_string(a.path().join("config.toml")).unwrap();
     assert!(
         !config_toml.contains("remote_service_id"),
@@ -375,6 +377,10 @@ fn cli_can_create_and_access_remote_tcp_service() {
     server.join().unwrap();
 
     run_cli(a.path(), ["service", "stop", "test-tcp@b"]);
+    assert!(
+        TcpStream::connect(&local_addr).is_err(),
+        "service stop should release the local access listener"
+    );
     let output = run_cli(a.path(), ["service"]);
     assert!(
         output.stdout.contains("test-tcp@b"),
@@ -387,7 +393,33 @@ fn cli_can_create_and_access_remote_tcp_service() {
         output.stdout
     );
 
+    run_cli(a.path(), ["service", "start", "test-tcp@b"]);
+    let output = run_cli(a.path(), ["test-tcp@b"]);
+    let restarted_local_addr = extract_local_address(&output.stdout);
+    assert_eq!(
+        restarted_local_addr, local_addr,
+        "remote service restart should reuse the saved local access port"
+    );
+
+    run_cli(a.path(), ["service", "disconnect", "test-tcp@b"]);
+    assert!(
+        TcpStream::connect(&local_addr).is_err(),
+        "service disconnect should release the local access listener"
+    );
+    let output = run_cli(a.path(), ["test-tcp@b"]);
+    let reconnected_local_addr = extract_local_address(&output.stdout);
+    assert_eq!(
+        reconnected_local_addr, local_addr,
+        "service reconnect should reuse the saved local access port"
+    );
+
     run_cli(a.path(), ["device", "remove", "b"]);
+    let access_json =
+        std::fs::read_to_string(a.path().join("access").join("local_access.json")).unwrap();
+    assert!(
+        !access_json.contains("test-tcp"),
+        "device remove should forget local access records"
+    );
     let output = run_cli(a.path(), ["device"]);
     assert!(
         !output.stdout.contains(" - b "),

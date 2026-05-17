@@ -20,8 +20,6 @@ use fungi_config::{
     FungiConfig,
     devices::{DeviceInfo, DevicesConfig},
     direct_addresses::DirectAddressCache,
-    local_access::LocalAccessConfig,
-    tcp_tunneling::{Forwarding, TcpTunneling},
     trusted_devices::TrustedDevicesConfig,
 };
 use fungi_swarm::{
@@ -210,17 +208,6 @@ impl FungiDaemon {
         node_capabilities_control.start()?;
 
         let tcp_tunneling_control = TcpTunnelingControl::new(swarm_control.clone());
-        let local_access_config = LocalAccessConfig::apply_from_dir(&fungi_home)?;
-        let tcp_tunneling_config = TcpTunneling {
-            forwarding: Forwarding {
-                rules: local_access_config.rules.clone(),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        tcp_tunneling_control
-            .init_from_config(&tcp_tunneling_config)
-            .await;
 
         let service_control_protocol_control = ServiceControlProtocolControl::new(
             swarm_control.clone(),
@@ -316,53 +303,14 @@ impl FungiDaemon {
         rule: fungi_config::tcp_tunneling::ForwardingRule,
     ) -> Result<String> {
         ensure_service_access_forwarding_rule(&rule)?;
-        let rule_id = self
-            .tcp_tunneling_control
-            .add_forwarding_rule(rule.clone())
-            .await?;
-
-        if let Err(error) = self.persist_service_access_forwarding_rule(rule, true) {
-            let _ = self.tcp_tunneling_control.remove_forwarding_rule(&rule_id);
-            return Err(error);
-        }
-
-        Ok(rule_id)
+        self.tcp_tunneling_control.add_forwarding_rule(rule).await
     }
 
     pub(crate) fn remove_service_access_forwarding_rule_internal(
         &self,
         rule_id: &str,
     ) -> Result<()> {
-        // Get the rule before removing it
-        let rules = self.tcp_tunneling_control.get_forwarding_rules();
-        let rule = rules
-            .iter()
-            .find(|(id, _)| id == rule_id)
-            .map(|(_, rule)| rule.clone())
-            .ok_or_else(|| anyhow::anyhow!("Forwarding rule not found: {}", rule_id))?;
-        ensure_service_access_forwarding_rule(&rule)?;
-
-        self.tcp_tunneling_control.remove_forwarding_rule(rule_id)?;
-
-        self.persist_service_access_forwarding_rule(rule, false)?;
-
-        Ok(())
-    }
-
-    fn persist_service_access_forwarding_rule(
-        &self,
-        rule: fungi_config::tcp_tunneling::ForwardingRule,
-        add: bool,
-    ) -> Result<()> {
-        ensure_service_access_forwarding_rule(&rule)?;
-        let fungi_dir = self.config_fungi_dir()?;
-        let current_access = LocalAccessConfig::apply_from_dir(&fungi_dir)?;
-        if add {
-            current_access.add_forwarding_rule(rule)?;
-        } else {
-            current_access.remove_forwarding_rule(&rule)?;
-        }
-        Ok(())
+        self.tcp_tunneling_control.remove_forwarding_rule(rule_id)
     }
 
     pub fn config_fungi_dir(&self) -> Result<PathBuf> {

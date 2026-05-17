@@ -171,11 +171,15 @@ service FungiDaemon {
   rpc AttachServiceAccess(AttachServiceAccessRequest)
   returns (ServiceAccessResponse) {}
 
-    // Removes local access entries for a previously attached remote service.
+    // Disconnects local access listeners for a remote service while keeping saved port records.
   rpc DetachServiceAccess(DetachServiceAccessRequest)
   returns (Empty) {}
 
-    // Lists service access entries currently attached on the local node.
+    // Deletes saved local access records for a remote service.
+  rpc ForgetServiceAccess(DetachServiceAccessRequest)
+  returns (Empty) {}
+
+    // Lists saved service access entries on the local node.
   rpc ListServiceAccesses(ListServiceAccessesRequest)
   returns (ServiceAccessesResponse) {}
 }
