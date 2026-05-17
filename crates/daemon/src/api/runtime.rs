@@ -486,7 +486,7 @@ impl FungiDaemon {
             anyhow::bail!("cached service not found for device: {name}");
         }
 
-        let _ = self.detach_service_access_by_match(device_id, name);
+        let _ = self.forget_service_access(device_id, name.to_string());
         Ok(ServiceControlResponse::success_forgotten_locally(
             None,
             name.to_string(),
@@ -640,7 +640,7 @@ impl FungiDaemon {
             .unwrap_or_default()
             .to_string();
         if !service_key.is_empty() {
-            let _ = self.detach_service_access_by_match(peer_id, &service_key);
+            let _ = self.forget_service_access(peer_id, service_key);
         }
         self.reconcile_remote_service_caches(peer_id, true).await;
         Ok(response)

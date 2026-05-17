@@ -49,8 +49,8 @@ pub async fn execute_catalog(args: CommonArgs, cmd: CatalogCommands) {
             };
             print_target_peer(&peer);
             let services = discover_services(&mut client, &peer.peer_id).await;
-            let attached = list_attached_services(&mut client, &peer.peer_id).await;
-            print_catalog_services(&peer.peer_id, &services, &attached, verbose);
+            let saved_accesses = list_saved_accesses(&mut client, &peer.peer_id).await;
+            print_catalog_services(&peer.peer_id, &services, &saved_accesses, verbose);
         }
         CatalogCommands::Inspect {
             service_name,
@@ -63,7 +63,7 @@ pub async fn execute_catalog(args: CommonArgs, cmd: CatalogCommands) {
             };
             print_target_peer(&peer);
             let services = discover_services(&mut client, &peer.peer_id).await;
-            let attached = list_attached_services(&mut client, &peer.peer_id).await;
+            let saved_accesses = list_saved_accesses(&mut client, &peer.peer_id).await;
             let Some(service) = services
                 .into_iter()
                 .find(|service| service.service_name == service_name)
@@ -73,7 +73,7 @@ pub async fn execute_catalog(args: CommonArgs, cmd: CatalogCommands) {
                     peer.peer_id, service_name
                 ));
             };
-            print_catalog_service(&peer.peer_id, service, &attached, verbose);
+            print_catalog_service(&peer.peer_id, service, &saved_accesses, verbose);
         }
     }
 }
@@ -81,10 +81,10 @@ pub async fn execute_catalog(args: CommonArgs, cmd: CatalogCommands) {
 fn print_catalog_services(
     peer_id: &str,
     services: &[CatalogService],
-    attached: &[ServiceAccess],
+    saved_accesses: &[ServiceAccess],
     verbose: bool,
 ) {
-    let attached_by_service = attached
+    let saved_access_by_service = saved_accesses
         .iter()
         .map(|service| (service.service_name.as_str(), service))
         .collect::<std::collections::BTreeMap<_, _>>();
@@ -98,8 +98,8 @@ fn print_catalog_services(
                 usage: catalog_usage_label(service),
                 runtime: service.runtime,
                 transport: catalog_transport_label(service),
-                attached: attached_by_service.contains_key(service.service_name.as_str()),
-                local_urls: attached_by_service
+                access_saved: saved_access_by_service.contains_key(service.service_name.as_str()),
+                local_urls: saved_access_by_service
                     .get(service.service_name.as_str())
                     .map(|access| build_local_urls(service, access))
                     .unwrap_or_default(),
@@ -121,8 +121,8 @@ fn print_catalog_services(
             .map(|service| CatalogListEntry {
                 service_name: service.service_name.clone(),
                 usage: catalog_usage_label(service),
-                attached: attached_by_service.contains_key(service.service_name.as_str()),
-                local_urls: attached_by_service
+                access_saved: saved_access_by_service.contains_key(service.service_name.as_str()),
+                local_urls: saved_access_by_service
                     .get(service.service_name.as_str())
                     .map(|access| build_local_urls(service, access))
                     .unwrap_or_default(),
@@ -136,14 +136,14 @@ fn print_catalog_services(
 fn print_catalog_service(
     peer_id: &str,
     service: CatalogService,
-    attached: &[ServiceAccess],
+    saved_accesses: &[ServiceAccess],
     verbose: bool,
 ) {
-    let attached_access = attached
+    let saved_access = saved_accesses
         .iter()
         .find(|access| access.service_name == service.service_name);
     let usage = catalog_usage_label(&service);
-    let local_urls = attached_access
+    let local_urls = saved_access
         .map(|access| build_local_urls(&service, access))
         .unwrap_or_default();
     let transport = catalog_transport_label(&service);
@@ -157,7 +157,7 @@ fn print_catalog_service(
             transport,
             status: service.status.state,
             running: service.status.running,
-            attached: attached_access.is_some(),
+            access_saved: saved_access.is_some(),
             local_urls,
             icon_url: service.icon_url,
             catalog_id: service.catalog_id,
@@ -179,7 +179,7 @@ fn print_catalog_service(
             usage,
             status: service.status.state,
             running: service.status.running,
-            attached: attached_access.is_some(),
+            access_saved: saved_access.is_some(),
             local_urls,
             endpoints: service
                 .endpoints
@@ -219,7 +219,7 @@ async fn discover_services(
     }
 }
 
-async fn list_attached_services(
+async fn list_saved_accesses(
     client: &mut fungi_daemon_grpc::fungi_daemon_grpc::fungi_daemon_client::FungiDaemonClient<
         tonic::transport::Channel,
     >,
@@ -233,7 +233,7 @@ async fn list_attached_services(
             &resp.into_inner().service_accesses_json,
         ) {
             Ok(services) => services,
-            Err(error) => fatal(format!("Failed to decode attached access list: {error}")),
+            Err(error) => fatal(format!("Failed to decode saved access list: {error}")),
         },
         Err(error) => fatal_grpc(error),
     }
@@ -294,7 +294,7 @@ fn print_json<T: Serialize>(value: &T, label: &str) {
 struct CatalogListEntry {
     service_name: String,
     usage: String,
-    attached: bool,
+    access_saved: bool,
     local_urls: Vec<String>,
 }
 
@@ -305,7 +305,7 @@ struct CatalogListVerboseEntry {
     usage: String,
     runtime: fungi_daemon::RuntimeKind,
     transport: String,
-    attached: bool,
+    access_saved: bool,
     local_urls: Vec<String>,
     endpoints: Vec<CatalogVerboseEndpointView>,
 }
@@ -316,7 +316,7 @@ struct CatalogInspectView {
     usage: String,
     status: String,
     running: bool,
-    attached: bool,
+    access_saved: bool,
     local_urls: Vec<String>,
     endpoints: Vec<CatalogEndpointView>,
 }
@@ -330,7 +330,7 @@ struct CatalogInspectVerboseView {
     transport: String,
     status: String,
     running: bool,
-    attached: bool,
+    access_saved: bool,
     local_urls: Vec<String>,
     icon_url: Option<String>,
     catalog_id: Option<String>,
