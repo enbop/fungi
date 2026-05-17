@@ -485,7 +485,7 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                     &service_ref,
                 )
                 .await;
-                let access = existing_or_attach_access(
+                let access = attach_access_with_options(
                     &mut client,
                     &device.peer_id,
                     &target.name,
@@ -518,7 +518,7 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                 let service_ref = remote_service_reference(&target.name, &device);
                 discover_remote_service(&mut client, &device.peer_id, &target.name, &service_ref)
                     .await;
-                let access = existing_or_attach_access(
+                let access = attach_access_with_options(
                     &mut client,
                     &device.peer_id,
                     &target.name,
@@ -565,7 +565,7 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             let service_ref = remote_service_reference(&service, &device);
             let remote_service =
                 discover_remote_service(&mut client, &device.peer_id, &service, &service_ref).await;
-            let access = existing_or_attach_access(
+            let access = attach_access_with_options(
                 &mut client,
                 &device.peer_id,
                 &service,
@@ -1640,16 +1640,6 @@ async fn attach_access_with_options(
         }
         Err(error) => fatal_grpc(error),
     }
-}
-
-async fn existing_or_attach_access(
-    client: &mut RpcClient,
-    peer_id: &str,
-    service_name: &str,
-    entry: Option<&str>,
-    local_port: Option<u16>,
-) -> ServiceAccess {
-    attach_access_with_options(client, peer_id, service_name, entry, local_port).await
 }
 
 async fn discover_remote_service(

@@ -1283,7 +1283,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
     async fn forget_service_access(
         &self,
-        request: Request<DetachServiceAccessRequest>,
+        request: Request<ForgetServiceAccessRequest>,
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
         let peer_id = PeerId::from_str(&req.peer_id)

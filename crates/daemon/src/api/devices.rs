@@ -45,7 +45,7 @@ impl FungiDaemon {
     }
 
     fn remove_device_local_service_state(&self, peer_id: PeerId) -> Result<()> {
-        let _ = self.forget_device_service_accesses(peer_id);
+        self.forget_device_service_accesses(peer_id)?;
 
         let fungi_dir = self.config_fungi_dir()?;
         let published =
