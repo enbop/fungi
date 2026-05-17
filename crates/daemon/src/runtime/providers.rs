@@ -18,7 +18,7 @@ use crate::controls::DockerControl;
 
 use super::{
     helpers::{
-        build_wasmtime_command, build_wasmtime_state, docker_spec_from_manifest,
+        build_wasmtime_command, build_wasmtime_state, docker_spec_from_manifest_with_name,
         ensure_manifest_mount_dirs, map_docker_instance, map_wasmtime_instance,
         refresh_child_state, tail_lines,
     },
@@ -49,6 +49,17 @@ impl DockerRuntimeProvider {
     pub fn new(docker: DockerControl) -> Self {
         Self { docker }
     }
+
+    pub(crate) async fn pull_with_container_name(
+        &self,
+        manifest: &ServiceManifest,
+        container_name: &str,
+    ) -> Result<ServiceInstance> {
+        ensure_manifest_mount_dirs(manifest)?;
+        let spec = docker_spec_from_manifest_with_name(manifest, container_name)?;
+        let details = self.docker.create_container(&spec).await?;
+        Ok(map_docker_instance(details))
+    }
 }
 
 #[async_trait]
@@ -58,10 +69,8 @@ impl RuntimeProvider for DockerRuntimeProvider {
     }
 
     async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
-        ensure_manifest_mount_dirs(manifest)?;
-        let spec = docker_spec_from_manifest(manifest)?;
-        let details = self.docker.create_container(&spec).await?;
-        Ok(map_docker_instance(details))
+        self.pull_with_container_name(manifest, &manifest.name)
+            .await
     }
 
     async fn start(&self, name: &str) -> Result<()> {

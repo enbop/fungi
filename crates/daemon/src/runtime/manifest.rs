@@ -98,33 +98,46 @@ pub(crate) fn parse_service_manifest_yaml_with_policy_for_service_paths(
 
 pub fn peek_service_manifest_name(content: &str) -> Result<String> {
     if let Some(document) = parse_fungi_service_document(content)? {
-        return normalize_non_empty(&document.name, "name");
+        return document.service_name();
     }
 
     let document = parse_legacy_service_manifest_yaml(content, "service manifest YAML")?;
     normalize_non_empty(&document.metadata.name, "metadata.name")
 }
 
-pub fn service_manifest_with_name_override(content: &str, service_name: &str) -> Result<String> {
+pub fn service_manifest_with_instance_name(content: &str, service_name: &str) -> Result<String> {
     let service_name = normalize_non_empty(service_name, "service name")?;
     if let Some(front_matter) = split_front_matter(content)? {
         let mut document =
             parse_fungi_service_yaml(front_matter.yaml, "Fungi service front matter")?;
-        document.name = service_name;
+        document.set_instance_name(service_name.to_string());
         let yaml = serde_yaml::to_string(&document)
             .context("Failed to encode Fungi service front matter")?;
+        let yaml = yaml_without_document_start(yaml);
         return Ok(format!("---\n{}---\n{}", yaml, front_matter.body));
     }
 
     if should_parse_as_fungi_service_yaml(content) {
         let mut document = parse_fungi_service_yaml(content, "Fungi service YAML")?;
-        document.name = service_name;
+        document.set_instance_name(service_name.to_string());
         return serde_yaml::to_string(&document).context("Failed to encode Fungi service YAML");
     }
 
     let mut document = parse_legacy_service_manifest_yaml(content, "service manifest YAML")?;
     document.metadata.name = service_name;
     serde_yaml::to_string(&document).context("Failed to encode service manifest YAML")
+}
+
+fn yaml_without_document_start(yaml: String) -> String {
+    let mut yaml = yaml
+        .strip_prefix("---\n")
+        .or_else(|| yaml.strip_prefix("---\r\n"))
+        .unwrap_or(&yaml)
+        .to_string();
+    if !yaml.ends_with('\n') {
+        yaml.push('\n');
+    }
+    yaml
 }
 
 pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
@@ -160,6 +173,7 @@ pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
         kind: "Service".to_string(),
         metadata: ServiceManifestMetadata {
             name: manifest.name.clone(),
+            definition_id: manifest.definition_id.clone(),
             labels: manifest.labels.clone(),
         },
         spec: ServiceManifestSpec {
@@ -234,6 +248,10 @@ impl ServiceManifestDocument {
             spec,
         } = self;
         let service_name = normalize_non_empty(&metadata.name, "metadata.name")?;
+        let definition_id = metadata
+            .definition_id
+            .map(|value| normalize_non_empty(&value, "metadata.definitionId"))
+            .transpose()?;
         let metadata_labels = metadata.labels;
         let mut reserved_host_ports = used_host_ports.clone();
         if spec.entries.is_empty() {
@@ -251,6 +269,7 @@ impl ServiceManifestDocument {
 
         Ok(ServiceManifest {
             name: service_name.clone(),
+            definition_id,
             runtime: runtime_and_source.runtime,
             run_mode: runtime_and_source.run_mode,
             source: runtime_and_source.source,
@@ -296,7 +315,9 @@ struct FrontMatter<'a> {
 #[serde(deny_unknown_fields)]
 struct FungiServiceDocument {
     fungi: String,
-    name: String,
+    id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    instance: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     run: Option<FungiServiceRun>,
     publish: BTreeMap<String, FungiServicePublishEntry>,
@@ -457,6 +478,21 @@ fn should_parse_as_fungi_service_yaml(content: &str) -> bool {
 }
 
 impl FungiServiceDocument {
+    fn definition_id(&self) -> Result<String> {
+        normalize_non_empty(&self.id, "id")
+    }
+
+    fn service_name(&self) -> Result<String> {
+        match self.instance.as_deref() {
+            Some(instance) => normalize_non_empty(instance, "instance"),
+            None => self.definition_id(),
+        }
+    }
+
+    fn set_instance_name(&mut self, service_name: String) {
+        self.instance = Some(service_name);
+    }
+
     fn into_service_manifest_for_node(
         self,
         base_dir: &Path,
@@ -464,7 +500,7 @@ impl FungiServiceDocument {
         policy: &ManifestResolutionPolicy,
         used_host_ports: &BTreeSet<u16>,
     ) -> Result<ServiceManifest> {
-        let service_name = normalize_non_empty(&self.name, "name")?;
+        let service_name = self.service_name()?;
         let path_roots = ManifestPathRoots::for_local_service_id(fungi_home, &service_name);
         self.into_service_manifest_for_node_with_service_paths(
             base_dir,
@@ -487,7 +523,8 @@ impl FungiServiceDocument {
             bail!("unsupported fungi service format: {}", self.fungi);
         }
 
-        let service_name = normalize_non_empty(&self.name, "name")?;
+        let definition_id = self.definition_id()?;
+        let service_name = self.service_name()?;
         if self.publish.is_empty() {
             bail!("service file requires at least one publish entry");
         }
@@ -495,7 +532,8 @@ impl FungiServiceDocument {
         let mut reserved_host_ports = used_host_ports.clone();
         let FungiServiceDocument {
             fungi: _,
-            name: _,
+            id: _,
+            instance: _,
             run,
             publish,
         } = self;
@@ -537,6 +575,7 @@ impl FungiServiceDocument {
 
         Ok(ServiceManifest {
             name: service_name,
+            definition_id: Some(definition_id),
             runtime: runtime_and_source.runtime,
             run_mode: runtime_and_source.run_mode,
             source: runtime_and_source.source,

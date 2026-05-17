@@ -20,7 +20,7 @@ use tokio::{
 };
 
 use super::helpers::{
-    build_wasmtime_command, docker_spec_from_manifest, ensure_manifest_mount_dirs,
+    build_wasmtime_command, docker_spec_from_manifest_with_name, ensure_manifest_mount_dirs,
     is_missing_docker_container_error,
 };
 use super::providers::WasmtimeServiceState;
@@ -29,6 +29,7 @@ use super::providers::WasmtimeServiceState;
 fn docker_manifest_maps_to_container_spec() {
     let manifest = ServiceManifest {
         name: "filebrowser".into(),
+        definition_id: None,
         runtime: RuntimeKind::Docker,
         run_mode: ServiceRunMode::Command,
         source: ServiceSource::Docker {
@@ -53,10 +54,36 @@ fn docker_manifest_maps_to_container_spec() {
         labels: BTreeMap::new(),
     };
 
-    let spec = docker_spec_from_manifest(&manifest).unwrap();
+    let spec = docker_spec_from_manifest_with_name(&manifest, &manifest.name).unwrap();
     assert_eq!(spec.name.as_deref(), Some("filebrowser"));
     assert_eq!(spec.image, "filebrowser/filebrowser:latest");
     assert_eq!(spec.ports[0].host_port, 8080);
+}
+
+#[test]
+fn docker_manifest_can_use_internal_container_name() {
+    let manifest = ServiceManifest {
+        name: "c".into(),
+        definition_id: Some("code-server".into()),
+        runtime: RuntimeKind::Docker,
+        run_mode: ServiceRunMode::Command,
+        source: ServiceSource::Docker {
+            image: "ghcr.io/coder/code-server:latest".into(),
+        },
+        expose: None,
+        env: BTreeMap::new(),
+        mounts: Vec::new(),
+        ports: Vec::new(),
+        command: Vec::new(),
+        entrypoint: Vec::new(),
+        working_dir: None,
+        labels: BTreeMap::new(),
+    };
+
+    let spec =
+        docker_spec_from_manifest_with_name(&manifest, "svc_01hz7j7n3evh1q4j1a8g9c2d3e").unwrap();
+
+    assert_eq!(spec.name.as_deref(), Some("svc_01hz7j7n3evh1q4j1a8g9c2d3e"));
 }
 
 #[test]
@@ -65,6 +92,7 @@ fn ensure_manifest_mount_dirs_creates_missing_host_paths() {
     let mount_path = temp_dir.path().join("nested/data");
     let manifest = ServiceManifest {
         name: "mount-test".into(),
+        definition_id: None,
         runtime: RuntimeKind::Wasmtime,
         run_mode: ServiceRunMode::Command,
         source: ServiceSource::WasmtimeFile {
@@ -116,6 +144,7 @@ fn runtime_control_new_creates_services_root() {
 fn docker_manifest_rejects_wrong_source_type() {
     let manifest = ServiceManifest {
         name: "bad".into(),
+        definition_id: None,
         runtime: RuntimeKind::Docker,
         run_mode: ServiceRunMode::Command,
         source: ServiceSource::WasmtimeFile {
@@ -131,7 +160,7 @@ fn docker_manifest_rejects_wrong_source_type() {
         labels: BTreeMap::new(),
     };
 
-    assert!(docker_spec_from_manifest(&manifest).is_err());
+    assert!(docker_spec_from_manifest_with_name(&manifest, &manifest.name).is_err());
 }
 
 #[tokio::test]
@@ -149,6 +178,7 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
     );
     let manifest = ServiceManifest {
         name: "demo-service".into(),
+        definition_id: None,
         runtime: RuntimeKind::Wasmtime,
         run_mode: ServiceRunMode::Http,
         source: ServiceSource::WasmtimeFile {
@@ -232,6 +262,7 @@ fn wasmtime_tcp_entry_runs_command_with_network_permissions() {
     let component = temp_dir.path().join("demo.wasm");
     let manifest = ServiceManifest {
         name: "tcp-service".into(),
+        definition_id: None,
         runtime: RuntimeKind::Wasmtime,
         run_mode: ServiceRunMode::Command,
         source: ServiceSource::WasmtimeFile {
@@ -295,6 +326,7 @@ fn wasmtime_http_mode_without_tcp_port_returns_error() {
     let component = temp_dir.path().join("demo.wasm");
     let manifest = ServiceManifest {
         name: "http-service".into(),
+        definition_id: None,
         runtime: RuntimeKind::Wasmtime,
         run_mode: ServiceRunMode::Http,
         source: ServiceSource::WasmtimeFile {
@@ -436,7 +468,7 @@ spec:
 fn fungi_service_file_maps_docker_workload_port_and_workspace_mount() {
     let content = r#"---
 fungi: service/v1
-name: code-server
+id: code-server
 run:
   provider: docker
   source:
@@ -489,7 +521,7 @@ publish:
 fn fungi_service_file_maps_wasmtime_http_mode_to_serve_intent() {
     let content = r#"
 fungi: service/v1
-name: filebrowser-lite
+id: filebrowser-lite
 run:
   provider: wasmtime
   mode: http
@@ -520,7 +552,7 @@ publish:
 fn fungi_service_file_without_run_maps_to_external_tcp_service() {
     let content = r#"
 fungi: service/v1
-name: ssh-tunnel
+id: ssh-tunnel
 publish:
   ssh:
     tcp:
@@ -556,7 +588,7 @@ publish:
 fn fungi_service_file_rejects_mixed_client_metadata() {
     let content = r#"
 fungi: service/v1
-name: mixed
+id: mixed
 run:
   provider: docker
   source:
@@ -585,7 +617,7 @@ publish:
 fn fungi_service_yaml_allows_yaml_document_start_without_front_matter_close() {
     let content = r#"---
 fungi: service/v1
-name: ssh-tunnel
+id: ssh-tunnel
 publish:
   ssh:
     tcp:
@@ -606,7 +638,7 @@ publish:
 fn fungi_service_yaml_parse_error_keeps_field_detail() {
     let content = r#"
 fungi: service/v1
-name: broken
+id: broken
 publish:
   main:
     tcp: {}
@@ -618,6 +650,57 @@ publish:
 
     assert!(message.contains("Failed to parse Fungi service YAML"));
     assert!(message.contains("missing field `port`"));
+}
+
+#[test]
+fn fungi_service_yaml_rejects_legacy_name_field() {
+    let content = r#"
+fungi: service/v1
+name: old-name
+publish:
+  main:
+    tcp:
+      port: 1080
+    client:
+      kind: raw
+"#;
+
+    let error = parse_service_manifest_yaml(content, Path::new("."), Path::new("/tmp/fungi-home"))
+        .expect_err("Fungi service files should require id instead of name");
+    let message = error.to_string();
+
+    assert!(message.contains("Failed to parse Fungi service YAML"));
+    assert!(message.contains("unknown field `name`"));
+}
+
+#[test]
+fn service_manifest_with_instance_name_keeps_front_matter_parseable() {
+    let content = r#"---
+fungi: service/v1
+id: docs
+publish:
+  main:
+    tcp:
+      port: 8080
+    client:
+      kind: raw
+---
+
+# Docs
+"#;
+
+    let rendered = service_manifest_with_instance_name(content, "published-docs").unwrap();
+
+    assert!(!rendered.starts_with("---\n---\n"));
+    assert!(rendered.contains("instance: published-docs"));
+
+    let manifest =
+        parse_service_manifest_yaml(&rendered, Path::new("."), Path::new("/tmp/fungi-home"))
+            .unwrap();
+
+    assert_eq!(manifest.name, "published-docs");
+    assert_eq!(manifest.definition_id.as_deref(), Some("docs"));
+    assert_eq!(manifest.runtime, RuntimeKind::External);
 }
 
 #[test]
@@ -800,6 +883,7 @@ async fn wasmtime_provider_downloads_remote_component() {
     );
     let manifest = ServiceManifest {
         name: "download-service".into(),
+        definition_id: None,
         runtime: RuntimeKind::Wasmtime,
         run_mode: ServiceRunMode::Command,
         source: ServiceSource::WasmtimeUrl {
@@ -1022,6 +1106,69 @@ async fn apply_manifest_yaml_allows_same_service_fixed_host_port_reapply_only() 
     );
 }
 
+#[tokio::test]
+async fn apply_manifest_yaml_rejects_definition_id_mismatch() {
+    let temp_dir = TempDir::new().unwrap();
+    let fungi_home = temp_dir.path().join("fungi-home");
+    let control = RuntimeControl::new(
+        fungi_home.join("runtime"),
+        PathBuf::from("/bin/echo"),
+        fungi_home.clone(),
+        None,
+        fungi_home.join("services"),
+        Vec::new(),
+        false,
+    )
+    .unwrap();
+
+    let code_server = r#"
+fungi: service/v1
+id: code-server
+publish:
+  main:
+    tcp:
+      host: 127.0.0.1
+      port: 18080
+    client:
+      kind: raw
+"#;
+    control
+        .apply_manifest_yaml(
+            code_server,
+            temp_dir.path(),
+            &fungi_home,
+            &ManifestResolutionPolicy::default(),
+        )
+        .await
+        .unwrap();
+
+    let filebrowser_as_code_server = r#"
+fungi: service/v1
+id: filebrowser-lite
+instance: code-server
+publish:
+  main:
+    tcp:
+      host: 127.0.0.1
+      port: 18081
+    client:
+      kind: raw
+"#;
+    let error = control
+        .apply_manifest_yaml(
+            filebrowser_as_code_server,
+            temp_dir.path(),
+            &fungi_home,
+            &ManifestResolutionPolicy::default(),
+        )
+        .await
+        .expect_err("different definition ids should not replace an existing service");
+
+    let message = error.to_string();
+    assert!(message.contains("definition id 'code-server'"));
+    assert!(message.contains("definition id 'filebrowser-lite'"));
+}
+
 #[test]
 fn parse_manifest_expose_defaults_service_identity() {
     let yaml = r#"
@@ -1219,6 +1366,7 @@ async fn spawn_http_server(body: Vec<u8>) -> TestHttpServer {
 fn existing_tcp_manifest(name: &str, host: &str, port: u16) -> ServiceManifest {
     ServiceManifest {
         name: name.to_string(),
+        definition_id: None,
         runtime: RuntimeKind::External,
         run_mode: ServiceRunMode::Command,
         source: ServiceSource::ExistingTcp {

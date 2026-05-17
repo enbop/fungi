@@ -66,13 +66,13 @@ pub enum DeviceCommands {
     },
     /// Get information about a specific device
     Get {
-        /// Device ID to query
-        peer_id: String,
+        /// Device name or device ID to query
+        device: String,
     },
     /// Remove a device
     Remove {
-        /// Device ID to remove
-        peer_id: String,
+        /// Device name or device ID to remove
+        device: String,
     },
 }
 
@@ -269,7 +269,11 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
                 Err(error) => fatal_grpc(error),
             }
         }
-        DeviceCommands::Get { peer_id } => {
+        DeviceCommands::Get { device } => {
+            let peer_id = match resolve_peer_value(&args, &device) {
+                Ok(peer) => peer.peer_id,
+                Err(error) => fatal(error),
+            };
             let req = GetDeviceRequest { peer_id };
             match client.get_device(Request::new(req)).await {
                 Ok(resp) => {
@@ -282,7 +286,11 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
                 Err(e) => fatal_grpc(e),
             }
         }
-        DeviceCommands::Remove { peer_id } => {
+        DeviceCommands::Remove { device } => {
+            let peer_id = match resolve_peer_value(&args, &device) {
+                Ok(peer) => peer.peer_id,
+                Err(error) => fatal(error),
+            };
             let req = RemoveDeviceRequest { peer_id };
             match client.remove_device(Request::new(req)).await {
                 Ok(_) => println!("Device removed successfully"),

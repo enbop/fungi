@@ -55,6 +55,32 @@ fn cli_suggests_builtin_command_for_dynamic_typo_without_config() {
 }
 
 #[test]
+fn service_apply_file_without_target_prints_order_hint() {
+    let home = TempDir::new().unwrap();
+    let manifest = home.path().join("demo.fungi.md");
+    let manifest_arg = manifest.to_string_lossy().to_string();
+
+    let output = run_cli_result(home.path(), ["service", "apply", manifest_arg.as_str()], "");
+
+    assert!(!output.status.success());
+    assert_eq!(output.stdout, "");
+    assert!(
+        output
+            .stderr
+            .contains("missing NAME[@DEVICE] before the file"),
+        "{}",
+        output.stderr
+    );
+    assert!(
+        output
+            .stderr
+            .contains("fungi service apply <name[@device]> <file>"),
+        "{}",
+        output.stderr
+    );
+}
+
+#[test]
 fn service_apply_dry_run_prints_resolved_intent() {
     let home = TempDir::new().unwrap();
     let rpc = reserve_port();
@@ -71,6 +97,7 @@ fn service_apply_dry_run_prints_resolved_intent() {
         [
             "service",
             "apply",
+            "dry-run-wasi",
             "--dry-run",
             "--start",
             manifest_path.as_ref(),
@@ -107,6 +134,67 @@ fn service_apply_dry_run_prints_resolved_intent() {
 }
 
 #[test]
+fn service_apply_rejects_mismatched_definition_id() {
+    let home = TempDir::new().unwrap();
+    let rpc = reserve_port();
+    let swarm = reserve_port();
+    let code_server_port = reserve_port();
+    let filebrowser_port = reserve_port();
+
+    init_fungi_dir(home.path(), rpc, swarm);
+    let _daemon = start_daemon(home.path());
+    let _peer = wait_peer_id(home.path());
+
+    let code_server =
+        write_existing_tcp_service_manifest(home.path(), "code-server", code_server_port, "raw");
+    let code_server_path = code_server.to_string_lossy();
+    run_cli(
+        home.path(),
+        [
+            "service",
+            "apply",
+            "code-server",
+            "--yes",
+            code_server_path.as_ref(),
+        ],
+    );
+
+    let filebrowser = write_existing_tcp_service_manifest(
+        home.path(),
+        "filebrowser-lite",
+        filebrowser_port,
+        "raw",
+    );
+    let filebrowser_path = filebrowser.to_string_lossy();
+    let output = run_cli_result(
+        home.path(),
+        [
+            "service",
+            "apply",
+            "code-server",
+            "--yes",
+            filebrowser_path.as_ref(),
+        ],
+        "",
+    );
+
+    assert!(!output.status.success());
+    assert_eq!(output.stdout, "");
+    assert!(
+        output.stderr.contains("definition id `code-server`"),
+        "{}",
+        output.stderr
+    );
+    assert!(
+        output
+            .stderr
+            .contains("new manifest declares `filebrowser-lite`"),
+        "{}",
+        output.stderr
+    );
+}
+
+#[test]
 fn cli_prefers_existing_dynamic_service_over_builtin_typo_hint() {
     let home = TempDir::new().unwrap();
     let rpc = reserve_port();
@@ -121,7 +209,13 @@ fn cli_prefers_existing_dynamic_service_over_builtin_typo_hint() {
     let manifest_path = manifest.to_string_lossy();
     run_cli(
         home.path(),
-        ["service", "apply", "--start", manifest_path.as_ref()],
+        [
+            "service",
+            "apply",
+            "devices",
+            "--start",
+            manifest_path.as_ref(),
+        ],
     );
 
     let output = run_cli_result(home.path(), ["devices"], "");
@@ -132,6 +226,44 @@ fn cli_prefers_existing_dynamic_service_over_builtin_typo_hint() {
         output.stderr,
         "No web entry is available for this service\n"
     );
+}
+
+#[test]
+fn cli_can_interactively_create_local_tcp_service() {
+    let home = TempDir::new().unwrap();
+    let rpc = reserve_port();
+    let swarm = reserve_port();
+    let target = reserve_port();
+
+    init_fungi_dir(home.path(), rpc, swarm);
+    let _daemon = start_daemon(home.path());
+    let _peer = wait_peer_id(home.path());
+
+    let target_listener = TcpListener::bind(("127.0.0.1", target)).unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = target_listener.accept().unwrap();
+        let mut buf = [0_u8; 4];
+        stream.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"ping");
+        stream.write_all(b"pong").unwrap();
+    });
+
+    let input = format!("\n{target}\nraw\n\ny\n");
+    run_cli_with_input(
+        home.path(),
+        ["service", "apply", "created-raw", "--create", "--yes"],
+        &input,
+    );
+
+    let output = run_cli(home.path(), ["service", "connect", "created-raw"]);
+    let local_addr = output.stdout.trim();
+    let mut stream = connect_with_retry(&local_addr, Duration::from_secs(5));
+    stream.write_all(b"ping").unwrap();
+    let mut response = [0_u8; 4];
+    stream.read_exact(&mut response).unwrap();
+    assert_eq!(&response, b"pong");
+
+    server.join().unwrap();
 }
 
 #[test]
@@ -190,9 +322,7 @@ fn cli_can_create_and_access_remote_tcp_tunnel_service() {
             "--device",
             "b",
             "apply",
-            "--name",
             "test-tcp",
-            "--start",
             manifest_path.as_ref(),
         ],
     );
@@ -205,6 +335,22 @@ fn cli_can_create_and_access_remote_tcp_tunnel_service() {
         "remote service cache should persist outside config.toml"
     );
 
+    let output = run_cli_result(a.path(), ["test-tcp@b"], "");
+    assert!(!output.status.success());
+    assert!(
+        output
+            .stderr
+            .contains("Remote service test-tcp@b exists but is not running"),
+        "{}",
+        output.stderr
+    );
+    assert!(
+        output.stderr.contains("fungi service start test-tcp@b"),
+        "{}",
+        output.stderr
+    );
+
+    run_cli(a.path(), ["service", "start", "test-tcp@b"]);
     let output = run_cli(a.path(), ["test-tcp@b"]);
     let local_addr = extract_local_address(&output.stdout);
     assert!(
@@ -227,6 +373,27 @@ fn cli_can_create_and_access_remote_tcp_tunnel_service() {
     assert_eq!(&response, b"pong");
 
     server.join().unwrap();
+
+    run_cli(a.path(), ["service", "stop", "test-tcp@b"]);
+    let output = run_cli(a.path(), ["service"]);
+    assert!(
+        output.stdout.contains("test-tcp@b"),
+        "stopped remote service should remain visible\n{}",
+        output.stdout
+    );
+    assert!(
+        output.stdout.contains("stopped"),
+        "stopped remote service should keep its state\n{}",
+        output.stdout
+    );
+
+    run_cli(a.path(), ["device", "remove", "b"]);
+    let output = run_cli(a.path(), ["device"]);
+    assert!(
+        !output.stdout.contains(" - b "),
+        "device remove should accept saved device names\n{}",
+        output.stdout
+    );
 }
 
 fn init_fungi_dir(path: &std::path::Path, rpc_port: u16, swarm_port: u16) {
@@ -258,7 +425,7 @@ fn write_existing_tcp_service_manifest(
         format!(
             r#"---
 fungi: service/v1
-name: {name}
+id: {name}
 publish:
   main:
     tcp:
@@ -285,7 +452,7 @@ fn write_wasmtime_dry_run_manifest(dir: &std::path::Path) -> std::path::PathBuf 
         format!(
             r#"---
 fungi: service/v1
-name: dry-run-wasi
+id: dry-run-wasi
 run:
   provider: wasmtime
   source:

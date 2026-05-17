@@ -12,7 +12,10 @@ use super::{
     manifest::service_expose_endpoint_bindings, model::*, providers::WasmtimeServiceState,
 };
 
-pub(crate) fn docker_spec_from_manifest(manifest: &ServiceManifest) -> Result<ContainerSpec> {
+pub(crate) fn docker_spec_from_manifest_with_name(
+    manifest: &ServiceManifest,
+    container_name: &str,
+) -> Result<ContainerSpec> {
     if manifest.runtime != RuntimeKind::Docker {
         bail!("service manifest runtime does not match docker provider")
     }
@@ -22,7 +25,7 @@ pub(crate) fn docker_spec_from_manifest(manifest: &ServiceManifest) -> Result<Co
     };
 
     Ok(ContainerSpec {
-        name: Some(manifest.name.clone()),
+        name: Some(container_name.to_string()),
         image: image.clone(),
         env: manifest.env.clone(),
         mounts: manifest
@@ -326,6 +329,7 @@ pub(crate) fn map_docker_instance(
         id: details.id.clone(),
         runtime: RuntimeKind::Docker,
         name: details.name,
+        definition_id: None,
         source: details.image,
         labels: details.labels,
         ports: Vec::new(),
@@ -355,6 +359,7 @@ pub(crate) fn map_wasmtime_instance(handle: &str, state: &WasmtimeServiceState) 
         id: format!("wasmtime:{handle}"),
         runtime: RuntimeKind::Wasmtime,
         name: state.manifest.name.clone(),
+        definition_id: state.manifest.definition_id.clone(),
         source: state.source_display.clone(),
         labels: state.manifest.labels.clone(),
         ports: Vec::new(),
@@ -371,6 +376,7 @@ pub(crate) fn missing_instance_from_manifest(manifest: &ServiceManifest) -> Serv
         id: service_instance_id(manifest.runtime, &manifest.name),
         runtime: manifest.runtime,
         name: manifest.name.clone(),
+        definition_id: manifest.definition_id.clone(),
         source: source_display(&manifest.source),
         labels: manifest.labels.clone(),
         ports: manifest.ports.clone(),
@@ -390,6 +396,7 @@ pub(crate) fn enrich_instance_from_manifest(
         instance.id = service_instance_id(manifest.runtime, &manifest.name);
     }
     instance.name = manifest.name.clone();
+    instance.definition_id = manifest.definition_id.clone();
     instance.ports = manifest.ports.clone();
     instance.exposed_endpoints = service_expose_endpoint_bindings(manifest);
     instance
