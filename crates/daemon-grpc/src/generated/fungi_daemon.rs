@@ -587,6 +587,13 @@ pub struct DetachServiceAccessRequest {
     pub service_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ForgetServiceAccessRequest {
+    #[prost(string, tag = "1")]
+    pub peer_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub service_name: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListServiceAccessesRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
@@ -1661,7 +1668,7 @@ pub mod fungi_daemon_client {
         /// Deletes saved local access records for a remote service.
         pub async fn forget_service_access(
             &mut self,
-            request: impl tonic::IntoRequest<super::DetachServiceAccessRequest>,
+            request: impl tonic::IntoRequest<super::ForgetServiceAccessRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
@@ -1978,7 +1985,7 @@ pub mod fungi_daemon_server {
         /// Deletes saved local access records for a remote service.
         async fn forget_service_access(
             &self,
-            request: tonic::Request<super::DetachServiceAccessRequest>,
+            request: tonic::Request<super::ForgetServiceAccessRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
         /// Lists saved service access entries on the local node.
         async fn list_service_accesses(
@@ -4020,14 +4027,14 @@ pub mod fungi_daemon_server {
                     #[allow(non_camel_case_types)]
                     struct ForgetServiceAccessSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<T: FungiDaemon>
-                        tonic::server::UnaryService<super::DetachServiceAccessRequest>
+                        tonic::server::UnaryService<super::ForgetServiceAccessRequest>
                         for ForgetServiceAccessSvc<T>
                     {
                         type Response = super::Empty;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::DetachServiceAccessRequest>,
+                            request: tonic::Request<super::ForgetServiceAccessRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {

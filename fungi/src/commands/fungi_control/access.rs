@@ -6,8 +6,8 @@ use fungi_daemon::{CatalogService, ServiceAccess, ServiceExposeUsageKind};
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
-        AttachServiceAccessRequest, DetachServiceAccessRequest, ListDeviceServicesRequest,
-        ListServiceAccessesRequest,
+        AttachServiceAccessRequest, DetachServiceAccessRequest, ForgetServiceAccessRequest,
+        ListDeviceServicesRequest, ListServiceAccessesRequest,
     },
 };
 use serde::Serialize;
@@ -121,7 +121,7 @@ pub async fn execute_access(args: CommonArgs, cmd: AccessCommands) {
                 Err(error) => fatal(error),
             };
             print_target_peer(&peer);
-            let req = DetachServiceAccessRequest {
+            let req = ForgetServiceAccessRequest {
                 peer_id: peer.peer_id,
                 service_name,
             };

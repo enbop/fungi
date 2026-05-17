@@ -30,7 +30,7 @@ impl FungiDaemon {
         record: &LocalAccessRecord,
         remote_protocol: String,
         remote_port: u16,
-    ) -> Result<()> {
+    ) -> Result<String> {
         let rule = ForwardingRule {
             local_host: record.local_host.clone(),
             local_port: record.local_port,
@@ -41,9 +41,16 @@ impl FungiDaemon {
             remote_service_name: Some(record.remote_service_name.clone()),
             remote_service_port_name: Some(record.remote_service_port_name.clone()),
         };
-        self.add_service_access_forwarding_rule_internal(rule)
-            .await?;
-        Ok(())
+        self.add_service_access_forwarding_rule_internal(rule).await
+    }
+
+    async fn restore_service_access_forwarding_rule(&self, rule: ForwardingRule) {
+        if let Err(error) = self.add_service_access_forwarding_rule_internal(rule).await {
+            log::warn!(
+                "Failed to restore previous service access listener after attach failure: {}",
+                error
+            );
+        }
     }
 
     pub async fn attach_service_access(
@@ -157,22 +164,54 @@ impl FungiDaemon {
                 last_remote_port: Some(remote_port),
             };
 
-            access_config = access_config.upsert_record(record.clone())?;
+            let updated_access_config = access_config.with_upserted_record(record.clone())?;
 
-            if let Some((rule_id, _)) = existing_active_rule
-                && !active_rule_matches
-            {
-                self.remove_service_access_forwarding_rule_internal(&rule_id)?;
-                active_rules.retain(|(existing_rule_id, _)| existing_rule_id != &rule_id);
+            let mut removed_active_rule = None;
+            let mut started_rule_id = None;
+            if !active_rule_matches {
+                if let Some((rule_id, rule)) = existing_active_rule {
+                    self.remove_service_access_forwarding_rule_internal(&rule_id)?;
+                    removed_active_rule = Some(rule);
+                }
+
+                match self
+                    .start_service_access_forwarding_rule(
+                        &record,
+                        endpoint.protocol.clone(),
+                        remote_port,
+                    )
+                    .await
+                {
+                    Ok(rule_id) => started_rule_id = Some(rule_id),
+                    Err(error) => {
+                        if let Some(rule) = removed_active_rule {
+                            self.restore_service_access_forwarding_rule(rule).await;
+                        }
+                        return Err(error);
+                    }
+                }
             }
 
+            if let Err(error) = updated_access_config.save_to_file() {
+                if let Some(rule_id) = started_rule_id {
+                    if let Err(rollback_error) =
+                        self.remove_service_access_forwarding_rule_internal(&rule_id)
+                    {
+                        log::warn!(
+                            "Failed to roll back service access listener after save failure: {}",
+                            rollback_error
+                        );
+                    }
+                }
+                if let Some(rule) = removed_active_rule {
+                    self.restore_service_access_forwarding_rule(rule).await;
+                }
+                return Err(error);
+            }
+
+            access_config = updated_access_config;
+
             if !active_rule_matches {
-                self.start_service_access_forwarding_rule(
-                    &record,
-                    endpoint.protocol.clone(),
-                    remote_port,
-                )
-                .await?;
                 active_rules = self.get_service_access_forwarding_rules();
             }
 

@@ -176,7 +176,7 @@ service FungiDaemon {
   returns (Empty) {}
 
     // Deletes saved local access records for a remote service.
-  rpc ForgetServiceAccess(DetachServiceAccessRequest)
+  rpc ForgetServiceAccess(ForgetServiceAccessRequest)
   returns (Empty) {}
 
     // Lists saved service access entries on the local node.
@@ -541,6 +541,11 @@ message AttachServiceAccessRequest {
 }
 
 message DetachServiceAccessRequest {
+  string peer_id      = 1;
+  string service_name = 2;
+}
+
+message ForgetServiceAccessRequest {
   string peer_id      = 1;
   string service_name = 2;
 }

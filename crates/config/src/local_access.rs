@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 const LOCAL_ACCESS_FILE: &str = "access/local_access.json";
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocalAccessConfig {
     #[serde(default)]
     pub records: Vec<LocalAccessRecord>,
@@ -15,6 +16,7 @@ pub struct LocalAccessConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocalAccessRecord {
     pub remote_peer_id: String,
     pub remote_service_name: String,
@@ -109,6 +111,13 @@ impl LocalAccessConfig {
     }
 
     pub fn upsert_record(&self, record: LocalAccessRecord) -> Result<Self> {
+        let updated = self.with_upserted_record(record)?;
+        updated.save_to_file()?;
+        Ok(updated)
+    }
+
+    /// Returns an updated config without writing it to disk.
+    pub fn with_upserted_record(&self, record: LocalAccessRecord) -> Result<Self> {
         record.validate()?;
         if self.local_port_used_by_other_record(&record) {
             bail!(
@@ -128,7 +137,6 @@ impl LocalAccessConfig {
             updated.records.push(record);
         }
         updated.sort_records();
-        updated.save_to_file()?;
         Ok(updated)
     }
 
@@ -284,6 +292,48 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("local port is already reserved by another service access")
+        );
+    }
+
+    #[test]
+    fn rejects_blank_local_host() {
+        let dir = TempDir::new().unwrap();
+        let config = LocalAccessConfig::apply_from_dir(dir.path()).unwrap();
+        let mut record = record("peer", "svc", "main", 2222);
+        record.local_host = " ".to_string();
+
+        let err = config.upsert_record(record).unwrap_err();
+
+        assert!(err.to_string().contains("local_host must not be empty"));
+    }
+
+    #[test]
+    fn rejects_zero_local_port() {
+        let dir = TempDir::new().unwrap();
+        let config = LocalAccessConfig::apply_from_dir(dir.path()).unwrap();
+
+        let err = config
+            .upsert_record(record("peer", "svc", "main", 0))
+            .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("local_port must be greater than 0")
+        );
+    }
+
+    #[test]
+    fn rejects_legacy_rules_shape() {
+        let dir = TempDir::new().unwrap();
+        let access_dir = dir.path().join("access");
+        std::fs::create_dir_all(&access_dir).unwrap();
+        std::fs::write(access_dir.join("local_access.json"), r#"{"rules":[]}"#).unwrap();
+
+        let err = LocalAccessConfig::apply_from_dir(dir.path()).unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("failed to parse local access config")
         );
     }
 
