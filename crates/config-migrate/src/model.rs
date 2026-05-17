@@ -12,6 +12,7 @@ pub(crate) const STAGING_DIR_PREFIX: &str = ".fungi-migrate-staging-";
 pub(crate) const APPLY_ROLLBACK_DIR_NAME: &str = ".apply-rollback";
 pub(crate) const LEGACY_ADDRESS_BOOK_FILE: &str = "address_book.toml";
 pub(crate) const DEVICES_FILE: &str = "devices.toml";
+pub(crate) const TRUSTED_DEVICES_FILE: &str = "trusted_devices.toml";
 pub(crate) const LEGACY_SERVICE_STATE_FILE: &str = "services-state.json";
 pub(crate) const SERVICES_ROOT_DIR: &str = "services";
 pub(crate) const DATA_ROOT_DIR: &str = "data";
@@ -71,6 +72,7 @@ impl MigrationReport {
 #[derive(Debug, Default)]
 pub(crate) struct MigrationPlan {
     pub(crate) update_config: bool,
+    pub(crate) migrate_incoming_allowed_peers: bool,
     pub(crate) migrate_address_book: bool,
     pub(crate) migrate_legacy_managed_services: bool,
     pub(crate) touched_paths: Vec<PathBuf>,

@@ -7,7 +7,8 @@ use std::{
 
 use crate::model::{
     CONFIG_FILE, DATA_ROOT_DIR, DEVICES_FILE, DetectedVersion, LEGACY_ADDRESS_BOOK_FILE,
-    LEGACY_SERVICE_STATE_FILE, MigrationPlan, SERVICES_ROOT_DIR, normalize_fs_path,
+    LEGACY_SERVICE_STATE_FILE, MigrationPlan, SERVICES_ROOT_DIR, TRUSTED_DEVICES_FILE,
+    normalize_fs_path,
 };
 
 pub fn detect_source_version(fungi_dir: &Path) -> Result<DetectedVersion> {
@@ -67,9 +68,15 @@ pub(crate) fn build_migration_plan(
     }
 
     let mut touched_paths = BTreeSet::new();
-    let update_config = config_requires_current_normalization(fungi_dir, source_version)?;
+    let migrate_incoming_allowed_peers =
+        config_has_legacy_incoming_allowed_peers(fungi_dir, source_version)?;
+    let update_config = config_requires_current_normalization(fungi_dir, source_version)?
+        || migrate_incoming_allowed_peers;
     if update_config {
         touched_paths.insert(PathBuf::from(CONFIG_FILE));
+    }
+    if migrate_incoming_allowed_peers {
+        touched_paths.insert(PathBuf::from(TRUSTED_DEVICES_FILE));
     }
 
     if legacy_address_book_exists {
@@ -85,10 +92,27 @@ pub(crate) fn build_migration_plan(
 
     Ok(MigrationPlan {
         update_config,
+        migrate_incoming_allowed_peers,
         migrate_address_book: legacy_address_book_exists,
         migrate_legacy_managed_services: legacy_service_state_exists,
         touched_paths: touched_paths.into_iter().collect(),
     })
+}
+
+fn config_has_legacy_incoming_allowed_peers(
+    fungi_dir: &Path,
+    source_version: &DetectedVersion,
+) -> Result<bool> {
+    if matches!(source_version, DetectedVersion::MissingConfig) {
+        return Ok(false);
+    }
+
+    let table = read_config_table(fungi_dir, "detecting legacy incoming peer allowlist")?;
+    Ok(table.contains_key("incoming_allowed_peers")
+        || table
+            .get("network")
+            .and_then(toml::Value::as_table)
+            .is_some_and(|network_table| network_table.contains_key("incoming_allowed_peers")))
 }
 
 fn config_requires_current_normalization(
@@ -99,18 +123,7 @@ fn config_requires_current_normalization(
         return Ok(false);
     }
 
-    let config_path = fungi_dir.join(CONFIG_FILE);
-    let content = fs::read_to_string(&config_path).with_context(|| {
-        format!(
-            "Failed to read Fungi config file while building migration plan: {}",
-            config_path.display()
-        )
-    })?;
-    let value: toml::Value = toml::from_str(&content)
-        .context("Failed to parse config.toml while building migration plan")?;
-    let Some(table) = value.as_table() else {
-        bail!("config.toml root must be a TOML table while building migration plan");
-    };
+    let table = read_config_table(fungi_dir, "building migration plan")?;
 
     if !table.contains_key("version") {
         return Ok(true);
@@ -139,6 +152,22 @@ fn config_requires_current_normalization(
         });
 
     Ok(has_legacy_services_allowlist)
+}
+
+fn read_config_table(fungi_dir: &Path, action: &str) -> Result<toml::Table> {
+    let config_path = fungi_dir.join(CONFIG_FILE);
+    let content = fs::read_to_string(&config_path).with_context(|| {
+        format!(
+            "Failed to read Fungi config file while {action}: {}",
+            config_path.display()
+        )
+    })?;
+    let value: toml::Value = toml::from_str(&content)
+        .with_context(|| format!("Failed to parse config.toml while {action}"))?;
+    let Some(table) = value.as_table() else {
+        bail!("config.toml root must be a TOML table while {action}");
+    };
+    Ok(table.clone())
 }
 
 fn ensure_no_mixed_managed_service_layout(fungi_dir: &Path) -> Result<()> {

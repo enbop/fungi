@@ -217,6 +217,7 @@ fn migrate_legacy_service_manifest(
                 CurrentServiceManifestEntry {
                     target: None,
                     port: Some(port.service_port),
+                    host_port: (port.host_port != 0).then_some(port.host_port),
                     protocol: (port.protocol != LegacyServicePortProtocol::Tcp)
                         .then_some(port.protocol),
                     usage,
@@ -396,7 +397,7 @@ struct LegacyServiceMount {
 struct LegacyServicePort {
     name: Option<String>,
     #[serde(rename = "host_port")]
-    _host_port: u16,
+    host_port: u16,
     service_port: u16,
     protocol: LegacyServicePortProtocol,
 }
@@ -498,6 +499,9 @@ struct CurrentServiceManifestEntry {
     target: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     port: Option<u16>,
+    #[serde(rename = "hostPort")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    host_port: Option<u16>,
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     protocol: Option<LegacyServicePortProtocol>,

@@ -11,7 +11,10 @@ use anyhow::{Result, bail};
 use std::path::Path;
 
 use apply::{MigrationTransaction, apply_staged_paths, copy_selected_paths, validate_migrated_dir};
-use config_files::{migrate_config_toml_to_current, migrate_legacy_address_book};
+use config_files::{
+    migrate_config_toml_to_current, migrate_legacy_address_book,
+    migrate_legacy_incoming_allowed_peers,
+};
 use detection::build_migration_plan;
 pub use detection::detect_source_version;
 pub use model::{CURRENT_FUNGI_DIR_VERSION, DetectedVersion, MigrationReport};
@@ -58,6 +61,9 @@ fn migrate_with_plan(
     copy_selected_paths(fungi_dir, &transaction.backup_dir, &plan.touched_paths)?;
     copy_selected_paths(fungi_dir, &transaction.staging_dir, &plan.touched_paths)?;
 
+    if plan.migrate_incoming_allowed_peers {
+        migrate_legacy_incoming_allowed_peers(&transaction.staging_dir)?;
+    }
     if plan.update_config {
         migrate_config_toml_to_current(&transaction.staging_dir, fungi_dir)?;
     }
