@@ -1281,6 +1281,21 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         Ok(Response::new(Empty {}))
     }
 
+    async fn forget_service_access(
+        &self,
+        request: Request<DetachServiceAccessRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let peer_id = PeerId::from_str(&req.peer_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
+
+        self.inner
+            .forget_service_access(peer_id, req.service_name)
+            .map_err(|e| Status::internal(format!("Failed to forget service access: {e}")))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
     async fn list_service_accesses(
         &self,
         request: Request<ListServiceAccessesRequest>,
@@ -1295,7 +1310,10 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             )
         };
 
-        let service_accesses = self.inner.list_service_accesses(peer_id);
+        let service_accesses = self
+            .inner
+            .list_service_accesses(peer_id)
+            .map_err(|e| Status::internal(format!("Failed to list service accesses: {e}")))?;
         let service_accesses_json = serde_json::to_string(&service_accesses)
             .map_err(|e| Status::internal(format!("Failed to serialize service accesses: {e}")))?;
 

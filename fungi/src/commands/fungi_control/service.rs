@@ -108,7 +108,7 @@ pub enum ServiceCommands {
         #[arg(long)]
         local_port: Option<u16>,
     },
-    /// Remove the local persistent access for a remote service
+    /// Disconnect local access for a remote service while keeping its saved port
     Disconnect { service: String },
     /// Change a service setting
     Set { service: String, setting: String },
@@ -1312,11 +1312,17 @@ async fn print_service_overview(
     let devices = list_saved_devices(client).await;
     if refresh {
         for device in devices {
-            let attached = list_accesses(client, &device.peer_id).await;
+            let saved_accesses = list_accesses(client, &device.peer_id).await;
             let managed = fetch_remote_managed_services(client, &device.peer_id).await;
             let published = fetch_remote_services(client, &device.peer_id).await;
             add_remote_service_overview_rows(
-                &mut rows, &device, &attached, managed, published, verbose, false,
+                &mut rows,
+                &device,
+                &saved_accesses,
+                managed,
+                published,
+                verbose,
+                false,
             );
         }
     } else {
@@ -1358,7 +1364,7 @@ async fn print_service_overview(
 fn add_remote_service_overview_rows(
     rows: &mut Vec<ServiceOverviewRow>,
     device: &DeviceInfo,
-    attached: &[ServiceAccess],
+    saved_accesses: &[ServiceAccess],
     managed: Result<Vec<ServiceInstance>, String>,
     published: Result<Vec<RemoteService>, String>,
     verbose: bool,
@@ -1375,7 +1381,13 @@ fn add_remote_service_overview_rows(
             let managed = managed.unwrap_or_default();
             let published = published.unwrap_or_default();
             add_cached_remote_service_overview_rows(
-                rows, device, attached, managed, published, verbose, cached,
+                rows,
+                device,
+                saved_accesses,
+                managed,
+                published,
+                verbose,
+                cached,
             );
         }
     }
@@ -1384,7 +1396,7 @@ fn add_remote_service_overview_rows(
 fn add_cached_remote_service_overview_rows(
     rows: &mut Vec<ServiceOverviewRow>,
     device: &DeviceInfo,
-    attached: &[ServiceAccess],
+    saved_accesses: &[ServiceAccess],
     managed: Vec<ServiceInstance>,
     published: Vec<RemoteService>,
     verbose: bool,
@@ -1394,14 +1406,21 @@ fn add_cached_remote_service_overview_rows(
     for service in published {
         published_names.insert(service.service_name.clone());
         rows.push(ServiceOverviewRow::from_remote_service(
-            service, device, attached, verbose, cached,
+            service,
+            device,
+            saved_accesses,
+            verbose,
+            cached,
         ));
     }
 
     for service in managed {
         if !published_names.contains(&service.name) {
             rows.push(ServiceOverviewRow::from_remote_managed_service(
-                service, device, attached, verbose,
+                service,
+                device,
+                saved_accesses,
+                verbose,
             ));
         }
     }
@@ -1616,22 +1635,6 @@ async fn existing_or_attach_access(
     entry: Option<&str>,
     local_port: Option<u16>,
 ) -> ServiceAccess {
-    let existing = list_accesses(client, peer_id).await;
-    if let Some(access) = existing.into_iter().find(|access| {
-        access.service_name == service_name
-            && local_port.is_none()
-            && entry
-                .map(|entry| {
-                    access
-                        .endpoints
-                        .iter()
-                        .any(|endpoint| endpoint.name == entry)
-                })
-                .unwrap_or(true)
-    }) {
-        return access;
-    }
-
     attach_access_with_options(client, peer_id, service_name, entry, local_port).await
 }
 
@@ -2522,7 +2525,7 @@ impl ServiceOverviewRow {
             device: device_name,
             kind: "remote".to_string(),
             usage: access_usage_label(&access),
-            state: "connected".to_string(),
+            state: "saved".to_string(),
             entries,
             note: None,
         }
@@ -2531,15 +2534,15 @@ impl ServiceOverviewRow {
     fn from_remote_service(
         service: RemoteService,
         device: &DeviceInfo,
-        attached: &[ServiceAccess],
+        saved_accesses: &[ServiceAccess],
         _verbose: bool,
         cached: bool,
     ) -> Self {
         let device_name = device_display_name(device);
-        let attached_access = attached
+        let saved_access = saved_accesses
             .iter()
             .find(|access| access.service_name == service.service_name);
-        let entries = match attached_access {
+        let entries = match saved_access {
             Some(access) => access
                 .endpoints
                 .iter()
@@ -2578,21 +2581,21 @@ impl ServiceOverviewRow {
                 service.status.state
             },
             entries,
-            note: attached_access.map(|_| "attached".to_string()),
+            note: saved_access.map(|_| "access saved".to_string()),
         }
     }
 
     fn from_remote_managed_service(
         service: ServiceInstance,
         device: &DeviceInfo,
-        attached: &[ServiceAccess],
+        saved_accesses: &[ServiceAccess],
         _verbose: bool,
     ) -> Self {
         let device_name = device_display_name(device);
-        let attached_access = attached
+        let saved_access = saved_accesses
             .iter()
             .find(|access| access.service_name == service.name);
-        let entries = match attached_access {
+        let entries = match saved_access {
             Some(access) => access
                 .endpoints
                 .iter()
@@ -2625,7 +2628,7 @@ impl ServiceOverviewRow {
             usage: local_service_usage_label(&service),
             state: service.status.state,
             entries,
-            note: attached_access.map(|_| "attached".to_string()),
+            note: saved_access.map(|_| "access saved".to_string()),
         }
     }
 
