@@ -25,8 +25,8 @@ struct ListeningRuleState {
     cancellation_token: CancellationToken,
 }
 
-/// Control interface for TCP tunneling functionality
-/// Manages both forwarding (local port -> remote peer) and listening (remote peer -> local port) rules
+/// Control interface for service endpoint forwarding.
+/// Manages local access listeners and remote service endpoint listeners.
 #[derive(Clone)]
 pub struct TcpTunnelingControl {
     swarm_control: SwarmControl,
@@ -43,7 +43,7 @@ impl TcpTunnelingControl {
         }
     }
 
-    /// Initialize TCP tunneling from config
+    /// Initialize service endpoint forwarding from config.
     pub async fn init_from_config(&self, config: &TcpTunneling) {
         if config.forwarding.enabled {
             for rule in &config.forwarding.rules {

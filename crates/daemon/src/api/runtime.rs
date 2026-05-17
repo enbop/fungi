@@ -16,10 +16,6 @@ use crate::{
 };
 
 impl FungiDaemon {
-    pub fn get_tcp_tunneling_config(&self) -> fungi_config::tcp_tunneling::TcpTunneling {
-        self.config().lock().tcp_tunneling.clone()
-    }
-
     pub fn docker_enabled(&self) -> bool {
         self.config().lock().runtime.docker_enabled()
     }
@@ -60,7 +56,7 @@ impl FungiDaemon {
         };
 
         let endpoints = service_expose_endpoint_bindings(manifest);
-        let listening_rules = self.get_tcp_listening_rules();
+        let listening_rules = self.get_service_endpoint_listening_rules();
 
         for endpoint in endpoints {
             let existing_rule_id = listening_rules

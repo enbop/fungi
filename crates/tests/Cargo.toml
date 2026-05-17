@@ -5,10 +5,6 @@ edition.workspace = true
 publish = false
 
 [[bin]]
-name = "test-tunnel-cli"
-path = "src/bin/test_tunnel_cli.rs"
-
-[[bin]]
 name = "test-service-remote-wasm-cli"
 path = "src/bin/test_service_remote_wasm_cli.rs"
 

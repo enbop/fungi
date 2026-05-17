@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use anyhow::Result;
 use fungi_swarm::{ConnectionDirection, ConnectionRecord};
 use libp2p::{Multiaddr, PeerId, StreamProtocol, multiaddr::Protocol};
@@ -133,19 +131,6 @@ impl FungiDaemon {
             .remove(&peer_id);
         // TODO disconnect connected incoming peer
         Ok(())
-    }
-
-    pub fn get_file_transfer_service_enabled(&self) -> bool {
-        self.config().lock().file_transfer.server.enabled
-    }
-
-    pub fn get_file_transfer_service_root_dir(&self) -> PathBuf {
-        self.config()
-            .lock()
-            .file_transfer
-            .server
-            .shared_root_dir
-            .clone()
     }
 
     pub fn get_peer_connections(&self, peer_id: PeerId) -> Option<Vec<ConnectionRecord>> {

@@ -29,15 +29,11 @@ manage remote services with simple commands, and access them locally without exp
 *   **Fast and Lightweight**: Built in Rust, around 20 MB idle RAM, with support for macOS, Windows, Linux, and Android.
 *   **Sandboxed Services**: Run sandboxed services with the built-in WASI runtime or an optional Docker backend.
 *   **Simple Remote Service Control**: Use a few commands like `pull`, `start`, `stop`, and `remove` to manage remote services locally.
-*   **Port Forwarding and File Transfer**: forward any TCP service and includes a built-in file transfer module, making it easy to create a lightweight NAS.
+*   **Local Service Access**: open remote service endpoints locally without exposing them to the public internet.
 *   **Modular architecture:**
     *   **`fungi-daemon`**: The background service that handles P2P networking and manage services.
     *   **`fungi-cli`**: A command-line tool to interact with the daemon via gRPC.
     *   **`fungi-app`**: (optional, external) An official GUI client for easier management (see [fungi-app](https://github.com/enbop/fungi-app)).
-
-> **Note on file transfer**
-> The older FTP/WebDAV-style file transfer is being gradually deprecated in favor of Sandboxed Services.
-
 
 ## Download
 macOS / Linux quick install:

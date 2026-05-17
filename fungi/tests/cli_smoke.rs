@@ -271,7 +271,7 @@ fn cli_can_interactively_create_local_tcp_service() {
     windows,
     ignore = "Windows GitHub Actions intermittently cancels short-lived local gRPC CLI connections in this two-daemon smoke; Linux/macOS cover the full remote TCP service flow"
 )]
-fn cli_can_create_and_access_remote_tcp_tunnel_service() {
+fn cli_can_create_and_access_remote_tcp_service() {
     let a = TempDir::new().unwrap();
     let b = TempDir::new().unwrap();
     let a_rpc = reserve_port();
@@ -408,8 +408,6 @@ fn init_fungi_dir(path: &std::path::Path, rpc_port: u16, swarm_port: u16) {
     config.network.listen_udp_port = 0;
     config.network.relay_enabled = false;
     config.network.use_community_relays = false;
-    config.file_transfer.proxy_ftp.enabled = false;
-    config.file_transfer.proxy_webdav.enabled = false;
     config.save_to_file().unwrap();
 }
 

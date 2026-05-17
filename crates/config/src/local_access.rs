@@ -36,6 +36,11 @@ impl LocalAccessConfig {
             )
         })?;
         config.config_file = config_file;
+        let before_len = config.rules.len();
+        config.rules.retain(is_service_access_rule);
+        if config.rules.len() != before_len {
+            config.save_to_file()?;
+        }
         Ok(config)
     }
 
@@ -73,6 +78,7 @@ impl LocalAccessConfig {
     }
 
     pub fn add_forwarding_rule(&self, rule: ForwardingRule) -> Result<Self> {
+        ensure_service_access_rule(&rule)?;
         if self
             .rules
             .iter()
@@ -106,6 +112,23 @@ impl LocalAccessConfig {
         updated.save_to_file()?;
         Ok(updated)
     }
+}
+
+fn ensure_service_access_rule(rule: &ForwardingRule) -> Result<()> {
+    if !is_service_access_rule(rule) {
+        anyhow::bail!("local access rules require remote service metadata");
+    }
+    Ok(())
+}
+
+fn is_service_access_rule(rule: &ForwardingRule) -> bool {
+    rule.remote_service_name
+        .as_deref()
+        .is_some_and(|value| !value.is_empty())
+        && rule
+            .remote_service_port_name
+            .as_deref()
+            .is_some_and(|value| !value.is_empty())
 }
 
 fn forwarding_rule_matches(left: &ForwardingRule, right: &ForwardingRule) -> bool {
@@ -163,6 +186,35 @@ mod tests {
         );
     }
 
+    #[test]
+    fn rejects_rules_without_service_metadata() {
+        let dir = TempDir::new().unwrap();
+        let config = LocalAccessConfig::apply_from_dir(dir.path()).unwrap();
+
+        let err = config.add_forwarding_rule(raw_rule()).unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("local access rules require remote service metadata")
+        );
+    }
+
+    #[test]
+    fn drops_rules_without_service_metadata_when_loading() {
+        let dir = TempDir::new().unwrap();
+        let access_path = dir.path().join("access").join("local_access.json");
+        LocalAccessConfig::init_config_file(access_path.clone()).unwrap();
+        let raw = serde_json::json!({
+            "rules": [rule("svc"), raw_rule()]
+        });
+        std::fs::write(&access_path, serde_json::to_string_pretty(&raw).unwrap()).unwrap();
+
+        let config = LocalAccessConfig::apply_from_dir(dir.path()).unwrap();
+
+        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules[0].remote_service_name.as_deref(), Some("svc"));
+    }
+
     fn rule(service_id: &str) -> ForwardingRule {
         ForwardingRule {
             local_host: "127.0.0.1".to_string(),
@@ -173,6 +225,19 @@ mod tests {
             remote_service_id: Some(service_id.to_string()),
             remote_service_name: Some(service_id.to_string()),
             remote_service_port_name: Some("main".to_string()),
+        }
+    }
+
+    fn raw_rule() -> ForwardingRule {
+        ForwardingRule {
+            local_host: "127.0.0.1".to_string(),
+            local_port: 2222,
+            remote_peer_id: "peer".to_string(),
+            remote_protocol: Some("/fungi/tunnel/22/1.0.0".to_string()),
+            remote_port: 22,
+            remote_service_id: None,
+            remote_service_name: None,
+            remote_service_port_name: None,
         }
     }
 

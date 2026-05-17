@@ -10,7 +10,6 @@ members = [
     "crates/stream",
     "crates/swarm",
     "crates/util",
-    "crates/fs",
     "crates/daemon-grpc",
     "crates/tests",
     "crates/lab",
@@ -32,7 +31,6 @@ bytes = "1"
 cap-std = "3.4"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
-dav-server = { version = "0.8", default-features = false }
 env_logger = "0.11"
 flexi_logger = "0.31"
 flume = "0.11.1"
@@ -43,7 +41,6 @@ hyper-util = "0.1.2"
 interprocess = { version = "2.2.3", features = ["tokio"] }
 libp2p-core = "0.43.1"
 libp2p-swarm-test = "0.6.0"
-libunftp = "0.21"
 mdns-sd = "0.18"
 multiaddr = "0.18"
 percent-encoding = "2.3"
@@ -66,7 +63,6 @@ tonic-prost = "0.14.2"
 tonic-prost-build = "0.14.2"
 typed-path = "0.11.0"
 ulid = "1"
-unftp-sbe-fs = "0.3.0"
 void = "1"
 wasmtime-cli = "44"
 libp2p = { version = "0.56", features = [
@@ -91,7 +87,6 @@ fungi-config-migrate = { path = "crates/config-migrate" }
 fungi-daemon = { path = "crates/daemon" }
 fungi-daemon-grpc = { path = "crates/daemon-grpc" }
 fungi-docker-agent = { path = "crates/docker-agent" }
-fungi-fs = { path = "crates/fs" }
 fungi-stream = { path = "crates/stream" }
 fungi-swarm = { path = "crates/swarm" }
 fungi-util = { path = "crates/util" }

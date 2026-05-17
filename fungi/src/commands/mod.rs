@@ -116,15 +116,6 @@ pub enum Commands {
     #[cfg(feature = "wasi")]
     /// [WASI runtime] Serve wasi-http requests (re-exported wasmtime command)
     Serve(wasmtime_cli::commands::ServeCommand),
-    /// Deprecated: manage raw TCP tunneling; prefer `service open/connect`
-    #[command(subcommand, visible_alias = "tn")]
-    Tunnel(fungi_control::TunnelCommands),
-    /// Deprecated: manage legacy file transfer service; this command will be removed in a future release
-    #[command(subcommand, visible_alias = "fs")]
-    FtService(fungi_control::FtServiceCommands),
-    /// Deprecated: manage legacy file transfer client config and FTP/WebDAV proxies; this command will be removed in a future release
-    #[command(subcommand, visible_alias = "fc")]
-    FtClient(fungi_control::FtClientCommands),
     /// Invoke a service or tool by name
     #[command(external_subcommand)]
     Dynamic(Vec<String>),

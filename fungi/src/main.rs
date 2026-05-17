@@ -30,9 +30,6 @@ fn main() -> Result<()> {
         // control commands
         Commands::Info(cmd) => block_on(execute_info(fungi_args.common, cmd)),
         Commands::Security(cmd) => block_on(execute_security(fungi_args.common, cmd)),
-        Commands::FtService(cmd) => block_on(execute_ft_service(fungi_args.common, cmd)),
-        Commands::FtClient(cmd) => block_on(execute_ft_client(fungi_args.common, cmd)),
-        Commands::Tunnel(cmd) => block_on(execute_tunnel(fungi_args.common, cmd)),
         Commands::Service(cmd) => block_on(execute_service(fungi_args.common, cmd)),
         Commands::Catalog(cmd) => block_on(execute_catalog(fungi_args.common, cmd)),
         Commands::Access(cmd) => block_on(execute_access(fungi_args.common, cmd)),

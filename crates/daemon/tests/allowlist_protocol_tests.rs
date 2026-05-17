@@ -1,10 +1,8 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use fungi_config::file_transfer::FileTransferClient;
 use fungi_daemon::test_support::{TestDaemon, TestDaemonBuilder};
 use libp2p::{identity::Keypair, swarm::dial_opts::DialOpts};
-use tempfile::TempDir;
 
 async fn spawn_reverse_connected_pair() -> Result<(TestDaemon, TestDaemon)> {
     let victim_kp = Keypair::generate_ed25519();
@@ -101,36 +99,6 @@ async fn untrusted_device_cannot_use_node_capabilities_over_existing_inbound_con
     assert!(
         result.is_err(),
         "untrusted device should not be able to discover node capabilities over an existing inbound connection"
-    );
-    Ok(())
-}
-
-#[tokio::test]
-async fn untrusted_device_cannot_use_file_transfer_over_existing_inbound_connection() -> Result<()>
-{
-    let (victim, attacker) = spawn_reverse_connected_pair().await?;
-    assert_only_inbound_connection(&attacker, &victim);
-
-    let shared_root = TempDir::new()?;
-    victim
-        .daemon()
-        .start_file_transfer_service(shared_root.path().to_string_lossy().to_string())
-        .await?;
-
-    attacker
-        .daemon()
-        .ftc_control()
-        .add_client(FileTransferClient {
-            enabled: true,
-            name: Some("victim".to_string()),
-            peer_id: victim.peer_id(),
-        });
-
-    let result = attacker.daemon().ftc_control().get_client("victim").await;
-
-    assert!(
-        result.is_err(),
-        "untrusted device should not be able to establish a file transfer RPC client over an existing inbound connection"
     );
     Ok(())
 }

@@ -49,7 +49,7 @@ pub async fn forward_port_to_peer(
             source,
         })?;
 
-    log::info!("Listening on {actual_addr} for TCP tunneling");
+    log::info!("Listening on {actual_addr} for service access forwarding");
 
     // Store active connection tasks for graceful shutdown
     let active_tasks: Arc<Mutex<Vec<JoinHandle<()>>>> = Arc::new(Mutex::new(Vec::new()));
@@ -122,7 +122,7 @@ async fn handle_tcp_connection(
     let tcp_peer_addr = tcp_stream
         .peer_addr()
         .map_err(PortForwardError::AcceptTcp)?;
-    log::debug!("Established tunnel from {tcp_peer_addr} to peer {target_peer}");
+    log::debug!("Established service access stream from {tcp_peer_addr} to peer {target_peer}");
 
     // Bidirectional copy
     tokio::io::copy_bidirectional(&mut p2p_stream.compat(), &mut tcp_stream)

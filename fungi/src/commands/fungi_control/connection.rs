@@ -20,7 +20,7 @@ pub enum ConnectionCommands {
         /// Optional peer ID filter
         #[arg(long)]
         peer_id: Option<String>,
-        /// Optional protocol filter (e.g. /fungi/tunnel/8080/1.0.0)
+        /// Optional protocol filter (e.g. /fungi/service/web/main/0.2.0)
         #[arg(long)]
         protocol_name: Option<String>,
         /// Show detailed output
@@ -32,7 +32,7 @@ pub enum ConnectionCommands {
         /// Optional peer ID filter
         #[arg(long)]
         peer_id: Option<String>,
-        /// Optional protocol filter (e.g. /fungi/tunnel/8080/1.0.0)
+        /// Optional protocol filter (e.g. /fungi/service/web/main/0.2.0)
         #[arg(long)]
         protocol_name: Option<String>,
         /// Show detailed output

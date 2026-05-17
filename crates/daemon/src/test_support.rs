@@ -71,7 +71,7 @@ pub fn reserve_ephemeral_port() -> u16 {
 
 /// Build a minimal [`FungiConfig`] for an isolated test daemon rooted at `dir`.
 ///
-/// Relay is **disabled** and file-transfer proxies are **off** so tests stay self-contained.
+/// Relay is **disabled** so tests stay self-contained.
 fn minimal_test_config(dir: &TempDir, tcp_port: u16) -> FungiConfig {
     let mut cfg = FungiConfig::apply_from_dir(dir.path()).expect("failed to init test config dir");
     cfg.network.listen_tcp_port = tcp_port;
@@ -81,8 +81,6 @@ fn minimal_test_config(dir: &TempDir, tcp_port: u16) -> FungiConfig {
     cfg.network.listen_udp_port = tcp_port.wrapping_add(1000);
     cfg.network.relay_enabled = false;
     cfg.network.custom_relay_addresses.clear();
-    cfg.file_transfer.proxy_ftp.enabled = false;
-    cfg.file_transfer.proxy_webdav.enabled = false;
     cfg
 }
 
@@ -376,13 +374,13 @@ mod tests {
     async fn builder_can_customize_config() {
         let d = TestDaemonBuilder::new()
             .with_config(|cfg| {
-                cfg.file_transfer.server.enabled = true;
+                cfg.network.relay_enabled = true;
             })
             .build()
             .await
             .unwrap();
 
-        assert!(d.daemon().config().lock().file_transfer.server.enabled);
+        assert!(d.daemon().config().lock().network.relay_enabled);
     }
 
     #[tokio::test]
