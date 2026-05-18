@@ -306,11 +306,13 @@ fn cli_can_create_and_access_remote_tcp_service() {
     let target = TcpListener::bind("127.0.0.1:0").unwrap();
     let target_port = target.local_addr().unwrap().port();
     let server = thread::spawn(move || {
-        let (mut stream, _) = target.accept().unwrap();
-        let mut buf = [0_u8; 4];
-        stream.read_exact(&mut buf).unwrap();
-        assert_eq!(&buf, b"ping");
-        stream.write_all(b"pong").unwrap();
+        for _ in 0..2 {
+            let (mut stream, _) = target.accept().unwrap();
+            let mut buf = [0_u8; 4];
+            stream.read_exact(&mut buf).unwrap();
+            assert_eq!(&buf, b"ping");
+            stream.write_all(b"pong").unwrap();
+        }
     });
 
     let manifest = write_existing_tcp_service_manifest(a.path(), "test-tcp", target_port, "raw");
@@ -374,8 +376,6 @@ fn cli_can_create_and_access_remote_tcp_service() {
     stream.read_exact(&mut response).unwrap();
     assert_eq!(&response, b"pong");
 
-    server.join().unwrap();
-
     run_cli(a.path(), ["service", "stop", "test-tcp@b"]);
     assert!(
         TcpStream::connect(&local_addr).is_err(),
@@ -394,6 +394,16 @@ fn cli_can_create_and_access_remote_tcp_service() {
     );
 
     run_cli(a.path(), ["service", "start", "test-tcp@b"]);
+    let mut stream = connect_with_retry(&local_addr, Duration::from_secs(5));
+    stream.write_all(b"ping").unwrap();
+    let mut response = [0_u8; 4];
+    stream.read_exact(&mut response).unwrap();
+    assert_eq!(
+        &response, b"pong",
+        "remote service start should restore the saved local access listener"
+    );
+    server.join().unwrap();
+
     let output = run_cli(a.path(), ["test-tcp@b"]);
     let restarted_local_addr = extract_local_address(&output.stdout);
     assert_eq!(

@@ -593,9 +593,22 @@ impl FungiDaemon {
     ) -> Result<ServiceControlResponse> {
         let response = self
             .service_control_protocol_control()
-            .start_peer_service(peer_id, name)
+            .start_peer_service(peer_id, name.clone())
             .await?;
+        let service_key = response
+            .service
+            .as_ref()
+            .map(|service| service.name.as_str())
+            .unwrap_or(name.as_str())
+            .to_string();
         self.reconcile_remote_service_caches(peer_id, true).await;
+        self.restore_saved_service_access(peer_id, service_key.clone())
+            .await
+            .with_context(|| {
+                format!(
+                    "remote service started, but failed to restore saved local access listeners for {service_key}"
+                )
+            })?;
         Ok(response)
     }
 
