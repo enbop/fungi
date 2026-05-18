@@ -9,7 +9,8 @@ use clap::{Args, Subcommand};
 use fungi_config::{FungiConfig, FungiDir, paths::FungiPaths, service_cache::ServiceCache};
 use fungi_daemon::{
     CatalogService, RuntimeKind, ServiceAccess, ServiceExposeUsageKind, ServiceInstance,
-    ServicePortProtocol, parse_service_manifest_yaml, service_manifest_with_instance_name,
+    ServicePortProtocol, ServiceStatus, parse_service_manifest_yaml,
+    service_manifest_with_instance_name,
 };
 use fungi_daemon_grpc::{
     Request,
@@ -2489,7 +2490,7 @@ impl ServiceOverviewRow {
             device: "this".to_string(),
             kind: "local".to_string(),
             usage,
-            state: service.status.state,
+            state: overview_state_label(&service.status),
             entries,
             note: None,
         }
@@ -2582,7 +2583,7 @@ impl ServiceOverviewRow {
             state: if cached {
                 "cached".to_string()
             } else {
-                service.status.state
+                overview_state_label(&service.status)
             },
             entries,
             note: saved_access.map(|_| "access saved".to_string()),
@@ -2630,7 +2631,7 @@ impl ServiceOverviewRow {
             device: device_name,
             kind: "remote".to_string(),
             usage: local_service_usage_label(&service),
-            state: service.status.state,
+            state: overview_state_label(&service.status),
             entries,
             note: saved_access.map(|_| "access saved".to_string()),
         }
@@ -2647,6 +2648,14 @@ impl ServiceOverviewRow {
             entries: Vec::new(),
             note: Some(error),
         }
+    }
+}
+
+fn overview_state_label(status: &ServiceStatus) -> String {
+    if status.running {
+        "running".to_string()
+    } else {
+        status.state.clone()
     }
 }
 
@@ -3076,6 +3085,33 @@ mod tests {
         assert_eq!(row.usage, "web");
         assert_eq!(row.state, "exited");
         assert_eq!(row.entries, vec!["web remote:nas:80"]);
+    }
+
+    #[test]
+    fn service_overview_row_shows_running_for_serving_services() {
+        let mut service = remote_web_service("/");
+        service.status = ServiceStatus {
+            state: "serving".to_string(),
+            running: true,
+        };
+        let device = device_info("nas");
+
+        let row = ServiceOverviewRow::from_remote_service(service, &device, &[], false, false);
+
+        assert_eq!(row.state, "running");
+    }
+
+    #[test]
+    fn local_overview_row_shows_running_for_serving_services() {
+        let mut instance = service_instance(vec![service_port("web", 28080)]);
+        instance.status = ServiceStatus {
+            state: "serving".to_string(),
+            running: true,
+        };
+
+        let row = ServiceOverviewRow::from_local(instance, false);
+
+        assert_eq!(row.state, "running");
     }
 
     #[test]
