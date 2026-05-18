@@ -363,7 +363,10 @@ fn wasmtime_command_android_home_override_matches_target_behavior() {
 
     if cfg!(target_os = "android") {
         let expected = fungi_home.join("wasmtime");
-        assert_eq!(home_env.as_deref(), Some(expected.to_string_lossy().as_ref()));
+        assert_eq!(
+            home_env.as_deref(),
+            Some(expected.to_string_lossy().as_ref())
+        );
         assert!(expected.exists());
     } else {
         assert!(home_env.is_none());
