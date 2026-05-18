@@ -237,6 +237,31 @@ impl FungiDaemon {
         self.detach_service_access_by_match(peer_id, &service_name)
     }
 
+    pub async fn restore_saved_service_access(
+        &self,
+        peer_id: PeerId,
+        service_name: String,
+    ) -> Result<()> {
+        let peer_id_string = peer_id.to_string();
+        let saved_entries = self
+            .local_access_config()?
+            .records
+            .into_iter()
+            .filter(|record| {
+                record.remote_peer_id == peer_id_string
+                    && record.remote_service_name == service_name
+            })
+            .map(|record| record.remote_service_port_name)
+            .collect::<BTreeSet<_>>();
+
+        for entry in saved_entries {
+            self.attach_service_access(peer_id, service_name.clone(), Some(entry), None)
+                .await?;
+        }
+
+        Ok(())
+    }
+
     pub fn detach_service_access_by_match(&self, peer_id: PeerId, matcher: &str) -> Result<()> {
         let peer_id_string = peer_id.to_string();
         let rules_to_remove = self
