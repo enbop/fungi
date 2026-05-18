@@ -33,7 +33,7 @@ pub struct CommonArgs {
         short = 'd',
         long = "device",
         value_name = "DEVICE",
-        help = "Device context for dynamic thing calls"
+        help = "Device context for dynamic service shortcuts"
     )]
     pub dynamic_device: Option<DeviceInput>,
 
@@ -116,7 +116,7 @@ pub enum Commands {
     #[cfg(feature = "wasi")]
     /// [WASI runtime] Serve wasi-http requests (re-exported wasmtime command)
     Serve(wasmtime_cli::commands::ServeCommand),
-    /// Invoke a service or tool by name
+    /// Invoke a service by name
     #[command(external_subcommand)]
     Dynamic(Vec<String>),
 }
@@ -125,7 +125,7 @@ pub fn dynamic_builtin_typo_hint_for_tokens(
     tokens: &[String],
     device_context: Option<&DeviceInput>,
 ) -> Option<(String, String)> {
-    if device_context.is_some() || tokens.len() != 1 {
+    if device_context.is_some() || tokens.is_empty() {
         return None;
     }
 
@@ -193,13 +193,13 @@ mod tests {
     }
 
     #[test]
-    fn dynamic_builtin_typo_hint_only_checks_unscoped_single_dynamic_targets() {
+    fn dynamic_builtin_typo_hint_only_checks_unscoped_dynamic_targets() {
         assert_eq!(
             dynamic_builtin_typo_hint_for_tokens(
                 &["devices".to_string(), "extra".to_string()],
                 None
             ),
-            None
+            Some(("devices".to_string(), "device".to_string()))
         );
         assert_eq!(
             dynamic_builtin_typo_hint_for_tokens(&["devices@nas".to_string()], None),

@@ -658,17 +658,6 @@ fn parses_dynamic_thing_with_device_context() {
 }
 
 #[test]
-fn parses_dynamic_tool_style_args() {
-    let args = FungiArgs::try_parse_from(["fungi", "rg@nas", "todo", "/data"]).unwrap();
-
-    let Commands::Dynamic(tokens) = args.command else {
-        panic!("expected dynamic thing command");
-    };
-
-    assert_eq!(tokens, vec!["rg@nas", "todo", "/data"]);
-}
-
-#[test]
 fn rejects_service_subcommand_scoped_device() {
     let result =
         FungiArgs::try_parse_from(["fungi", "service", "open", "home-ssh", "--device", "nas"]);
