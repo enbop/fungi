@@ -652,7 +652,6 @@ fn looks_like_windows_drive_path(value: &str) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DynamicThingInvocation {
     pub target: DynamicThingTarget,
-    pub args: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -667,14 +666,17 @@ pub async fn execute_dynamic_thing(
     device_context: Option<DeviceInput>,
     tokens: Vec<String>,
 ) {
-    let invocation = parse_dynamic_thing_invocation(tokens).unwrap_or_else(|error| fatal(error));
+    let invocation = parse_dynamic_thing_invocation(tokens.clone()).unwrap_or_else(|error| {
+        if let Some((name, command)) =
+            crate::commands::dynamic_builtin_typo_hint_for_tokens(&tokens, device_context.as_ref())
+        {
+            fatal_dynamic_builtin_typo(&name, &command)
+        }
+        fatal(error)
+    });
 
     if invocation.target.name.starts_with(':') {
         fatal("Shortcuts are not implemented yet")
-    }
-
-    if !invocation.args.is_empty() {
-        fatal("Dynamic tool execution is not implemented yet")
     }
 
     if device_context.is_some() && invocation.target.device.is_some() {
@@ -709,11 +711,23 @@ pub fn parse_dynamic_thing_invocation(
         return Err("Missing thing name".to_string());
     }
 
+    if tokens.len() > 1 {
+        let target = tokens.remove(0);
+        parse_dynamic_thing_target(target.clone())?;
+        let unexpected = &tokens[0];
+        return Err(format!(
+            "Unexpected argument `{unexpected}` after `{target}`.
+
+Dynamic service shortcuts accept one service target, for example:
+
+  fungi filebrowser@nas
+
+Use `fungi service ...` for service subcommands."
+        ));
+    }
+
     let target = parse_dynamic_thing_target(tokens.remove(0))?;
-    Ok(DynamicThingInvocation {
-        target,
-        args: tokens,
-    })
+    Ok(DynamicThingInvocation { target })
 }
 
 pub fn parse_dynamic_thing_target(value: String) -> Result<DynamicThingTarget, String> {
@@ -768,7 +782,7 @@ fn parse_service_reference(value: String) -> DynamicThingTarget {
 
 pub fn fatal_dynamic_builtin_typo(name: &str, command: &str) -> ! {
     fatal(format!(
-        "No service or tool named `{name}` was found.
+        "No service named `{name}` was found.
 
 Hint: `{name}` looks like a built-in command typo.
 Did you mean:
@@ -3115,17 +3129,19 @@ mod tests {
     }
 
     #[test]
-    fn parse_dynamic_thing_invocation_keeps_tool_args() {
-        let invocation = parse_dynamic_thing_invocation(vec![
+    fn parse_dynamic_thing_invocation_rejects_extra_args() {
+        let result = parse_dynamic_thing_invocation(vec![
             "rg@nas".to_string(),
             "todo".to_string(),
             "/data".to_string(),
-        ])
-        .unwrap();
+        ]);
 
-        assert_eq!(invocation.target.name, "rg");
-        assert!(matches!(invocation.target.device, Some(DeviceInput::Name(name)) if name == "nas"));
-        assert_eq!(invocation.args, vec!["todo", "/data"]);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Dynamic service shortcuts accept one service target")
+        );
     }
 
     #[test]

@@ -30,7 +30,7 @@ fn cli_suggests_builtin_command_for_dynamic_typo_without_config() {
     assert_eq!(
         output.stderr,
         concat!(
-            "No service or tool named `devices` was found.
+            "No service named `devices` was found.
 ",
             "
 ",
@@ -52,6 +52,18 @@ fn cli_suggests_builtin_command_for_dynamic_typo_without_config() {
 "
         )
     );
+}
+
+#[test]
+fn cli_suggests_builtin_command_for_dynamic_typo_with_trailing_arg() {
+    let home = TempDir::new().unwrap();
+    let output = run_cli_result(home.path(), ["devices", "list"], "");
+
+    assert!(!output.status.success());
+    assert_eq!(output.stdout, "");
+    assert!(output.stderr.contains("Did you mean:"));
+    assert!(output.stderr.contains("  fungi device"));
+    assert!(!output.stderr.contains("Dynamic tool execution"));
 }
 
 #[test]
