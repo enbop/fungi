@@ -215,13 +215,13 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
 
     provider.pull(&manifest).await.unwrap();
     let created = provider.inspect("demo-service").await.unwrap();
-    assert_eq!(created.status.state, "created");
+    assert_eq!(created.status.phase, ServicePhase::Stopped);
 
     provider.start("demo-service").await.unwrap();
     sleep(Duration::from_millis(150)).await;
 
     let running = provider.inspect("demo-service").await.unwrap();
-    assert!(running.status.running);
+    assert!(running.status.is_running());
 
     let mut logs = ServiceLogs {
         raw: Vec::new(),
@@ -250,7 +250,7 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
 
     provider.stop("demo-service").await.unwrap();
     let stopped = provider.inspect("demo-service").await.unwrap();
-    assert!(!stopped.status.running);
+    assert!(!stopped.status.is_running());
 
     provider.remove("demo-service").await.unwrap();
     assert!(provider.inspect("demo-service").await.is_err());
@@ -903,7 +903,7 @@ async fn wasmtime_provider_downloads_remote_component() {
         .pull_with_local_service_id(&manifest, "svc_download")
         .await
         .unwrap();
-    assert_eq!(pulled.status.state, "created");
+    assert_eq!(pulled.status.phase, ServicePhase::Stopped);
     assert!(
         temp_dir
             .path()
@@ -1015,7 +1015,7 @@ spec:
         local_service_id
     );
     assert_eq!(fs::read(&staged_component).unwrap(), b"wasm-v2");
-    assert!(applied_v2.instance.status.running);
+    assert!(applied_v2.instance.status.is_running());
 }
 
 #[tokio::test]

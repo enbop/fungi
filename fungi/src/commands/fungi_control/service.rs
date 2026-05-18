@@ -9,7 +9,7 @@ use clap::{Args, Subcommand};
 use fungi_config::{FungiConfig, FungiDir, paths::FungiPaths, service_cache::ServiceCache};
 use fungi_daemon::{
     CatalogService, RuntimeKind, ServiceAccess, ServiceExposeUsageKind, ServiceInstance,
-    ServicePortProtocol, ServiceStatus, parse_service_manifest_yaml,
+    ServicePhase, ServicePortProtocol, ServiceStatus, parse_service_manifest_yaml,
     service_manifest_with_instance_name,
 };
 use fungi_daemon_grpc::{
@@ -1685,10 +1685,10 @@ async fn remote_service_unavailable_message(
         return format!("Remote service not found: {service_ref}");
     };
 
-    if !managed.status.running {
+    if !managed.status.is_running() {
         return format!(
-            "Remote service {service_ref} exists but is not running (state: {}). Start it with:\n  fungi service start {service_ref}",
-            managed.status.state
+            "Remote service {service_ref} exists but is not running (phase: {}). Start it with:\n  fungi service start {service_ref}",
+            managed.status.phase
         );
     }
 
@@ -2652,11 +2652,7 @@ impl ServiceOverviewRow {
 }
 
 fn overview_state_label(status: &ServiceStatus) -> String {
-    if status.running {
-        "running".to_string()
-    } else {
-        status.state.clone()
-    }
+    status.phase.to_string()
 }
 
 fn print_service_overview_rows(rows: &[ServiceOverviewRow]) {
@@ -2755,8 +2751,11 @@ fn format_remote_port(port: u16) -> String {
 #[derive(Debug, Serialize)]
 struct LocalServiceListEntry {
     service_name: String,
-    state: String,
-    running: bool,
+    phase: ServicePhase,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime_state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exit_code: Option<i32>,
     entries: Vec<ServiceEntryView>,
 }
 
@@ -2764,16 +2763,22 @@ struct LocalServiceListEntry {
 struct LocalServiceListVerboseEntry {
     service_name: String,
     runtime: RuntimeKind,
-    state: String,
-    running: bool,
+    phase: ServicePhase,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime_state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exit_code: Option<i32>,
     local_endpoints: Vec<LocalServiceEndpointVerboseView>,
 }
 
 #[derive(Debug, Serialize)]
 struct LocalServiceInspectView {
     name: String,
-    state: String,
-    running: bool,
+    phase: ServicePhase,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime_state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exit_code: Option<i32>,
     entries: Vec<ServiceEntryView>,
     published_entries: Vec<ServiceEntryView>,
 }
@@ -2785,8 +2790,11 @@ struct LocalServiceInspectVerboseView {
     runtime: RuntimeKind,
     source: String,
     labels: std::collections::BTreeMap<String, String>,
-    state: String,
-    running: bool,
+    phase: ServicePhase,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime_state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exit_code: Option<i32>,
     local_endpoints: Vec<LocalServiceEndpointVerboseView>,
     published_endpoints: Vec<PublishedEndpointVerboseView>,
 }
@@ -2817,10 +2825,12 @@ struct PublishedEndpointVerboseView {
 impl From<ServiceInstance> for LocalServiceListEntry {
     fn from(instance: ServiceInstance) -> Self {
         let entries = local_entry_views(&instance);
+        let status = instance.status;
         Self {
             service_name: instance.name,
-            state: instance.status.state,
-            running: instance.status.running,
+            phase: status.phase,
+            runtime_state: status.runtime_state,
+            exit_code: status.exit_code,
             entries,
         }
     }
@@ -2829,11 +2839,13 @@ impl From<ServiceInstance> for LocalServiceListEntry {
 impl From<ServiceInstance> for LocalServiceListVerboseEntry {
     fn from(instance: ServiceInstance) -> Self {
         let local_endpoints = local_endpoint_verbose_views(&instance);
+        let status = instance.status;
         Self {
             service_name: instance.name,
             runtime: instance.runtime,
-            state: instance.status.state,
-            running: instance.status.running,
+            phase: status.phase,
+            runtime_state: status.runtime_state,
+            exit_code: status.exit_code,
             local_endpoints,
         }
     }
@@ -2842,10 +2854,12 @@ impl From<ServiceInstance> for LocalServiceListVerboseEntry {
 impl From<ServiceInstance> for LocalServiceInspectView {
     fn from(instance: ServiceInstance) -> Self {
         let entries = local_entry_views(&instance);
+        let status = instance.status;
         Self {
             name: instance.name,
-            state: instance.status.state,
-            running: instance.status.running,
+            phase: status.phase,
+            runtime_state: status.runtime_state,
+            exit_code: status.exit_code,
             entries,
             published_entries: instance
                 .exposed_endpoints
@@ -2861,14 +2875,16 @@ impl From<ServiceInstance> for LocalServiceInspectView {
 impl From<ServiceInstance> for LocalServiceInspectVerboseView {
     fn from(instance: ServiceInstance) -> Self {
         let local_endpoints = local_endpoint_verbose_views(&instance);
+        let status = instance.status;
         Self {
             id: instance.id,
             name: instance.name,
             runtime: instance.runtime,
             source: instance.source,
             labels: instance.labels,
-            state: instance.status.state,
-            running: instance.status.running,
+            phase: status.phase,
+            runtime_state: status.runtime_state,
+            exit_code: status.exit_code,
             local_endpoints,
             published_endpoints: instance
                 .exposed_endpoints
@@ -3071,10 +3087,7 @@ mod tests {
     #[test]
     fn remote_managed_overview_row_keeps_stopped_state() {
         let mut instance = service_instance(vec![service_port("web", 28080)]);
-        instance.status = ServiceStatus {
-            state: "exited".to_string(),
-            running: false,
-        };
+        instance.status = ServiceStatus::exited(None);
         let device = device_info("nas");
 
         let row = ServiceOverviewRow::from_remote_managed_service(instance, &device, &[], false);
@@ -3088,12 +3101,9 @@ mod tests {
     }
 
     #[test]
-    fn service_overview_row_shows_running_for_serving_services() {
+    fn service_overview_row_shows_running_phase() {
         let mut service = remote_web_service("/");
-        service.status = ServiceStatus {
-            state: "serving".to_string(),
-            running: true,
-        };
+        service.status = ServiceStatus::running();
         let device = device_info("nas");
 
         let row = ServiceOverviewRow::from_remote_service(service, &device, &[], false, false);
@@ -3102,12 +3112,9 @@ mod tests {
     }
 
     #[test]
-    fn local_overview_row_shows_running_for_serving_services() {
+    fn local_overview_row_shows_running_phase() {
         let mut instance = service_instance(vec![service_port("web", 28080)]);
-        instance.status = ServiceStatus {
-            state: "serving".to_string(),
-            running: true,
-        };
+        instance.status = ServiceStatus::running();
 
         let row = ServiceOverviewRow::from_local(instance, false);
 
@@ -3255,10 +3262,7 @@ publish:
             icon_url: None,
             catalog_id: None,
             endpoints: Vec::new(),
-            status: ServiceStatus {
-                state: "running".to_string(),
-                running: true,
-            },
+            status: ServiceStatus::running(),
         }
     }
 
@@ -3272,10 +3276,7 @@ publish:
             labels: BTreeMap::new(),
             ports,
             exposed_endpoints: Vec::new(),
-            status: ServiceStatus {
-                state: "running".to_string(),
-                running: true,
-            },
+            status: ServiceStatus::running(),
         }
     }
 
