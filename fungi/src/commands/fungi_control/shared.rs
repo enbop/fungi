@@ -26,7 +26,7 @@ pub struct OptionalDeviceTargetArg {
         short = 'd',
         long = "device",
         value_name = "DEVICE",
-        help = "Device name"
+        help = "Target device name"
     )]
     pub device: Option<DeviceInput>,
 }

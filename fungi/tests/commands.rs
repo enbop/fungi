@@ -702,6 +702,7 @@ fn service_help_hides_pull_shortcut_from_main_path() {
     assert!(help.contains("  open"));
     assert!(help.contains("  connect"));
     assert!(!help.contains("  pull"));
+    assert!(!help.contains("on this device or another device"));
 }
 
 #[test]
@@ -714,6 +715,7 @@ fn service_command_help_prefers_device_language() {
 
     assert!(help.contains("--device <DEVICE>"));
     assert!(help.contains("-d"));
+    assert!(help.contains("Target device name"));
     assert!(!help.contains("--on"));
     assert!(!help.contains("--peer"));
     assert!(!help.contains("Peer ID"));

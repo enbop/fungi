@@ -54,7 +54,7 @@ pub struct ServiceArgs {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum ServiceCommands {
-    /// List services on this device or another device
+    /// List services
     List {
         /// Show detailed output
         #[arg(short, long, default_value_t = false)]
@@ -63,7 +63,7 @@ pub enum ServiceCommands {
         #[arg(long, default_value_t = false)]
         refresh: bool,
     },
-    /// Apply a service file to this device or another device
+    /// Apply a service file
     Apply {
         /// Service instance target to create or update
         #[arg(value_name = "NAME[@DEVICE]")]
@@ -112,11 +112,11 @@ pub enum ServiceCommands {
     Disconnect { service: String },
     /// Change a service setting
     Set { service: String, setting: String },
-    /// Start a service by name on this device or another device
+    /// Start a service
     Start { name: String },
-    /// Stop a service by name on this device or another device
+    /// Stop a service
     Stop { name: String },
-    /// Inspect a service by name on this device or another device
+    /// Inspect a service
     Inspect {
         name: String,
         /// Show detailed output
@@ -129,7 +129,7 @@ pub enum ServiceCommands {
         #[arg(long)]
         tail: Option<String>,
     },
-    /// Remove a service by name from this device or another device
+    /// Remove a service
     Remove {
         name: String,
         /// Remove only the local cached record for a device service
