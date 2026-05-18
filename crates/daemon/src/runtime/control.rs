@@ -413,7 +413,7 @@ impl RuntimeControl {
                 }
             };
 
-            if !instance.status.running {
+            if !instance.status.is_running() {
                 continue;
             }
 
@@ -766,9 +766,10 @@ impl RuntimeControl {
             labels: manifest.labels.clone(),
             ports: manifest.ports.clone(),
             exposed_endpoints: service_expose_endpoint_bindings(manifest),
-            status: ServiceStatus {
-                state: if running { "running" } else { "stopped" }.to_string(),
-                running,
+            status: if running {
+                ServiceStatus::running()
+            } else {
+                ServiceStatus::stopped()
             },
         }
     }

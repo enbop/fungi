@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{collections::BTreeMap, fmt, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -135,10 +135,83 @@ pub struct ServiceInstance {
     pub status: ServiceStatus,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ServicePhase {
+    Running,
+    Stopped,
+    Exited,
+    Missing,
+    Unknown,
+}
+
+impl ServicePhase {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Running => "running",
+            Self::Stopped => "stopped",
+            Self::Exited => "exited",
+            Self::Missing => "missing",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+impl fmt::Display for ServicePhase {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceStatus {
-    pub state: String,
-    pub running: bool,
+    pub phase: ServicePhase,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+}
+
+impl ServiceStatus {
+    pub fn running() -> Self {
+        Self::new(ServicePhase::Running)
+    }
+
+    pub fn stopped() -> Self {
+        Self::new(ServicePhase::Stopped)
+    }
+
+    pub fn exited(exit_code: Option<i32>) -> Self {
+        Self {
+            exit_code,
+            ..Self::new(ServicePhase::Exited)
+        }
+    }
+
+    pub fn missing() -> Self {
+        Self::new(ServicePhase::Missing)
+    }
+
+    pub fn unknown() -> Self {
+        Self::new(ServicePhase::Unknown)
+    }
+
+    pub fn new(phase: ServicePhase) -> Self {
+        Self {
+            phase,
+            runtime_state: None,
+            exit_code: None,
+        }
+    }
+
+    pub fn with_runtime_state(mut self, runtime_state: impl Into<String>) -> Self {
+        self.runtime_state = Some(runtime_state.into());
+        self
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.phase == ServicePhase::Running
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

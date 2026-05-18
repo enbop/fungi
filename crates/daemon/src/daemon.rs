@@ -266,7 +266,7 @@ impl FungiDaemon {
         let mut restored_protocols = std::collections::BTreeSet::new();
 
         for service in self.runtime_control.list_services().await? {
-            if !service.status.running {
+            if !service.status.is_running() {
                 continue;
             }
 

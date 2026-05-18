@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use fungi_daemon::{CatalogService, ServiceAccess, ServiceExposeUsageKind};
+use fungi_daemon::{CatalogService, ServiceAccess, ServiceExposeUsageKind, ServicePhase};
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{ListDeviceServicesRequest, ListServiceAccessesRequest},
@@ -147,6 +147,7 @@ fn print_catalog_service(
         .map(|access| build_local_urls(&service, access))
         .unwrap_or_default();
     let transport = catalog_transport_label(&service);
+    let status = service.status.clone();
 
     if verbose {
         let view = CatalogInspectVerboseView {
@@ -155,8 +156,9 @@ fn print_catalog_service(
             usage,
             runtime: service.runtime,
             transport,
-            status: service.status.state,
-            running: service.status.running,
+            phase: status.phase,
+            runtime_state: status.runtime_state.clone(),
+            exit_code: status.exit_code,
             access_saved: saved_access.is_some(),
             local_urls,
             icon_url: service.icon_url,
@@ -177,8 +179,9 @@ fn print_catalog_service(
         let view = CatalogInspectView {
             service_name: service.service_name,
             usage,
-            status: service.status.state,
-            running: service.status.running,
+            phase: status.phase,
+            runtime_state: status.runtime_state,
+            exit_code: status.exit_code,
             access_saved: saved_access.is_some(),
             local_urls,
             endpoints: service
@@ -314,8 +317,11 @@ struct CatalogListVerboseEntry {
 struct CatalogInspectView {
     service_name: String,
     usage: String,
-    status: String,
-    running: bool,
+    phase: ServicePhase,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime_state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exit_code: Option<i32>,
     access_saved: bool,
     local_urls: Vec<String>,
     endpoints: Vec<CatalogEndpointView>,
@@ -328,8 +334,11 @@ struct CatalogInspectVerboseView {
     usage: String,
     runtime: fungi_daemon::RuntimeKind,
     transport: String,
-    status: String,
-    running: bool,
+    phase: ServicePhase,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime_state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exit_code: Option<i32>,
     access_saved: bool,
     local_urls: Vec<String>,
     icon_url: Option<String>,
