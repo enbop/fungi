@@ -3,7 +3,7 @@ use std::{collections::BTreeSet, fs, path::Path};
 
 use crate::model::{
     CONFIG_FILE, CURRENT_FUNGI_DIR_VERSION, DEVICES_FILE, LEGACY_ADDRESS_BOOK_FILE,
-    SERVICES_ROOT_DIR, normalize_fs_path,
+    SERVICES_ROOT_DIR, TRUSTED_DEVICES_FILE, normalize_fs_path,
 };
 
 pub(crate) fn migrate_config_toml_to_current(staging_root: &Path, fungi_dir: &Path) -> Result<()> {
@@ -25,6 +25,9 @@ pub(crate) fn migrate_config_toml_to_current(staging_root: &Path, fungi_dir: &Pa
         toml::Value::Integer(CURRENT_FUNGI_DIR_VERSION.into()),
     );
     table.remove("incoming_allowed_peers");
+    if let Some(network_table) = table.get_mut("network").and_then(toml::Value::as_table_mut) {
+        network_table.remove("incoming_allowed_peers");
+    }
 
     if let Some(runtime_table) = table.get_mut("runtime").and_then(toml::Value::as_table_mut) {
         runtime_table.remove("allowed_ports");
@@ -38,6 +41,67 @@ pub(crate) fn migrate_config_toml_to_current(staging_root: &Path, fungi_dir: &Pa
         format!(
             "Failed to write migrated config.toml into staging directory: {}",
             config_path.display()
+        )
+    })?;
+
+    Ok(())
+}
+
+pub(crate) fn migrate_legacy_incoming_allowed_peers(staging_root: &Path) -> Result<()> {
+    let config_path = staging_root.join(CONFIG_FILE);
+    if !config_path.exists() {
+        return Ok(());
+    }
+
+    let content = fs::read_to_string(&config_path).with_context(|| {
+        format!(
+            "Failed to read config.toml from staging directory: {}",
+            config_path.display()
+        )
+    })?;
+    let value: toml::Value =
+        toml::from_str(&content).context("Failed to parse config.toml in staging")?;
+    let Some(table) = value.as_table() else {
+        anyhow::bail!("config.toml root must be a TOML table");
+    };
+
+    let mut incoming_peers = legacy_incoming_allowed_peers(table)?;
+
+    let trusted_devices_path = staging_root.join(TRUSTED_DEVICES_FILE);
+    let mut trusted_devices_value = if trusted_devices_path.exists() {
+        let existing = fs::read_to_string(&trusted_devices_path).with_context(|| {
+            format!(
+                "Failed to read existing trusted_devices.toml from staging directory: {}",
+                trusted_devices_path.display()
+            )
+        })?;
+        toml::from_str(&existing)
+            .context("Failed to parse existing trusted_devices.toml in staging")?
+    } else {
+        toml::Value::Table(toml::map::Map::new())
+    };
+
+    let trusted_devices = ensure_toml_array_field(&mut trusted_devices_value, "trusted_devices")?;
+    let mut existing = trusted_devices
+        .iter()
+        .filter_map(toml::Value::as_str)
+        .map(ToOwned::to_owned)
+        .collect::<BTreeSet<_>>();
+    incoming_peers.sort();
+    incoming_peers.dedup();
+    for peer_id in incoming_peers {
+        if existing.insert(peer_id.clone()) {
+            trusted_devices.push(toml::Value::String(peer_id));
+        }
+    }
+
+    trusted_devices.sort_by(|left, right| left.as_str().cmp(&right.as_str()));
+    let encoded = toml::to_string_pretty(&trusted_devices_value)
+        .context("Failed to encode migrated trusted_devices.toml from staging")?;
+    fs::write(&trusted_devices_path, encoded).with_context(|| {
+        format!(
+            "Failed to write migrated trusted_devices.toml into staging directory: {}",
+            trusted_devices_path.display()
         )
     })?;
 
@@ -115,6 +179,45 @@ pub(crate) fn migrate_legacy_address_book(staging_root: &Path) -> Result<()> {
             address_book_path.display()
         )
     })?;
+    Ok(())
+}
+
+fn legacy_incoming_allowed_peers(table: &toml::Table) -> Result<Vec<String>> {
+    let mut peers = Vec::new();
+    append_toml_string_array(
+        &mut peers,
+        table.get("incoming_allowed_peers"),
+        "incoming_allowed_peers",
+    )?;
+    let network_table = table.get("network").and_then(toml::Value::as_table);
+    append_toml_string_array(
+        &mut peers,
+        network_table.and_then(|table| table.get("incoming_allowed_peers")),
+        "network.incoming_allowed_peers",
+    )?;
+    Ok(peers)
+}
+
+fn append_toml_string_array(
+    output: &mut Vec<String>,
+    value: Option<&toml::Value>,
+    field_name: &str,
+) -> Result<()> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    let Some(values) = value.as_array() else {
+        anyhow::bail!("{field_name} must be an array of peer IDs");
+    };
+    for item in values {
+        let Some(peer_id) = item.as_str() else {
+            anyhow::bail!("{field_name} must contain only peer ID strings");
+        };
+        let peer_id = peer_id.trim();
+        if !peer_id.is_empty() {
+            output.push(peer_id.to_string());
+        }
+    }
     Ok(())
 }
 

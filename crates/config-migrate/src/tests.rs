@@ -1,11 +1,12 @@
 use crate::{
     CURRENT_FUNGI_DIR_VERSION, DetectedVersion,
+    apply::MigrationTransaction,
     detection::detect_source_version_from_toml_str,
     migrate_if_needed,
     model::{
         BACKUP_ROOT_DIR, CONFIG_FILE, CURRENT_SERVICE_STATE_SCHEMA_VERSION, DATA_ROOT_DIR,
         DEVICES_FILE, LEGACY_ADDRESS_BOOK_FILE, LEGACY_SERVICE_STATE_FILE, SERVICES_ROOT_DIR,
-        STAGING_DIR_PREFIX,
+        STAGING_DIR_PREFIX, TRUSTED_DEVICES_FILE,
     },
 };
 use serde_json::json;
@@ -65,7 +66,7 @@ fn current_version_is_a_noop() {
 }
 
 #[test]
-fn migrates_legacy_config_transactionally_without_copying_unrelated_side_files() {
+fn migrates_legacy_config_transactionally_and_keeps_full_backup_snapshot() {
     let dir = TempDir::new().unwrap();
     fs::write(
         dir.path().join(CONFIG_FILE),
@@ -126,9 +127,19 @@ fn migrates_legacy_config_transactionally_without_copying_unrelated_side_files()
         fs::read_to_string(backup_dir.join(CONFIG_FILE)).unwrap(),
         original_config
     );
-    assert!(!backup_dir.join("devices.toml").exists());
-    assert!(!backup_dir.join("access").exists());
-    assert!(!backup_dir.join("cache").exists());
+    assert_eq!(
+        fs::read_to_string(backup_dir.join("devices.toml")).unwrap(),
+        "version = \"0.6.1\"\n[devices]\n"
+    );
+    assert_eq!(
+        fs::read_to_string(backup_dir.join("access").join("local_access.json")).unwrap(),
+        "{\n  \"version\": 1,\n  \"entries\": []\n}\n"
+    );
+    assert_eq!(
+        fs::read_to_string(backup_dir.join("cache").join("direct_addresses.json")).unwrap(),
+        "{\n  \"version\": 1,\n  \"addresses\": []\n}\n"
+    );
+    assert!(!backup_dir.join(BACKUP_ROOT_DIR).exists());
 
     assert!(report.staging_dir.is_none());
     let staging_count = fs::read_dir(dir.path())
@@ -145,15 +156,47 @@ fn migrates_legacy_config_transactionally_without_copying_unrelated_side_files()
 }
 
 #[test]
+fn migration_transaction_prepare_allocates_fresh_backup_dirs() {
+    let dir = TempDir::new().unwrap();
+
+    let first =
+        MigrationTransaction::prepare(dir.path(), &DetectedVersion::LegacyNoVersion, 7).unwrap();
+    let second =
+        MigrationTransaction::prepare(dir.path(), &DetectedVersion::LegacyNoVersion, 7).unwrap();
+
+    assert_ne!(first.backup_dir, second.backup_dir);
+    assert_ne!(first.staging_dir, second.staging_dir);
+    assert!(first.backup_dir.is_dir());
+    assert!(second.backup_dir.is_dir());
+    assert!(first.staging_dir.is_dir());
+    assert!(second.staging_dir.is_dir());
+    assert!(
+        first
+            .backup_dir
+            .starts_with(dir.path().join(BACKUP_ROOT_DIR))
+    );
+    assert!(
+        second
+            .backup_dir
+            .starts_with(dir.path().join(BACKUP_ROOT_DIR))
+    );
+}
+
+#[test]
 fn migration_removes_legacy_incoming_allowed_peers_from_config() {
     let dir = TempDir::new().unwrap();
+    let root_peer = "12D3KooWQW1nMmgC9R2j8uF1pL7dV7cP8xN3d8X7p4hYt3QwD8YV";
+    let network_peer = "12D3KooWJGXfQ3X6E3FJxMeYpPvVhDhxDBBkYDpAJrYaHsxkUTdT";
     fs::write(
         dir.path().join(CONFIG_FILE),
-        concat!(
-            "incoming_allowed_peers = [\"16Uiu2HAmUSNEhHAAhJsWZU16U8kaBqqXwCPbty8q243amnT2FWe8\"]\n",
-            "\n",
-            "[rpc]\n",
-            "listen_address = \"127.0.0.1:6601\"\n",
+        format!(
+            "incoming_allowed_peers = [\"{root_peer}\"]\n\
+             \n\
+             [rpc]\n\
+             listen_address = \"127.0.0.1:6601\"\n\
+             \n\
+             [network]\n\
+             incoming_allowed_peers = [\"{network_peer}\", \"{root_peer}\"]\n",
         ),
     )
     .unwrap();
@@ -161,9 +204,67 @@ fn migration_removes_legacy_incoming_allowed_peers_from_config() {
     let report = migrate_if_needed(dir.path()).unwrap();
 
     assert!(report.changed);
+    assert_eq!(
+        report.migrated_paths,
+        vec![
+            PathBuf::from(CONFIG_FILE),
+            PathBuf::from(TRUSTED_DEVICES_FILE),
+        ]
+    );
     let migrated_config = fs::read_to_string(dir.path().join(CONFIG_FILE)).unwrap();
     assert!(migrated_config.contains("version = 2"));
     assert!(!migrated_config.contains("incoming_allowed_peers"));
+
+    let trusted_value: toml::Value =
+        toml::from_str(&fs::read_to_string(dir.path().join(TRUSTED_DEVICES_FILE)).unwrap())
+            .unwrap();
+    let trusted_devices = trusted_value
+        .as_table()
+        .and_then(|table| table.get("trusted_devices"))
+        .and_then(toml::Value::as_array)
+        .unwrap()
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(trusted_devices, vec![network_peer, root_peer]);
+}
+
+#[test]
+fn migration_merges_legacy_incoming_allowed_peers_into_existing_trusted_devices_file() {
+    let dir = TempDir::new().unwrap();
+    let existing_peer = "12D3KooWQW1nMmgC9R2j8uF1pL7dV7cP8xN3d8X7p4hYt3QwD8YV";
+    let new_peer = "12D3KooWJGXfQ3X6E3FJxMeYpPvVhDhxDBBkYDpAJrYaHsxkUTdT";
+    fs::write(
+        dir.path().join(CONFIG_FILE),
+        format!(
+            "version = 2\n\
+             \n\
+             [network]\n\
+             incoming_allowed_peers = [\"{existing_peer}\", \"{new_peer}\"]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join(TRUSTED_DEVICES_FILE),
+        format!("trusted_devices = [\"{existing_peer}\"]\n"),
+    )
+    .unwrap();
+
+    let report = migrate_if_needed(dir.path()).unwrap();
+
+    assert!(report.changed);
+    let trusted_value: toml::Value =
+        toml::from_str(&fs::read_to_string(dir.path().join(TRUSTED_DEVICES_FILE)).unwrap())
+            .unwrap();
+    let trusted_devices = trusted_value
+        .as_table()
+        .and_then(|table| table.get("trusted_devices"))
+        .and_then(toml::Value::as_array)
+        .unwrap()
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(trusted_devices, vec![new_peer, existing_peer]);
 }
 
 #[test]
@@ -351,6 +452,7 @@ fn migrates_legacy_service_state_into_local_service_id_layout_and_moves_service_
             .as_ref()
     );
     assert_eq!(manifest["spec"]["entries"]["http"]["port"], 80);
+    assert_eq!(manifest["spec"]["entries"]["http"]["hostPort"], 18080);
     assert_eq!(manifest["spec"]["entries"]["http"]["usage"], "web");
     assert_eq!(manifest["spec"]["entries"]["http"]["path"], "/");
     let mounts = manifest["spec"]["mounts"].as_sequence().unwrap();
@@ -380,6 +482,72 @@ fn migrates_legacy_service_state_into_local_service_id_layout_and_moves_service_
     let backup_dir = report.backup_dir.expect("backup dir should exist");
     assert!(backup_dir.join(LEGACY_SERVICE_STATE_FILE).is_file());
     assert!(backup_dir.join(SERVICES_ROOT_DIR).join("demo").is_dir());
+}
+
+#[test]
+fn migrates_legacy_service_state_without_host_port_when_legacy_port_was_auto() {
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join(CONFIG_FILE),
+        read_fixture("legacy-no-version-config.toml"),
+    )
+    .unwrap();
+
+    fs::write(
+        dir.path().join(LEGACY_SERVICE_STATE_FILE),
+        serde_json::to_string_pretty(&json!({
+            "schema_version": 1,
+            "updated_at": "2026-05-01T00:00:00Z",
+            "services": {
+                "demo": {
+                    "manifest": {
+                        "name": "demo",
+                        "runtime": "wasmtime",
+                        "source": {
+                            "WasmtimeUrl": {
+                                "url": "https://example.com/demo.wasm"
+                            }
+                        },
+                        "expose": null,
+                        "env": {},
+                        "mounts": [],
+                        "ports": [
+                            {
+                                "name": "http",
+                                "host_port": 0,
+                                "service_port": 80,
+                                "protocol": "tcp"
+                            }
+                        ],
+                        "command": [],
+                        "entrypoint": [],
+                        "working_dir": null,
+                        "labels": {}
+                    },
+                    "desired_state": "stopped"
+                }
+            }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    migrate_if_needed(dir.path()).unwrap();
+
+    let service_entries = fs::read_dir(dir.path().join(SERVICES_ROOT_DIR))
+        .unwrap()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_type().unwrap().is_dir())
+        .collect::<Vec<_>>();
+    assert_eq!(service_entries.len(), 1);
+    let manifest_yaml = fs::read_to_string(service_entries[0].path().join("service.yaml")).unwrap();
+    let manifest: serde_yaml::Value = serde_yaml::from_str(&manifest_yaml).unwrap();
+    assert_eq!(manifest["spec"]["entries"]["http"]["port"], 80);
+    assert!(
+        manifest["spec"]["entries"]["http"]
+            .get("hostPort")
+            .is_none()
+    );
 }
 
 #[test]
