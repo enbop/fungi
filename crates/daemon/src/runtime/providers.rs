@@ -37,7 +37,7 @@ pub trait RuntimeProvider: Send + Sync {
 }
 
 pub const fn wasmtime_runtime_supported() -> bool {
-    !cfg!(target_os = "android")
+    true
 }
 
 #[derive(Clone)]

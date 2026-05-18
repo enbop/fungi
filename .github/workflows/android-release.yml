@@ -55,7 +55,6 @@ jobs:
         run: cargo install cargo-ndk
 
       - name: Build Rust CLI for Android
-        # Use --no-default-features to disable wasi feature
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.ref_name }}" = "nightly" ]; then
@@ -66,7 +65,7 @@ jobs:
           export FUNGI_BUILD_COMMIT="${GITHUB_SHA::12}"
           export FUNGI_BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           echo "Building fungi Android channel=$FUNGI_DIST_CHANNEL commit=$FUNGI_BUILD_COMMIT time=$FUNGI_BUILD_TIME"
-          cargo ndk -P 24 -t arm64-v8a build --bin fungi -r --no-default-features
+          cargo ndk -P 24 -t arm64-v8a build --bin fungi -r
 
       - name: Prepare Artifacts (Android)
         shell: bash

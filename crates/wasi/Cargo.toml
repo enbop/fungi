@@ -4,8 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-wasmtime = "37"
-wasmtime-wasi = "37"
+wasmtime = "44.0.1"
+wasmtime-wasi = "44.0.1"
 anyhow = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }

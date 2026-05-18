@@ -321,6 +321,56 @@ fn wasmtime_tcp_entry_runs_command_with_network_permissions() {
 }
 
 #[test]
+fn wasmtime_command_android_home_override_matches_target_behavior() {
+    let temp_dir = TempDir::new().unwrap();
+    let component = temp_dir.path().join("demo.wasm");
+    let manifest = ServiceManifest {
+        name: "android-home".into(),
+        definition_id: None,
+        runtime: RuntimeKind::Wasmtime,
+        run_mode: ServiceRunMode::Command,
+        source: ServiceSource::WasmtimeFile {
+            component: component.clone(),
+        },
+        expose: None,
+        env: BTreeMap::new(),
+        mounts: Vec::new(),
+        ports: Vec::new(),
+        command: Vec::new(),
+        entrypoint: Vec::new(),
+        working_dir: None,
+        labels: BTreeMap::new(),
+    };
+    let state = WasmtimeServiceState {
+        manifest,
+        source_display: component.display().to_string(),
+        staged_component_path: component,
+        service_dir: temp_dir.path().join("service"),
+        runtime_dir: temp_dir.path().join("runtime"),
+        log_file_path: temp_dir.path().join("runtime.log"),
+        child: None,
+        last_exit_code: None,
+    };
+
+    let fungi_home = temp_dir.path().join(".fungi");
+    let command = build_wasmtime_command(Path::new("/bin/fungi"), &fungi_home, &state).unwrap();
+    let home_env = command
+        .as_std()
+        .get_envs()
+        .find_map(|(key, value)| (key == "HOME").then_some(value))
+        .flatten()
+        .map(|value| value.to_string_lossy().into_owned());
+
+    if cfg!(target_os = "android") {
+        let expected = fungi_home.join("wasmtime");
+        assert_eq!(home_env.as_deref(), Some(expected.to_string_lossy().as_ref()));
+        assert!(expected.exists());
+    } else {
+        assert!(home_env.is_none());
+    }
+}
+
+#[test]
 fn wasmtime_http_mode_without_tcp_port_returns_error() {
     let temp_dir = TempDir::new().unwrap();
     let component = temp_dir.path().join("demo.wasm");
