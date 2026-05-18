@@ -1,5 +1,6 @@
 use crate::{
     CURRENT_FUNGI_DIR_VERSION, DetectedVersion,
+    apply::MigrationTransaction,
     detection::detect_source_version_from_toml_str,
     migrate_if_needed,
     model::{
@@ -65,7 +66,7 @@ fn current_version_is_a_noop() {
 }
 
 #[test]
-fn migrates_legacy_config_transactionally_without_copying_unrelated_side_files() {
+fn migrates_legacy_config_transactionally_and_keeps_full_backup_snapshot() {
     let dir = TempDir::new().unwrap();
     fs::write(
         dir.path().join(CONFIG_FILE),
@@ -126,9 +127,19 @@ fn migrates_legacy_config_transactionally_without_copying_unrelated_side_files()
         fs::read_to_string(backup_dir.join(CONFIG_FILE)).unwrap(),
         original_config
     );
-    assert!(!backup_dir.join("devices.toml").exists());
-    assert!(!backup_dir.join("access").exists());
-    assert!(!backup_dir.join("cache").exists());
+    assert_eq!(
+        fs::read_to_string(backup_dir.join("devices.toml")).unwrap(),
+        "version = \"0.6.1\"\n[devices]\n"
+    );
+    assert_eq!(
+        fs::read_to_string(backup_dir.join("access").join("local_access.json")).unwrap(),
+        "{\n  \"version\": 1,\n  \"entries\": []\n}\n"
+    );
+    assert_eq!(
+        fs::read_to_string(backup_dir.join("cache").join("direct_addresses.json")).unwrap(),
+        "{\n  \"version\": 1,\n  \"addresses\": []\n}\n"
+    );
+    assert!(!backup_dir.join(BACKUP_ROOT_DIR).exists());
 
     assert!(report.staging_dir.is_none());
     let staging_count = fs::read_dir(dir.path())
@@ -142,6 +153,33 @@ fn migrates_legacy_config_transactionally_without_copying_unrelated_side_files()
         })
         .count();
     assert_eq!(staging_count, 0);
+}
+
+#[test]
+fn migration_transaction_prepare_allocates_fresh_backup_dirs() {
+    let dir = TempDir::new().unwrap();
+
+    let first =
+        MigrationTransaction::prepare(dir.path(), &DetectedVersion::LegacyNoVersion, 7).unwrap();
+    let second =
+        MigrationTransaction::prepare(dir.path(), &DetectedVersion::LegacyNoVersion, 7).unwrap();
+
+    assert_ne!(first.backup_dir, second.backup_dir);
+    assert_ne!(first.staging_dir, second.staging_dir);
+    assert!(first.backup_dir.is_dir());
+    assert!(second.backup_dir.is_dir());
+    assert!(first.staging_dir.is_dir());
+    assert!(second.staging_dir.is_dir());
+    assert!(
+        first
+            .backup_dir
+            .starts_with(dir.path().join(BACKUP_ROOT_DIR))
+    );
+    assert!(
+        second
+            .backup_dir
+            .starts_with(dir.path().join(BACKUP_ROOT_DIR))
+    );
 }
 
 #[test]

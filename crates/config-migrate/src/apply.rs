@@ -42,44 +42,97 @@ impl MigrationTransaction {
             )
         })?;
 
-        let backup_dir = backup_root.join(format!(
+        let backup_dir_name = format!(
             "{timestamp}-from-{}-to-v{target_version}",
             source_version.backup_label()
-        ));
-        let staging_dir =
-            fungi_dir.join(format!("{STAGING_DIR_PREFIX}{timestamp}-v{target_version}"));
+        );
+        let staging_dir_name = format!("{STAGING_DIR_PREFIX}{timestamp}-v{target_version}");
 
-        if backup_dir.exists() {
-            bail!(
-                "Refusing to overwrite existing migration backup directory: {}",
-                backup_dir.display()
-            );
-        }
-        if staging_dir.exists() {
-            bail!(
-                "Refusing to overwrite existing migration staging directory: {}",
-                staging_dir.display()
-            );
-        }
-
-        fs::create_dir_all(&backup_dir).with_context(|| {
-            format!(
-                "Failed to create migration backup directory: {}",
-                backup_dir.display()
-            )
-        })?;
-        fs::create_dir_all(&staging_dir).with_context(|| {
-            format!(
-                "Failed to create migration staging directory: {}",
-                staging_dir.display()
-            )
-        })?;
+        let (backup_dir, staging_dir) = allocate_transaction_dirs(
+            &backup_root,
+            fungi_dir,
+            &backup_dir_name,
+            &staging_dir_name,
+        )?;
 
         Ok(Self {
             backup_dir,
             staging_dir,
         })
     }
+}
+
+fn allocate_transaction_dirs(
+    backup_root: &Path,
+    fungi_dir: &Path,
+    backup_dir_name: &str,
+    staging_dir_name: &str,
+) -> Result<(PathBuf, PathBuf)> {
+    for attempt in 0..1000 {
+        let suffix = if attempt == 0 {
+            String::new()
+        } else {
+            format!("-{attempt}")
+        };
+        let backup_dir = backup_root.join(format!("{backup_dir_name}{suffix}"));
+        let staging_dir = fungi_dir.join(format!("{staging_dir_name}{suffix}"));
+
+        if backup_dir.exists() || staging_dir.exists() {
+            continue;
+        }
+
+        if let Err(error) = fs::create_dir(&backup_dir) {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                continue;
+            }
+            return Err(error).with_context(|| {
+                format!(
+                    "Failed to create migration backup directory: {}",
+                    backup_dir.display()
+                )
+            });
+        }
+        match fs::create_dir(&staging_dir) {
+            Ok(()) => return Ok((backup_dir, staging_dir)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let _ = fs::remove_dir_all(&backup_dir);
+                continue;
+            }
+            Err(error) => {
+                let _ = fs::remove_dir_all(&backup_dir);
+                return Err(error).with_context(|| {
+                    format!(
+                        "Failed to create migration staging directory: {}",
+                        staging_dir.display()
+                    )
+                });
+            }
+        }
+    }
+
+    bail!(
+        "Failed to allocate a unique migration backup directory under {}",
+        backup_root.display()
+    )
+}
+
+pub(crate) fn copy_backup_snapshot(source_root: &Path, target_root: &Path) -> Result<()> {
+    for entry in fs::read_dir(source_root).with_context(|| {
+        format!(
+            "Failed to read source directory during migration backup: {}",
+            source_root.display()
+        )
+    })? {
+        let entry = entry?;
+        let file_name = entry.file_name();
+        let display_name = file_name.to_string_lossy();
+        if display_name == BACKUP_ROOT_DIR || display_name.starts_with(STAGING_DIR_PREFIX) {
+            continue;
+        }
+
+        copy_path_recursively(&entry.path(), &target_root.join(file_name))?;
+    }
+    Ok(())
 }
 
 pub(crate) fn copy_selected_paths(

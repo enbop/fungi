@@ -10,7 +10,10 @@ mod tests;
 use anyhow::{Result, bail};
 use std::path::Path;
 
-use apply::{MigrationTransaction, apply_staged_paths, copy_selected_paths, validate_migrated_dir};
+use apply::{
+    MigrationTransaction, apply_staged_paths, copy_backup_snapshot, copy_selected_paths,
+    validate_migrated_dir,
+};
 use config_files::{
     migrate_config_toml_to_current, migrate_legacy_address_book,
     migrate_legacy_incoming_allowed_peers,
@@ -58,7 +61,7 @@ fn migrate_with_plan(
 
     let transaction =
         MigrationTransaction::prepare(fungi_dir, &source_version, CURRENT_FUNGI_DIR_VERSION)?;
-    copy_selected_paths(fungi_dir, &transaction.backup_dir, &plan.touched_paths)?;
+    copy_backup_snapshot(fungi_dir, &transaction.backup_dir)?;
     copy_selected_paths(fungi_dir, &transaction.staging_dir, &plan.touched_paths)?;
 
     if plan.migrate_incoming_allowed_peers {
