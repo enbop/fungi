@@ -41,7 +41,6 @@ pub(crate) fn parse_managed_service_manifest_yaml(
     parse_service_manifest_yaml_with_policy_for_service_paths(
         content,
         base_dir,
-        fungi_home,
         &ManifestPathRoots::for_local_service_id(fungi_home, local_service_id),
         &ManifestResolutionPolicy::default(),
         &BTreeSet::new(),
@@ -71,7 +70,6 @@ pub fn parse_service_manifest_yaml_with_policy(
 pub(crate) fn parse_service_manifest_yaml_with_policy_for_service_paths(
     content: &str,
     base_dir: &Path,
-    fungi_home: &Path,
     path_roots: &ManifestPathRoots,
     policy: &ManifestResolutionPolicy,
     used_host_ports: &BTreeSet<u16>,
@@ -79,7 +77,6 @@ pub(crate) fn parse_service_manifest_yaml_with_policy_for_service_paths(
     if let Some(document) = parse_fungi_service_document(content)? {
         return document.into_service_manifest_for_node_with_service_paths(
             base_dir,
-            fungi_home,
             path_roots,
             policy,
             used_host_ports,
@@ -89,7 +86,6 @@ pub(crate) fn parse_service_manifest_yaml_with_policy_for_service_paths(
     let document = parse_legacy_service_manifest_yaml(content, "service manifest YAML")?;
     document.into_service_manifest_for_node_with_service_paths(
         base_dir,
-        fungi_home,
         path_roots,
         policy,
         used_host_ports,
@@ -222,7 +218,6 @@ impl ServiceManifestDocument {
         let path_roots = ManifestPathRoots::for_local_service_id(fungi_home, &service_name);
         self.into_service_manifest_for_node_with_service_paths(
             base_dir,
-            fungi_home,
             &path_roots,
             policy,
             used_host_ports,
@@ -232,7 +227,6 @@ impl ServiceManifestDocument {
     pub(crate) fn into_service_manifest_for_node_with_service_paths(
         self,
         base_dir: &Path,
-        fungi_home: &Path,
         path_roots: &ManifestPathRoots,
         _policy: &ManifestResolutionPolicy,
         used_host_ports: &BTreeSet<u16>,
@@ -258,8 +252,7 @@ impl ServiceManifestDocument {
             bail!("service manifest requires at least one spec.entries item");
         }
 
-        let runtime_and_source =
-            parse_manifest_run(spec.run, &spec.entries, base_dir, fungi_home, path_roots)?;
+        let runtime_and_source = parse_manifest_run(spec.run, &spec.entries, base_dir, path_roots)?;
         let ports = parse_manifest_entries(
             &spec.entries,
             runtime_and_source.runtime,
@@ -279,21 +272,16 @@ impl ServiceManifestDocument {
                 .mounts
                 .into_iter()
                 .map(|mount| ServiceMount {
-                    host_path: resolve_manifest_path(
-                        &mount.host_path,
-                        base_dir,
-                        fungi_home,
-                        path_roots,
-                    ),
+                    host_path: resolve_manifest_path(&mount.host_path, base_dir, path_roots),
                     runtime_path: mount.runtime_path,
                 })
                 .collect(),
             ports,
             command: spec.command,
             entrypoint: spec.entrypoint,
-            working_dir: spec.working_dir.map(|value| {
-                resolve_manifest_path_string(value.as_str(), base_dir, fungi_home, path_roots)
-            }),
+            working_dir: spec
+                .working_dir
+                .map(|value| resolve_manifest_path_string(value.as_str(), base_dir, path_roots)),
             labels: metadata_labels,
         })
     }
@@ -504,7 +492,6 @@ impl FungiServiceDocument {
         let path_roots = ManifestPathRoots::for_local_service_id(fungi_home, &service_name);
         self.into_service_manifest_for_node_with_service_paths(
             base_dir,
-            fungi_home,
             &path_roots,
             policy,
             used_host_ports,
@@ -514,7 +501,6 @@ impl FungiServiceDocument {
     fn into_service_manifest_for_node_with_service_paths(
         self,
         base_dir: &Path,
-        fungi_home: &Path,
         path_roots: &ManifestPathRoots,
         _policy: &ManifestResolutionPolicy,
         used_host_ports: &BTreeSet<u16>,
@@ -540,19 +526,13 @@ impl FungiServiceDocument {
 
         let (runtime_and_source, env, mounts, command) = match run {
             Some(run) => {
-                let runtime_and_source =
-                    parse_fungi_run(&run, &publish, base_dir, fungi_home, path_roots)?;
+                let runtime_and_source = parse_fungi_run(&run, &publish, base_dir, path_roots)?;
                 let env = run.env;
                 let mounts = run
                     .mounts
                     .into_iter()
                     .map(|mount| ServiceMount {
-                        host_path: resolve_manifest_path(
-                            &mount.from,
-                            base_dir,
-                            fungi_home,
-                            path_roots,
-                        ),
+                        host_path: resolve_manifest_path(&mount.from, base_dir, path_roots),
                         runtime_path: mount.to,
                     })
                     .collect();
@@ -595,7 +575,6 @@ fn parse_fungi_run(
     run: &FungiServiceRun,
     publish: &BTreeMap<String, FungiServicePublishEntry>,
     base_dir: &Path,
-    fungi_home: &Path,
     path_roots: &ManifestPathRoots,
 ) -> Result<RuntimeAndSource> {
     for (name, entry) in publish {
@@ -623,7 +602,7 @@ fn parse_fungi_run(
                 normalize_optional(run.source.image.clone()),
             ) {
                 (Some(file), None, None) => ServiceSource::WasmtimeFile {
-                    component: resolve_manifest_path(&file, base_dir, fungi_home, path_roots),
+                    component: resolve_manifest_path(&file, base_dir, path_roots),
                 },
                 (None, Some(url), None) => ServiceSource::WasmtimeUrl { url },
                 (None, None, Some(_)) => {
@@ -897,11 +876,10 @@ fn parse_manifest_run(
     run: Option<ServiceManifestRun>,
     entries: &BTreeMap<String, ServiceManifestEntry>,
     base_dir: &Path,
-    fungi_home: &Path,
     path_roots: &ManifestPathRoots,
 ) -> Result<RuntimeAndSource> {
     match run {
-        Some(run) => parse_runtime_run(run, entries, base_dir, fungi_home, path_roots),
+        Some(run) => parse_runtime_run(run, entries, base_dir, path_roots),
         None => parse_existing_tcp_run(entries),
     }
 }
@@ -910,7 +888,6 @@ fn parse_runtime_run(
     run: ServiceManifestRun,
     entries: &BTreeMap<String, ServiceManifestEntry>,
     base_dir: &Path,
-    fungi_home: &Path,
     path_roots: &ManifestPathRoots,
 ) -> Result<RuntimeAndSource> {
     for (name, entry) in entries {
@@ -938,7 +915,7 @@ fn parse_runtime_run(
                     runtime: RuntimeKind::Wasmtime,
                     run_mode: mode.unwrap_or_default(),
                     source: ServiceSource::WasmtimeFile {
-                        component: resolve_manifest_path(&file, base_dir, fungi_home, path_roots),
+                        component: resolve_manifest_path(&file, base_dir, path_roots),
                     },
                 }),
                 (None, Some(url)) => {
@@ -1249,23 +1226,16 @@ impl ManifestPathRoots {
     }
 }
 
-fn resolve_manifest_path(
-    path: &str,
-    base_dir: &Path,
-    fungi_home: &Path,
-    path_roots: &ManifestPathRoots,
-) -> PathBuf {
-    let expanded = resolve_manifest_path_string(path, base_dir, fungi_home, path_roots);
+fn resolve_manifest_path(path: &str, base_dir: &Path, path_roots: &ManifestPathRoots) -> PathBuf {
+    let expanded = resolve_manifest_path_string(path, base_dir, path_roots);
     PathBuf::from(expanded)
 }
 
 fn resolve_manifest_path_string(
     path: &str,
     base_dir: &Path,
-    fungi_home: &Path,
     path_roots: &ManifestPathRoots,
 ) -> String {
-    let fungi_home_value = fungi_home.to_string_lossy();
     let service_appdata_value = path_roots.service_appdata_dir.to_string_lossy();
     let service_artifacts_value = path_roots.service_artifacts_dir.to_string_lossy();
     let user_root_value = path_roots.user_root_dir.to_string_lossy();
@@ -1274,27 +1244,7 @@ fn resolve_manifest_path_string(
         .replace("$fungi.service.artifacts", &service_artifacts_value)
         .replace("$fungi.service.data", &service_appdata_value)
         .replace("$fungi.workspace", &user_home_value)
-        .replace("$fungi.root", &user_root_value)
-        .replace("${FUNGI_HOME}", &fungi_home_value)
-        .replace("$FUNGI_HOME", &fungi_home_value)
-        .replace("${fungi_home}", &fungi_home_value)
-        .replace("$fungi_home", &fungi_home_value)
-        .replace("${SERVICE_APPDATA}", &service_appdata_value)
-        .replace("$SERVICE_APPDATA", &service_appdata_value)
-        .replace("${service_appdata}", &service_appdata_value)
-        .replace("$service_appdata", &service_appdata_value)
-        .replace("${SERVICE_ARTIFACTS}", &service_artifacts_value)
-        .replace("$SERVICE_ARTIFACTS", &service_artifacts_value)
-        .replace("${service_artifacts}", &service_artifacts_value)
-        .replace("$service_artifacts", &service_artifacts_value)
-        .replace("${USER_ROOT}", &user_root_value)
-        .replace("$USER_ROOT", &user_root_value)
-        .replace("${user_root}", &user_root_value)
-        .replace("$user_root", &user_root_value)
-        .replace("${USER_HOME}", &user_home_value)
-        .replace("$USER_HOME", &user_home_value)
-        .replace("${user_home}", &user_home_value)
-        .replace("$user_home", &user_home_value);
+        .replace("$fungi.root", &user_root_value);
     let resolved = PathBuf::from(&expanded);
     if resolved.is_absolute() {
         resolved.to_string_lossy().to_string()

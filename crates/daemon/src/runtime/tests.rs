@@ -369,7 +369,7 @@ fn wasmtime_http_mode_without_tcp_port_returns_error() {
 }
 
 #[test]
-fn manifest_document_supports_user_home_and_auto_host_port() {
+fn manifest_document_supports_fungi_workspace_and_auto_host_port() {
     let yaml = r#"
 apiVersion: fungi.rs/v1alpha1
 kind: Service
@@ -384,7 +384,7 @@ spec:
             port: 80
             usage: web
     mounts:
-        - hostPath: ${USER_HOME}
+        - hostPath: $fungi.workspace
           runtimePath: /srv
 "#;
 
@@ -425,13 +425,13 @@ spec:
         http:
             port: 80
     mounts:
-        - hostPath: ${SERVICE_APPDATA}/db
+        - hostPath: $fungi.service.data/db
           runtimePath: /srv
-        - hostPath: ${SERVICE_ARTIFACTS}/static
+        - hostPath: $fungi.service.artifacts/static
           runtimePath: /static
-        - hostPath: ${USER_ROOT}
+        - hostPath: $fungi.root
           runtimePath: /user
-    workingDir: ${USER_HOME}
+    workingDir: $fungi.workspace
 "#;
 
     let fungi_home = PathBuf::from("/tmp/fungi-home");
@@ -442,7 +442,6 @@ spec:
     let manifest = parse_service_manifest_yaml_with_policy_for_service_paths(
         yaml,
         Path::new("."),
-        &fungi_home,
         &path_roots,
         &ManifestResolutionPolicy::default(),
         &BTreeSet::new(),

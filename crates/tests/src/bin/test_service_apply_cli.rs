@@ -198,7 +198,7 @@ fn write_manifest(
 ) -> Result<PathBuf> {
     let path = dir.join(format!("{}-{}", unique_suffix(), file_name));
     let content = format!(
-        "apiVersion: fungi.rs/v1alpha1\nkind: Service\n\nmetadata:\n  name: {service_name}\n\nspec:\n  run:\n    docker:\n      image: {image}\n\n  entries:\n    {entry_name}:\n      port: 8080\n      usage: web\n      path: /\n\n  mounts:\n    - hostPath: ${{USER_HOME}}\n      runtimePath: {workspace_path}\n\n  command:\n    - --auth\n    - none\n    - {workspace_path}\n",
+        "apiVersion: fungi.rs/v1alpha1\nkind: Service\n\nmetadata:\n  name: {service_name}\n\nspec:\n  run:\n    docker:\n      image: {image}\n\n  entries:\n    {entry_name}:\n      port: 8080\n      usage: web\n      path: /\n\n  mounts:\n    - hostPath: $fungi.workspace\n      runtimePath: {workspace_path}\n\n  command:\n    - --auth\n    - none\n    - {workspace_path}\n",
     );
     fs::write(&path, content).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(path)
