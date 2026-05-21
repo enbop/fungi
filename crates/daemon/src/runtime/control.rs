@@ -237,7 +237,6 @@ impl RuntimeControl {
         let manifest = parse_service_manifest_yaml_with_policy_for_service_paths(
             content,
             base_dir,
-            fungi_home,
             &path_roots,
             policy,
             &used_host_ports,
