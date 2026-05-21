@@ -475,7 +475,7 @@ impl FungiDaemon {
         Ok(true)
     }
 
-    pub fn forget_device_service(
+    pub async fn forget_device_service(
         &self,
         device_id: PeerId,
         name: &str,
@@ -487,6 +487,7 @@ impl FungiDaemon {
         }
 
         self.forget_service_access(device_id, name.to_string())
+            .await
             .with_context(|| format!("failed to forget local access records for service {name}"))?;
         Ok(ServiceControlResponse::success_forgotten_locally(
             None,
@@ -660,6 +661,7 @@ impl FungiDaemon {
             .to_string();
         if !service_key.is_empty() {
             self.forget_service_access(peer_id, service_key.clone())
+                .await
                 .with_context(|| {
                     format!(
                         "remote service removed, but failed to forget local access records for {service_key}"

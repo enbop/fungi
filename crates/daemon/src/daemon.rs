@@ -28,7 +28,7 @@ use fungi_swarm::{
 use fungi_util::keypair::get_keypair_from_dir;
 use libp2p::{Multiaddr, identity::Keypair, multiaddr::Protocol};
 use parking_lot::Mutex;
-use tokio::task::JoinHandle;
+use tokio::{sync::Mutex as AsyncMutex, task::JoinHandle};
 
 const DIRECT_ADDRESS_CACHE_SYNC_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -44,6 +44,7 @@ pub struct FungiDaemon {
     devices_config: Arc<Mutex<DevicesConfig>>,
     trusted_devices_config: Arc<Mutex<TrustedDevicesConfig>>,
     direct_address_cache: Arc<Mutex<DirectAddressCache>>,
+    local_access_config_lock: Arc<AsyncMutex<()>>,
     args: DaemonArgs,
 
     swarm_control: SwarmControl,
@@ -69,6 +70,10 @@ impl FungiDaemon {
 
     pub fn trusted_devices(&self) -> Arc<Mutex<TrustedDevicesConfig>> {
         self.trusted_devices_config.clone()
+    }
+
+    pub(crate) fn local_access_config_lock(&self) -> Arc<AsyncMutex<()>> {
+        self.local_access_config_lock.clone()
     }
 
     pub fn swarm_control(&self) -> &SwarmControl {
@@ -220,6 +225,7 @@ impl FungiDaemon {
         let devices_config = Arc::new(Mutex::new(devices_config));
         let trusted_devices_config = Arc::new(Mutex::new(trusted_devices_config));
         let direct_address_cache = Arc::new(Mutex::new(direct_address_cache));
+        let local_access_config_lock = Arc::new(AsyncMutex::new(()));
 
         let task_handles = TaskHandles {
             swarm_task,
@@ -233,6 +239,7 @@ impl FungiDaemon {
             devices_config,
             trusted_devices_config,
             direct_address_cache,
+            local_access_config_lock,
             args,
             swarm_control,
             mdns_control,
