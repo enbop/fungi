@@ -77,6 +77,9 @@ impl FungiDaemon {
             bail!("choose a service entry before assigning a fixed local port");
         }
 
+        let local_access_lock = self.local_access_config_lock();
+        let _local_access_guard = local_access_lock.lock().await;
+
         let peer_id_string = peer_id.to_string();
         let mut access_config = self.local_access_config()?;
         let mut active_rules = self.get_service_access_forwarding_rules();
@@ -243,16 +246,19 @@ impl FungiDaemon {
         service_name: String,
     ) -> Result<()> {
         let peer_id_string = peer_id.to_string();
-        let saved_entries = self
-            .local_access_config()?
-            .records
-            .into_iter()
-            .filter(|record| {
-                record.remote_peer_id == peer_id_string
-                    && record.remote_service_name == service_name
-            })
-            .map(|record| record.remote_service_port_name)
-            .collect::<BTreeSet<_>>();
+        let saved_entries = {
+            let local_access_lock = self.local_access_config_lock();
+            let _local_access_guard = local_access_lock.lock().await;
+            self.local_access_config()?
+                .records
+                .into_iter()
+                .filter(|record| {
+                    record.remote_peer_id == peer_id_string
+                        && record.remote_service_name == service_name
+                })
+                .map(|record| record.remote_service_port_name)
+                .collect::<BTreeSet<_>>()
+        };
 
         for entry in saved_entries {
             self.attach_service_access(peer_id, service_name.clone(), Some(entry), None)
@@ -281,7 +287,10 @@ impl FungiDaemon {
         Ok(())
     }
 
-    pub fn forget_service_access(&self, peer_id: PeerId, service_name: String) -> Result<()> {
+    pub async fn forget_service_access(&self, peer_id: PeerId, service_name: String) -> Result<()> {
+        let local_access_lock = self.local_access_config_lock();
+        let _local_access_guard = local_access_lock.lock().await;
+
         self.detach_service_access_by_match(peer_id, &service_name)?;
         let peer_id_string = peer_id.to_string();
         self.local_access_config()?
@@ -289,7 +298,10 @@ impl FungiDaemon {
         Ok(())
     }
 
-    pub fn forget_device_service_accesses(&self, peer_id: PeerId) -> Result<()> {
+    pub async fn forget_device_service_accesses(&self, peer_id: PeerId) -> Result<()> {
+        let local_access_lock = self.local_access_config_lock();
+        let _local_access_guard = local_access_lock.lock().await;
+
         let peer_id_string = peer_id.to_string();
         let rules_to_remove = self
             .get_service_access_forwarding_rules()
@@ -307,7 +319,13 @@ impl FungiDaemon {
         Ok(())
     }
 
-    pub fn list_service_accesses(&self, peer_id: Option<PeerId>) -> Result<Vec<ServiceAccess>> {
+    pub async fn list_service_accesses(
+        &self,
+        peer_id: Option<PeerId>,
+    ) -> Result<Vec<ServiceAccess>> {
+        let local_access_lock = self.local_access_config_lock();
+        let _local_access_guard = local_access_lock.lock().await;
+
         let peer_filter = peer_id.map(|peer_id| peer_id.to_string());
         let mut grouped = BTreeMap::<(String, String), Vec<ServiceAccessEndpoint>>::new();
 
@@ -411,4 +429,166 @@ fn allocate_local_access_port(preferred_port: u16, reserved_ports: &BTreeSet<u16
     }
 
     bail!("failed to allocate a free local TCP port for remote service access")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        RuntimeKind, ServiceExpose, ServiceExposeTransport, ServiceExposeTransportKind,
+        ServiceExposeUsage, ServiceExposeUsageKind, ServiceManifest, ServiceMount, ServicePort,
+        ServicePortAllocation, ServicePortProtocol, ServiceRunMode, ServiceSource,
+        test_support::{TestDaemon, spawn_connected_pair},
+    };
+    use libp2p::swarm::dial_opts::DialOpts;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn concurrent_attach_accesses_preserve_both_saved_records() -> Result<()> {
+        let service_name = "multi-access";
+        let entries = vec![("api", free_tcp_port()?), ("metrics", free_tcp_port()?)];
+        let (client, server) = setup_access_test_pair(service_name, entries).await?;
+        let peer_id = server.peer_id();
+
+        let attach_api = client.daemon().attach_service_access(
+            peer_id,
+            service_name.to_string(),
+            Some("api".to_string()),
+            None,
+        );
+        let attach_metrics = client.daemon().attach_service_access(
+            peer_id,
+            service_name.to_string(),
+            Some("metrics".to_string()),
+            None,
+        );
+        let (api_access, metrics_access) = tokio::join!(attach_api, attach_metrics);
+        api_access?;
+        metrics_access?;
+
+        let accesses = client.daemon().list_service_accesses(Some(peer_id)).await?;
+        let saved = accesses
+            .iter()
+            .find(|access| access.service_name == service_name)
+            .expect("expected saved service access");
+        let endpoint_names = saved
+            .endpoints
+            .iter()
+            .map(|endpoint| endpoint.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(endpoint_names, vec!["api", "metrics"]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn concurrent_attach_and_forget_keep_access_config_readable() -> Result<()> {
+        let service_name = "forget-race";
+        let (client, server) =
+            setup_access_test_pair(service_name, vec![("main", free_tcp_port()?)]).await?;
+        let peer_id = server.peer_id();
+
+        let attach = client.daemon().attach_service_access(
+            peer_id,
+            service_name.to_string(),
+            Some("main".to_string()),
+            None,
+        );
+        let forget = client
+            .daemon()
+            .forget_service_access(peer_id, service_name.to_string());
+        let (attach_result, forget_result) = tokio::join!(attach, forget);
+        attach_result?;
+        forget_result?;
+
+        let accesses = client.daemon().list_service_accesses(Some(peer_id)).await?;
+        let saved_count = accesses
+            .iter()
+            .filter(|access| access.service_name == service_name)
+            .count();
+        assert!(saved_count <= 1);
+        Ok(())
+    }
+
+    async fn setup_access_test_pair(
+        service_name: &str,
+        entries: Vec<(&str, u16)>,
+    ) -> Result<(TestDaemon, TestDaemon)> {
+        let (client, server) = spawn_connected_pair().await?;
+        server
+            .daemon()
+            .pull_service(exposed_external_manifest(service_name, entries))
+            .await?;
+        server
+            .daemon()
+            .start_service_by_name(service_name.to_string())
+            .await?;
+        let server_peer_id = server.peer_id();
+        let server_addr = server.tcp_multiaddr();
+        client
+            .swarm_control()
+            .invoke_swarm(move |swarm| {
+                swarm.dial(
+                    DialOpts::peer_id(server_peer_id)
+                        .addresses(vec![server_addr])
+                        .build(),
+                )
+            })
+            .await??;
+        client
+            .wait_connected(server.peer_id(), Duration::from_secs(5))
+            .await?;
+        server
+            .wait_connected(client.peer_id(), Duration::from_secs(5))
+            .await?;
+        Ok((client, server))
+    }
+
+    fn exposed_external_manifest(service_name: &str, entries: Vec<(&str, u16)>) -> ServiceManifest {
+        let first_port = entries
+            .first()
+            .map(|(_, port)| *port)
+            .expect("test manifest requires at least one port");
+        ServiceManifest {
+            name: service_name.to_string(),
+            definition_id: None,
+            runtime: RuntimeKind::External,
+            run_mode: ServiceRunMode::Command,
+            source: ServiceSource::ExistingTcp {
+                host: "127.0.0.1".to_string(),
+                port: first_port,
+            },
+            expose: Some(ServiceExpose {
+                transport: ServiceExposeTransport {
+                    kind: ServiceExposeTransportKind::Tcp,
+                },
+                usage: Some(ServiceExposeUsage {
+                    kind: ServiceExposeUsageKind::Raw,
+                    path: None,
+                }),
+                icon_url: None,
+                catalog_id: None,
+            }),
+            env: BTreeMap::new(),
+            mounts: Vec::<ServiceMount>::new(),
+            ports: entries
+                .into_iter()
+                .map(|(name, port)| ServicePort {
+                    name: Some(name.to_string()),
+                    host_port: port,
+                    host_port_allocation: ServicePortAllocation::Fixed,
+                    service_port: port,
+                    protocol: ServicePortProtocol::Tcp,
+                })
+                .collect(),
+            command: Vec::new(),
+            entrypoint: Vec::new(),
+            working_dir: None,
+            labels: BTreeMap::new(),
+        }
+    }
+
+    fn free_tcp_port() -> Result<u16> {
+        let listener = StdTcpListener::bind(("127.0.0.1", 0))?;
+        Ok(listener.local_addr()?.port())
+    }
 }

@@ -472,6 +472,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
         self.inner
             .devices_remove(peer_id)
+            .await
             .map_err(|e| Status::internal(format!("Failed to remove device: {}", e)))?;
 
         Ok(Response::new(Empty {}))
@@ -1205,6 +1206,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         let response = self
             .inner
             .forget_device_service(peer_id, &req.name)
+            .await
             .map_err(|e| Status::internal(format!("Failed to forget device service: {e}")))?;
 
         Ok(Response::new(RemoteServiceControlResponse {
@@ -1291,6 +1293,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
         self.inner
             .forget_service_access(peer_id, req.service_name)
+            .await
             .map_err(|e| Status::internal(format!("Failed to forget service access: {e}")))?;
 
         Ok(Response::new(Empty {}))
@@ -1313,6 +1316,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         let service_accesses = self
             .inner
             .list_service_accesses(peer_id)
+            .await
             .map_err(|e| Status::internal(format!("Failed to list service accesses: {e}")))?;
         let service_accesses_json = serde_json::to_string(&service_accesses)
             .map_err(|e| Status::internal(format!("Failed to serialize service accesses: {e}")))?;
