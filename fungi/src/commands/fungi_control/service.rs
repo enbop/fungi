@@ -1990,36 +1990,35 @@ fn create_tcp_service_interactively(
             }
         }
     };
-    let host = prompt_with_default("Local host on target device", "127.0.0.1");
-    let port = prompt_required("Local TCP port")
+    let host = prompt_with_default("Host on target device (default: 127.0.0.1)", "127.0.0.1");
+    let port = prompt_required("TCP port on target device")
         .parse::<u16>()
         .unwrap_or_else(|error| fatal(format!("Invalid TCP port: {error}")));
     if port == 0 {
-        fatal("Local TCP port must be greater than 0")
+        fatal("TCP port on target device must be greater than 0")
     }
-    let client_kind = prompt_with_default("Client kind (raw, ssh, web, webdav)", "raw");
-    let default_entry = match client_kind.trim().to_ascii_lowercase().as_str() {
-        "ssh" => "ssh",
-        "web" => "http",
-        "webdav" => "webdav",
-        _ => "main",
-    };
-    let entry = prompt_with_default("Entry name", default_entry);
+    let client_kind = prompt("Client kind (optional)").trim().to_string();
     let client_path = if client_kind.trim().eq_ignore_ascii_case("web") {
-        Some(prompt_with_default("Web path", "/"))
+        Some(prompt_with_default("Web path (default: /)", "/"))
     } else {
         None
     };
+    let entry = prompt_with_default("Entry name (optional, default: main)", "main");
     let start_now = start_flag || prompt_yes_no_default("Start after apply? [Y/n]", true);
     let mut manifest_yaml = format!(
-        "fungi: service/v1\nid: external-tcp\n\npublish:\n  {}:\n    tcp:\n      host: {}\n      port: {}\n    client:\n      kind: {}\n",
+        "fungi: service/v1\nid: external-tcp\n\npublish:\n  {}:\n    tcp:\n      host: {}\n      port: {}\n",
         yaml_key(&entry),
         yaml_scalar(&host),
-        port,
-        yaml_scalar(&client_kind)
+        port
     );
-    if let Some(path) = client_path {
-        manifest_yaml.push_str(&format!("      path: {}\n", yaml_scalar(&path)));
+    if !client_kind.trim().is_empty() {
+        manifest_yaml.push_str(&format!(
+            "    client:\n      kind: {}\n",
+            yaml_scalar(&client_kind)
+        ));
+        if let Some(path) = client_path {
+            manifest_yaml.push_str(&format!("      path: {}\n", yaml_scalar(&path)));
+        }
     }
 
     (

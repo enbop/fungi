@@ -260,7 +260,7 @@ fn cli_can_interactively_create_local_tcp_service() {
         stream.write_all(b"pong").unwrap();
     });
 
-    let input = format!("\n{target}\nraw\n\ny\n");
+    let input = format!("\n{target}\n\n\ny\n");
     run_cli_with_input(
         home.path(),
         ["service", "apply", "created-raw", "--create", "--yes"],
