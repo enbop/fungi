@@ -1,7 +1,15 @@
 use anyhow::{Result, anyhow, bail};
 use std::path::PathBuf;
+#[cfg(target_os = "android")]
+use wasmtime_android as wasmtime;
 use wasmtime::component::TypedFunc;
 use wasmtime::{Config, Engine, Store};
+#[cfg(target_os = "android")]
+use wasmtime_wasi_android as wasmtime_wasi;
+#[cfg(not(target_os = "android"))]
+use wasmtime_host as wasmtime;
+#[cfg(not(target_os = "android"))]
+use wasmtime_wasi_host as wasmtime_wasi;
 use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 pub struct State {

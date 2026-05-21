@@ -8,7 +8,7 @@ default-run = "fungi"
 
 [features]
 default = ["wasi"]
-wasi = ["dep:wasmtime-cli"]
+wasi = []
 
 [dependencies]
 log = { workspace = true }
@@ -28,7 +28,6 @@ fungi-daemon = { workspace = true }
 fungi-daemon-grpc = { workspace = true }
 fungi-swarm = { workspace = true }
 fungi-util = { workspace = true }
-wasmtime-cli = { workspace = true, optional = true }
 libp2p = { workspace = true }
 multiaddr = { workspace = true }
 futures = { workspace = true }
@@ -37,6 +36,13 @@ interprocess = { workspace = true }
 rand = { workspace = true }
 anyhow = { workspace = true }
 tarpc = { workspace = true }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+wasmtime-cli-host = { package = "wasmtime-cli", version = "44.0.1" }
+
+[target.'cfg(target_os = "android")'.dependencies]
+# Temporary override until an official Wasmtime release includes #13118.
+wasmtime-cli-android = { package = "wasmtime-cli", git = "https://github.com/Heap-Hop/wasmtime.git", tag = "v44.0.1-android-fix" }
 
 [dev-dependencies]
 tempfile = { workspace = true }

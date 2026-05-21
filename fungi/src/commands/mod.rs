@@ -9,6 +9,10 @@ use std::path::PathBuf;
 use clap::{CommandFactory, Parser, Subcommand};
 use fungi_config::{FungiDir, default_fungi_dir_name};
 use fungi_control::DeviceInput;
+#[cfg(all(feature = "wasi", target_os = "android"))]
+use wasmtime_cli_android as wasmtime_cli;
+#[cfg(all(feature = "wasi", not(target_os = "android")))]
+use wasmtime_cli_host as wasmtime_cli;
 
 /// A platform built for seamless multi-device integration
 #[derive(Parser)]

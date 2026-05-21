@@ -751,7 +751,15 @@ version = "0.131.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8628cc4ba7f88a9205a7ee42327697abc61195a1e3d92cfae172d6a946e722e"
 dependencies = [
- "cranelift-assembler-x64-meta",
+ "cranelift-assembler-x64-meta 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "cranelift-assembler-x64"
+version = "0.131.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cranelift-assembler-x64-meta 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -760,7 +768,15 @@ version = "0.131.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d582754487e6c9a065a91c42ccf1bdd8d5977af33468dac5ae9bec0ce88acb3e"
 dependencies = [
- "cranelift-srcgen",
+ "cranelift-srcgen 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "cranelift-assembler-x64-meta"
+version = "0.131.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cranelift-srcgen 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -769,8 +785,17 @@ version = "0.131.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb59c81ace12ee7c33074db7903d4d75d1f40b28cd3e8e6f491de57b29129eb9"
 dependencies = [
- "cranelift-entity",
- "wasmtime-internal-core",
+ "cranelift-entity 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-core 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "cranelift-bforest"
+version = "0.131.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cranelift-entity 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-core 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -781,7 +806,17 @@ checksum = "f25c06993a681be9cf3140798a3d4ac5bec955e7444416a2fdc87fda8567285d"
 dependencies = [
  "serde",
  "serde_derive",
- "wasmtime-internal-core",
+ "wasmtime-internal-core 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "cranelift-bitset"
+version = "0.131.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "serde",
+ "serde_derive",
+ "wasmtime-internal-core 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -793,25 +828,54 @@ dependencies = [
  "anyhow",
  "bumpalo",
  "capstone",
- "cranelift-assembler-x64",
- "cranelift-bforest",
- "cranelift-bitset",
- "cranelift-codegen-meta",
- "cranelift-codegen-shared",
- "cranelift-control",
- "cranelift-entity",
- "cranelift-isle",
+ "cranelift-assembler-x64 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-bforest 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-bitset 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-codegen-meta 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-codegen-shared 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-control 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-entity 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-isle 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "gimli 0.33.0",
  "hashbrown 0.16.1",
  "libm",
  "log",
- "pulley-interpreter",
+ "pulley-interpreter 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "regalloc2",
  "rustc-hash",
  "serde",
  "smallvec",
  "target-lexicon",
- "wasmtime-internal-core",
+ "wasmtime-internal-core 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "cranelift-codegen"
+version = "0.131.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "anyhow",
+ "bumpalo",
+ "capstone",
+ "cranelift-assembler-x64 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-bforest 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-bitset 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-codegen-meta 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-codegen-shared 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-control 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-entity 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-isle 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "gimli 0.33.0",
+ "hashbrown 0.16.1",
+ "libm",
+ "log",
+ "pulley-interpreter 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "regalloc2",
+ "rustc-hash",
+ "serde",
+ "smallvec",
+ "target-lexicon",
+ "wasmtime-internal-core 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -820,11 +884,23 @@ version = "0.131.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b85aa822fce72080d041d7c2cf7c3f5c6ecdea7afae68379ba4ef85269c4fa5"
 dependencies = [
- "cranelift-assembler-x64-meta",
- "cranelift-codegen-shared",
- "cranelift-srcgen",
+ "cranelift-assembler-x64-meta 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-codegen-shared 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-srcgen 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "heck",
- "pulley-interpreter",
+ "pulley-interpreter 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "cranelift-codegen-meta"
+version = "0.131.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cranelift-assembler-x64-meta 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-codegen-shared 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-srcgen 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "heck",
+ "pulley-interpreter 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -832,6 +908,11 @@ name = "cranelift-codegen-shared"
 version = "0.131.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "833eb9fc89326cd072cc19e96892f09b5692c0dfe17cd4da2858ba30c2cd85c0"
+
+[[package]]
+name = "cranelift-codegen-shared"
+version = "0.131.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
 
 [[package]]
 name = "cranelift-control"
@@ -843,15 +924,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "cranelift-control"
+version = "0.131.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "arbitrary",
+]
+
+[[package]]
 name = "cranelift-entity"
 version = "0.131.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e62ef34c6e720f347a79ece043e8584e242d168911da640bac654a33a6aaaf5"
 dependencies = [
- "cranelift-bitset",
+ "cranelift-bitset 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_derive",
- "wasmtime-internal-core",
+ "wasmtime-internal-core 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "cranelift-entity"
+version = "0.131.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cranelift-bitset 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "serde",
+ "serde_derive",
+ "wasmtime-internal-core 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -860,7 +960,18 @@ version = "0.131.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfa2ad00399dd47e7e7e33cb1dc23b0e39ed9dcd01e8f026fc37af91655031b8"
 dependencies = [
- "cranelift-codegen",
+ "cranelift-codegen 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log",
+ "smallvec",
+ "target-lexicon",
+]
+
+[[package]]
+name = "cranelift-frontend"
+version = "0.131.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cranelift-codegen 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "log",
  "smallvec",
  "target-lexicon",
@@ -873,12 +984,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02c51975ed217b4e8e5a7fd11e9ec83a96104bdff311dddcb505d1d8a9fd7fc6"
 
 [[package]]
+name = "cranelift-isle"
+version = "0.131.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+
+[[package]]
 name = "cranelift-native"
 version = "0.131.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9b1889e00da9729d8f8525f3c12998ded86ea709058ff844ebe00b97548de0e"
 dependencies = [
- "cranelift-codegen",
+ "cranelift-codegen 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc",
+ "target-lexicon",
+]
+
+[[package]]
+name = "cranelift-native"
+version = "0.131.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cranelift-codegen 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "libc",
  "target-lexicon",
 ]
@@ -888,6 +1014,11 @@ name = "cranelift-srcgen"
 version = "0.131.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d5a8f82fd5124f009f72167e60139245cd3b56cfd4b53050f22110c48c5f4da1"
+
+[[package]]
+name = "cranelift-srcgen"
+version = "0.131.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
 
 [[package]]
 name = "crc32fast"
@@ -1482,7 +1613,8 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tonic",
- "wasmtime-cli",
+ "wasmtime-cli 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-cli 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -4019,10 +4151,21 @@ version = "44.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9326e3a0093d170582cf64ed9e4cf253b8aac155ec4a294ff62330450bbf094"
 dependencies = [
- "cranelift-bitset",
+ "cranelift-bitset 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log",
- "pulley-macros",
- "wasmtime-internal-core",
+ "pulley-macros 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-core 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "pulley-interpreter"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cranelift-bitset 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "log",
+ "pulley-macros 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-core 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -4030,6 +4173,16 @@ name = "pulley-macros"
 version = "44.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00c6433917e3789605b1f4cd2a589f637ff17212344e7fa5ba99544625ba52c7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "pulley-macros"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5561,9 +5714,36 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
- "wasmtime",
- "wasmtime-environ",
- "wiggle",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-environ 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wiggle 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "wasi-common"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "async-trait",
+ "bitflags 2.11.1",
+ "cap-fs-ext",
+ "cap-rand",
+ "cap-std",
+ "cap-time-ext",
+ "fs-set-times",
+ "io-extras",
+ "io-lifetimes",
+ "libc",
+ "log",
+ "rustix 1.0.8",
+ "system-interface",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-environ 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wiggle 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "windows-sys 0.61.2",
 ]
 
@@ -5729,7 +5909,7 @@ dependencies = [
  "object",
  "once_cell",
  "postcard",
- "pulley-interpreter",
+ "pulley-interpreter 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rayon",
  "rustix 1.0.8",
  "semver",
@@ -5741,18 +5921,70 @@ dependencies = [
  "wasm-encoder 0.246.2",
  "wasm-wave",
  "wasmparser 0.246.2",
- "wasmtime-environ",
- "wasmtime-internal-cache",
- "wasmtime-internal-component-macro",
- "wasmtime-internal-component-util",
- "wasmtime-internal-core",
- "wasmtime-internal-cranelift",
- "wasmtime-internal-fiber",
- "wasmtime-internal-jit-debug",
- "wasmtime-internal-jit-icache-coherence",
- "wasmtime-internal-unwinder",
- "wasmtime-internal-versioned-export-macros",
- "wasmtime-internal-winch",
+ "wasmtime-environ 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-cache 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-component-macro 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-component-util 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-core 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-cranelift 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-fiber 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-jit-debug 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-jit-icache-coherence 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-unwinder 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-versioned-export-macros 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-winch 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wat",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "wasmtime"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "addr2line",
+ "async-trait",
+ "bitflags 2.11.1",
+ "bumpalo",
+ "bytes",
+ "cc",
+ "cfg-if",
+ "encoding_rs",
+ "futures",
+ "fxprof-processed-profile",
+ "gimli 0.33.0",
+ "ittapi",
+ "libc",
+ "log",
+ "mach2",
+ "memfd",
+ "object",
+ "once_cell",
+ "postcard",
+ "pulley-interpreter 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "rayon",
+ "rustix 1.0.8",
+ "semver",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "smallvec",
+ "target-lexicon",
+ "wasm-encoder 0.246.2",
+ "wasm-wave",
+ "wasmparser 0.246.2",
+ "wasmtime-environ 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-cache 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-component-macro 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-component-util 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-core 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-cranelift 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-fiber 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-jit-debug 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-jit-icache-coherence 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-unwinder 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-versioned-export-macros 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-winch 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "wat",
  "windows-sys 0.61.2",
 ]
@@ -5769,7 +6001,7 @@ dependencies = [
  "cfg-if",
  "clap",
  "clap_complete",
- "cranelift-codegen",
+ "cranelift-codegen 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures",
  "gimli 0.33.0",
  "http 1.3.1",
@@ -5778,7 +6010,7 @@ dependencies = [
  "listenfd",
  "log",
  "object",
- "pulley-interpreter",
+ "pulley-interpreter 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustix 1.0.8",
  "serde",
  "serde_derive",
@@ -5789,25 +6021,78 @@ dependencies = [
  "termcolor",
  "tokio",
  "tracing",
- "wasi-common",
+ "wasi-common 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "wasmparser 0.246.2",
- "wasmtime",
- "wasmtime-cli-flags",
- "wasmtime-environ",
- "wasmtime-internal-cache",
- "wasmtime-internal-cranelift",
- "wasmtime-internal-debugger",
- "wasmtime-internal-explorer",
- "wasmtime-internal-unwinder",
- "wasmtime-wasi",
- "wasmtime-wasi-config",
- "wasmtime-wasi-http",
- "wasmtime-wasi-keyvalue",
- "wasmtime-wasi-nn",
- "wasmtime-wasi-threads",
- "wasmtime-wasi-tls",
- "wasmtime-wast",
- "wasmtime-wizer",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-cli-flags 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-environ 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-cache 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-cranelift 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-debugger 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-explorer 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-unwinder 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wasi 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wasi-config 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wasi-http 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wasi-keyvalue 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wasi-nn 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wasi-threads 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wasi-tls 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wast 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wizer 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wat",
+]
+
+[[package]]
+name = "wasmtime-cli"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "capstone",
+ "cfg-if",
+ "clap",
+ "clap_complete",
+ "cranelift-codegen 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "futures",
+ "gimli 0.33.0",
+ "http 1.3.1",
+ "http-body-util",
+ "hyper",
+ "listenfd",
+ "log",
+ "object",
+ "pulley-interpreter 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "rustix 1.0.8",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "smallvec",
+ "target-lexicon",
+ "tempfile",
+ "termcolor",
+ "tokio",
+ "tracing",
+ "wasi-common 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmparser 0.246.2",
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-cli-flags 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-environ 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-cache 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-cranelift 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-debugger 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-explorer 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-unwinder 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wasi 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wasi-config 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wasi-http 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wasi-keyvalue 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wasi-nn 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wasi-threads 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wasi-tls 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wast 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wizer 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "wat",
 ]
 
@@ -5824,7 +6109,22 @@ dependencies = [
  "serde_derive",
  "toml",
  "tracing-subscriber",
- "wasmtime",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wasmtime-cli-flags"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "clap",
+ "file-per-thread-logger",
+ "rayon",
+ "serde",
+ "serde_derive",
+ "toml",
+ "tracing-subscriber",
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -5835,9 +6135,9 @@ checksum = "1e15aa0d1545e48d9b25ca604e9e27b4cd6d5886d30ac5787b57b3a2daf85b57"
 dependencies = [
  "anyhow",
  "cpp_demangle",
- "cranelift-bforest",
- "cranelift-bitset",
- "cranelift-entity",
+ "cranelift-bforest 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-bitset 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-entity 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "gimli 0.33.0",
  "hashbrown 0.16.1",
  "indexmap",
@@ -5854,8 +6154,38 @@ dependencies = [
  "wasm-encoder 0.246.2",
  "wasmparser 0.246.2",
  "wasmprinter",
- "wasmtime-internal-component-util",
- "wasmtime-internal-core",
+ "wasmtime-internal-component-util 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-core 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wasmtime-environ"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "anyhow",
+ "cpp_demangle",
+ "cranelift-bforest 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-bitset 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-entity 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "gimli 0.33.0",
+ "hashbrown 0.16.1",
+ "indexmap",
+ "log",
+ "object",
+ "postcard",
+ "rustc-demangle",
+ "semver",
+ "serde",
+ "serde_derive",
+ "sha2",
+ "smallvec",
+ "target-lexicon",
+ "wasm-encoder 0.246.2",
+ "wasmparser 0.246.2",
+ "wasmprinter",
+ "wasmtime-internal-component-util 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-core 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -5873,7 +6203,26 @@ dependencies = [
  "serde_derive",
  "sha2",
  "toml",
- "wasmtime-environ",
+ "wasmtime-environ 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "windows-sys 0.61.2",
+ "zstd",
+]
+
+[[package]]
+name = "wasmtime-internal-cache"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "base64",
+ "directories-next",
+ "log",
+ "postcard",
+ "rustix 1.0.8",
+ "serde",
+ "serde_derive",
+ "sha2",
+ "toml",
+ "wasmtime-environ 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "windows-sys 0.61.2",
  "zstd",
 ]
@@ -5888,8 +6237,22 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
- "wasmtime-internal-component-util",
- "wasmtime-internal-wit-bindgen",
+ "wasmtime-internal-component-util 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-wit-bindgen 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wit-parser",
+]
+
+[[package]]
+name = "wasmtime-internal-component-macro"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "anyhow",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "wasmtime-internal-component-util 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-wit-bindgen 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "wit-parser",
 ]
 
@@ -5898,6 +6261,11 @@ name = "wasmtime-internal-component-util"
 version = "44.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49df3d3b4fa2119c6fd161e475b4e21aaefb51d082353b922b433bea37facc65"
+
+[[package]]
+name = "wasmtime-internal-component-util"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
 
 [[package]]
 name = "wasmtime-internal-core"
@@ -5912,30 +6280,67 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasmtime-internal-core"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "anyhow",
+ "hashbrown 0.16.1",
+ "libm",
+ "serde",
+]
+
+[[package]]
 name = "wasmtime-internal-cranelift"
 version = "44.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98c032f422e39061dfc43f32190c0a3526b04161ec4867f362958f3fe9d1fe29"
 dependencies = [
  "cfg-if",
- "cranelift-codegen",
- "cranelift-control",
- "cranelift-entity",
- "cranelift-frontend",
- "cranelift-native",
+ "cranelift-codegen 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-control 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-entity 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-frontend 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-native 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "gimli 0.33.0",
  "itertools",
  "log",
  "object",
- "pulley-interpreter",
+ "pulley-interpreter 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "smallvec",
  "target-lexicon",
  "thiserror 2.0.18",
  "wasmparser 0.246.2",
- "wasmtime-environ",
- "wasmtime-internal-core",
- "wasmtime-internal-unwinder",
- "wasmtime-internal-versioned-export-macros",
+ "wasmtime-environ 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-core 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-unwinder 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-versioned-export-macros 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wasmtime-internal-cranelift"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cfg-if",
+ "cranelift-codegen 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-control 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-entity 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-frontend 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-native 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "gimli 0.33.0",
+ "itertools",
+ "log",
+ "object",
+ "pulley-interpreter 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "smallvec",
+ "target-lexicon",
+ "thiserror 2.0.18",
+ "wasmparser 0.246.2",
+ "wasmtime-environ 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-core 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-unwinder 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-versioned-export-macros 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -5947,9 +6352,22 @@ dependencies = [
  "async-trait",
  "log",
  "tokio",
- "wasmtime",
- "wasmtime-wasi",
- "wasmtime-wasi-io",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wasi 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wasi-io 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wasmtime-internal-debugger"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "async-trait",
+ "log",
+ "tokio",
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wasi 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wasi-io 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -5964,8 +6382,23 @@ dependencies = [
  "serde_json",
  "target-lexicon",
  "wasmprinter",
- "wasmtime",
- "wasmtime-environ",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-environ 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wasmtime-internal-explorer"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "capstone",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "target-lexicon",
+ "wasmprinter",
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-environ 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -5978,8 +6411,22 @@ dependencies = [
  "cfg-if",
  "libc",
  "rustix 1.0.8",
- "wasmtime-environ",
- "wasmtime-internal-versioned-export-macros",
+ "wasmtime-environ 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-versioned-export-macros 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "wasmtime-internal-fiber"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cc",
+ "cfg-if",
+ "libc",
+ "rustix 1.0.8",
+ "wasmtime-environ 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-versioned-export-macros 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "windows-sys 0.61.2",
 ]
 
@@ -5992,7 +6439,18 @@ dependencies = [
  "cc",
  "object",
  "rustix 1.0.8",
- "wasmtime-internal-versioned-export-macros",
+ "wasmtime-internal-versioned-export-macros 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wasmtime-internal-jit-debug"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cc",
+ "object",
+ "rustix 1.0.8",
+ "wasmtime-internal-versioned-export-macros 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -6003,7 +6461,18 @@ checksum = "6a1859e920871515d324fb9757c3e448d6ed1512ca6ccdff14b6e016505d6ada"
 dependencies = [
  "cfg-if",
  "libc",
- "wasmtime-internal-core",
+ "wasmtime-internal-core 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "wasmtime-internal-jit-icache-coherence"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "wasmtime-internal-core 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "windows-sys 0.61.2",
 ]
 
@@ -6014,10 +6483,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1dfe405bd6adb1386d935a30f16a236bd4ef0d3c383e7cbbab98d063c9d9b73"
 dependencies = [
  "cfg-if",
- "cranelift-codegen",
+ "cranelift-codegen 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log",
  "object",
- "wasmtime-environ",
+ "wasmtime-environ 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wasmtime-internal-unwinder"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cfg-if",
+ "cranelift-codegen 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "log",
+ "object",
+ "wasmtime-environ 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -6032,20 +6513,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasmtime-internal-versioned-export-macros"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "wasmtime-internal-winch"
 version = "44.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95f439b70ba3855a8c808d2cd798eef79bcd389f78aa48a8a694ea8e2904410c"
 dependencies = [
- "cranelift-codegen",
+ "cranelift-codegen 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "gimli 0.33.0",
  "log",
  "object",
  "target-lexicon",
  "wasmparser 0.246.2",
- "wasmtime-environ",
- "wasmtime-internal-cranelift",
- "winch-codegen",
+ "wasmtime-environ 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-cranelift 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winch-codegen 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wasmtime-internal-winch"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cranelift-codegen 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "gimli 0.33.0",
+ "log",
+ "object",
+ "target-lexicon",
+ "wasmparser 0.246.2",
+ "wasmtime-environ 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-cranelift 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "winch-codegen 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -6053,6 +6560,18 @@ name = "wasmtime-internal-wit-bindgen"
 version = "44.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17c7ced16dc16d2027f9f8d3a503e191dcce0f53fe9218e7990135b31f8f6fdb"
+dependencies = [
+ "anyhow",
+ "bitflags 2.11.1",
+ "heck",
+ "indexmap",
+ "wit-parser",
+]
+
+[[package]]
+name = "wasmtime-internal-wit-bindgen"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
 dependencies = [
  "anyhow",
  "bitflags 2.11.1",
@@ -6085,9 +6604,38 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
- "wasmtime",
- "wasmtime-wasi-io",
- "wiggle",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wasi-io 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wiggle 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "wasmtime-wasi"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "async-trait",
+ "bitflags 2.11.1",
+ "bytes",
+ "cap-fs-ext",
+ "cap-net-ext",
+ "cap-rand",
+ "cap-std",
+ "cap-time-ext",
+ "fs-set-times",
+ "futures",
+ "io-extras",
+ "io-lifetimes",
+ "rustix 1.0.8",
+ "system-interface",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "url",
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wasi-io 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wiggle 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "windows-sys 0.61.2",
 ]
 
@@ -6097,7 +6645,15 @@ version = "44.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a4e06806c6817d36ddbb503ec5ebf384d0ae374d9ba2b3ecf60a2d0914d0410"
 dependencies = [
- "wasmtime",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wasmtime-wasi-config"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -6118,9 +6674,32 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
  "tracing",
- "wasmtime",
- "wasmtime-wasi",
- "wasmtime-wasi-io",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wasi 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wasi-io 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "webpki-roots 0.26.11",
+]
+
+[[package]]
+name = "wasmtime-wasi-http"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
+ "http 1.3.1",
+ "http-body",
+ "http-body-util",
+ "hyper",
+ "rustls",
+ "tokio",
+ "tokio-rustls",
+ "tokio-util",
+ "tracing",
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wasi 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wasi-io 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "webpki-roots 0.26.11",
 ]
 
@@ -6134,7 +6713,19 @@ dependencies = [
  "bytes",
  "futures",
  "tracing",
- "wasmtime",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wasmtime-wasi-io"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
+ "tracing",
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -6143,7 +6734,15 @@ version = "44.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7495d3cd172a3b1d071f1e71c177121da3a693751c4c25ec5efd21ffc75aeef7"
 dependencies = [
- "wasmtime",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wasmtime-wasi-keyvalue"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -6156,8 +6755,22 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "walkdir",
- "wasmtime",
- "wiggle",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wiggle 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "windows 0.52.0",
+]
+
+[[package]]
+name = "wasmtime-wasi-nn"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "openvino",
+ "thiserror 2.0.18",
+ "tracing",
+ "walkdir",
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wiggle 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "windows 0.52.0",
 ]
 
@@ -6169,9 +6782,21 @@ checksum = "d5cf8f9462f6c56847ef08858d5434570427c76235ea76013a382edd40c4026c"
 dependencies = [
  "log",
  "rand 0.8.5",
- "wasi-common",
- "wasmtime",
- "wasmtime-wasi",
+ "wasi-common 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wasi 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wasmtime-wasi-threads"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "log",
+ "rand 0.8.5",
+ "wasi-common 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wasi 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -6186,8 +6811,24 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tracing",
- "wasmtime",
- "wasmtime-wasi",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-wasi 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "webpki-roots 0.26.11",
+]
+
+[[package]]
+name = "wasmtime-wasi-tls"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "bytes",
+ "cfg-if",
+ "rustls",
+ "tokio",
+ "tokio-rustls",
+ "tracing",
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-wasi 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "webpki-roots 0.26.11",
 ]
 
@@ -6203,7 +6844,22 @@ dependencies = [
  "serde_json",
  "tokio",
  "wasmparser 0.246.2",
- "wasmtime",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wast 246.0.2",
+]
+
+[[package]]
+name = "wasmtime-wast"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "json-from-wast",
+ "log",
+ "object",
+ "serde_json",
+ "tokio",
+ "wasmparser 0.246.2",
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "wast 246.0.2",
 ]
 
@@ -6218,7 +6874,20 @@ dependencies = [
  "rayon",
  "wasm-encoder 0.246.2",
  "wasmparser 0.246.2",
- "wasmtime",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wasmtime-wizer"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "clap",
+ "log",
+ "rayon",
+ "wasm-encoder 0.246.2",
+ "wasmparser 0.246.2",
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -6319,9 +6988,22 @@ dependencies = [
  "bitflags 2.11.1",
  "thiserror 2.0.18",
  "tracing",
- "wasmtime",
- "wasmtime-environ",
- "wiggle-macro",
+ "wasmtime 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-environ 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wiggle-macro 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wiggle"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "bitflags 2.11.1",
+ "thiserror 2.0.18",
+ "tracing",
+ "wasmtime 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-environ 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wiggle-macro 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -6334,7 +7016,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
- "wasmtime-environ",
+ "wasmtime-environ 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "witx",
+]
+
+[[package]]
+name = "wiggle-generate"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "wasmtime-environ 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
  "witx",
 ]
 
@@ -6347,7 +7042,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
- "wiggle-generate",
+ "wiggle-generate 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wiggle-macro"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+ "wiggle-generate 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
@@ -6387,17 +7093,35 @@ version = "44.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6da7c536f3cfe5ff63537f795902fed56b8b5adcc7a87843a86dd8d4e57a7946"
 dependencies = [
- "cranelift-assembler-x64",
- "cranelift-codegen",
+ "cranelift-assembler-x64 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cranelift-codegen 0.131.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "gimli 0.33.0",
  "regalloc2",
  "smallvec",
  "target-lexicon",
  "thiserror 2.0.18",
  "wasmparser 0.246.2",
- "wasmtime-environ",
- "wasmtime-internal-core",
- "wasmtime-internal-cranelift",
+ "wasmtime-environ 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-core 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmtime-internal-cranelift 44.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "winch-codegen"
+version = "44.0.1"
+source = "git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix#da86e6b0b8cf6113ecd8444332fd4c06cc375ad4"
+dependencies = [
+ "cranelift-assembler-x64 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "cranelift-codegen 0.131.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "gimli 0.33.0",
+ "regalloc2",
+ "smallvec",
+ "target-lexicon",
+ "thiserror 2.0.18",
+ "wasmparser 0.246.2",
+ "wasmtime-environ 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-core 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
+ "wasmtime-internal-cranelift 44.0.1 (git+https://github.com/Heap-Hop/wasmtime.git?tag=v44.0.1-android-fix)",
 ]
 
 [[package]]
