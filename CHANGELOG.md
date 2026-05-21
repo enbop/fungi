@@ -34,7 +34,7 @@ All notable changes to this project will be documented in this file.
 - `fungi service`, `fungi catalog`, `fungi access`, and `fungi peer` command groups for local service management, remote catalog browsing, local access creation, and remote peer administration.
 - A `crates/docker-agent` safety layer so container-backed services run through a constrained Docker agent instead of broad direct Docker access from the daemon.
 - Local and remote service management built around YAML service manifests, including pull/list/start control paths over CLI and gRPC.
-- Service discovery metadata through `spec.expose`, plus peer capability summary for service-aware remote workflows.
+- Service discovery metadata plus peer capability summary for service-aware remote workflows.
 - Runtime service state management and persistence for pulled services.
 - Docker-compatible container runtime and Wasmtime service-manifest examples.
 - Docker-based Android cross-compilation.

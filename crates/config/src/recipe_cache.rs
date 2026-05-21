@@ -187,18 +187,14 @@ mod tests {
             .write_index("v0.3.1", br#"{"schemaVersion":1}"#)
             .unwrap();
         let manifest_path = cache
-            .write_asset(
-                "v0.3.1",
-                "ssh-tunnel.manifest.yaml",
-                b"apiVersion: fungi.rs/v1alpha1\n",
-            )
+            .write_asset("v0.3.1", "ssh-tunnel.manifest.yaml", b"fungi: service/v1\n")
             .unwrap();
         let resolved_path = cache
             .write_resolved_manifest(
                 "v0.3.1",
                 "ssh-tunnel",
                 "home-ssh-tunnel",
-                "apiVersion: fungi.rs/v1alpha1\n",
+                "fungi: service/v1\n",
             )
             .unwrap();
 
