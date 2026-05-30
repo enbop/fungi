@@ -2651,7 +2651,7 @@ impl ServiceOverviewRow {
 }
 
 fn overview_state_label(status: &ServiceStatus) -> String {
-    status.phase.to_string()
+    status.state_label()
 }
 
 fn print_service_overview_rows(rows: &[ServiceOverviewRow]) {
@@ -2752,9 +2752,7 @@ struct LocalServiceListEntry {
     service_name: String,
     phase: ServicePhase,
     #[serde(skip_serializing_if = "Option::is_none")]
-    runtime_state: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    exit_code: Option<i32>,
+    detail: Option<String>,
     entries: Vec<ServiceEntryView>,
 }
 
@@ -2764,9 +2762,7 @@ struct LocalServiceListVerboseEntry {
     runtime: RuntimeKind,
     phase: ServicePhase,
     #[serde(skip_serializing_if = "Option::is_none")]
-    runtime_state: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    exit_code: Option<i32>,
+    detail: Option<String>,
     local_endpoints: Vec<LocalServiceEndpointVerboseView>,
 }
 
@@ -2775,9 +2771,7 @@ struct LocalServiceInspectView {
     name: String,
     phase: ServicePhase,
     #[serde(skip_serializing_if = "Option::is_none")]
-    runtime_state: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    exit_code: Option<i32>,
+    detail: Option<String>,
     entries: Vec<ServiceEntryView>,
     published_entries: Vec<ServiceEntryView>,
 }
@@ -2791,9 +2785,7 @@ struct LocalServiceInspectVerboseView {
     labels: std::collections::BTreeMap<String, String>,
     phase: ServicePhase,
     #[serde(skip_serializing_if = "Option::is_none")]
-    runtime_state: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    exit_code: Option<i32>,
+    detail: Option<String>,
     local_endpoints: Vec<LocalServiceEndpointVerboseView>,
     published_endpoints: Vec<PublishedEndpointVerboseView>,
 }
@@ -2828,8 +2820,7 @@ impl From<ServiceInstance> for LocalServiceListEntry {
         Self {
             service_name: instance.name,
             phase: status.phase,
-            runtime_state: status.runtime_state,
-            exit_code: status.exit_code,
+            detail: status.detail,
             entries,
         }
     }
@@ -2843,8 +2834,7 @@ impl From<ServiceInstance> for LocalServiceListVerboseEntry {
             service_name: instance.name,
             runtime: instance.runtime,
             phase: status.phase,
-            runtime_state: status.runtime_state,
-            exit_code: status.exit_code,
+            detail: status.detail,
             local_endpoints,
         }
     }
@@ -2857,8 +2847,7 @@ impl From<ServiceInstance> for LocalServiceInspectView {
         Self {
             name: instance.name,
             phase: status.phase,
-            runtime_state: status.runtime_state,
-            exit_code: status.exit_code,
+            detail: status.detail,
             entries,
             published_entries: instance
                 .exposed_endpoints
@@ -2882,8 +2871,7 @@ impl From<ServiceInstance> for LocalServiceInspectVerboseView {
             source: instance.source,
             labels: instance.labels,
             phase: status.phase,
-            runtime_state: status.runtime_state,
-            exit_code: status.exit_code,
+            detail: status.detail,
             local_endpoints,
             published_endpoints: instance
                 .exposed_endpoints

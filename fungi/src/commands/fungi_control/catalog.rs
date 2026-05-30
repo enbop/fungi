@@ -157,8 +157,7 @@ fn print_catalog_service(
             runtime: service.runtime,
             transport,
             phase: status.phase,
-            runtime_state: status.runtime_state.clone(),
-            exit_code: status.exit_code,
+            detail: status.detail.clone(),
             access_saved: saved_access.is_some(),
             local_urls,
             icon_url: service.icon_url,
@@ -180,8 +179,7 @@ fn print_catalog_service(
             service_name: service.service_name,
             usage,
             phase: status.phase,
-            runtime_state: status.runtime_state,
-            exit_code: status.exit_code,
+            detail: status.detail,
             access_saved: saved_access.is_some(),
             local_urls,
             endpoints: service
@@ -319,9 +317,7 @@ struct CatalogInspectView {
     usage: String,
     phase: ServicePhase,
     #[serde(skip_serializing_if = "Option::is_none")]
-    runtime_state: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    exit_code: Option<i32>,
+    detail: Option<String>,
     access_saved: bool,
     local_urls: Vec<String>,
     endpoints: Vec<CatalogEndpointView>,
@@ -336,9 +332,7 @@ struct CatalogInspectVerboseView {
     transport: String,
     phase: ServicePhase,
     #[serde(skip_serializing_if = "Option::is_none")]
-    runtime_state: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    exit_code: Option<i32>,
+    detail: Option<String>,
     access_saved: bool,
     local_urls: Vec<String>,
     icon_url: Option<String>,
