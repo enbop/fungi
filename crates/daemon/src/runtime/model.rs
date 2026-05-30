@@ -167,9 +167,7 @@ impl fmt::Display for ServicePhase {
 pub struct ServiceStatus {
     pub phase: ServicePhase,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub runtime_state: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub exit_code: Option<i32>,
+    pub detail: Option<String>,
 }
 
 impl ServiceStatus {
@@ -182,10 +180,8 @@ impl ServiceStatus {
     }
 
     pub fn exited(exit_code: Option<i32>) -> Self {
-        Self {
-            exit_code,
-            ..Self::new(ServicePhase::Exited)
-        }
+        let detail = exit_code.map(|code| format!("exited({code})"));
+        Self::new(ServicePhase::Exited).with_optional_detail(detail)
     }
 
     pub fn missing() -> Self {
@@ -199,18 +195,49 @@ impl ServiceStatus {
     pub fn new(phase: ServicePhase) -> Self {
         Self {
             phase,
-            runtime_state: None,
-            exit_code: None,
+            detail: None,
         }
     }
 
-    pub fn with_runtime_state(mut self, runtime_state: impl Into<String>) -> Self {
-        self.runtime_state = Some(runtime_state.into());
+    pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+
+    pub fn with_optional_detail(mut self, detail: Option<String>) -> Self {
+        self.detail = detail;
         self
     }
 
     pub fn is_running(&self) -> bool {
         self.phase == ServicePhase::Running
+    }
+
+    pub fn state_label(&self) -> String {
+        self.detail
+            .clone()
+            .unwrap_or_else(|| self.phase.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ServicePhase, ServiceStatus};
+
+    #[test]
+    fn status_label_prefers_detail() {
+        let status = ServiceStatus::new(ServicePhase::Unknown).with_detail("paused");
+
+        assert_eq!(status.state_label(), "paused");
+    }
+
+    #[test]
+    fn exited_status_formats_exit_code_as_detail() {
+        let status = ServiceStatus::exited(Some(137));
+
+        assert_eq!(status.phase, ServicePhase::Exited);
+        assert_eq!(status.detail.as_deref(), Some("exited(137)"));
+        assert_eq!(status.state_label(), "exited(137)");
     }
 }
 

@@ -372,7 +372,7 @@ fn docker_service_status(runtime_state: String, running: bool) -> ServiceStatus 
         }
     };
 
-    ServiceStatus::new(phase).with_runtime_state(runtime_state)
+    ServiceStatus::new(phase).with_detail(runtime_state)
 }
 
 pub(crate) fn missing_instance_from_manifest(manifest: &ServiceManifest) -> ServiceInstance {
