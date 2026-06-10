@@ -167,19 +167,19 @@ service FungiDaemon {
   rpc RemoteListServices(RemotePeerRequest)
   returns (ListServicesResponse) {}
 
-    // Creates local access entries for all named endpoints of a published remote service.
+    // Creates or updates local address listeners for named endpoints of a published remote service.
   rpc AttachServiceAccess(AttachServiceAccessRequest)
   returns (ServiceAccessResponse) {}
 
-    // Disconnects local access listeners for a remote service while keeping saved port records.
+    // Disconnects local listeners for a remote service while keeping saved address preferences.
   rpc DetachServiceAccess(DetachServiceAccessRequest)
   returns (Empty) {}
 
-    // Deletes saved local access records for a remote service.
+    // Deletes saved local address preferences for a remote service.
   rpc ForgetServiceAccess(ForgetServiceAccessRequest)
   returns (Empty) {}
 
-    // Lists saved service access entries on the local node.
+    // Lists saved local address preferences on the local node.
   rpc ListServiceAccesses(ListServiceAccessesRequest)
   returns (ServiceAccessesResponse) {}
 }

@@ -3,21 +3,17 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, Serialize};
 
-const LOCAL_ACCESS_FILE: &str = "access/local_access.json";
+const LOCAL_PREFERENCES_FILE: &str = "cache/local_preferences.json";
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct LocalAccessConfig {
-    #[serde(default)]
-    pub records: Vec<LocalAccessRecord>,
-
-    #[serde(skip)]
+#[derive(Debug, Clone, Default)]
+pub struct LocalPreferenceCache {
+    pub records: Vec<LocalServicePreference>,
     config_file: PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct LocalAccessRecord {
+pub struct LocalServicePreference {
     pub remote_peer_id: String,
     pub remote_service_name: String,
     pub remote_service_port_name: String,
@@ -25,10 +21,6 @@ pub struct LocalAccessRecord {
     pub local_port: u16,
     #[serde(default)]
     pub local_port_source: LocalPortSource,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_remote_protocol: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_remote_port: Option<u16>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
@@ -39,27 +31,30 @@ pub enum LocalPortSource {
     User,
 }
 
-impl LocalAccessConfig {
+impl LocalPreferenceCache {
     pub fn apply_from_dir(fungi_dir: &Path) -> Result<Self> {
-        let config_file = fungi_dir.join(LOCAL_ACCESS_FILE);
+        let config_file = fungi_dir.join(LOCAL_PREFERENCES_FILE);
         if !config_file.exists() {
             Self::init_config_file(config_file.clone())?;
         }
 
         let raw = std::fs::read_to_string(&config_file).with_context(|| {
             format!(
-                "failed to read local access config: {}",
+                "failed to read local preference cache: {}",
                 config_file.display()
             )
         })?;
-        let mut config: Self = serde_json::from_str(&raw).with_context(|| {
-            format!(
-                "failed to parse local access config: {}",
-                config_file.display()
-            )
-        })?;
-        config.config_file = config_file;
-        Ok(config)
+        let records =
+            serde_json::from_str::<Vec<LocalServicePreference>>(&raw).with_context(|| {
+                format!(
+                    "failed to parse local preference cache: {}",
+                    config_file.display()
+                )
+            })?;
+        Ok(Self {
+            records,
+            config_file,
+        })
     }
 
     pub fn init_config_file(config_file: PathBuf) -> Result<()> {
@@ -68,16 +63,13 @@ impl LocalAccessConfig {
         }
         if let Some(parent) = config_file.parent() {
             std::fs::create_dir_all(parent).with_context(|| {
-                format!(
-                    "failed to create local access directory: {}",
-                    parent.display()
-                )
+                format!("failed to create cache directory: {}", parent.display())
             })?;
         }
-        let raw = serde_json::to_string_pretty(&Self::default())?;
+        let raw = serde_json::to_string_pretty(&Vec::<LocalServicePreference>::new())?;
         std::fs::write(&config_file, raw).with_context(|| {
             format!(
-                "failed to write local access config: {}",
+                "failed to write local preference cache: {}",
                 config_file.display()
             )
         })?;
@@ -85,10 +77,10 @@ impl LocalAccessConfig {
     }
 
     pub fn save_to_file(&self) -> Result<()> {
-        let raw = serde_json::to_string_pretty(self)?;
+        let raw = serde_json::to_string_pretty(&self.records)?;
         std::fs::write(&self.config_file, raw).with_context(|| {
             format!(
-                "failed to write local access config: {}",
+                "failed to write local preference cache: {}",
                 self.config_file.display()
             )
         })?;
@@ -100,7 +92,7 @@ impl LocalAccessConfig {
         remote_peer_id: &str,
         remote_service_name: &str,
         remote_service_port_name: &str,
-    ) -> Option<&LocalAccessRecord> {
+    ) -> Option<&LocalServicePreference> {
         self.records.iter().find(|record| {
             record.identity_matches(
                 remote_peer_id,
@@ -110,18 +102,18 @@ impl LocalAccessConfig {
         })
     }
 
-    pub fn upsert_record(&self, record: LocalAccessRecord) -> Result<Self> {
+    pub fn upsert_record(&self, record: LocalServicePreference) -> Result<Self> {
         let updated = self.with_upserted_record(record)?;
         updated.save_to_file()?;
         Ok(updated)
     }
 
     /// Returns an updated config without writing it to disk.
-    pub fn with_upserted_record(&self, record: LocalAccessRecord) -> Result<Self> {
+    pub fn with_upserted_record(&self, record: LocalServicePreference) -> Result<Self> {
         record.validate()?;
         if self.local_port_used_by_other_record(&record) {
             bail!(
-                "local port is already reserved by another service access: {}",
+                "local port is already reserved by another local address: {}",
                 record.local_port
             );
         }
@@ -163,7 +155,7 @@ impl LocalAccessConfig {
         Ok(updated)
     }
 
-    fn local_port_used_by_other_record(&self, record: &LocalAccessRecord) -> bool {
+    fn local_port_used_by_other_record(&self, record: &LocalServicePreference) -> bool {
         self.records.iter().any(|existing| {
             existing.local_host == record.local_host
                 && existing.local_port == record.local_port
@@ -186,7 +178,7 @@ impl LocalAccessConfig {
     }
 }
 
-impl LocalAccessRecord {
+impl LocalServicePreference {
     pub fn identity_matches(
         &self,
         remote_peer_id: &str,
@@ -231,26 +223,31 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn stores_local_access_records_outside_config_toml() {
+    fn stores_local_preferences_outside_config_toml() {
         let dir = TempDir::new().unwrap();
-        let config = LocalAccessConfig::apply_from_dir(dir.path()).unwrap();
+        let config = LocalPreferenceCache::apply_from_dir(dir.path()).unwrap();
 
         let updated = config
             .upsert_record(record("peer", "svc", "main", 2222))
             .unwrap();
 
         assert_eq!(updated.records.len(), 1);
-        assert!(dir.path().join("access").join("local_access.json").exists());
-        let raw =
-            std::fs::read_to_string(dir.path().join("access").join("local_access.json")).unwrap();
-        assert!(raw.contains("\"records\""));
+        assert!(
+            dir.path()
+                .join("cache")
+                .join("local_preferences.json")
+                .exists()
+        );
+        let raw = std::fs::read_to_string(dir.path().join("cache").join("local_preferences.json"))
+            .unwrap();
+        assert!(raw.trim_start().starts_with('['));
         assert!(!raw.contains("\"rules\""));
     }
 
     #[test]
     fn upsert_updates_same_service_entry_port() {
         let dir = TempDir::new().unwrap();
-        let config = LocalAccessConfig::apply_from_dir(dir.path()).unwrap();
+        let config = LocalPreferenceCache::apply_from_dir(dir.path()).unwrap();
 
         let updated = config
             .upsert_record(record("peer", "svc", "main", 2222))
@@ -265,7 +262,7 @@ mod tests {
     #[test]
     fn keeps_same_endpoint_names_for_different_services() {
         let dir = TempDir::new().unwrap();
-        let config = LocalAccessConfig::apply_from_dir(dir.path()).unwrap();
+        let config = LocalPreferenceCache::apply_from_dir(dir.path()).unwrap();
 
         let updated = config
             .upsert_record(record("peer", "alpha", "main", 2222))
@@ -281,7 +278,7 @@ mod tests {
     #[test]
     fn rejects_duplicate_local_ports_for_different_entries() {
         let dir = TempDir::new().unwrap();
-        let config = LocalAccessConfig::apply_from_dir(dir.path()).unwrap();
+        let config = LocalPreferenceCache::apply_from_dir(dir.path()).unwrap();
 
         let err = config
             .upsert_record(record("peer", "alpha", "main", 2222))
@@ -291,14 +288,14 @@ mod tests {
 
         assert!(
             err.to_string()
-                .contains("local port is already reserved by another service access")
+                .contains("local port is already reserved by another local address")
         );
     }
 
     #[test]
     fn rejects_blank_local_host() {
         let dir = TempDir::new().unwrap();
-        let config = LocalAccessConfig::apply_from_dir(dir.path()).unwrap();
+        let config = LocalPreferenceCache::apply_from_dir(dir.path()).unwrap();
         let mut record = record("peer", "svc", "main", 2222);
         record.local_host = " ".to_string();
 
@@ -310,7 +307,7 @@ mod tests {
     #[test]
     fn rejects_zero_local_port() {
         let dir = TempDir::new().unwrap();
-        let config = LocalAccessConfig::apply_from_dir(dir.path()).unwrap();
+        let config = LocalPreferenceCache::apply_from_dir(dir.path()).unwrap();
 
         let err = config
             .upsert_record(record("peer", "svc", "main", 0))
@@ -325,22 +322,22 @@ mod tests {
     #[test]
     fn rejects_legacy_rules_shape() {
         let dir = TempDir::new().unwrap();
-        let access_dir = dir.path().join("access");
-        std::fs::create_dir_all(&access_dir).unwrap();
-        std::fs::write(access_dir.join("local_access.json"), r#"{"rules":[]}"#).unwrap();
+        let cache_dir = dir.path().join("cache");
+        std::fs::create_dir_all(&cache_dir).unwrap();
+        std::fs::write(cache_dir.join("local_preferences.json"), r#"{"rules":[]}"#).unwrap();
 
-        let err = LocalAccessConfig::apply_from_dir(dir.path()).unwrap_err();
+        let err = LocalPreferenceCache::apply_from_dir(dir.path()).unwrap_err();
 
         assert!(
             err.to_string()
-                .contains("failed to parse local access config")
+                .contains("failed to parse local preference cache")
         );
     }
 
     #[test]
     fn removes_service_records_without_touching_other_services() {
         let dir = TempDir::new().unwrap();
-        let config = LocalAccessConfig::apply_from_dir(dir.path()).unwrap();
+        let config = LocalPreferenceCache::apply_from_dir(dir.path()).unwrap();
 
         let updated = config
             .upsert_record(record("peer", "alpha", "main", 2222))
@@ -357,7 +354,7 @@ mod tests {
     #[test]
     fn removes_device_records() {
         let dir = TempDir::new().unwrap();
-        let config = LocalAccessConfig::apply_from_dir(dir.path()).unwrap();
+        let config = LocalPreferenceCache::apply_from_dir(dir.path()).unwrap();
 
         let updated = config
             .upsert_record(record("peer-a", "alpha", "main", 2222))
@@ -376,18 +373,14 @@ mod tests {
         remote_service_name: &str,
         remote_service_port_name: &str,
         local_port: u16,
-    ) -> LocalAccessRecord {
-        LocalAccessRecord {
+    ) -> LocalServicePreference {
+        LocalServicePreference {
             remote_peer_id: remote_peer_id.to_string(),
             remote_service_name: remote_service_name.to_string(),
             remote_service_port_name: remote_service_port_name.to_string(),
             local_host: "127.0.0.1".to_string(),
             local_port,
             local_port_source: LocalPortSource::Auto,
-            last_remote_protocol: Some(format!(
-                "/fungi/service/{remote_service_name}/{remote_service_port_name}/0.2.0"
-            )),
-            last_remote_port: Some(22),
         }
     }
 }

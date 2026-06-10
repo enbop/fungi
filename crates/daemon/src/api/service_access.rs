@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{Result, bail};
 use fungi_config::{
-    local_access::{LocalAccessConfig, LocalAccessRecord, LocalPortSource},
+    local_preferences::{LocalPortSource, LocalPreferenceCache, LocalServicePreference},
     tcp_tunneling::ForwardingRule,
 };
 use libp2p::PeerId;
@@ -27,7 +27,7 @@ impl FungiDaemon {
 
     async fn start_service_access_forwarding_rule(
         &self,
-        record: &LocalAccessRecord,
+        record: &LocalServicePreference,
         remote_protocol: String,
         remote_port: u16,
     ) -> Result<String> {
@@ -77,13 +77,13 @@ impl FungiDaemon {
             bail!("choose a service entry before assigning a fixed local port");
         }
 
-        let local_access_lock = self.local_access_config_lock();
-        let _local_access_guard = local_access_lock.lock().await;
+        let local_preferences_lock = self.local_preferences_lock();
+        let _local_preferences_guard = local_preferences_lock.lock().await;
 
         let peer_id_string = peer_id.to_string();
-        let mut access_config = self.local_access_config()?;
+        let mut local_preferences = self.local_preferences()?;
         let mut active_rules = self.get_service_access_forwarding_rules();
-        let mut reserved_local_ports = access_config
+        let mut reserved_local_ports = local_preferences
             .records
             .iter()
             .map(|record| record.local_port)
@@ -108,7 +108,7 @@ impl FungiDaemon {
 
         for endpoint in endpoints {
             let remote_port = catalog_endpoint_listen_port(&endpoint);
-            let existing_record = access_config
+            let existing_record = local_preferences
                 .find_record(&peer_id_string, &service.service_name, &endpoint.name)
                 .cloned();
             let existing_active_rule = find_active_rule(
@@ -129,7 +129,7 @@ impl FungiDaemon {
                 (Some(local_port), _) => local_port,
                 (None, Some(record)) => record.local_port,
                 (None, None) => {
-                    allocate_local_access_port(endpoint.service_port, &reserved_local_ports)?
+                    allocate_preferred_local_port(endpoint.service_port, &reserved_local_ports)?
                 }
             };
             let local_port_source = if local_port.is_some() {
@@ -156,18 +156,17 @@ impl FungiDaemon {
                 ensure_local_port_available(selected_local_port, &reserved_local_ports)?;
             }
 
-            let record = LocalAccessRecord {
+            let record = LocalServicePreference {
                 remote_peer_id: peer_id_string.clone(),
                 remote_service_name: service.service_name.clone(),
                 remote_service_port_name: endpoint.name.clone(),
                 local_host: "127.0.0.1".to_string(),
                 local_port: selected_local_port,
                 local_port_source,
-                last_remote_protocol: Some(endpoint.protocol.clone()),
-                last_remote_port: Some(remote_port),
             };
 
-            let updated_access_config = access_config.with_upserted_record(record.clone())?;
+            let updated_local_preferences =
+                local_preferences.with_upserted_record(record.clone())?;
 
             let mut removed_active_rule = None;
             let mut started_rule_id = None;
@@ -195,7 +194,7 @@ impl FungiDaemon {
                 }
             }
 
-            if let Err(error) = updated_access_config.save_to_file() {
+            if let Err(error) = updated_local_preferences.save_to_file() {
                 if let Some(rule_id) = started_rule_id {
                     if let Err(rollback_error) =
                         self.remove_service_access_forwarding_rule_internal(&rule_id)
@@ -212,7 +211,7 @@ impl FungiDaemon {
                 return Err(error);
             }
 
-            access_config = updated_access_config;
+            local_preferences = updated_local_preferences;
 
             if !active_rule_matches {
                 active_rules = self.get_service_access_forwarding_rules();
@@ -247,9 +246,9 @@ impl FungiDaemon {
     ) -> Result<()> {
         let peer_id_string = peer_id.to_string();
         let saved_entries = {
-            let local_access_lock = self.local_access_config_lock();
-            let _local_access_guard = local_access_lock.lock().await;
-            self.local_access_config()?
+            let local_preferences_lock = self.local_preferences_lock();
+            let _local_preferences_guard = local_preferences_lock.lock().await;
+            self.local_preferences()?
                 .records
                 .into_iter()
                 .filter(|record| {
@@ -288,19 +287,19 @@ impl FungiDaemon {
     }
 
     pub async fn forget_service_access(&self, peer_id: PeerId, service_name: String) -> Result<()> {
-        let local_access_lock = self.local_access_config_lock();
-        let _local_access_guard = local_access_lock.lock().await;
+        let local_preferences_lock = self.local_preferences_lock();
+        let _local_preferences_guard = local_preferences_lock.lock().await;
 
         self.detach_service_access_by_match(peer_id, &service_name)?;
         let peer_id_string = peer_id.to_string();
-        self.local_access_config()?
+        self.local_preferences()?
             .remove_service_records(&peer_id_string, &service_name)?;
         Ok(())
     }
 
     pub async fn forget_device_service_accesses(&self, peer_id: PeerId) -> Result<()> {
-        let local_access_lock = self.local_access_config_lock();
-        let _local_access_guard = local_access_lock.lock().await;
+        let local_preferences_lock = self.local_preferences_lock();
+        let _local_preferences_guard = local_preferences_lock.lock().await;
 
         let peer_id_string = peer_id.to_string();
         let rules_to_remove = self
@@ -314,7 +313,7 @@ impl FungiDaemon {
             self.remove_service_access_forwarding_rule_internal(&rule_id)?;
         }
 
-        self.local_access_config()?
+        self.local_preferences()?
             .remove_device_records(&peer_id_string)?;
         Ok(())
     }
@@ -323,13 +322,13 @@ impl FungiDaemon {
         &self,
         peer_id: Option<PeerId>,
     ) -> Result<Vec<ServiceAccess>> {
-        let local_access_lock = self.local_access_config_lock();
-        let _local_access_guard = local_access_lock.lock().await;
+        let local_preferences_lock = self.local_preferences_lock();
+        let _local_preferences_guard = local_preferences_lock.lock().await;
 
         let peer_filter = peer_id.map(|peer_id| peer_id.to_string());
         let mut grouped = BTreeMap::<(String, String), Vec<ServiceAccessEndpoint>>::new();
 
-        for record in self.local_access_config()?.records {
+        for record in self.local_preferences()?.records {
             if let Some(peer_filter) = &peer_filter
                 && &record.remote_peer_id != peer_filter
             {
@@ -344,10 +343,10 @@ impl FungiDaemon {
                 .or_default()
                 .push(ServiceAccessEndpoint {
                     name: record.remote_service_port_name,
-                    protocol: record.last_remote_protocol.unwrap_or_default(),
+                    protocol: String::new(),
                     local_host: record.local_host,
                     local_port: record.local_port,
-                    remote_port: record.last_remote_port.unwrap_or_default(),
+                    remote_port: 0,
                 });
         }
 
@@ -370,9 +369,9 @@ impl FungiDaemon {
         Ok(services)
     }
 
-    fn local_access_config(&self) -> Result<LocalAccessConfig> {
+    fn local_preferences(&self) -> Result<LocalPreferenceCache> {
         let fungi_dir = self.config_fungi_dir()?;
-        LocalAccessConfig::apply_from_dir(&fungi_dir)
+        LocalPreferenceCache::apply_from_dir(&fungi_dir)
     }
 }
 
@@ -412,7 +411,10 @@ fn ensure_local_port_available(port: u16, reserved_ports: &BTreeSet<u16>) -> Res
         .map_err(|error| anyhow::anyhow!("local port {} is not available: {}", port, error))
 }
 
-fn allocate_local_access_port(preferred_port: u16, reserved_ports: &BTreeSet<u16>) -> Result<u16> {
+fn allocate_preferred_local_port(
+    preferred_port: u16,
+    reserved_ports: &BTreeSet<u16>,
+) -> Result<u16> {
     if preferred_port != 0
         && !reserved_ports.contains(&preferred_port)
         && StdTcpListener::bind(("127.0.0.1", preferred_port)).is_ok()
@@ -481,7 +483,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn concurrent_attach_and_forget_keep_access_config_readable() -> Result<()> {
+    async fn concurrent_attach_and_forget_keep_local_preferences_readable() -> Result<()> {
         let service_name = "forget-race";
         let (client, server) =
             setup_access_test_pair(service_name, vec![("main", free_tcp_port()?)]).await?;
@@ -506,6 +508,58 @@ mod tests {
             .filter(|access| access.service_name == service_name)
             .count();
         assert!(saved_count <= 1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn attach_with_new_local_port_updates_saved_preference_and_listener() -> Result<()> {
+        let service_name = "move-port";
+        let first_local_port = free_tcp_port()?;
+        let second_local_port = free_tcp_port()?;
+        let (client, server) =
+            setup_access_test_pair(service_name, vec![("main", free_tcp_port()?)]).await?;
+        let peer_id = server.peer_id();
+
+        client
+            .daemon()
+            .attach_service_access(
+                peer_id,
+                service_name.to_string(),
+                Some("main".to_string()),
+                Some(first_local_port),
+            )
+            .await?;
+        client
+            .daemon()
+            .attach_service_access(
+                peer_id,
+                service_name.to_string(),
+                Some("main".to_string()),
+                Some(second_local_port),
+            )
+            .await?;
+
+        let accesses = client.daemon().list_service_accesses(Some(peer_id)).await?;
+        let saved = accesses
+            .iter()
+            .find(|access| access.service_name == service_name)
+            .and_then(|access| {
+                access
+                    .endpoints
+                    .iter()
+                    .find(|endpoint| endpoint.name == "main")
+            })
+            .expect("expected saved local address");
+        assert_eq!(saved.local_port, second_local_port);
+
+        let active_ports = client
+            .daemon()
+            .get_service_access_forwarding_rules()
+            .into_iter()
+            .filter(|(_, rule)| rule.remote_service_name.as_deref() == Some(service_name))
+            .map(|(_, rule)| rule.local_port)
+            .collect::<Vec<_>>();
+        assert_eq!(active_ports, vec![second_local_port]);
         Ok(())
     }
 

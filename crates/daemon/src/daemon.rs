@@ -44,7 +44,7 @@ pub struct FungiDaemon {
     devices_config: Arc<Mutex<DevicesConfig>>,
     trusted_devices_config: Arc<Mutex<TrustedDevicesConfig>>,
     direct_address_cache: Arc<Mutex<DirectAddressCache>>,
-    local_access_config_lock: Arc<AsyncMutex<()>>,
+    local_preferences_lock: Arc<AsyncMutex<()>>,
     args: DaemonArgs,
 
     swarm_control: SwarmControl,
@@ -72,8 +72,8 @@ impl FungiDaemon {
         self.trusted_devices_config.clone()
     }
 
-    pub(crate) fn local_access_config_lock(&self) -> Arc<AsyncMutex<()>> {
-        self.local_access_config_lock.clone()
+    pub(crate) fn local_preferences_lock(&self) -> Arc<AsyncMutex<()>> {
+        self.local_preferences_lock.clone()
     }
 
     pub fn swarm_control(&self) -> &SwarmControl {
@@ -225,7 +225,7 @@ impl FungiDaemon {
         let devices_config = Arc::new(Mutex::new(devices_config));
         let trusted_devices_config = Arc::new(Mutex::new(trusted_devices_config));
         let direct_address_cache = Arc::new(Mutex::new(direct_address_cache));
-        let local_access_config_lock = Arc::new(AsyncMutex::new(()));
+        let local_preferences_lock = Arc::new(AsyncMutex::new(()));
 
         let task_handles = TaskHandles {
             swarm_task,
@@ -239,7 +239,7 @@ impl FungiDaemon {
             devices_config,
             trusted_devices_config,
             direct_address_cache,
-            local_access_config_lock,
+            local_preferences_lock,
             args,
             swarm_control,
             mdns_control,

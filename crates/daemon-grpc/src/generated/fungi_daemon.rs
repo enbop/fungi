@@ -1626,7 +1626,7 @@ pub mod fungi_daemon_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        /// Creates local access entries for all named endpoints of a published remote service.
+        /// Creates or updates local address listeners for named endpoints of a published remote service.
         pub async fn attach_service_access(
             &mut self,
             request: impl tonic::IntoRequest<super::AttachServiceAccessRequest>,
@@ -1646,7 +1646,7 @@ pub mod fungi_daemon_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        /// Disconnects local access listeners for a remote service while keeping saved port records.
+        /// Disconnects local listeners for a remote service while keeping saved address preferences.
         pub async fn detach_service_access(
             &mut self,
             request: impl tonic::IntoRequest<super::DetachServiceAccessRequest>,
@@ -1665,7 +1665,7 @@ pub mod fungi_daemon_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        /// Deletes saved local access records for a remote service.
+        /// Deletes saved local address preferences for a remote service.
         pub async fn forget_service_access(
             &mut self,
             request: impl tonic::IntoRequest<super::ForgetServiceAccessRequest>,
@@ -1684,7 +1684,7 @@ pub mod fungi_daemon_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        /// Lists saved service access entries on the local node.
+        /// Lists saved local address preferences on the local node.
         pub async fn list_service_accesses(
             &mut self,
             request: impl tonic::IntoRequest<super::ListServiceAccessesRequest>,
@@ -1972,22 +1972,22 @@ pub mod fungi_daemon_server {
             &self,
             request: tonic::Request<super::RemotePeerRequest>,
         ) -> std::result::Result<tonic::Response<super::ListServicesResponse>, tonic::Status>;
-        /// Creates local access entries for all named endpoints of a published remote service.
+        /// Creates or updates local address listeners for named endpoints of a published remote service.
         async fn attach_service_access(
             &self,
             request: tonic::Request<super::AttachServiceAccessRequest>,
         ) -> std::result::Result<tonic::Response<super::ServiceAccessResponse>, tonic::Status>;
-        /// Disconnects local access listeners for a remote service while keeping saved port records.
+        /// Disconnects local listeners for a remote service while keeping saved address preferences.
         async fn detach_service_access(
             &self,
             request: tonic::Request<super::DetachServiceAccessRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Deletes saved local access records for a remote service.
+        /// Deletes saved local address preferences for a remote service.
         async fn forget_service_access(
             &self,
             request: tonic::Request<super::ForgetServiceAccessRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Lists saved service access entries on the local node.
+        /// Lists saved local address preferences on the local node.
         async fn list_service_accesses(
             &self,
             request: tonic::Request<super::ListServiceAccessesRequest>,

@@ -3,7 +3,7 @@ pub mod devices;
 pub mod direct_addresses;
 mod init;
 mod libp2p;
-pub mod local_access;
+pub mod local_preferences;
 pub mod paths;
 pub mod recipe_cache;
 mod rpc;
