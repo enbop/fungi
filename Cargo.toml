@@ -64,7 +64,7 @@ tonic-prost-build = "0.14.2"
 typed-path = "0.11.0"
 ulid = "1"
 void = "1"
-wasmtime-cli = "44.0.1"
+wasmtime-cli = "45.0.1"
 libp2p = { version = "0.56", features = [
     "macros",
     "noise",

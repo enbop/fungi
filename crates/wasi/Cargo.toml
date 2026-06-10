@@ -8,12 +8,5 @@ anyhow = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tokio = { version = "1", features = ["full"] }
-
-[target.'cfg(not(target_os = "android"))'.dependencies]
-wasmtime-host = { package = "wasmtime", version = "44.0.1" }
-wasmtime-wasi-host = { package = "wasmtime-wasi", version = "44.0.1" }
-
-[target.'cfg(target_os = "android")'.dependencies]
-# Temporary override until an official Wasmtime release includes #13118.
-wasmtime-android = { package = "wasmtime", git = "https://github.com/Heap-Hop/wasmtime.git", tag = "v44.0.1-android-fix" }
-wasmtime-wasi-android = { package = "wasmtime-wasi", git = "https://github.com/Heap-Hop/wasmtime.git", tag = "v44.0.1-android-fix" }
+wasmtime = "45.0.1"
+wasmtime-wasi = "45.0.1"
