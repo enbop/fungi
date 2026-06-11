@@ -256,6 +256,17 @@ pub(crate) fn build_wasmtime_command(
     command.arg("--fungi-dir");
     command.arg(fungi_home.as_os_str());
 
+    if cfg!(target_os = "android") {
+        let wasmtime_home = fungi_home.join("wasmtime");
+        fs::create_dir_all(&wasmtime_home).with_context(|| {
+            format!(
+                "Failed to create wasmtime home directory: {}",
+                wasmtime_home.display()
+            )
+        })?;
+        command.env("HOME", &wasmtime_home);
+    }
+
     if should_serve_wasmtime_http(&state.manifest) {
         let port = state
             .manifest

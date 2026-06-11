@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, anyhow, bail};
 use std::path::PathBuf;
 use wasmtime::component::TypedFunc;
 use wasmtime::{Config, Engine, Store};
@@ -35,7 +35,7 @@ impl WasiCommand {
         self.func
             .call_async(&mut self.store, ())
             .await
-            .context("failed to call function")?;
+            .map_err(|error| anyhow!("failed to call function: {error}"))?;
         tokio::time::sleep(std::time::Duration::from_micros(10)).await; // TODO wait io
         Ok(())
     }
@@ -43,9 +43,9 @@ impl WasiCommand {
 
 impl WasiRuntime {
     pub fn new(root_dir: PathBuf, bin_dir: PathBuf) -> Result<Self> {
-        let mut config = Config::new();
-        config.async_support(true);
-        let engine = Engine::new(&config).context("failed to create engine")?;
+        let config = Config::new();
+        let engine =
+            Engine::new(&config).map_err(|error| anyhow!("failed to create engine: {error}"))?;
 
         Ok(Self {
             engine,
@@ -78,7 +78,7 @@ impl WasiRuntime {
         let mut store: Store<State> = Store::new(&self.engine, state);
 
         let component_file = wasmtime::component::Component::from_file(&self.engine, bin_path)
-            .context("failed to load module")?;
+            .map_err(|error| anyhow!("failed to load module: {error}"))?;
         let mut linker = wasmtime::component::Linker::new(&self.engine);
         wasmtime_wasi::p2::add_to_linker_async(&mut linker).unwrap();
 
