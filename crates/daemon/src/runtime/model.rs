@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{collections::BTreeMap, fmt, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -135,10 +135,110 @@ pub struct ServiceInstance {
     pub status: ServiceStatus,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ServicePhase {
+    Running,
+    Stopped,
+    Exited,
+    Missing,
+    Unknown,
+}
+
+impl ServicePhase {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Running => "running",
+            Self::Stopped => "stopped",
+            Self::Exited => "exited",
+            Self::Missing => "missing",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+impl fmt::Display for ServicePhase {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceStatus {
-    pub state: String,
-    pub running: bool,
+    pub phase: ServicePhase,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+impl ServiceStatus {
+    pub fn running() -> Self {
+        Self::new(ServicePhase::Running)
+    }
+
+    pub fn stopped() -> Self {
+        Self::new(ServicePhase::Stopped)
+    }
+
+    pub fn exited(exit_code: Option<i32>) -> Self {
+        let detail = exit_code.map(|code| format!("exited({code})"));
+        Self::new(ServicePhase::Exited).with_optional_detail(detail)
+    }
+
+    pub fn missing() -> Self {
+        Self::new(ServicePhase::Missing)
+    }
+
+    pub fn unknown() -> Self {
+        Self::new(ServicePhase::Unknown)
+    }
+
+    pub fn new(phase: ServicePhase) -> Self {
+        Self {
+            phase,
+            detail: None,
+        }
+    }
+
+    pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+
+    pub fn with_optional_detail(mut self, detail: Option<String>) -> Self {
+        self.detail = detail;
+        self
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.phase == ServicePhase::Running
+    }
+
+    pub fn state_label(&self) -> String {
+        self.detail
+            .clone()
+            .unwrap_or_else(|| self.phase.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ServicePhase, ServiceStatus};
+
+    #[test]
+    fn status_label_prefers_detail() {
+        let status = ServiceStatus::new(ServicePhase::Unknown).with_detail("paused");
+
+        assert_eq!(status.state_label(), "paused");
+    }
+
+    #[test]
+    fn exited_status_formats_exit_code_as_detail() {
+        let status = ServiceStatus::exited(Some(137));
+
+        assert_eq!(status.phase, ServicePhase::Exited);
+        assert_eq!(status.detail.as_deref(), Some("exited(137)"));
+        assert_eq!(status.state_label(), "exited(137)");
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -180,132 +280,4 @@ pub struct ServiceLogsOptions {
 pub struct ServiceLogs {
     pub raw: Vec<u8>,
     pub text: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceManifestDocument {
-    #[serde(rename = "apiVersion")]
-    pub api_version: String,
-    pub kind: String,
-    pub metadata: ServiceManifestMetadata,
-    pub spec: ServiceManifestSpec,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ServiceManifestMetadata {
-    pub name: String,
-    #[serde(rename = "definitionId")]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub definition_id: Option<String>,
-    #[serde(default)]
-    pub labels: BTreeMap<String, String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceManifestSpec {
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub run: Option<ServiceManifestRun>,
-    #[serde(default)]
-    pub entries: BTreeMap<String, ServiceManifestEntry>,
-    #[serde(default)]
-    pub env: BTreeMap<String, String>,
-    #[serde(default)]
-    pub mounts: Vec<ServiceManifestMount>,
-    #[serde(default)]
-    pub command: Vec<String>,
-    #[serde(default)]
-    pub entrypoint: Vec<String>,
-    #[serde(rename = "workingDir")]
-    pub working_dir: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ServiceManifestRun {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub docker: Option<ServiceManifestDockerRun>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub wasmtime: Option<ServiceManifestWasmtimeRun>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceManifestDockerRun {
-    pub image: String,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ServiceManifestWasmtimeRun {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub file: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub mode: Option<ServiceRunMode>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ServiceManifestEntry {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub target: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub port: Option<u16>,
-    #[serde(rename = "hostPort", alias = "host_port")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub host_port: Option<u16>,
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub protocol: Option<ServicePortProtocol>,
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage: Option<ServiceManifestEntryUsageKind>,
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>,
-    #[serde(rename = "iconUrl")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub icon_url: Option<String>,
-    #[serde(rename = "catalogId")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub catalog_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ServiceManifestEntryUsageKind {
-    Web,
-    Ssh,
-    Tcp,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceManifestMount {
-    #[serde(rename = "hostPath")]
-    pub host_path: String,
-    #[serde(rename = "runtimePath")]
-    pub runtime_path: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceManifestExpose {
-    #[serde(default)]
-    pub enabled: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub transport: Option<ServiceManifestExposeTransport>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage: Option<ServiceManifestExposeUsage>,
-    #[serde(rename = "catalogId")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub catalog_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceManifestExposeTransport {
-    pub kind: ServiceExposeTransportKind,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceManifestExposeUsage {
-    pub kind: ServiceExposeUsageKind,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>,
 }

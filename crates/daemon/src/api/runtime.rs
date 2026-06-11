@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use fungi_config::runtime::Runtime as RuntimeConfig;
 use libp2p::PeerId;
 
@@ -475,7 +475,7 @@ impl FungiDaemon {
         Ok(true)
     }
 
-    pub fn forget_device_service(
+    pub async fn forget_device_service(
         &self,
         device_id: PeerId,
         name: &str,
@@ -486,7 +486,9 @@ impl FungiDaemon {
             anyhow::bail!("cached service not found for device: {name}");
         }
 
-        let _ = self.detach_service_access_by_match(device_id, name);
+        self.forget_service_access(device_id, name.to_string())
+            .await
+            .with_context(|| format!("failed to forget local access records for service {name}"))?;
         Ok(ServiceControlResponse::success_forgotten_locally(
             None,
             name.to_string(),
@@ -592,9 +594,22 @@ impl FungiDaemon {
     ) -> Result<ServiceControlResponse> {
         let response = self
             .service_control_protocol_control()
-            .start_peer_service(peer_id, name)
+            .start_peer_service(peer_id, name.clone())
             .await?;
+        let service_key = response
+            .service
+            .as_ref()
+            .map(|service| service.name.as_str())
+            .unwrap_or(name.as_str())
+            .to_string();
         self.reconcile_remote_service_caches(peer_id, true).await;
+        self.restore_saved_service_access(peer_id, service_key.clone())
+            .await
+            .with_context(|| {
+                format!(
+                    "remote service started, but failed to restore saved local access listeners for {service_key}"
+                )
+            })?;
         Ok(response)
     }
 
@@ -618,7 +633,12 @@ impl FungiDaemon {
             .unwrap_or_default()
             .to_string();
         if !service_key.is_empty() {
-            let _ = self.detach_service_access_by_match(peer_id, &service_key);
+            self.detach_service_access_by_match(peer_id, &service_key)
+                .with_context(|| {
+                    format!(
+                        "remote service stopped, but failed to disconnect local access listeners for {service_key}"
+                    )
+                })?;
         }
         self.reconcile_remote_service_caches(peer_id, true).await;
         Ok(response)
@@ -640,7 +660,13 @@ impl FungiDaemon {
             .unwrap_or_default()
             .to_string();
         if !service_key.is_empty() {
-            let _ = self.detach_service_access_by_match(peer_id, &service_key);
+            self.forget_service_access(peer_id, service_key.clone())
+                .await
+                .with_context(|| {
+                    format!(
+                        "remote service removed, but failed to forget local access records for {service_key}"
+                    )
+                })?;
         }
         self.reconcile_remote_service_caches(peer_id, true).await;
         Ok(response)

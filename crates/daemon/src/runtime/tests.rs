@@ -215,13 +215,13 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
 
     provider.pull(&manifest).await.unwrap();
     let created = provider.inspect("demo-service").await.unwrap();
-    assert_eq!(created.status.state, "created");
+    assert_eq!(created.status.phase, ServicePhase::Stopped);
 
     provider.start("demo-service").await.unwrap();
     sleep(Duration::from_millis(150)).await;
 
     let running = provider.inspect("demo-service").await.unwrap();
-    assert!(running.status.running);
+    assert!(running.status.is_running());
 
     let mut logs = ServiceLogs {
         raw: Vec::new(),
@@ -250,7 +250,7 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
 
     provider.stop("demo-service").await.unwrap();
     let stopped = provider.inspect("demo-service").await.unwrap();
-    assert!(!stopped.status.running);
+    assert!(!stopped.status.is_running());
 
     provider.remove("demo-service").await.unwrap();
     assert!(provider.inspect("demo-service").await.is_err());
@@ -369,23 +369,23 @@ fn wasmtime_http_mode_without_tcp_port_returns_error() {
 }
 
 #[test]
-fn manifest_document_supports_user_home_and_auto_host_port() {
+fn fungi_service_document_supports_fungi_workspace_and_auto_host_port() {
     let yaml = r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-    name: filebrowser
-spec:
-    run:
-        docker:
-            image: filebrowser/filebrowser:latest
-    entries:
-        http:
-            port: 80
-            usage: web
-    mounts:
-        - hostPath: ${USER_HOME}
-          runtimePath: /srv
+fungi: service/v1
+id: filebrowser
+run:
+  provider: docker
+  source:
+    image: filebrowser/filebrowser:latest
+  mounts:
+    - from: $fungi.workspace
+      to: /srv
+publish:
+  http:
+    tcp:
+      port: 80
+    client:
+      kind: web
 "#;
 
     let occupied_allowed_port = StdTcpListener::bind(("127.0.0.1", 0)).unwrap();
@@ -411,27 +411,25 @@ spec:
 }
 
 #[test]
-fn manifest_document_supports_explicit_service_path_roots() {
+fn fungi_service_document_supports_explicit_service_path_roots() {
     let yaml = r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-    name: filebrowser
-spec:
-    run:
-        docker:
-            image: filebrowser/filebrowser:latest
-    entries:
-        http:
-            port: 80
-    mounts:
-        - hostPath: ${SERVICE_APPDATA}/db
-          runtimePath: /srv
-        - hostPath: ${SERVICE_ARTIFACTS}/static
-          runtimePath: /static
-        - hostPath: ${USER_ROOT}
-          runtimePath: /user
-    workingDir: ${USER_HOME}
+fungi: service/v1
+id: filebrowser
+run:
+  provider: docker
+  source:
+    image: filebrowser/filebrowser:latest
+  mounts:
+    - from: $fungi.service.data/db
+      to: /srv
+    - from: $fungi.service.artifacts/static
+      to: /static
+    - from: $fungi.root
+      to: /user
+publish:
+  http:
+    tcp:
+      port: 80
 "#;
 
     let fungi_home = PathBuf::from("/tmp/fungi-home");
@@ -442,7 +440,6 @@ spec:
     let manifest = parse_service_manifest_yaml_with_policy_for_service_paths(
         yaml,
         Path::new("."),
-        &fungi_home,
         &path_roots,
         &ManifestResolutionPolicy::default(),
         &BTreeSet::new(),
@@ -458,10 +455,6 @@ spec:
         paths.service_artifacts_dir(local_service_id).join("static")
     );
     assert_eq!(manifest.mounts[2].host_path, paths.user_root());
-    assert_eq!(
-        manifest.working_dir,
-        Some(paths.user_home().to_string_lossy().to_string())
-    );
 }
 
 #[test]
@@ -704,19 +697,18 @@ publish:
 }
 
 #[test]
-fn manifest_document_defaults_missing_host_port_to_auto() {
+fn fungi_service_docker_publish_allocates_host_port() {
     let yaml = r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-    name: filebrowser
-spec:
-    run:
-        docker:
-            image: filebrowser/filebrowser:latest
-    entries:
-        http:
-            port: 80
+fungi: service/v1
+id: filebrowser
+run:
+  provider: docker
+  source:
+    image: filebrowser/filebrowser:latest
+publish:
+  http:
+    tcp:
+      port: 80
 "#;
 
     let manifest = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
@@ -729,32 +721,34 @@ spec:
 }
 
 #[test]
-fn service_manifest_to_yaml_preserves_resolved_auto_host_port() {
+fn service_manifest_to_yaml_renders_current_fungi_service_format() {
     let yaml = r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-    name: code-server
-spec:
-    run:
-        docker:
-            image: ghcr.io/coder/code-server:4.117.0
-    entries:
-        http:
-            port: 8080
-            usage: web
+fungi: service/v1
+id: code-server
+run:
+  provider: docker
+  source:
+    image: ghcr.io/coder/code-server:4.117.0
+publish:
+  http:
+    tcp:
+      port: 8080
+    client:
+      kind: web
 "#;
 
     let manifest =
         parse_service_manifest_yaml(yaml, Path::new("."), Path::new("/tmp/fungi-home")).unwrap();
-    let resolved_host_port = manifest.ports[0].host_port;
     assert_eq!(
         manifest.ports[0].host_port_allocation,
         ServicePortAllocation::Auto
     );
 
     let rendered = service_manifest_to_yaml(&manifest).unwrap();
-    assert!(rendered.contains(&format!("hostPort: {resolved_host_port}")));
+    assert!(rendered.contains("fungi: service/v1"));
+    assert!(rendered.contains("id: code-server"));
+    assert!(rendered.contains("publish:"));
+    assert!(rendered.contains("port: 8080"));
 
     let reparsed = parse_managed_service_manifest_yaml(
         &rendered,
@@ -763,29 +757,28 @@ spec:
         "svc_code_server",
     )
     .unwrap();
-    assert_eq!(reparsed.ports[0].host_port, resolved_host_port);
+    assert_eq!(reparsed.ports[0].service_port, 8080);
     assert_eq!(
         reparsed.ports[0].host_port_allocation,
-        ServicePortAllocation::Fixed
+        ServicePortAllocation::Auto
     );
 }
 
 #[test]
-fn service_manifest_to_yaml_preserves_fixed_host_port_equal_to_service_port() {
+fn service_manifest_to_yaml_preserves_fixed_wasmtime_publish_port() {
     let yaml = r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-    name: fixed-web
-spec:
-    run:
-        docker:
-            image: example/web:latest
-    entries:
-        http:
-            port: 8080
-            hostPort: 8080
-            usage: web
+fungi: service/v1
+id: fixed-web
+run:
+  provider: wasmtime
+  source:
+    url: https://example.test/fixed-web.wasm
+publish:
+  http:
+    tcp:
+      port: 8080
+    client:
+      kind: web
 "#;
 
     let manifest =
@@ -798,7 +791,8 @@ spec:
     );
 
     let rendered = service_manifest_to_yaml(&manifest).unwrap();
-    assert!(rendered.contains("hostPort: 8080"));
+    assert!(rendered.contains("fungi: service/v1"));
+    assert!(rendered.contains("port: 8080"));
 
     let reparsed = parse_managed_service_manifest_yaml(
         &rendered,
@@ -815,47 +809,46 @@ spec:
 }
 
 #[test]
-fn manifest_document_rejects_duplicate_explicit_host_ports() {
+fn fungi_service_rejects_duplicate_fixed_publish_ports() {
     let yaml = r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-    name: duplicate-host-port
-spec:
-    run:
-        docker:
-            image: example/web:latest
-    entries:
-        http:
-            port: 8080
-            hostPort: 18080
-            usage: web
-        metrics:
-            port: 9090
-            hostPort: 18080
+fungi: service/v1
+id: duplicate-host-port
+run:
+  provider: wasmtime
+  source:
+    url: https://example.test/web.wasm
+publish:
+  http:
+    tcp:
+      port: 18080
+    client:
+      kind: web
+  metrics:
+    tcp:
+      port: 18080
 "#;
 
     let error = parse_service_manifest_yaml(yaml, Path::new("."), Path::new("/tmp/fungi-home"))
-        .expect_err("duplicate hostPort should fail validation");
+        .expect_err("duplicate fixed publish ports should fail validation");
     assert!(
         error
             .to_string()
-            .contains("spec.entries.metrics.hostPort 18080 is already reserved")
+            .contains("publish.metrics.tcp.port 18080 is already reserved")
     );
 }
 
 #[test]
-fn manifest_document_supports_external_tcp_service() {
+fn fungi_service_document_supports_external_tcp_service() {
     let yaml = r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-    name: home-ssh
-spec:
-    entries:
-        ssh:
-            target: 127.0.0.1:22
-            usage: ssh
+fungi: service/v1
+id: home-ssh
+publish:
+  ssh:
+    tcp:
+      host: 127.0.0.1
+      port: 22
+    client:
+      kind: ssh
 "#;
 
     let manifest =
@@ -903,7 +896,7 @@ async fn wasmtime_provider_downloads_remote_component() {
         .pull_with_local_service_id(&manifest, "svc_download")
         .await
         .unwrap();
-    assert_eq!(pulled.status.state, "created");
+    assert_eq!(pulled.status.phase, ServicePhase::Stopped);
     assert!(
         temp_dir
             .path()
@@ -936,16 +929,15 @@ async fn runtime_control_apply_reuses_local_id_and_restages_wasmtime_component()
 
     let manifest_v1 = format!(
         r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-  name: demo
-spec:
-  run:
-    wasmtime:
-      file: {}
-  entries:
-    main:
+fungi: service/v1
+id: demo
+run:
+  provider: wasmtime
+  source:
+    file: {}
+publish:
+  main:
+    tcp:
       port: 8080
 "#,
         component_v1.display()
@@ -979,16 +971,15 @@ spec:
 
     let manifest_v2 = format!(
         r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-  name: demo
-spec:
-  run:
-    wasmtime:
-      file: {}
-  entries:
-    main:
+fungi: service/v1
+id: demo
+run:
+  provider: wasmtime
+  source:
+    file: {}
+publish:
+  main:
+    tcp:
       port: 8080
 "#,
         component_v2.display()
@@ -1015,7 +1006,7 @@ spec:
         local_service_id
     );
     assert_eq!(fs::read(&staged_component).unwrap(), b"wasm-v2");
-    assert!(applied_v2.instance.status.running);
+    assert!(applied_v2.instance.status.is_running());
 }
 
 #[tokio::test]
@@ -1097,12 +1088,12 @@ async fn apply_manifest_yaml_allows_same_service_fixed_host_port_reapply_only() 
         )
         .await
         .err()
-        .expect("different service should not reuse a fixed hostPort");
+        .expect("different service should not reuse a fixed publish port");
 
     assert!(
         error
             .to_string()
-            .contains("spec.entries.main.hostPort 19100 is already reserved")
+            .contains("publish.main.tcp.port 19100 is already reserved")
     );
 }
 
@@ -1170,21 +1161,21 @@ publish:
 }
 
 #[test]
-fn parse_manifest_expose_defaults_service_identity() {
+fn parse_fungi_service_expose_defaults_service_identity() {
     let yaml = r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-    name: filebrowser
-spec:
-    run:
-        docker:
-            image: filebrowser/filebrowser:latest
-    entries:
-        http:
-            port: 80
-            usage: web
-            path: /
+fungi: service/v1
+id: filebrowser
+run:
+  provider: docker
+  source:
+    image: filebrowser/filebrowser:latest
+publish:
+  http:
+    tcp:
+      port: 80
+    client:
+      kind: web
+      path: /
 "#;
 
     let manifest = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
@@ -1196,23 +1187,23 @@ spec:
 }
 
 #[test]
-fn parse_manifest_expose_maps_icon_url_and_catalog_id() {
+fn parse_fungi_service_expose_maps_icon_url_and_catalog_id() {
     let yaml = r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-    name: filebrowser
-spec:
-    run:
-        docker:
-            image: filebrowser/filebrowser:latest
-    entries:
-        http:
-            port: 80
-            usage: web
-            path: /
-            iconUrl: https://example.test/icon.svg
-            catalogId: io.example.filebrowser
+fungi: service/v1
+id: filebrowser
+run:
+  provider: docker
+  source:
+    image: filebrowser/filebrowser:latest
+publish:
+  http:
+    tcp:
+      port: 80
+    client:
+      kind: web
+      path: /
+      iconUrl: https://example.test/icon.svg
+      catalogId: io.example.filebrowser
 "#;
 
     let manifest = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
@@ -1230,66 +1221,77 @@ spec:
 }
 
 #[test]
-fn parse_manifest_rejects_mismatched_multi_entry_expose_metadata() {
+fn parse_fungi_service_rejects_mismatched_multi_entry_client_metadata() {
     let yaml = r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-    name: multi
-spec:
-    run:
-        docker:
-            image: example/multi:latest
-    entries:
-        api:
-            port: 8081
-            usage: tcp
-        web:
-            port: 8080
-            usage: web
-            path: /
+fungi: service/v1
+id: multi
+run:
+  provider: docker
+  source:
+    image: example/multi:latest
+publish:
+  api:
+    tcp:
+      port: 8081
+    client:
+      kind: raw
+  web:
+    tcp:
+      port: 8080
+    client:
+      kind: web
+      path: /
 "#;
 
     let error = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp"))
-        .expect_err("per-entry expose metadata is not supported yet");
-    assert!(error.to_string().contains("expose metadata must match"));
+        .expect_err("per-entry client metadata is not supported yet");
+    assert!(error.to_string().contains("client metadata must match"));
 }
 
 #[test]
-fn parse_manifest_rejects_entry_with_target_and_port() {
+fn parse_fungi_service_rejects_docker_publish_host() {
     let yaml = r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-    name: raw-service
-spec:
-    entries:
-        main:
-            target: 127.0.0.1:1234
-            port: 1234
+fungi: service/v1
+id: web-service
+run:
+  provider: docker
+  source:
+    image: example/web:latest
+publish:
+  main:
+    tcp:
+      host: 127.0.0.1
+      port: 1234
 "#;
 
     let error = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp"))
-        .expect_err("entry cannot use target and port together");
-    assert!(error.to_string().contains("either target or port"));
+        .expect_err("docker publish host should be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("publish.main.tcp.host is not used with provider: docker")
+    );
 }
 
 #[test]
-fn parse_manifest_rejects_entry_without_target_or_port() {
+fn parse_fungi_service_rejects_zero_publish_port() {
     let yaml = r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-    name: raw-service
-spec:
-    entries:
-        main:
-            usage: tcp
+fungi: service/v1
+id: raw-service
+publish:
+  main:
+    tcp:
+      host: 127.0.0.1
+      port: 0
 "#;
 
     let error = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp"))
-        .expect_err("entry requires target or port");
-    assert!(error.to_string().contains("requires target or port"));
+        .expect_err("zero publish port should be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("publish.main.tcp.port must be greater than 0")
+    );
 }
 
 #[test]
@@ -1393,18 +1395,16 @@ fn existing_tcp_manifest(name: &str, host: &str, port: u16) -> ServiceManifest {
 fn wasmtime_manifest_yaml(name: &str, component: &Path, host_port: u16) -> String {
     format!(
         r#"
-apiVersion: fungi.rs/v1alpha1
-kind: Service
-metadata:
-  name: {name}
-spec:
-  run:
-    wasmtime:
-      file: {}
-  entries:
-    main:
-      port: 8080
-      hostPort: {host_port}
+fungi: service/v1
+id: {name}
+run:
+  provider: wasmtime
+  source:
+    file: {}
+publish:
+  main:
+    tcp:
+      port: {host_port}
 "#,
         component.display()
     )

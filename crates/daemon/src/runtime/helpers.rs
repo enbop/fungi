@@ -334,25 +334,18 @@ pub(crate) fn map_docker_instance(
         labels: details.labels,
         ports: Vec::new(),
         exposed_endpoints: Vec::new(),
-        status: ServiceStatus {
-            state: details.state.status,
-            running: details.state.running,
-        },
+        status: docker_service_status(details.state.status, details.state.running),
     }
 }
 
 pub(crate) fn map_wasmtime_instance(handle: &str, state: &WasmtimeServiceState) -> ServiceInstance {
     let running = state.child.is_some();
     let status = if running {
-        if state.manifest.ports.is_empty() {
-            "running".to_string()
-        } else {
-            "serving".to_string()
-        }
+        ServiceStatus::running()
     } else if let Some(code) = state.last_exit_code {
-        format!("exited({code})")
+        ServiceStatus::exited(Some(code))
     } else {
-        "created".to_string()
+        ServiceStatus::stopped()
     };
 
     ServiceInstance {
@@ -364,11 +357,22 @@ pub(crate) fn map_wasmtime_instance(handle: &str, state: &WasmtimeServiceState) 
         labels: state.manifest.labels.clone(),
         ports: Vec::new(),
         exposed_endpoints: Vec::new(),
-        status: ServiceStatus {
-            state: status,
-            running,
-        },
+        status,
     }
+}
+
+fn docker_service_status(runtime_state: String, running: bool) -> ServiceStatus {
+    let phase = if running {
+        ServicePhase::Running
+    } else {
+        match runtime_state.as_str() {
+            "created" => ServicePhase::Stopped,
+            "exited" | "dead" => ServicePhase::Exited,
+            _ => ServicePhase::Unknown,
+        }
+    };
+
+    ServiceStatus::new(phase).with_detail(runtime_state)
 }
 
 pub(crate) fn missing_instance_from_manifest(manifest: &ServiceManifest) -> ServiceInstance {
@@ -381,10 +385,7 @@ pub(crate) fn missing_instance_from_manifest(manifest: &ServiceManifest) -> Serv
         labels: manifest.labels.clone(),
         ports: manifest.ports.clone(),
         exposed_endpoints: service_expose_endpoint_bindings(manifest),
-        status: ServiceStatus {
-            state: "missing".to_string(),
-            running: false,
-        },
+        status: ServiceStatus::missing(),
     }
 }
 

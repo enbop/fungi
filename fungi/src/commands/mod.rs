@@ -88,9 +88,6 @@ pub enum Commands {
     /// Browse published remote services
     #[command(subcommand, hide = true)]
     Catalog(fungi_control::CatalogCommands),
-    /// Manage local access entries for remote services
-    #[command(subcommand, hide = true)]
-    Access(fungi_control::AccessCommands),
     /// Query and administer remote peers
     #[command(subcommand, hide = true)]
     Peer(fungi_control::PeerCommands),

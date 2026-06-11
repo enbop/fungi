@@ -502,7 +502,8 @@ mod tests {
         );
         let manifest_yaml =
             fs::read_to_string(services_root.join(&local_service_id).join("service.yaml")).unwrap();
-        assert!(manifest_yaml.contains("definitionId: demo-definition"));
+        assert!(manifest_yaml.contains("id: demo-definition"));
+        assert!(manifest_yaml.contains("instance: demo"));
         let paths = FungiPaths::from_fungi_home(dir.path());
         assert!(paths.service_appdata_dir(&local_service_id).is_dir());
         assert!(!dir.path().join("data").join(&local_service_id).exists());

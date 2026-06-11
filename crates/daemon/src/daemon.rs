@@ -20,8 +20,6 @@ use fungi_config::{
     FungiConfig,
     devices::{DeviceInfo, DevicesConfig},
     direct_addresses::DirectAddressCache,
-    local_access::LocalAccessConfig,
-    tcp_tunneling::{Forwarding, TcpTunneling},
     trusted_devices::TrustedDevicesConfig,
 };
 use fungi_swarm::{
@@ -30,7 +28,7 @@ use fungi_swarm::{
 use fungi_util::keypair::get_keypair_from_dir;
 use libp2p::{Multiaddr, identity::Keypair, multiaddr::Protocol};
 use parking_lot::Mutex;
-use tokio::task::JoinHandle;
+use tokio::{sync::Mutex as AsyncMutex, task::JoinHandle};
 
 const DIRECT_ADDRESS_CACHE_SYNC_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -46,6 +44,7 @@ pub struct FungiDaemon {
     devices_config: Arc<Mutex<DevicesConfig>>,
     trusted_devices_config: Arc<Mutex<TrustedDevicesConfig>>,
     direct_address_cache: Arc<Mutex<DirectAddressCache>>,
+    local_preferences_lock: Arc<AsyncMutex<()>>,
     args: DaemonArgs,
 
     swarm_control: SwarmControl,
@@ -71,6 +70,10 @@ impl FungiDaemon {
 
     pub fn trusted_devices(&self) -> Arc<Mutex<TrustedDevicesConfig>> {
         self.trusted_devices_config.clone()
+    }
+
+    pub(crate) fn local_preferences_lock(&self) -> Arc<AsyncMutex<()>> {
+        self.local_preferences_lock.clone()
     }
 
     pub fn swarm_control(&self) -> &SwarmControl {
@@ -210,17 +213,6 @@ impl FungiDaemon {
         node_capabilities_control.start()?;
 
         let tcp_tunneling_control = TcpTunnelingControl::new(swarm_control.clone());
-        let local_access_config = LocalAccessConfig::apply_from_dir(&fungi_home)?;
-        let tcp_tunneling_config = TcpTunneling {
-            forwarding: Forwarding {
-                rules: local_access_config.rules.clone(),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        tcp_tunneling_control
-            .init_from_config(&tcp_tunneling_config)
-            .await;
 
         let service_control_protocol_control = ServiceControlProtocolControl::new(
             swarm_control.clone(),
@@ -233,6 +225,7 @@ impl FungiDaemon {
         let devices_config = Arc::new(Mutex::new(devices_config));
         let trusted_devices_config = Arc::new(Mutex::new(trusted_devices_config));
         let direct_address_cache = Arc::new(Mutex::new(direct_address_cache));
+        let local_preferences_lock = Arc::new(AsyncMutex::new(()));
 
         let task_handles = TaskHandles {
             swarm_task,
@@ -246,6 +239,7 @@ impl FungiDaemon {
             devices_config,
             trusted_devices_config,
             direct_address_cache,
+            local_preferences_lock,
             args,
             swarm_control,
             mdns_control,
@@ -279,7 +273,7 @@ impl FungiDaemon {
         let mut restored_protocols = std::collections::BTreeSet::new();
 
         for service in self.runtime_control.list_services().await? {
-            if !service.status.running {
+            if !service.status.is_running() {
                 continue;
             }
 
@@ -316,53 +310,14 @@ impl FungiDaemon {
         rule: fungi_config::tcp_tunneling::ForwardingRule,
     ) -> Result<String> {
         ensure_service_access_forwarding_rule(&rule)?;
-        let rule_id = self
-            .tcp_tunneling_control
-            .add_forwarding_rule(rule.clone())
-            .await?;
-
-        if let Err(error) = self.persist_service_access_forwarding_rule(rule, true) {
-            let _ = self.tcp_tunneling_control.remove_forwarding_rule(&rule_id);
-            return Err(error);
-        }
-
-        Ok(rule_id)
+        self.tcp_tunneling_control.add_forwarding_rule(rule).await
     }
 
     pub(crate) fn remove_service_access_forwarding_rule_internal(
         &self,
         rule_id: &str,
     ) -> Result<()> {
-        // Get the rule before removing it
-        let rules = self.tcp_tunneling_control.get_forwarding_rules();
-        let rule = rules
-            .iter()
-            .find(|(id, _)| id == rule_id)
-            .map(|(_, rule)| rule.clone())
-            .ok_or_else(|| anyhow::anyhow!("Forwarding rule not found: {}", rule_id))?;
-        ensure_service_access_forwarding_rule(&rule)?;
-
-        self.tcp_tunneling_control.remove_forwarding_rule(rule_id)?;
-
-        self.persist_service_access_forwarding_rule(rule, false)?;
-
-        Ok(())
-    }
-
-    fn persist_service_access_forwarding_rule(
-        &self,
-        rule: fungi_config::tcp_tunneling::ForwardingRule,
-        add: bool,
-    ) -> Result<()> {
-        ensure_service_access_forwarding_rule(&rule)?;
-        let fungi_dir = self.config_fungi_dir()?;
-        let current_access = LocalAccessConfig::apply_from_dir(&fungi_dir)?;
-        if add {
-            current_access.add_forwarding_rule(rule)?;
-        } else {
-            current_access.remove_forwarding_rule(&rule)?;
-        }
-        Ok(())
+        self.tcp_tunneling_control.remove_forwarding_rule(rule_id)
     }
 
     pub fn config_fungi_dir(&self) -> Result<PathBuf> {

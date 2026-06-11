@@ -77,13 +77,12 @@ fn migrates_legacy_config_transactionally_without_copying_unrelated_side_files()
         "version = \"0.6.1\"\n[devices]\n",
     )
     .unwrap();
-    fs::create_dir_all(dir.path().join("access")).unwrap();
+    fs::create_dir_all(dir.path().join("cache")).unwrap();
     fs::write(
-        dir.path().join("access").join("local_access.json"),
-        "{\n  \"version\": 1,\n  \"entries\": []\n}\n",
+        dir.path().join("cache").join("local_preferences.json"),
+        "[]\n",
     )
     .unwrap();
-    fs::create_dir_all(dir.path().join("cache")).unwrap();
     fs::write(
         dir.path().join("cache").join("direct_addresses.json"),
         "{\n  \"version\": 1,\n  \"addresses\": []\n}\n",
@@ -105,8 +104,8 @@ fn migrates_legacy_config_transactionally_without_copying_unrelated_side_files()
         "version = \"0.6.1\"\n[devices]\n"
     );
     assert_eq!(
-        fs::read_to_string(dir.path().join("access").join("local_access.json")).unwrap(),
-        "{\n  \"version\": 1,\n  \"entries\": []\n}\n"
+        fs::read_to_string(dir.path().join("cache").join("local_preferences.json")).unwrap(),
+        "[]\n"
     );
     assert_eq!(
         fs::read_to_string(dir.path().join("cache").join("direct_addresses.json")).unwrap(),
@@ -127,7 +126,6 @@ fn migrates_legacy_config_transactionally_without_copying_unrelated_side_files()
         original_config
     );
     assert!(!backup_dir.join("devices.toml").exists());
-    assert!(!backup_dir.join("access").exists());
     assert!(!backup_dir.join("cache").exists());
 
     assert!(report.staging_dir.is_none());

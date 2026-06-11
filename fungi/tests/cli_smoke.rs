@@ -260,7 +260,7 @@ fn cli_can_interactively_create_local_tcp_service() {
         stream.write_all(b"pong").unwrap();
     });
 
-    let input = format!("\n{target}\nraw\n\ny\n");
+    let input = format!("\n{target}\n\n\ny\n");
     run_cli_with_input(
         home.path(),
         ["service", "apply", "created-raw", "--create", "--yes"],
@@ -318,11 +318,13 @@ fn cli_can_create_and_access_remote_tcp_service() {
     let target = TcpListener::bind("127.0.0.1:0").unwrap();
     let target_port = target.local_addr().unwrap().port();
     let server = thread::spawn(move || {
-        let (mut stream, _) = target.accept().unwrap();
-        let mut buf = [0_u8; 4];
-        stream.read_exact(&mut buf).unwrap();
-        assert_eq!(&buf, b"ping");
-        stream.write_all(b"pong").unwrap();
+        for _ in 0..2 {
+            let (mut stream, _) = target.accept().unwrap();
+            let mut buf = [0_u8; 4];
+            stream.read_exact(&mut buf).unwrap();
+            assert_eq!(&buf, b"ping");
+            stream.write_all(b"pong").unwrap();
+        }
     });
 
     let manifest = write_existing_tcp_service_manifest(a.path(), "test-tcp", target_port, "raw");
@@ -366,16 +368,21 @@ fn cli_can_create_and_access_remote_tcp_service() {
     let output = run_cli(a.path(), ["test-tcp@b"]);
     let local_addr = extract_local_address(&output.stdout);
     assert!(
-        a.path().join("access").join("local_access.json").exists(),
-        "service access should persist outside config.toml"
+        a.path()
+            .join("cache")
+            .join("local_preferences.json")
+            .exists(),
+        "local preferences should persist outside config.toml"
     );
     let access_json =
-        std::fs::read_to_string(a.path().join("access").join("local_access.json")).unwrap();
+        std::fs::read_to_string(a.path().join("cache").join("local_preferences.json")).unwrap();
     assert!(access_json.contains("test-tcp"));
+    assert!(access_json.trim_start().starts_with('['));
+    assert!(!access_json.contains("\"rules\""));
     let config_toml = std::fs::read_to_string(a.path().join("config.toml")).unwrap();
     assert!(
         !config_toml.contains("remote_service_id"),
-        "service access should not be persisted in config.toml"
+        "local preferences should not be persisted in config.toml"
     );
 
     let mut stream = connect_with_retry(&local_addr, Duration::from_secs(5));
@@ -384,9 +391,11 @@ fn cli_can_create_and_access_remote_tcp_service() {
     stream.read_exact(&mut response).unwrap();
     assert_eq!(&response, b"pong");
 
-    server.join().unwrap();
-
     run_cli(a.path(), ["service", "stop", "test-tcp@b"]);
+    assert!(
+        TcpStream::connect(&local_addr).is_err(),
+        "service stop should release the local listener"
+    );
     let output = run_cli(a.path(), ["service"]);
     assert!(
         output.stdout.contains("test-tcp@b"),
@@ -399,7 +408,43 @@ fn cli_can_create_and_access_remote_tcp_service() {
         output.stdout
     );
 
+    run_cli(a.path(), ["service", "start", "test-tcp@b"]);
+    let mut stream = connect_with_retry(&local_addr, Duration::from_secs(5));
+    stream.write_all(b"ping").unwrap();
+    let mut response = [0_u8; 4];
+    stream.read_exact(&mut response).unwrap();
+    assert_eq!(
+        &response, b"pong",
+        "remote service start should restore the saved local listener"
+    );
+    server.join().unwrap();
+
+    let output = run_cli(a.path(), ["test-tcp@b"]);
+    let restarted_local_addr = extract_local_address(&output.stdout);
+    assert_eq!(
+        restarted_local_addr, local_addr,
+        "remote service restart should reuse the saved local address"
+    );
+
+    run_cli(a.path(), ["service", "disconnect", "test-tcp@b"]);
+    assert!(
+        TcpStream::connect(&local_addr).is_err(),
+        "service disconnect should release the local listener"
+    );
+    let output = run_cli(a.path(), ["test-tcp@b"]);
+    let reconnected_local_addr = extract_local_address(&output.stdout);
+    assert_eq!(
+        reconnected_local_addr, local_addr,
+        "service reconnect should reuse the saved local address"
+    );
+
     run_cli(a.path(), ["device", "remove", "b"]);
+    let access_json =
+        std::fs::read_to_string(a.path().join("cache").join("local_preferences.json")).unwrap();
+    assert!(
+        !access_json.contains("test-tcp"),
+        "device remove should clear local preferences"
+    );
     let output = run_cli(a.path(), ["device"]);
     assert!(
         !output.stdout.contains(" - b "),

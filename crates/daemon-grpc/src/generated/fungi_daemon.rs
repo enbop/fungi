@@ -587,6 +587,13 @@ pub struct DetachServiceAccessRequest {
     pub service_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ForgetServiceAccessRequest {
+    #[prost(string, tag = "1")]
+    pub peer_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub service_name: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListServiceAccessesRequest {
     #[prost(string, tag = "1")]
     pub peer_id: ::prost::alloc::string::String,
@@ -1619,7 +1626,7 @@ pub mod fungi_daemon_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        /// Creates local access entries for all named endpoints of a published remote service.
+        /// Creates or updates local address listeners for named endpoints of a published remote service.
         pub async fn attach_service_access(
             &mut self,
             request: impl tonic::IntoRequest<super::AttachServiceAccessRequest>,
@@ -1639,7 +1646,7 @@ pub mod fungi_daemon_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        /// Removes local access entries for a previously attached remote service.
+        /// Disconnects local listeners for a remote service while keeping saved address preferences.
         pub async fn detach_service_access(
             &mut self,
             request: impl tonic::IntoRequest<super::DetachServiceAccessRequest>,
@@ -1658,7 +1665,26 @@ pub mod fungi_daemon_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        /// Lists service access entries currently attached on the local node.
+        /// Deletes saved local address preferences for a remote service.
+        pub async fn forget_service_access(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ForgetServiceAccessRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/fungi_daemon.FungiDaemon/ForgetServiceAccess",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "fungi_daemon.FungiDaemon",
+                "ForgetServiceAccess",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Lists saved local address preferences on the local node.
         pub async fn list_service_accesses(
             &mut self,
             request: impl tonic::IntoRequest<super::ListServiceAccessesRequest>,
@@ -1946,17 +1972,22 @@ pub mod fungi_daemon_server {
             &self,
             request: tonic::Request<super::RemotePeerRequest>,
         ) -> std::result::Result<tonic::Response<super::ListServicesResponse>, tonic::Status>;
-        /// Creates local access entries for all named endpoints of a published remote service.
+        /// Creates or updates local address listeners for named endpoints of a published remote service.
         async fn attach_service_access(
             &self,
             request: tonic::Request<super::AttachServiceAccessRequest>,
         ) -> std::result::Result<tonic::Response<super::ServiceAccessResponse>, tonic::Status>;
-        /// Removes local access entries for a previously attached remote service.
+        /// Disconnects local listeners for a remote service while keeping saved address preferences.
         async fn detach_service_access(
             &self,
             request: tonic::Request<super::DetachServiceAccessRequest>,
         ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
-        /// Lists service access entries currently attached on the local node.
+        /// Deletes saved local address preferences for a remote service.
+        async fn forget_service_access(
+            &self,
+            request: tonic::Request<super::ForgetServiceAccessRequest>,
+        ) -> std::result::Result<tonic::Response<super::Empty>, tonic::Status>;
+        /// Lists saved local address preferences on the local node.
         async fn list_service_accesses(
             &self,
             request: tonic::Request<super::ListServiceAccessesRequest>,
@@ -3977,6 +4008,48 @@ pub mod fungi_daemon_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = DetachServiceAccessSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/fungi_daemon.FungiDaemon/ForgetServiceAccess" => {
+                    #[allow(non_camel_case_types)]
+                    struct ForgetServiceAccessSvc<T: FungiDaemon>(pub Arc<T>);
+                    impl<T: FungiDaemon>
+                        tonic::server::UnaryService<super::ForgetServiceAccessRequest>
+                        for ForgetServiceAccessSvc<T>
+                    {
+                        type Response = super::Empty;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ForgetServiceAccessRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as FungiDaemon>::forget_service_access(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ForgetServiceAccessSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

@@ -302,24 +302,6 @@ fn parses_service_disconnect_reference() {
 }
 
 #[test]
-fn parses_service_set_local_port() {
-    let args =
-        FungiArgs::try_parse_from(["fungi", "service", "set", "home-ssh@nas", "local.port=2222"])
-            .unwrap();
-
-    let Commands::Service(ServiceArgs {
-        command: Some(ServiceCommands::Set { service, setting }),
-        ..
-    }) = args.command
-    else {
-        panic!("expected service set command");
-    };
-
-    assert_eq!(service, "home-ssh@nas");
-    assert_eq!(setting, "local.port=2222");
-}
-
-#[test]
 fn parses_service_list_with_device() {
     let args = FungiArgs::try_parse_from(["fungi", "service", "--device", "home", "list"]).unwrap();
 
@@ -679,7 +661,7 @@ fn root_help_omits_removed_legacy_commands_and_hides_service_plumbing_commands()
 }
 
 #[test]
-fn service_help_hides_pull_shortcut_from_main_path() {
+fn service_help_hides_open_and_pull_shortcuts_from_main_path() {
     let mut command = FungiArgs::command();
     let service = command
         .find_subcommand_mut("service")
@@ -688,8 +670,9 @@ fn service_help_hides_pull_shortcut_from_main_path() {
 
     assert!(help.contains("  apply"));
     assert!(!help.contains("  add"));
-    assert!(help.contains("  open"));
+    assert!(!help.contains("  open"));
     assert!(help.contains("  connect"));
+    assert!(!help.contains("  set"));
     assert!(!help.contains("  pull"));
     assert!(!help.contains("on this device or another device"));
 }
