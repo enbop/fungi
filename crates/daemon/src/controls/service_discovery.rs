@@ -1,4 +1,4 @@
-use crate::{CatalogService, RuntimeControl};
+use crate::{DeviceService, RuntimeControl};
 use anyhow::Result;
 use fungi_stream::IncomingStreams;
 use fungi_swarm::SwarmControl;
@@ -35,7 +35,7 @@ impl ServiceDiscoveryControl {
         Ok(())
     }
 
-    pub async fn list_peer_services(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
+    pub async fn list_peer_services(&self, peer_id: PeerId) -> Result<Vec<DeviceService>> {
         let (mut stream, _handle, _connection_id) = self
             .swarm_control
             .open_stream(peer_id, FUNGI_SERVICE_DISCOVERY_PROTOCOL)
@@ -55,10 +55,6 @@ impl ServiceDiscoveryControl {
         Ok(services)
     }
 
-    pub async fn list_peer_catalog(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
-        self.list_peer_services(peer_id).await
-    }
-
     async fn listen_from_incoming_streams(self, mut incoming_streams: IncomingStreams) {
         while let Some(incoming_stream) = incoming_streams.next().await {
             let peer_id = incoming_stream.peer_id;
@@ -66,7 +62,7 @@ impl ServiceDiscoveryControl {
 
             let this = self.clone();
             tokio::spawn(async move {
-                let services = match this.runtime_control.list_catalog_services().await {
+                let services = match this.runtime_control.list_published_device_services().await {
                     Ok(services) => services,
                     Err(error) => {
                         log::warn!("Failed to list exposed services for discovery: {}", error);

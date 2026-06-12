@@ -197,9 +197,6 @@ fn migrate_legacy_service_manifest(
     let icon_url = expose
         .as_ref()
         .and_then(|expose| normalize_optional(expose.icon_url.clone()));
-    let catalog_id = expose
-        .as_ref()
-        .and_then(|expose| normalize_optional(expose.catalog_id.clone()));
     let entries = manifest
         .ports
         .into_iter()
@@ -222,7 +219,6 @@ fn migrate_legacy_service_manifest(
                     usage,
                     path: path.clone(),
                     icon_url: icon_url.clone(),
-                    catalog_id: catalog_id.clone(),
                 },
             )
         })
@@ -356,7 +352,8 @@ struct LegacyServiceExpose {
     _transport: LegacyServiceExposeTransport,
     usage: Option<LegacyServiceExposeUsage>,
     icon_url: Option<String>,
-    catalog_id: Option<String>,
+    #[serde(rename = "catalog_id")]
+    _catalog_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -510,9 +507,6 @@ struct CurrentServiceManifestEntry {
     #[serde(rename = "iconUrl")]
     #[serde(skip_serializing_if = "Option::is_none")]
     icon_url: Option<String>,
-    #[serde(rename = "catalogId")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    catalog_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

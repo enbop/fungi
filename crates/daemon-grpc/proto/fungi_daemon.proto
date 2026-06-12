@@ -127,17 +127,9 @@ service FungiDaemon {
   // Resolves one official recipe into a concrete manifest for local or remote pull.
   rpc ResolveRecipe(ResolveRecipeRequest) returns (ResolveRecipeResponse) {}
 
-  // Lists services published by a device for consumption.
-  rpc ListDevicePublishedServices(ListDeviceServicesRequest)
-  returns (ListServicesResponse) {}
-
-  // Lists services managed on a device, including stopped ones.
-  rpc ListDeviceManagedServices(ListDeviceServicesRequest)
-  returns (ListServicesResponse) {}
-
-    // Compatibility alias for services published by a remote peer for consumption.
-  rpc ListPeerCatalog(ListPeerCatalogRequest)
-  returns (ListPeerCatalogResponse) {}
+  // Returns a lightweight cached or refreshed service snapshot for one device.
+  rpc GetDeviceServiceSnapshot(DeviceServiceSnapshotRequest)
+  returns (DeviceServiceSnapshotResponse) {}
 
     // Queries a remote peer for a minimal node runtime capability summary.
   rpc GetPeerCapabilitySummary(GetPeerCapabilitySummaryRequest)
@@ -500,16 +492,15 @@ message ResolveRecipeResponse {
   repeated string warnings               = 5;
 }
 
-message ListPeerCatalogRequest {
-  string peer_id = 1;
-  bool   cached  = 2;
+message DeviceServiceSnapshotRequest {
+  string device_id = 1;
+  bool   refresh   = 2;
 }
 
-message ListPeerCatalogResponse { string services_json = 1; }
-
-message ListDeviceServicesRequest {
-  string device_id = 1;
-  bool   cached    = 2;
+message DeviceServiceSnapshotResponse {
+  string snapshot_json = 1;
+  string source        = 2;
+  string error         = 3;
 }
 
 message GetPeerCapabilitySummaryRequest { string peer_id = 1; }

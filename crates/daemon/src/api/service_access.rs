@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     net::TcpListener as StdTcpListener,
+    time::Duration,
 };
 
 use anyhow::{Result, bail};
@@ -10,7 +11,7 @@ use fungi_config::{
 };
 use libp2p::PeerId;
 
-use crate::{CatalogServiceEndpoint, FungiDaemon};
+use crate::{DeviceServiceEndpoint, FungiDaemon};
 
 use super::types::{ServiceAccess, ServiceAccessEndpoint};
 
@@ -44,6 +45,49 @@ impl FungiDaemon {
         self.add_service_access_forwarding_rule_internal(rule).await
     }
 
+    async fn restore_service_access_forwarding_record(
+        &self,
+        record: &LocalServicePreference,
+        endpoint: &DeviceServiceEndpoint,
+    ) -> Result<()> {
+        let remote_port = device_service_endpoint_listen_port(endpoint);
+        let existing_active_rule = find_active_rule(
+            &self.get_service_access_forwarding_rules(),
+            &record.remote_peer_id,
+            &record.remote_service_name,
+            &record.remote_service_port_name,
+        );
+
+        let active_rule_matches = existing_active_rule.as_ref().is_some_and(|(_, rule)| {
+            rule.local_host == record.local_host
+                && rule.local_port == record.local_port
+                && rule.remote_port == remote_port
+                && rule.remote_protocol.as_deref() == Some(endpoint.protocol.as_str())
+        });
+        if active_rule_matches {
+            return Ok(());
+        }
+
+        let mut removed_active_rule = None;
+        if let Some((rule_id, rule)) = existing_active_rule {
+            self.remove_service_access_forwarding_rule_internal(&rule_id)?;
+            removed_active_rule = Some(rule);
+        }
+
+        match self
+            .start_service_access_forwarding_rule(record, endpoint.protocol.clone(), remote_port)
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(error) => {
+                if let Some(rule) = removed_active_rule {
+                    self.restore_service_access_forwarding_rule(rule).await;
+                }
+                Err(error)
+            }
+        }
+    }
+
     async fn restore_service_access_forwarding_rule(&self, rule: ForwardingRule) {
         if let Err(error) = self.add_service_access_forwarding_rule_internal(rule).await {
             log::warn!(
@@ -60,16 +104,18 @@ impl FungiDaemon {
         entry: Option<String>,
         local_port: Option<u16>,
     ) -> Result<ServiceAccess> {
-        let catalog_services = self.list_peer_catalog(peer_id).await?;
-        let service = catalog_services
+        let snapshot = self.get_device_service_snapshot(peer_id, true).await?;
+        let service = snapshot
+            .snapshot
+            .services
             .into_iter()
-            .find(|service| service.service_name == service_name)
+            .find(|service| service.name == service_name)
             .ok_or_else(|| anyhow::anyhow!("remote service not found: {}", service_name))?;
 
         if service.endpoints.is_empty() {
             bail!(
                 "remote service exposes no named TCP endpoints: {}",
-                service.service_name
+                service.name
             );
         }
 
@@ -107,14 +153,14 @@ impl FungiDaemon {
         }
 
         for endpoint in endpoints {
-            let remote_port = catalog_endpoint_listen_port(&endpoint);
+            let remote_port = device_service_endpoint_listen_port(&endpoint);
             let existing_record = local_preferences
-                .find_record(&peer_id_string, &service.service_name, &endpoint.name)
+                .find_record(&peer_id_string, &service.name, &endpoint.name)
                 .cloned();
             let existing_active_rule = find_active_rule(
                 &active_rules,
                 &peer_id_string,
-                &service.service_name,
+                &service.name,
                 &endpoint.name,
             );
 
@@ -158,7 +204,7 @@ impl FungiDaemon {
 
             let record = LocalServicePreference {
                 remote_peer_id: peer_id_string.clone(),
-                remote_service_name: service.service_name.clone(),
+                remote_service_name: service.name.clone(),
                 remote_service_port_name: endpoint.name.clone(),
                 local_host: "127.0.0.1".to_string(),
                 local_port: selected_local_port,
@@ -230,9 +276,147 @@ impl FungiDaemon {
         enabled_endpoints.sort_by(|left, right| left.name.cmp(&right.name));
         Ok(ServiceAccess {
             peer_id: peer_id_string,
-            service_name: service.service_name,
+            service_name: service.name,
             endpoints: enabled_endpoints,
         })
+    }
+
+    pub async fn restore_saved_service_access_from_snapshots(&self) {
+        let records = match self.local_preference_records().await {
+            Ok(records) => records,
+            Err(error) => {
+                log::warn!("Failed to read local service access preferences: {}", error);
+                return;
+            }
+        };
+
+        if records.is_empty() {
+            return;
+        }
+
+        self.restore_service_access_records_from_cached_snapshots(&records)
+            .await;
+
+        let mut peer_ids = BTreeSet::new();
+        for record in &records {
+            match record.remote_peer_id.parse::<PeerId>() {
+                Ok(peer_id) => {
+                    peer_ids.insert(peer_id);
+                }
+                Err(error) => {
+                    log::warn!(
+                        "Skipping service access restore for invalid peer id '{}': {}",
+                        record.remote_peer_id,
+                        error
+                    );
+                }
+            }
+        }
+
+        for peer_id in peer_ids {
+            match tokio::time::timeout(
+                Duration::from_secs(5),
+                self.refresh_device_service_snapshot(peer_id),
+            )
+            .await
+            {
+                Ok(Ok(_)) => {}
+                Ok(Err(error)) => {
+                    log::warn!(
+                        "Failed to refresh device service snapshot during startup restore for {}: {}",
+                        peer_id,
+                        error
+                    );
+                }
+                Err(_) => {
+                    log::warn!(
+                        "Timed out refreshing device service snapshot during startup restore for {}",
+                        peer_id
+                    );
+                }
+            }
+        }
+
+        self.restore_service_access_records_from_cached_snapshots(&records)
+            .await;
+    }
+
+    async fn local_preference_records(&self) -> Result<Vec<LocalServicePreference>> {
+        let local_preferences_lock = self.local_preferences_lock();
+        let _local_preferences_guard = local_preferences_lock.lock().await;
+        Ok(self.local_preferences()?.records)
+    }
+
+    async fn restore_service_access_records_from_cached_snapshots(
+        &self,
+        records: &[LocalServicePreference],
+    ) {
+        for record in records {
+            let peer_id = match record.remote_peer_id.parse::<PeerId>() {
+                Ok(peer_id) => peer_id,
+                Err(_) => continue,
+            };
+            let snapshot = match self.load_device_service_snapshot(peer_id) {
+                Ok(Some(snapshot)) => snapshot,
+                Ok(None) => {
+                    log::debug!(
+                        "No cached device service snapshot for {}; skipping service access restore",
+                        record.remote_peer_id
+                    );
+                    continue;
+                }
+                Err(error) => {
+                    log::warn!(
+                        "Failed to load cached device service snapshot for {}: {}",
+                        record.remote_peer_id,
+                        error
+                    );
+                    continue;
+                }
+            };
+
+            let Some(service) = snapshot
+                .services
+                .iter()
+                .find(|service| service.name == record.remote_service_name)
+            else {
+                log::warn!(
+                    "Cached device service snapshot for {} does not include service {}; skipping service access restore",
+                    record.remote_peer_id,
+                    record.remote_service_name
+                );
+                continue;
+            };
+
+            let Some(endpoint) = service
+                .endpoints
+                .iter()
+                .find(|endpoint| endpoint.name == record.remote_service_port_name)
+            else {
+                log::warn!(
+                    "Cached device service snapshot for {} service {} does not include entry {}; skipping service access restore",
+                    record.remote_peer_id,
+                    record.remote_service_name,
+                    record.remote_service_port_name
+                );
+                continue;
+            };
+
+            if let Err(error) = self
+                .restore_service_access_forwarding_record(record, endpoint)
+                .await
+            {
+                log::warn!(
+                    "Failed to restore local listener for {}@{} entry {} on {}:{}: {}",
+                    record.remote_service_name,
+                    record.remote_peer_id,
+                    record.remote_service_port_name,
+                    record.local_host,
+                    record.local_port,
+                    error
+                );
+            }
+        }
     }
 
     pub fn detach_service_access(&self, peer_id: PeerId, service_name: String) -> Result<()> {
@@ -391,7 +575,7 @@ fn find_active_rule(
         .cloned()
 }
 
-fn catalog_endpoint_listen_port(endpoint: &CatalogServiceEndpoint) -> u16 {
+fn device_service_endpoint_listen_port(endpoint: &DeviceServiceEndpoint) -> u16 {
     if endpoint.host_port == 0 {
         endpoint.service_port
     } else {
@@ -620,7 +804,6 @@ mod tests {
                     path: None,
                 }),
                 icon_url: None,
-                catalog_id: None,
             }),
             env: BTreeMap::new(),
             mounts: Vec::<ServiceMount>::new(),

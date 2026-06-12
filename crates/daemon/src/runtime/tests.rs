@@ -193,7 +193,6 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
                 path: Some("/".into()),
             }),
             icon_url: None,
-            catalog_id: None,
         }),
         env: BTreeMap::new(),
         mounts: vec![ServiceMount {
@@ -277,7 +276,6 @@ fn wasmtime_tcp_entry_runs_command_with_network_permissions() {
                 path: None,
             }),
             icon_url: None,
-            catalog_id: None,
         }),
         env: BTreeMap::new(),
         mounts: Vec::new(),
@@ -394,7 +392,6 @@ fn wasmtime_http_mode_without_tcp_port_returns_error() {
                 path: Some("/".into()),
             }),
             icon_url: None,
-            catalog_id: None,
         }),
         env: BTreeMap::new(),
         mounts: Vec::new(),
@@ -1240,7 +1237,7 @@ publish:
 }
 
 #[test]
-fn parse_fungi_service_expose_maps_icon_url_and_catalog_id() {
+fn parse_fungi_service_expose_maps_icon_url() {
     let yaml = r#"
 fungi: service/v1
 id: filebrowser
@@ -1256,7 +1253,6 @@ publish:
       kind: web
       path: /
       iconUrl: https://example.test/icon.svg
-      catalogId: io.example.filebrowser
 "#;
 
     let manifest = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
@@ -1266,11 +1262,8 @@ publish:
         expose.icon_url.as_deref(),
         Some("https://example.test/icon.svg")
     );
-    assert_eq!(expose.catalog_id.as_deref(), Some("io.example.filebrowser"));
-
     let rendered = service_manifest_to_yaml(&manifest).unwrap();
     assert!(rendered.contains("iconUrl: https://example.test/icon.svg"));
-    assert!(rendered.contains("catalogId: io.example.filebrowser"));
 }
 
 #[test]

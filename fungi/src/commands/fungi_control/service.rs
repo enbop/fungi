@@ -1,26 +1,23 @@
+use std::io::{self, Write};
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use std::process::Command;
-use std::{
-    collections::BTreeSet,
-    io::{self, Write},
-};
 
 use clap::{Args, Subcommand};
-use fungi_config::{FungiConfig, FungiDir, paths::FungiPaths, service_cache::ServiceCache};
+use fungi_config::{FungiConfig, FungiDir, paths::FungiPaths};
 use fungi_daemon::{
-    CatalogService, RuntimeKind, ServiceAccess, ServiceExposeUsageKind, ServiceInstance,
-    ServicePhase, ServicePortProtocol, ServiceStatus, parse_service_manifest_yaml,
-    service_manifest_with_instance_name,
+    DeviceService, DeviceServiceSnapshot, RuntimeKind, ServiceAccess, ServiceExposeEndpointBinding,
+    ServiceExposeUsageKind, ServiceInstance, ServicePhase, ServicePortProtocol, ServiceStatus,
+    parse_service_manifest_yaml, service_manifest_with_instance_name,
 };
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
-        AttachServiceAccessRequest, DetachServiceAccessRequest, DeviceInfo, Empty,
-        GetRecipeRequest, GetServiceLogsRequest, ListDeviceServicesRequest, ListRecipesRequest,
-        ListRecipesResponse, ListServiceAccessesRequest, ListServicesResponse, PullServiceRequest,
-        RecipeDetail, RecipeRuntimeKind, RecipeSummary, RemotePullServiceRequest,
-        RemoteServiceControlResponse, RemoteServiceNameRequest, ResolveRecipeRequest,
-        ServiceInstanceResponse, ServiceNameRequest,
+        AttachServiceAccessRequest, DetachServiceAccessRequest, DeviceInfo,
+        DeviceServiceSnapshotRequest, Empty, GetRecipeRequest, GetServiceLogsRequest,
+        ListRecipesRequest, ListRecipesResponse, ListServiceAccessesRequest, ListServicesResponse,
+        PullServiceRequest, RecipeDetail, RecipeRuntimeKind, RecipeSummary,
+        RemotePullServiceRequest, RemoteServiceControlResponse, RemoteServiceNameRequest,
+        ResolveRecipeRequest, ServiceInstanceResponse, ServiceNameRequest,
     },
 };
 use serde::Serialize;
@@ -38,7 +35,7 @@ use super::{
 type RpcClient = fungi_daemon_grpc::fungi_daemon_grpc::fungi_daemon_client::FungiDaemonClient<
     tonic::transport::Channel,
 >;
-type RemoteService = CatalogService;
+type RemoteService = DeviceService;
 
 const SERVICE_APPLY_USAGE: &str = "Use `fungi service apply <name[@device]> <file>`, `fungi service apply <name[@device]> --recipe <id>`, or `fungi service apply --create` to create interactively.";
 
@@ -188,22 +185,10 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
         ServiceCommands::List { verbose, refresh } => {
             if let Some(device) = device {
                 print_target_device(&device);
-                let req = ListDeviceServicesRequest {
-                    device_id: device.peer_id,
-                    cached: false,
-                };
-                match client.list_device_managed_services(Request::new(req)).await {
-                    Ok(resp) => print_service_instances(resp.into_inner(), verbose),
-                    Err(error) => fatal_grpc(error),
-                }
+                let instances = list_remote_service_instances(&mut client, &device.peer_id).await;
+                print_service_instances_value(instances, verbose);
             } else {
-                print_service_overview(
-                    &args,
-                    &mut client,
-                    verbose,
-                    service_args.refresh || refresh,
-                )
-                .await;
+                print_service_overview(&mut client, verbose, service_args.refresh || refresh).await;
             }
         }
         ServiceCommands::Apply {
@@ -1189,11 +1174,17 @@ fn is_remote_device_reachability_error(error: &tonic::Status) -> bool {
 }
 
 async fn refresh_remote_device_services(client: &mut RpcClient, peer_id: &str) {
-    if let Err(error) = fetch_remote_managed_services(client, peer_id).await {
-        eprintln!("Warning: failed to refresh remote managed service cache: {error}");
-    }
-    if let Err(error) = fetch_remote_services(client, peer_id).await {
-        eprintln!("Warning: failed to refresh remote published service cache: {error}");
+    match fetch_device_service_snapshot(client, peer_id, true).await {
+        Ok(snapshot) => {
+            if let Some(error) = snapshot.error {
+                eprintln!(
+                    "Warning: failed to refresh device service snapshot; using cached data: {error}"
+                );
+            }
+        }
+        Err(error) => {
+            eprintln!("Warning: failed to load device service snapshot: {error}");
+        }
     }
 }
 
@@ -1263,12 +1254,7 @@ async fn find_local_service(client: &mut RpcClient, service: &str) -> Option<Ser
         .find(|instance| instance.name == service || instance.id == service)
 }
 
-async fn print_service_overview(
-    args: &CommonArgs,
-    client: &mut RpcClient,
-    verbose: bool,
-    refresh: bool,
-) {
+async fn print_service_overview(client: &mut RpcClient, verbose: bool, refresh: bool) {
     let mut rows = Vec::new();
 
     let local_services = list_local_service_instances(client).await;
@@ -1282,41 +1268,20 @@ async fn print_service_overview(
     if refresh {
         for device in devices {
             let saved_accesses = list_accesses(client, &device.peer_id).await;
-            let managed = fetch_remote_managed_services(client, &device.peer_id).await;
-            let published = fetch_remote_services(client, &device.peer_id).await;
+            let snapshot = fetch_device_service_snapshot(client, &device.peer_id, true).await;
             add_remote_service_overview_rows(
                 &mut rows,
                 &device,
                 &saved_accesses,
-                managed,
-                published,
+                snapshot,
                 verbose,
-                false,
             );
         }
     } else {
-        let published_cache = ServiceCache::apply_published_services_from_dir(&args.fungi_dir())
-            .unwrap_or_else(|error| fatal(format!("Failed to load remote service cache: {error}")));
-        let managed_cache = ServiceCache::apply_managed_services_from_dir(&args.fungi_dir())
-            .unwrap_or_else(|error| {
-                fatal(format!(
-                    "Failed to load remote managed service cache: {error}"
-                ))
-            });
         for device in devices {
             let accesses = list_accesses(client, &device.peer_id).await;
-            let cached_published = load_cached_remote_services(&published_cache, &device.peer_id);
-            let cached_managed =
-                load_cached_remote_managed_services(&managed_cache, &device.peer_id);
-            add_cached_remote_service_overview_rows(
-                &mut rows,
-                &device,
-                &accesses,
-                cached_managed.unwrap_or_default(),
-                cached_published.unwrap_or_default(),
-                verbose,
-                true,
-            );
+            let snapshot = fetch_device_service_snapshot(client, &device.peer_id, false).await;
+            add_remote_service_overview_rows(&mut rows, &device, &accesses, snapshot, verbose);
         }
     }
 
@@ -1328,29 +1293,21 @@ fn add_remote_service_overview_rows(
     rows: &mut Vec<ServiceOverviewRow>,
     device: &DeviceInfo,
     saved_accesses: &[ServiceAccess],
-    managed: Result<Vec<ServiceInstance>, String>,
-    published: Result<Vec<RemoteService>, String>,
+    snapshot: Result<DeviceServiceSnapshotView, String>,
     verbose: bool,
-    cached: bool,
 ) {
-    match (managed, published) {
-        (Err(managed_error), Err(published_error)) => {
-            rows.push(ServiceOverviewRow::remote_unavailable(
-                device,
-                format!("{managed_error}; {published_error}"),
-            ));
+    match snapshot {
+        Err(error) => {
+            rows.push(ServiceOverviewRow::remote_unavailable(device, error));
         }
-        (managed, published) => {
-            let managed = managed.unwrap_or_default();
-            let published = published.unwrap_or_default();
+        Ok(snapshot) => {
             add_cached_remote_service_overview_rows(
                 rows,
                 device,
                 saved_accesses,
-                managed,
-                published,
+                snapshot.snapshot.services,
                 verbose,
-                cached,
+                snapshot.source != "live",
             );
         }
     }
@@ -1360,14 +1317,11 @@ fn add_cached_remote_service_overview_rows(
     rows: &mut Vec<ServiceOverviewRow>,
     device: &DeviceInfo,
     saved_accesses: &[ServiceAccess],
-    managed: Vec<ServiceInstance>,
-    published: Vec<RemoteService>,
+    services: Vec<RemoteService>,
     verbose: bool,
     cached: bool,
 ) {
-    let mut published_names = BTreeSet::new();
-    for service in published {
-        published_names.insert(service.service_name.clone());
+    for service in services {
         rows.push(ServiceOverviewRow::from_remote_service(
             service,
             device,
@@ -1375,17 +1329,6 @@ fn add_cached_remote_service_overview_rows(
             verbose,
             cached,
         ));
-    }
-
-    for service in managed {
-        if !published_names.contains(&service.name) {
-            rows.push(ServiceOverviewRow::from_remote_managed_service(
-                service,
-                device,
-                saved_accesses,
-                verbose,
-            ));
-        }
     }
 }
 
@@ -1407,122 +1350,73 @@ async fn list_remote_service_instances(
     client: &mut RpcClient,
     peer_id: &str,
 ) -> Vec<ServiceInstance> {
-    match fetch_remote_managed_services(client, peer_id).await {
-        Ok(services) => services,
+    match fetch_device_service_snapshot(client, peer_id, true).await {
+        Ok(snapshot) => snapshot
+            .snapshot
+            .services
+            .into_iter()
+            .map(device_service_to_instance)
+            .collect(),
         Err(error) => fatal(error),
     }
 }
 
-async fn fetch_remote_managed_services(
+fn device_service_to_instance(service: DeviceService) -> ServiceInstance {
+    ServiceInstance {
+        id: format!("remote:{}", service.name),
+        runtime: service.runtime,
+        name: service.name,
+        definition_id: None,
+        source: String::new(),
+        labels: Default::default(),
+        ports: service.ports,
+        exposed_endpoints: service
+            .endpoints
+            .into_iter()
+            .map(|endpoint| ServiceExposeEndpointBinding {
+                name: endpoint.name,
+                protocol: endpoint.protocol,
+                host_port: endpoint.host_port,
+                service_port: endpoint.service_port,
+            })
+            .collect(),
+        status: service.status,
+    }
+}
+
+#[derive(Debug)]
+struct DeviceServiceSnapshotView {
+    snapshot: DeviceServiceSnapshot,
+    source: String,
+    error: Option<String>,
+}
+
+async fn fetch_device_service_snapshot(
     client: &mut RpcClient,
     peer_id: &str,
-) -> Result<Vec<ServiceInstance>, String> {
-    let req = ListDeviceServicesRequest {
+    refresh: bool,
+) -> Result<DeviceServiceSnapshotView, String> {
+    let req = DeviceServiceSnapshotRequest {
         device_id: peer_id.to_string(),
-        cached: false,
+        refresh,
     };
-    match client.list_device_managed_services(Request::new(req)).await {
-        Ok(resp) => serde_json::from_str::<Vec<ServiceInstance>>(&resp.into_inner().services_json)
-            .map_err(|error| format!("Failed to decode remote managed services: {error}")),
+    match client.get_device_service_snapshot(Request::new(req)).await {
+        Ok(resp) => {
+            let resp = resp.into_inner();
+            let snapshot = serde_json::from_str::<DeviceServiceSnapshot>(&resp.snapshot_json)
+                .map_err(|error| format!("Failed to decode device service snapshot: {error}"))?;
+            Ok(DeviceServiceSnapshotView {
+                snapshot,
+                source: resp.source,
+                error: if resp.error.is_empty() {
+                    None
+                } else {
+                    Some(resp.error)
+                },
+            })
+        }
         Err(error) => Err(error.message().to_string()),
     }
-}
-
-async fn fetch_remote_services(
-    client: &mut RpcClient,
-    peer_id: &str,
-) -> Result<Vec<RemoteService>, String> {
-    let req = ListDeviceServicesRequest {
-        device_id: peer_id.to_string(),
-        cached: false,
-    };
-    match client
-        .list_device_published_services(Request::new(req))
-        .await
-    {
-        Ok(resp) => serde_json::from_str::<Vec<RemoteService>>(&resp.into_inner().services_json)
-            .map_err(|error| format!("Failed to decode remote services: {error}")),
-        Err(error) => Err(error.message().to_string()),
-    }
-}
-
-async fn fetch_cached_remote_services(client: &mut RpcClient, peer_id: &str) -> Vec<RemoteService> {
-    let req = ListDeviceServicesRequest {
-        device_id: peer_id.to_string(),
-        cached: true,
-    };
-    match client
-        .list_device_published_services(Request::new(req))
-        .await
-    {
-        Ok(resp) => {
-            match serde_json::from_str::<Vec<RemoteService>>(&resp.into_inner().services_json) {
-                Ok(services) => services,
-                Err(error) => fatal(format!("Failed to decode cached remote services: {error}")),
-            }
-        }
-        Err(error) => fatal_grpc(error),
-    }
-}
-
-async fn fetch_cached_remote_managed_services(
-    client: &mut RpcClient,
-    peer_id: &str,
-) -> Vec<ServiceInstance> {
-    let req = ListDeviceServicesRequest {
-        device_id: peer_id.to_string(),
-        cached: true,
-    };
-    match client.list_device_managed_services(Request::new(req)).await {
-        Ok(resp) => {
-            match serde_json::from_str::<Vec<ServiceInstance>>(&resp.into_inner().services_json) {
-                Ok(services) => services,
-                Err(error) => fatal(format!(
-                    "Failed to decode cached remote managed services: {error}"
-                )),
-            }
-        }
-        Err(error) => fatal_grpc(error),
-    }
-}
-
-fn load_cached_remote_services(cache: &ServiceCache, peer_id: &str) -> Option<Vec<RemoteService>> {
-    let Some(services_json) = cache
-        .get_device_services_json(peer_id)
-        .unwrap_or_else(|error| fatal(format!("Failed to read remote service cache: {error}")))
-    else {
-        return None;
-    };
-
-    Some(
-        serde_json::from_str::<Vec<RemoteService>>(&services_json).unwrap_or_else(|error| {
-            fatal(format!("Failed to decode cached remote services: {error}"))
-        }),
-    )
-}
-
-fn load_cached_remote_managed_services(
-    cache: &ServiceCache,
-    peer_id: &str,
-) -> Option<Vec<ServiceInstance>> {
-    let Some(services_json) = cache
-        .get_device_services_json(peer_id)
-        .unwrap_or_else(|error| {
-            fatal(format!(
-                "Failed to read remote managed service cache: {error}"
-            ))
-        })
-    else {
-        return None;
-    };
-
-    Some(
-        serde_json::from_str::<Vec<ServiceInstance>>(&services_json).unwrap_or_else(|error| {
-            fatal(format!(
-                "Failed to decode cached remote managed services: {error}"
-            ))
-        }),
-    )
 }
 
 async fn cached_device_service_exists(
@@ -1530,14 +1424,16 @@ async fn cached_device_service_exists(
     peer_id: &str,
     service_name: &str,
 ) -> bool {
-    fetch_cached_remote_managed_services(client, peer_id)
+    fetch_device_service_snapshot(client, peer_id, false)
         .await
-        .iter()
-        .any(|service| service.name == service_name)
-        || fetch_cached_remote_services(client, peer_id)
-            .await
-            .iter()
-            .any(|service| service.service_name == service_name)
+        .map(|snapshot| {
+            snapshot
+                .snapshot
+                .services
+                .iter()
+                .any(|service| service.name == service_name)
+        })
+        .unwrap_or(false)
 }
 
 async fn inspect_remote_service(
@@ -1597,22 +1493,16 @@ async fn discover_remote_service(
     service_name: &str,
     service_ref: &str,
 ) -> RemoteService {
-    if let Some(service) = fetch_cached_remote_services(client, peer_id)
-        .await
-        .into_iter()
-        .find(|service| service.service_name == service_name)
-    {
-        return service;
-    }
-
-    let services = match fetch_remote_services(client, peer_id).await {
-        Ok(services) => services,
+    let snapshot = match fetch_device_service_snapshot(client, peer_id, true).await {
+        Ok(snapshot) => snapshot,
         Err(error) => fatal(error),
     };
 
-    if let Some(service) = services
+    if let Some(service) = snapshot
+        .snapshot
+        .services
         .into_iter()
-        .find(|service| service.service_name == service_name)
+        .find(|service| service.name == service_name && !service.endpoints.is_empty())
     {
         return service;
     }
@@ -1628,15 +1518,15 @@ async fn remote_service_unavailable_message(
     service_name: &str,
     service_ref: &str,
 ) -> String {
-    let managed = find_remote_managed_service(client, peer_id, service_name).await;
-    let Some(managed) = managed else {
+    let service = find_remote_service(client, peer_id, service_name).await;
+    let Some(service) = service else {
         return format!("Remote service not found: {service_ref}");
     };
 
-    if !managed.status.is_running() {
+    if !service.status.is_running() {
         return format!(
             "Remote service {service_ref} exists but is not running (phase: {}). Start it with:\n  fungi service start {service_ref}",
-            managed.status.phase
+            service.status.phase
         );
     }
 
@@ -1645,23 +1535,27 @@ async fn remote_service_unavailable_message(
     )
 }
 
-async fn find_remote_managed_service(
+async fn find_remote_service(
     client: &mut RpcClient,
     peer_id: &str,
     service_name: &str,
-) -> Option<ServiceInstance> {
-    if let Ok(services) = fetch_remote_managed_services(client, peer_id).await
-        && let Some(service) = services
+) -> Option<RemoteService> {
+    if let Ok(snapshot) = fetch_device_service_snapshot(client, peer_id, true).await
+        && let Some(service) = snapshot
+            .snapshot
+            .services
             .into_iter()
             .find(|service| service.name == service_name)
     {
         return Some(service);
     }
 
-    if let Some(service) = fetch_cached_remote_managed_services(client, peer_id)
-        .await
-        .into_iter()
-        .find(|service| service.name == service_name)
+    if let Ok(snapshot) = fetch_device_service_snapshot(client, peer_id, false).await
+        && let Some(service) = snapshot
+            .snapshot
+            .services
+            .into_iter()
+            .find(|service| service.name == service_name)
     {
         return Some(service);
     }
@@ -2336,10 +2230,6 @@ pub(crate) fn print_service_instance(resp: ServiceInstanceResponse, verbose: boo
     }
 }
 
-pub(crate) fn print_service_instances(resp: ListServicesResponse, verbose: bool) {
-    print_service_instances_value(decode_service_instances(resp), verbose)
-}
-
 fn decode_service_instances(resp: ListServicesResponse) -> Vec<ServiceInstance> {
     match serde_json::from_str::<Vec<ServiceInstance>>(&resp.services_json) {
         Ok(services) => services,
@@ -2432,12 +2322,12 @@ impl ServiceOverviewRow {
         device: &DeviceInfo,
         saved_accesses: &[ServiceAccess],
         _verbose: bool,
-        cached: bool,
+        _cached: bool,
     ) -> Self {
         let device_name = device_display_name(device);
         let saved_access = saved_accesses
             .iter()
-            .find(|access| access.service_name == service.service_name);
+            .find(|access| access.service_name == service.name);
         let entries = match saved_access {
             Some(access) => access
                 .endpoints
@@ -2473,20 +2363,17 @@ impl ServiceOverviewRow {
         };
 
         Self {
-            reference: format!("{}@{}", service.service_name, device_name),
+            reference: format!("{}@{}", service.name, device_name),
             device: device_name,
             kind: "remote".to_string(),
             usage: service_usage_label(service.usage.as_ref()).to_string(),
-            state: if cached {
-                "cached".to_string()
-            } else {
-                overview_state_label(&service.status)
-            },
+            state: overview_state_label(&service.status),
             entries,
             note: saved_access.map(|_| "local address saved".to_string()),
         }
     }
 
+    #[cfg(test)]
     fn from_remote_managed_service(
         service: ServiceInstance,
         device: &DeviceInfo,
@@ -2830,8 +2717,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use fungi_daemon::{
-        ServiceAccessEndpoint, ServiceExposeTransport, ServiceExposeTransportKind,
-        ServiceExposeUsage, ServicePort, ServicePortAllocation, ServiceStatus,
+        DeviceServiceEndpoint, ServiceAccessEndpoint, ServiceExposeUsage, ServicePort,
+        ServicePortAllocation, ServiceStatus,
     };
 
     use super::*;
@@ -3141,18 +3028,20 @@ publish:
 
     fn remote_web_service(path: &str) -> RemoteService {
         RemoteService {
-            service_name: "demo".to_string(),
+            name: "demo".to_string(),
             runtime: RuntimeKind::Docker,
-            transport: ServiceExposeTransport {
-                kind: ServiceExposeTransportKind::Tcp,
-            },
             usage: Some(ServiceExposeUsage {
                 kind: ServiceExposeUsageKind::Web,
                 path: Some(path.to_string()),
             }),
             icon_url: None,
-            catalog_id: None,
-            endpoints: Vec::new(),
+            ports: vec![service_port("web", 28080)],
+            endpoints: vec![DeviceServiceEndpoint {
+                name: "web".to_string(),
+                protocol: "/fungi/service/demo/web/0.2.0".to_string(),
+                host_port: 28080,
+                service_port: 80,
+            }],
             status: ServiceStatus::running(),
         }
     }

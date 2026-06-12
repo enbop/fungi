@@ -24,13 +24,14 @@ pub use recipes::{
     ResolvedServiceRecipe, ServiceRecipeDetail, ServiceRecipeRuntime, ServiceRecipeSummary,
 };
 pub use runtime::{
-    CatalogService, CatalogServiceEndpoint, ManifestResolutionPolicy, RuntimeControl, RuntimeKind,
-    ServiceExpose, ServiceExposeEndpointBinding, ServiceExposeTransport,
-    ServiceExposeTransportKind, ServiceExposeUsage, ServiceExposeUsageKind, ServiceInstance,
-    ServiceLogs, ServiceLogsOptions, ServiceManifest, ServiceMount, ServicePhase, ServicePort,
-    ServicePortAllocation, ServicePortProtocol, ServiceRunMode, ServiceSource, ServiceStatus,
-    load_service_manifest_yaml_file, parse_service_manifest_yaml, peek_service_manifest_name,
-    service_expose_endpoint_bindings, service_manifest_with_instance_name,
+    DeviceService, DeviceServiceEndpoint, DeviceServiceSnapshot, ManifestResolutionPolicy,
+    RuntimeControl, RuntimeKind, ServiceExpose, ServiceExposeEndpointBinding,
+    ServiceExposeTransport, ServiceExposeTransportKind, ServiceExposeUsage, ServiceExposeUsageKind,
+    ServiceInstance, ServiceLogs, ServiceLogsOptions, ServiceManifest, ServiceMount, ServicePhase,
+    ServicePort, ServicePortAllocation, ServicePortProtocol, ServiceRunMode, ServiceSource,
+    ServiceStatus, load_service_manifest_yaml_file, parse_service_manifest_yaml,
+    peek_service_manifest_name, service_expose_endpoint_bindings,
+    service_manifest_with_instance_name,
 };
 pub use service_control::{
     ServiceControlError, ServiceControlRequest, ServiceControlResponse, ServiceControlServiceRef,

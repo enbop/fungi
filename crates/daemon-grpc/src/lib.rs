@@ -1026,61 +1026,26 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         }))
     }
 
-    async fn list_device_published_services(
+    async fn get_device_service_snapshot(
         &self,
-        request: Request<ListDeviceServicesRequest>,
-    ) -> Result<Response<ListServicesResponse>, Status> {
+        request: Request<DeviceServiceSnapshotRequest>,
+    ) -> Result<Response<DeviceServiceSnapshotResponse>, Status> {
         let req = request.into_inner();
         let device_id = PeerId::from_str(&req.device_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid device_id: {}", e)))?;
-        let services = self
+        let lookup = self
             .inner
-            .list_device_published_services(device_id, req.cached)
+            .get_device_service_snapshot(device_id, req.refresh)
             .await
-            .map_err(|e| {
-                Status::internal(format!("Failed to list device published services: {e}"))
-            })?;
-        let services_json = serde_json::to_string(&services)
-            .map_err(|e| Status::internal(format!("Failed to serialize device services: {e}")))?;
-        Ok(Response::new(ListServicesResponse { services_json }))
-    }
-
-    async fn list_device_managed_services(
-        &self,
-        request: Request<ListDeviceServicesRequest>,
-    ) -> Result<Response<ListServicesResponse>, Status> {
-        let req = request.into_inner();
-        let device_id = PeerId::from_str(&req.device_id)
-            .map_err(|e| Status::invalid_argument(format!("Invalid device_id: {}", e)))?;
-
-        let response = self
-            .inner
-            .list_device_managed_services(device_id, req.cached)
-            .await
-            .map_err(|e| {
-                Status::internal(format!("Failed to list device managed services: {e}"))
-            })?;
-
-        Ok(Response::new(ListServicesResponse {
-            services_json: response.services_json.unwrap_or_default(),
+            .map_err(|e| Status::internal(format!("Failed to get device service snapshot: {e}")))?;
+        let snapshot_json = serde_json::to_string(&lookup.snapshot).map_err(|e| {
+            Status::internal(format!("Failed to serialize device service snapshot: {e}"))
+        })?;
+        Ok(Response::new(DeviceServiceSnapshotResponse {
+            snapshot_json,
+            source: lookup.source.as_str().to_string(),
+            error: lookup.error.unwrap_or_default(),
         }))
-    }
-
-    async fn list_peer_catalog(
-        &self,
-        request: Request<ListPeerCatalogRequest>,
-    ) -> Result<Response<ListPeerCatalogResponse>, Status> {
-        let req = request.into_inner();
-        let peer_id = PeerId::from_str(&req.peer_id)
-            .map_err(|e| Status::invalid_argument(format!("Invalid peer_id: {}", e)))?;
-        let services = self
-            .inner
-            .list_device_published_services(peer_id, req.cached)
-            .await
-            .map_err(|e| Status::internal(format!("Failed to list peer services: {e}")))?;
-        let services_json = serde_json::to_string(&services)
-            .map_err(|e| Status::internal(format!("Failed to serialize peer services: {e}")))?;
-        Ok(Response::new(ListPeerCatalogResponse { services_json }))
     }
 
     async fn get_peer_capability_summary(
@@ -1228,7 +1193,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
 
         let response = self
             .inner
-            .list_device_managed_services(peer_id, false)
+            .remote_list_services(peer_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to list remote services: {e}")))?;
 

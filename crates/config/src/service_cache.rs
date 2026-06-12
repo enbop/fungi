@@ -11,85 +11,86 @@ use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 
-const DEVICE_PUBLISHED_SERVICES_CACHE_DIR: &str = "cache/remote_services";
-const DEVICE_MANAGED_SERVICES_CACHE_DIR: &str = "cache/device_managed_services";
+const DEVICE_SERVICE_SNAPSHOTS_CACHE_DIR: &str = "cache/device_service_snapshots";
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct ServiceCache {
+pub struct DeviceServiceSnapshotCache {
     #[serde(skip)]
     root_dir: PathBuf,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct CachedDeviceServices {
+pub struct CachedDeviceServiceSnapshot {
     pub peer_id: String,
-    pub services_json: String,
+    pub snapshot_json: String,
     pub updated_at: SystemTime,
 }
 
-impl ServiceCache {
+impl DeviceServiceSnapshotCache {
     pub fn apply_from_dir(fungi_dir: &Path) -> Result<Self> {
-        Self::apply_published_services_from_dir(fungi_dir)
-    }
-
-    pub fn apply_published_services_from_dir(fungi_dir: &Path) -> Result<Self> {
-        Self::apply_namespace_from_dir(fungi_dir, DEVICE_PUBLISHED_SERVICES_CACHE_DIR)
-    }
-
-    pub fn apply_managed_services_from_dir(fungi_dir: &Path) -> Result<Self> {
-        Self::apply_namespace_from_dir(fungi_dir, DEVICE_MANAGED_SERVICES_CACHE_DIR)
-    }
-
-    fn apply_namespace_from_dir(fungi_dir: &Path, namespace: &str) -> Result<Self> {
-        let root_dir = fungi_dir.join(namespace);
+        let root_dir = fungi_dir.join(DEVICE_SERVICE_SNAPSHOTS_CACHE_DIR);
         std::fs::create_dir_all(&root_dir).with_context(|| {
             format!(
-                "failed to create device services cache directory: {}",
+                "failed to create device service snapshot cache directory: {}",
                 root_dir.display()
             )
         })?;
         Ok(Self { root_dir })
     }
 
-    pub fn get_device_services_json(&self, peer_id: &str) -> Result<Option<String>> {
+    pub fn get_device_snapshot_json(&self, peer_id: &str) -> Result<Option<String>> {
         let path = self.device_cache_path(peer_id);
         if !path.exists() {
             return Ok(None);
         }
 
-        let raw = std::fs::read_to_string(&path)
-            .with_context(|| format!("failed to read remote services cache: {}", path.display()))?;
-        let entry: CachedDeviceServices = serde_json::from_str(&raw).with_context(|| {
-            format!("failed to parse remote services cache: {}", path.display())
+        let raw = std::fs::read_to_string(&path).with_context(|| {
+            format!(
+                "failed to read device service snapshot cache: {}",
+                path.display()
+            )
         })?;
-        Ok(Some(entry.services_json))
+        let entry: CachedDeviceServiceSnapshot = serde_json::from_str(&raw).with_context(|| {
+            format!(
+                "failed to parse device service snapshot cache: {}",
+                path.display()
+            )
+        })?;
+        Ok(Some(entry.snapshot_json))
     }
 
-    pub fn set_device_services_json(&self, peer_id: String, services_json: String) -> Result<()> {
+    pub fn set_device_snapshot_json(&self, peer_id: String, snapshot_json: String) -> Result<()> {
         std::fs::create_dir_all(&self.root_dir).with_context(|| {
             format!(
-                "failed to create device services cache directory: {}",
+                "failed to create device service snapshot cache directory: {}",
                 self.root_dir.display()
             )
         })?;
-        let entry = CachedDeviceServices {
+        let entry = CachedDeviceServiceSnapshot {
             peer_id,
-            services_json,
+            snapshot_json,
             updated_at: SystemTime::now(),
         };
         let raw = serde_json::to_string_pretty(&entry)?;
         let path = self.device_cache_path(&entry.peer_id);
-        write_atomically(&path, raw.as_bytes())
-            .with_context(|| format!("failed to write remote services cache: {}", path.display()))
+        write_atomically(&path, raw.as_bytes()).with_context(|| {
+            format!(
+                "failed to write device service snapshot cache: {}",
+                path.display()
+            )
+        })
     }
 
-    pub fn remove_device_services(&self, peer_id: &str) -> Result<bool> {
+    pub fn remove_device_snapshot(&self, peer_id: &str) -> Result<bool> {
         let path = self.device_cache_path(peer_id);
         if !path.exists() {
             return Ok(false);
         }
         std::fs::remove_file(&path).with_context(|| {
-            format!("failed to remove remote services cache: {}", path.display())
+            format!(
+                "failed to remove device service snapshot cache: {}",
+                path.display()
+            )
         })?;
         Ok(true)
     }
@@ -105,7 +106,7 @@ fn write_atomically(path: &Path, contents: &[u8]) -> Result<()> {
         .with_context(|| format!("cache path has no parent directory: {}", path.display()))?;
     std::fs::create_dir_all(parent).with_context(|| {
         format!(
-            "failed to create device services cache directory: {}",
+            "failed to create device service snapshot cache directory: {}",
             parent.display()
         )
     })?;
@@ -179,91 +180,55 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn stores_peer_services_in_remote_services_cache_file() {
+    fn stores_device_service_snapshot_in_unified_cache_file() {
         let dir = TempDir::new().unwrap();
-        let cache = ServiceCache::apply_from_dir(dir.path()).unwrap();
+        let cache = DeviceServiceSnapshotCache::apply_from_dir(dir.path()).unwrap();
 
         cache
-            .set_device_services_json("peer-a".to_string(), "[{\"id\":\"svc\"}]".to_string())
+            .set_device_snapshot_json("peer-a".to_string(), "{\"services\":[]}".to_string())
             .unwrap();
 
-        let value = cache.get_device_services_json("peer-a").unwrap();
-        assert_eq!(value.as_deref(), Some("[{\"id\":\"svc\"}]"));
+        let value = cache.get_device_snapshot_json("peer-a").unwrap();
+        assert_eq!(value.as_deref(), Some("{\"services\":[]}"));
         assert!(
             dir.path()
                 .join("cache")
-                .join("remote_services")
+                .join("device_service_snapshots")
                 .join("peer-a.json")
                 .exists()
         );
     }
 
     #[test]
-    fn separates_published_and_managed_device_service_caches() {
+    fn removes_device_service_snapshot_cache_file() {
         let dir = TempDir::new().unwrap();
-        let published = ServiceCache::apply_published_services_from_dir(dir.path()).unwrap();
-        let managed = ServiceCache::apply_managed_services_from_dir(dir.path()).unwrap();
-
-        published
-            .set_device_services_json("peer-a".to_string(), "[{\"published\":true}]".to_string())
-            .unwrap();
-        managed
-            .set_device_services_json("peer-a".to_string(), "[{\"managed\":true}]".to_string())
-            .unwrap();
-
-        assert_eq!(
-            published
-                .get_device_services_json("peer-a")
-                .unwrap()
-                .as_deref(),
-            Some("[{\"published\":true}]")
-        );
-        assert_eq!(
-            managed
-                .get_device_services_json("peer-a")
-                .unwrap()
-                .as_deref(),
-            Some("[{\"managed\":true}]")
-        );
-        assert!(
-            dir.path()
-                .join("cache")
-                .join("device_managed_services")
-                .join("peer-a.json")
-                .exists()
-        );
-    }
-
-    #[test]
-    fn removes_device_services_cache_file() {
-        let dir = TempDir::new().unwrap();
-        let cache = ServiceCache::apply_managed_services_from_dir(dir.path()).unwrap();
+        let cache = DeviceServiceSnapshotCache::apply_from_dir(dir.path()).unwrap();
 
         cache
-            .set_device_services_json("peer-a".to_string(), "[{\"managed\":true}]".to_string())
+            .set_device_snapshot_json("peer-a".to_string(), "{\"services\":[]}".to_string())
             .unwrap();
 
-        assert!(cache.remove_device_services("peer-a").unwrap());
-        assert!(!cache.remove_device_services("peer-a").unwrap());
-        assert_eq!(cache.get_device_services_json("peer-a").unwrap(), None);
+        assert!(cache.remove_device_snapshot("peer-a").unwrap());
+        assert!(!cache.remove_device_snapshot("peer-a").unwrap());
+        assert_eq!(cache.get_device_snapshot_json("peer-a").unwrap(), None);
     }
 
     #[test]
     fn atomic_write_replaces_existing_cache_file_without_temp_artifacts() {
         let dir = TempDir::new().unwrap();
-        let cache = ServiceCache::apply_managed_services_from_dir(dir.path()).unwrap();
-        let cache_dir = dir.path().join("cache").join("device_managed_services");
+        let cache = DeviceServiceSnapshotCache::apply_from_dir(dir.path()).unwrap();
+        let cache_dir = dir.path().join("cache").join("device_service_snapshots");
 
         cache
-            .set_device_services_json("peer-a".to_string(), "[{\"state\":\"old\"}]".to_string())
+            .set_device_snapshot_json("peer-a".to_string(), "{\"state\":\"old\"}".to_string())
             .unwrap();
         cache
-            .set_device_services_json("peer-a".to_string(), "[{\"state\":\"new\"}]".to_string())
+            .set_device_snapshot_json("peer-a".to_string(), "{\"state\":\"new\"}".to_string())
             .unwrap();
 
         assert_eq!(
-            cache.get_device_services_json("peer-a").unwrap().as_deref(),
-            Some("[{\"state\":\"new\"}]")
+            cache.get_device_snapshot_json("peer-a").unwrap().as_deref(),
+            Some("{\"state\":\"new\"}")
         );
 
         let entries = std::fs::read_dir(cache_dir)

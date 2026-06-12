@@ -1,4 +1,3 @@
-mod catalog;
 mod client;
 mod connection;
 mod device;
@@ -11,7 +10,6 @@ mod service;
 mod shared;
 mod trusted_devices;
 
-pub use catalog::{CatalogCommands, execute_catalog};
 pub use connection::{ConnectionCommands, execute_connection};
 pub use device::{DeviceAddressCommands, DeviceArgs, DeviceCommands, execute_device};
 pub use info::{InfoCommands, execute_info};

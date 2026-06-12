@@ -253,6 +253,7 @@ impl FungiDaemon {
         };
 
         daemon.restore_service_endpoint_listeners().await?;
+        daemon.restore_saved_service_access_from_snapshots().await;
 
         Ok(daemon)
     }

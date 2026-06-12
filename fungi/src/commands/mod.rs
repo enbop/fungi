@@ -85,9 +85,6 @@ pub enum Commands {
     /// Manage services
     #[command(visible_alias = "svc")]
     Service(fungi_control::ServiceArgs),
-    /// Browse published remote services
-    #[command(subcommand, hide = true)]
-    Catalog(fungi_control::CatalogCommands),
     /// Query and administer remote peers
     #[command(subcommand, hide = true)]
     Peer(fungi_control::PeerCommands),
