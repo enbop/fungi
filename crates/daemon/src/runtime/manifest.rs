@@ -232,9 +232,8 @@ fn manifest_client_to_fungi(expose: Option<&ServiceExpose>) -> Option<FungiServi
             .flatten()
     });
     let icon_url = expose.icon_url.clone();
-    let catalog_id = expose.catalog_id.clone();
 
-    if kind.is_none() && path.is_none() && icon_url.is_none() && catalog_id.is_none() {
+    if kind.is_none() && path.is_none() && icon_url.is_none() {
         return None;
     }
 
@@ -242,7 +241,6 @@ fn manifest_client_to_fungi(expose: Option<&ServiceExpose>) -> Option<FungiServi
         kind,
         path,
         icon_url,
-        catalog_id,
     })
 }
 
@@ -342,9 +340,6 @@ struct FungiServiceClient {
     #[serde(rename = "iconUrl")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     icon_url: Option<String>,
-    #[serde(rename = "catalogId")]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    catalog_id: Option<String>,
 }
 
 fn parse_fungi_service_document(content: &str) -> Result<Option<FungiServiceDocument>> {
@@ -738,7 +733,6 @@ fn parse_fungi_publish_expose(
         },
         usage,
         icon_url: first_metadata.icon_url.clone(),
-        catalog_id: first_metadata.catalog_id.clone(),
     }))
 }
 
@@ -747,7 +741,6 @@ struct FungiClientExposeMetadata {
     usage: Option<ServiceExposeUsageKind>,
     path: Option<String>,
     icon_url: Option<String>,
-    catalog_id: Option<String>,
 }
 
 fn fungi_client_expose_metadata(entry: &FungiServicePublishEntry) -> FungiClientExposeMetadata {
@@ -769,15 +762,10 @@ fn fungi_client_expose_metadata(entry: &FungiServicePublishEntry) -> FungiClient
         .client
         .as_ref()
         .and_then(|client| normalize_optional(client.icon_url.clone()));
-    let catalog_id = entry
-        .client
-        .as_ref()
-        .and_then(|client| normalize_optional(client.catalog_id.clone()));
     FungiClientExposeMetadata {
         usage,
         path,
         icon_url,
-        catalog_id,
     }
 }
 

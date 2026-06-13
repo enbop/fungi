@@ -1,7 +1,7 @@
 use crate::{
     DEFAULT_CONFIG_FILE, FungiConfig, FungiDir, devices::DevicesConfig,
     direct_addresses::DirectAddressCache, local_preferences::LocalPreferenceCache,
-    paths::FungiPaths, recipe_cache::RecipeCache, service_cache::ServiceCache,
+    paths::FungiPaths, recipe_cache::RecipeCache, service_cache::DeviceServiceSnapshotCache,
     trusted_devices::TrustedDevicesConfig,
 };
 use anyhow::{Context, Result};
@@ -30,8 +30,7 @@ pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
             DevicesConfig::apply_from_dir(&fungi_dir)?;
             DirectAddressCache::apply_from_dir(&fungi_dir)?;
             LocalPreferenceCache::apply_from_dir(&fungi_dir)?;
-            ServiceCache::apply_from_dir(&fungi_dir)?;
-            ServiceCache::apply_managed_services_from_dir(&fungi_dir)?;
+            DeviceServiceSnapshotCache::apply_from_dir(&fungi_dir)?;
             RecipeCache::apply_from_dir(&fungi_dir)?;
             TrustedDevicesConfig::apply_from_dir(&fungi_dir)?;
             println!("Configuration file upgraded at {}", config_file.display());
@@ -54,11 +53,10 @@ pub fn init(dirs: &impl FungiDir, upgrade_existing: bool) -> Result<()> {
     DevicesConfig::apply_from_dir(&fungi_dir)?;
 
     // create cache/direct_addresses.json, cache/local_preferences.json,
-    // cache/remote_services/, cache/device_managed_services/, and cache/recipes/
+    // cache/device_service_snapshots/, and cache/recipes/
     DirectAddressCache::apply_from_dir(&fungi_dir)?;
     LocalPreferenceCache::apply_from_dir(&fungi_dir)?;
-    ServiceCache::apply_from_dir(&fungi_dir)?;
-    ServiceCache::apply_managed_services_from_dir(&fungi_dir)?;
+    DeviceServiceSnapshotCache::apply_from_dir(&fungi_dir)?;
     RecipeCache::apply_from_dir(&fungi_dir)?;
     TrustedDevicesConfig::apply_from_dir(&fungi_dir)?;
 

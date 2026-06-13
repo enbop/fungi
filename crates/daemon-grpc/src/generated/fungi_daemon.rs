@@ -514,23 +514,20 @@ pub struct ResolveRecipeResponse {
     pub warnings: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListPeerCatalogRequest {
-    #[prost(string, tag = "1")]
-    pub peer_id: ::prost::alloc::string::String,
-    #[prost(bool, tag = "2")]
-    pub cached: bool,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListPeerCatalogResponse {
-    #[prost(string, tag = "1")]
-    pub services_json: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListDeviceServicesRequest {
+pub struct DeviceServiceSnapshotRequest {
     #[prost(string, tag = "1")]
     pub device_id: ::prost::alloc::string::String,
     #[prost(bool, tag = "2")]
-    pub cached: bool,
+    pub refresh: bool,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DeviceServiceSnapshotResponse {
+    #[prost(string, tag = "1")]
+    pub snapshot_json: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub source: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub error: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetPeerCapabilitySummaryRequest {
@@ -1427,62 +1424,23 @@ pub mod fungi_daemon_client {
                 .insert(GrpcMethod::new("fungi_daemon.FungiDaemon", "ResolveRecipe"));
             self.inner.unary(req, path, codec).await
         }
-        /// Lists services published by a device for consumption.
-        pub async fn list_device_published_services(
+        /// Returns a lightweight cached or refreshed service snapshot for one device.
+        pub async fn get_device_service_snapshot(
             &mut self,
-            request: impl tonic::IntoRequest<super::ListDeviceServicesRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListServicesResponse>, tonic::Status>
+            request: impl tonic::IntoRequest<super::DeviceServiceSnapshotRequest>,
+        ) -> std::result::Result<tonic::Response<super::DeviceServiceSnapshotResponse>, tonic::Status>
         {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/ListDevicePublishedServices",
+                "/fungi_daemon.FungiDaemon/GetDeviceServiceSnapshot",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
                 "fungi_daemon.FungiDaemon",
-                "ListDevicePublishedServices",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        /// Lists services managed on a device, including stopped ones.
-        pub async fn list_device_managed_services(
-            &mut self,
-            request: impl tonic::IntoRequest<super::ListDeviceServicesRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListServicesResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/fungi_daemon.FungiDaemon/ListDeviceManagedServices",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "fungi_daemon.FungiDaemon",
-                "ListDeviceManagedServices",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        /// Compatibility alias for services published by a remote peer for consumption.
-        pub async fn list_peer_catalog(
-            &mut self,
-            request: impl tonic::IntoRequest<super::ListPeerCatalogRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListPeerCatalogResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/fungi_daemon.FungiDaemon/ListPeerCatalog");
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "fungi_daemon.FungiDaemon",
-                "ListPeerCatalog",
+                "GetDeviceServiceSnapshot",
             ));
             self.inner.unary(req, path, codec).await
         }
@@ -1919,21 +1877,11 @@ pub mod fungi_daemon_server {
             &self,
             request: tonic::Request<super::ResolveRecipeRequest>,
         ) -> std::result::Result<tonic::Response<super::ResolveRecipeResponse>, tonic::Status>;
-        /// Lists services published by a device for consumption.
-        async fn list_device_published_services(
+        /// Returns a lightweight cached or refreshed service snapshot for one device.
+        async fn get_device_service_snapshot(
             &self,
-            request: tonic::Request<super::ListDeviceServicesRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListServicesResponse>, tonic::Status>;
-        /// Lists services managed on a device, including stopped ones.
-        async fn list_device_managed_services(
-            &self,
-            request: tonic::Request<super::ListDeviceServicesRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListServicesResponse>, tonic::Status>;
-        /// Compatibility alias for services published by a remote peer for consumption.
-        async fn list_peer_catalog(
-            &self,
-            request: tonic::Request<super::ListPeerCatalogRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListPeerCatalogResponse>, tonic::Status>;
+            request: tonic::Request<super::DeviceServiceSnapshotRequest>,
+        ) -> std::result::Result<tonic::Response<super::DeviceServiceSnapshotResponse>, tonic::Status>;
         /// Queries a remote peer for a minimal node runtime capability summary.
         async fn get_peer_capability_summary(
             &self,
@@ -3518,22 +3466,22 @@ pub mod fungi_daemon_server {
                     };
                     Box::pin(fut)
                 }
-                "/fungi_daemon.FungiDaemon/ListDevicePublishedServices" => {
+                "/fungi_daemon.FungiDaemon/GetDeviceServiceSnapshot" => {
                     #[allow(non_camel_case_types)]
-                    struct ListDevicePublishedServicesSvc<T: FungiDaemon>(pub Arc<T>);
+                    struct GetDeviceServiceSnapshotSvc<T: FungiDaemon>(pub Arc<T>);
                     impl<T: FungiDaemon>
-                        tonic::server::UnaryService<super::ListDeviceServicesRequest>
-                        for ListDevicePublishedServicesSvc<T>
+                        tonic::server::UnaryService<super::DeviceServiceSnapshotRequest>
+                        for GetDeviceServiceSnapshotSvc<T>
                     {
-                        type Response = super::ListServicesResponse;
+                        type Response = super::DeviceServiceSnapshotResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::ListDeviceServicesRequest>,
+                            request: tonic::Request<super::DeviceServiceSnapshotRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as FungiDaemon>::list_device_published_services(&inner, request)
+                                <T as FungiDaemon>::get_device_service_snapshot(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -3545,91 +3493,7 @@ pub mod fungi_daemon_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = ListDevicePublishedServicesSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/fungi_daemon.FungiDaemon/ListDeviceManagedServices" => {
-                    #[allow(non_camel_case_types)]
-                    struct ListDeviceManagedServicesSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon>
-                        tonic::server::UnaryService<super::ListDeviceServicesRequest>
-                        for ListDeviceManagedServicesSvc<T>
-                    {
-                        type Response = super::ListServicesResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::ListDeviceServicesRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as FungiDaemon>::list_device_managed_services(&inner, request)
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = ListDeviceManagedServicesSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/fungi_daemon.FungiDaemon/ListPeerCatalog" => {
-                    #[allow(non_camel_case_types)]
-                    struct ListPeerCatalogSvc<T: FungiDaemon>(pub Arc<T>);
-                    impl<T: FungiDaemon> tonic::server::UnaryService<super::ListPeerCatalogRequest>
-                        for ListPeerCatalogSvc<T>
-                    {
-                        type Response = super::ListPeerCatalogResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::ListPeerCatalogRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as FungiDaemon>::list_peer_catalog(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = ListPeerCatalogSvc(inner);
+                        let method = GetDeviceServiceSnapshotSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

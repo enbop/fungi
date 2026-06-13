@@ -343,10 +343,10 @@ fn cli_can_create_and_access_remote_tcp_service() {
     assert!(
         a.path()
             .join("cache")
-            .join("remote_services")
+            .join("device_service_snapshots")
             .join(format!("{b_peer}.json"))
             .exists(),
-        "remote service cache should persist outside config.toml"
+        "device service snapshot cache should persist outside config.toml"
     );
 
     let output = run_cli_result(a.path(), ["test-tcp@b"], "");

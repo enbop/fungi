@@ -31,7 +31,6 @@ fn main() -> Result<()> {
         Commands::Info(cmd) => block_on(execute_info(fungi_args.common, cmd)),
         Commands::Security(cmd) => block_on(execute_security(fungi_args.common, cmd)),
         Commands::Service(cmd) => block_on(execute_service(fungi_args.common, cmd)),
-        Commands::Catalog(cmd) => block_on(execute_catalog(fungi_args.common, cmd)),
         Commands::Peer(cmd) => block_on(execute_peer(fungi_args.common, cmd)),
         Commands::Device(cmd) => block_on(execute_device(fungi_args.common, cmd)),
         Commands::Connection(cmd) => block_on(execute_connection(fungi_args.common, cmd)),

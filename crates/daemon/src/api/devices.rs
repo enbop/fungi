@@ -48,15 +48,10 @@ impl FungiDaemon {
         self.forget_device_service_accesses(peer_id).await?;
 
         let fungi_dir = self.config_fungi_dir()?;
-        let published =
-            fungi_config::service_cache::ServiceCache::apply_published_services_from_dir(
-                &fungi_dir,
-            )?;
-        let managed =
-            fungi_config::service_cache::ServiceCache::apply_managed_services_from_dir(&fungi_dir)?;
+        let snapshots =
+            fungi_config::service_cache::DeviceServiceSnapshotCache::apply_from_dir(&fungi_dir)?;
         let peer_id = peer_id.to_string();
-        let _ = published.remove_device_services(&peer_id)?;
-        let _ = managed.remove_device_services(&peer_id)?;
+        let _ = snapshots.remove_device_snapshot(&peer_id)?;
         Ok(())
     }
 

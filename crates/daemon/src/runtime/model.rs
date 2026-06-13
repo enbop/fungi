@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt, path::PathBuf};
+use std::{collections::BTreeMap, fmt, path::PathBuf, time::SystemTime};
 
 use serde::{Deserialize, Serialize};
 
@@ -50,7 +50,6 @@ pub struct ServiceExpose {
     pub transport: ServiceExposeTransport,
     pub usage: Option<ServiceExposeUsage>,
     pub icon_url: Option<String>,
-    pub catalog_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -242,20 +241,27 @@ mod tests {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CatalogService {
-    pub service_name: String,
+pub struct DeviceServiceSnapshot {
+    pub peer_id: String,
+    pub services: Vec<DeviceService>,
+    pub updated_at: SystemTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceService {
+    pub name: String,
     pub runtime: RuntimeKind,
-    pub transport: ServiceExposeTransport,
     pub usage: Option<ServiceExposeUsage>,
     pub icon_url: Option<String>,
-    pub catalog_id: Option<String>,
     #[serde(default)]
-    pub endpoints: Vec<CatalogServiceEndpoint>,
+    pub ports: Vec<ServicePort>,
+    #[serde(default)]
+    pub endpoints: Vec<DeviceServiceEndpoint>,
     pub status: ServiceStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CatalogServiceEndpoint {
+pub struct DeviceServiceEndpoint {
     pub name: String,
     pub protocol: String,
     #[serde(default)]

@@ -1,12 +1,16 @@
-use std::path::{Path, PathBuf};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 use anyhow::{Context as _, Result};
 use fungi_config::runtime::Runtime as RuntimeConfig;
 use libp2p::PeerId;
 
 use crate::runtime::{
-    CatalogService, RuntimeKind, ServiceInstance, ServiceLogs, ServiceLogsOptions, ServiceManifest,
-    service_expose_endpoint_bindings,
+    DeviceService, DeviceServiceSnapshot, RuntimeKind, ServiceInstance, ServiceLogs,
+    ServiceLogsOptions, ServiceManifest, service_expose_endpoint_bindings,
 };
 use crate::service_state::DesiredServiceState;
 use crate::{
@@ -14,6 +18,28 @@ use crate::{
     ResolvedServiceRecipe, ServiceControlResponse, ServiceRecipeDetail, ServiceRecipeRuntime,
     ServiceRecipeSummary, build_local_node_capabilities, build_local_runtime_status,
 };
+
+pub struct DeviceServiceSnapshotLookup {
+    pub snapshot: DeviceServiceSnapshot,
+    pub source: DeviceServiceSnapshotSource,
+    pub error: Option<String>,
+}
+
+pub enum DeviceServiceSnapshotSource {
+    Live,
+    Cache,
+    Empty,
+}
+
+impl DeviceServiceSnapshotSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Live => "live",
+            Self::Cache => "cache",
+            Self::Empty => "empty",
+        }
+    }
+}
 
 impl FungiDaemon {
     pub fn docker_enabled(&self) -> bool {
@@ -226,34 +252,16 @@ impl FungiDaemon {
         self.runtime_control().list_services().await
     }
 
-    pub async fn list_exposed_services(&self) -> Result<Vec<CatalogService>> {
-        self.runtime_control().list_catalog_services().await
-    }
-
-    pub async fn list_peer_services(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
-        self.service_discovery_control()
-            .list_peer_services(peer_id)
+    pub async fn list_exposed_services(&self) -> Result<Vec<DeviceService>> {
+        self.runtime_control()
+            .list_published_device_services()
             .await
     }
 
-    pub async fn list_catalog_services(&self) -> Result<Vec<CatalogService>> {
-        self.list_exposed_services().await
-    }
-
-    pub async fn list_peer_catalog(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
-        self.list_device_published_services(peer_id, false).await
-    }
-
-    pub async fn list_device_published_services(
-        &self,
-        device_id: PeerId,
-        cached: bool,
-    ) -> Result<Vec<CatalogService>> {
-        if cached {
-            self.list_cached_device_published_services(device_id)
-        } else {
-            self.refresh_device_published_services(device_id).await
-        }
+    pub async fn list_peer_services(&self, peer_id: PeerId) -> Result<Vec<DeviceService>> {
+        self.service_discovery_control()
+            .list_peer_services(peer_id)
+            .await
     }
 
     pub async fn list_service_recipes(&self, refresh: bool) -> Result<Vec<ServiceRecipeSummary>> {
@@ -291,187 +299,146 @@ impl FungiDaemon {
         Ok(resolved)
     }
 
-    pub fn list_cached_peer_services(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
-        self.list_cached_device_published_services(peer_id)
-    }
-
-    pub fn list_cached_device_published_services(
+    pub fn load_device_service_snapshot(
         &self,
         device_id: PeerId,
-    ) -> Result<Vec<CatalogService>> {
-        let peer_id = device_id.to_string();
-        let fungi_dir = self.config_fungi_dir()?;
-        let cache = fungi_config::service_cache::ServiceCache::apply_published_services_from_dir(
-            &fungi_dir,
-        )?;
-        let Some(services_json) = cache.get_device_services_json(&peer_id)? else {
-            return Ok(Vec::new());
-        };
-        serde_json::from_str(&services_json)
-            .map_err(|error| anyhow::anyhow!("failed to decode cached peer services: {}", error))
-    }
-
-    pub async fn refresh_peer_services(&self, peer_id: PeerId) -> Result<Vec<CatalogService>> {
-        self.refresh_device_published_services(peer_id).await
-    }
-
-    pub async fn refresh_device_published_services(
-        &self,
-        device_id: PeerId,
-    ) -> Result<Vec<CatalogService>> {
-        let services = self.list_peer_services(device_id).await?;
-        self.save_cached_device_published_services(device_id, &services)?;
-        Ok(services)
-    }
-
-    fn save_cached_device_published_services(
-        &self,
-        device_id: PeerId,
-        services: &[CatalogService],
-    ) -> Result<()> {
-        let services_json = serde_json::to_string(services)?;
-        let fungi_dir = self.config_fungi_dir()?;
-        let cache = fungi_config::service_cache::ServiceCache::apply_published_services_from_dir(
-            &fungi_dir,
-        )?;
-        cache.set_device_services_json(device_id.to_string(), services_json)?;
-        Ok(())
-    }
-
-    fn invalidate_cached_device_published_services(&self, device_id: PeerId) -> Result<bool> {
-        let fungi_dir = self.config_fungi_dir()?;
-        let cache = fungi_config::service_cache::ServiceCache::apply_published_services_from_dir(
-            &fungi_dir,
-        )?;
-        cache.remove_device_services(&device_id.to_string())
-    }
-
-    pub fn list_cached_device_managed_services_json(&self, device_id: PeerId) -> Result<String> {
+    ) -> Result<Option<DeviceServiceSnapshot>> {
         let fungi_dir = self.config_fungi_dir()?;
         let cache =
-            fungi_config::service_cache::ServiceCache::apply_managed_services_from_dir(&fungi_dir)?;
-        Ok(cache
-            .get_device_services_json(&device_id.to_string())?
-            .unwrap_or_else(|| "[]".to_string()))
+            fungi_config::service_cache::DeviceServiceSnapshotCache::apply_from_dir(&fungi_dir)?;
+        let Some(snapshot_json) = cache.get_device_snapshot_json(&device_id.to_string())? else {
+            return Ok(None);
+        };
+        serde_json::from_str(&snapshot_json)
+            .map(Some)
+            .map_err(|error| {
+                anyhow::anyhow!("failed to decode cached device service snapshot: {}", error)
+            })
     }
 
-    pub async fn list_device_managed_services(
+    pub async fn refresh_device_service_snapshot(
         &self,
         device_id: PeerId,
-        cached: bool,
-    ) -> Result<ServiceControlResponse> {
-        if cached {
-            Ok(ServiceControlResponse::success_services(
-                None,
-                self.list_cached_device_managed_services_json(device_id)?,
-            ))
-        } else {
-            self.refresh_device_managed_services(device_id).await
-        }
-    }
-
-    pub async fn refresh_device_managed_services(
-        &self,
-        device_id: PeerId,
-    ) -> Result<ServiceControlResponse> {
-        let response = self
+    ) -> Result<DeviceServiceSnapshot> {
+        let managed_response = self
             .service_control_protocol_control()
             .list_peer_services(device_id)
-            .await?;
-        if let Some(services_json) = response.services_json.as_ref() {
-            self.save_cached_device_managed_services_json(device_id, services_json)?;
-        }
-        Ok(response)
+            .await;
+        let published = self.list_peer_services(device_id).await;
+
+        let managed_response = managed_response.with_context(|| {
+            format!("failed to refresh managed services for device {device_id}")
+        })?;
+        let published = published.with_context(|| {
+            format!("failed to refresh published services for device {device_id}")
+        })?;
+
+        let managed = managed_response
+            .services_json
+            .as_deref()
+            .map(|services_json| serde_json::from_str::<Vec<ServiceInstance>>(services_json))
+            .transpose()
+            .map_err(|error| {
+                anyhow::anyhow!(
+                    "failed to decode managed services from device {device_id}: {error}"
+                )
+            })?
+            .unwrap_or_default();
+
+        let snapshot = merge_device_service_snapshot(device_id, managed, published);
+        self.save_device_service_snapshot(&snapshot)?;
+        Ok(snapshot)
     }
 
-    fn save_cached_device_managed_services_json(
-        &self,
-        device_id: PeerId,
-        services_json: &str,
-    ) -> Result<()> {
+    pub fn save_device_service_snapshot(&self, snapshot: &DeviceServiceSnapshot) -> Result<()> {
+        let snapshot_json = serde_json::to_string(snapshot)?;
         let fungi_dir = self.config_fungi_dir()?;
         let cache =
-            fungi_config::service_cache::ServiceCache::apply_managed_services_from_dir(&fungi_dir)?;
-        cache.set_device_services_json(device_id.to_string(), services_json.to_string())?;
+            fungi_config::service_cache::DeviceServiceSnapshotCache::apply_from_dir(&fungi_dir)?;
+        cache.set_device_snapshot_json(snapshot.peer_id.clone(), snapshot_json)?;
         Ok(())
     }
 
-    fn invalidate_cached_device_managed_services(&self, device_id: PeerId) -> Result<bool> {
+    pub fn remove_device_service_snapshot(&self, device_id: PeerId) -> Result<bool> {
         let fungi_dir = self.config_fungi_dir()?;
         let cache =
-            fungi_config::service_cache::ServiceCache::apply_managed_services_from_dir(&fungi_dir)?;
-        cache.remove_device_services(&device_id.to_string())
+            fungi_config::service_cache::DeviceServiceSnapshotCache::apply_from_dir(&fungi_dir)?;
+        cache.remove_device_snapshot(&device_id.to_string())
     }
 
-    async fn refresh_or_invalidate_device_managed_services(&self, device_id: PeerId) {
-        if let Err(refresh_error) = self.refresh_device_managed_services(device_id).await {
-            log::warn!(
-                "Failed to refresh cached managed services for device {device_id} after remote mutation: {refresh_error}; invalidating cache"
-            );
-            if let Err(invalidate_error) = self.invalidate_cached_device_managed_services(device_id)
-            {
-                log::warn!(
-                    "Failed to invalidate cached managed services for device {device_id}: {invalidate_error}"
-                );
-            }
-        }
-    }
-
-    async fn refresh_or_invalidate_device_published_services(&self, device_id: PeerId) {
-        if let Err(refresh_error) = self.refresh_device_published_services(device_id).await {
-            log::warn!(
-                "Failed to refresh cached published services for device {device_id} after remote mutation: {refresh_error}; invalidating cache"
-            );
-            if let Err(invalidate_error) =
-                self.invalidate_cached_device_published_services(device_id)
-            {
-                log::warn!(
-                    "Failed to invalidate cached published services for device {device_id}: {invalidate_error}"
-                );
-            }
-        }
-    }
-
-    async fn reconcile_remote_service_caches(
+    pub async fn get_device_service_snapshot(
         &self,
         device_id: PeerId,
-        published_services_may_change: bool,
-    ) {
-        self.refresh_or_invalidate_device_managed_services(device_id)
-            .await;
-        if published_services_may_change {
-            self.refresh_or_invalidate_device_published_services(device_id)
-                .await;
+        refresh: bool,
+    ) -> Result<DeviceServiceSnapshotLookup> {
+        if refresh {
+            match self.refresh_device_service_snapshot(device_id).await {
+                Ok(snapshot) => {
+                    return Ok(DeviceServiceSnapshotLookup {
+                        snapshot,
+                        source: DeviceServiceSnapshotSource::Live,
+                        error: None,
+                    });
+                }
+                Err(error) => {
+                    if let Some(snapshot) = self.load_device_service_snapshot(device_id)? {
+                        return Ok(DeviceServiceSnapshotLookup {
+                            snapshot,
+                            source: DeviceServiceSnapshotSource::Cache,
+                            error: Some(error.to_string()),
+                        });
+                    }
+                    return Ok(DeviceServiceSnapshotLookup {
+                        snapshot: DeviceServiceSnapshot {
+                            peer_id: device_id.to_string(),
+                            services: Vec::new(),
+                            updated_at: SystemTime::now(),
+                        },
+                        source: DeviceServiceSnapshotSource::Empty,
+                        error: Some(error.to_string()),
+                    });
+                }
+            }
+        }
+
+        if let Some(snapshot) = self.load_device_service_snapshot(device_id)? {
+            Ok(DeviceServiceSnapshotLookup {
+                snapshot,
+                source: DeviceServiceSnapshotSource::Cache,
+                error: None,
+            })
+        } else {
+            Ok(DeviceServiceSnapshotLookup {
+                snapshot: DeviceServiceSnapshot {
+                    peer_id: device_id.to_string(),
+                    services: Vec::new(),
+                    updated_at: SystemTime::now(),
+                },
+                source: DeviceServiceSnapshotSource::Empty,
+                error: None,
+            })
         }
     }
 
-    fn remove_cached_device_managed_service(&self, device_id: PeerId, name: &str) -> Result<bool> {
-        let current_json = self.list_cached_device_managed_services_json(device_id)?;
-        let mut services: Vec<ServiceInstance> = serde_json::from_str(&current_json)?;
-        let before = services.len();
-        services.retain(|service| service.name != name);
-        if services.len() == before {
+    async fn refresh_or_keep_device_service_snapshot(&self, device_id: PeerId) {
+        if let Err(refresh_error) = self.refresh_device_service_snapshot(device_id).await {
+            log::warn!(
+                "Failed to refresh device service snapshot for device {device_id} after remote mutation: {refresh_error}"
+            );
+        }
+    }
+
+    fn remove_cached_device_service(&self, device_id: PeerId, name: &str) -> Result<bool> {
+        let Some(mut snapshot) = self.load_device_service_snapshot(device_id)? else {
+            return Ok(false);
+        };
+        let before = snapshot.services.len();
+        snapshot.services.retain(|service| service.name != name);
+        if snapshot.services.len() == before {
             return Ok(false);
         }
 
-        let updated_json = serde_json::to_string(&services)?;
-        self.save_cached_device_managed_services_json(device_id, &updated_json)?;
-        Ok(true)
-    }
-
-    fn remove_cached_device_published_service(
-        &self,
-        device_id: PeerId,
-        name: &str,
-    ) -> Result<bool> {
-        let mut services = self.list_cached_device_published_services(device_id)?;
-        let before = services.len();
-        services.retain(|service| service.service_name != name);
-        if services.len() == before {
-            return Ok(false);
-        }
-
-        self.save_cached_device_published_services(device_id, &services)?;
+        self.save_device_service_snapshot(&snapshot)?;
         Ok(true)
     }
 
@@ -480,9 +447,7 @@ impl FungiDaemon {
         device_id: PeerId,
         name: &str,
     ) -> Result<ServiceControlResponse> {
-        let removed_managed = self.remove_cached_device_managed_service(device_id, name)?;
-        let removed_published = self.remove_cached_device_published_service(device_id, name)?;
-        if !(removed_managed || removed_published) {
+        if !self.remove_cached_device_service(device_id, name)? {
             anyhow::bail!("cached service not found for device: {name}");
         }
 
@@ -583,7 +548,7 @@ impl FungiDaemon {
             .service_control_protocol_control()
             .pull_peer_service(peer_id, manifest_yaml)
             .await?;
-        self.reconcile_remote_service_caches(peer_id, true).await;
+        self.refresh_or_keep_device_service_snapshot(peer_id).await;
         Ok(response)
     }
 
@@ -602,7 +567,7 @@ impl FungiDaemon {
             .map(|service| service.name.as_str())
             .unwrap_or(name.as_str())
             .to_string();
-        self.reconcile_remote_service_caches(peer_id, true).await;
+        self.refresh_or_keep_device_service_snapshot(peer_id).await;
         self.restore_saved_service_access(peer_id, service_key.clone())
             .await
             .with_context(|| {
@@ -614,7 +579,11 @@ impl FungiDaemon {
     }
 
     pub async fn remote_list_services(&self, peer_id: PeerId) -> Result<ServiceControlResponse> {
-        self.list_device_managed_services(peer_id, false).await
+        let lookup = self.get_device_service_snapshot(peer_id, true).await?;
+        Ok(ServiceControlResponse::success_services(
+            None,
+            serde_json::to_string(&lookup.snapshot.services)?,
+        ))
     }
 
     pub async fn remote_stop_service(
@@ -640,7 +609,7 @@ impl FungiDaemon {
                     )
                 })?;
         }
-        self.reconcile_remote_service_caches(peer_id, true).await;
+        self.refresh_or_keep_device_service_snapshot(peer_id).await;
         Ok(response)
     }
 
@@ -668,8 +637,52 @@ impl FungiDaemon {
                     )
                 })?;
         }
-        self.reconcile_remote_service_caches(peer_id, true).await;
+        self.refresh_or_keep_device_service_snapshot(peer_id).await;
         Ok(response)
+    }
+}
+
+fn merge_device_service_snapshot(
+    device_id: PeerId,
+    managed: Vec<ServiceInstance>,
+    published: Vec<DeviceService>,
+) -> DeviceServiceSnapshot {
+    let mut services_by_name = BTreeMap::<String, DeviceService>::new();
+
+    for service in managed {
+        services_by_name.insert(service.name.clone(), device_service_from_instance(service));
+    }
+
+    for service in published {
+        services_by_name
+            .entry(service.name.clone())
+            .and_modify(|existing| {
+                existing.usage = service.usage.clone();
+                existing.icon_url = service.icon_url.clone();
+                existing.endpoints = service.endpoints.clone();
+                if existing.ports.is_empty() {
+                    existing.ports = service.ports.clone();
+                }
+            })
+            .or_insert(service);
+    }
+
+    DeviceServiceSnapshot {
+        peer_id: device_id.to_string(),
+        services: services_by_name.into_values().collect(),
+        updated_at: SystemTime::now(),
+    }
+}
+
+fn device_service_from_instance(instance: ServiceInstance) -> DeviceService {
+    DeviceService {
+        name: instance.name,
+        runtime: instance.runtime,
+        usage: None,
+        icon_url: None,
+        ports: instance.ports,
+        endpoints: Vec::new(),
+        status: instance.status,
     }
 }
 
@@ -700,42 +713,96 @@ fn runtime_status_warning(
 #[cfg(test)]
 mod tests {
     use crate::test_support::TestDaemon;
+    use crate::{
+        DeviceServiceEndpoint, ServiceExposeUsage, ServiceExposeUsageKind, ServicePhase,
+        ServicePort, ServicePortAllocation, ServicePortProtocol, ServiceStatus,
+    };
 
     use super::*;
 
+    #[test]
+    fn merges_managed_status_with_published_connectable_endpoint() {
+        let peer_id = PeerId::random();
+        let snapshot = merge_device_service_snapshot(
+            peer_id,
+            vec![service_instance("web", ServiceStatus::running())],
+            vec![published_service("web", ServiceStatus::running())],
+        );
+
+        assert_eq!(snapshot.peer_id, peer_id.to_string());
+        assert_eq!(snapshot.services.len(), 1);
+        let service = &snapshot.services[0];
+        assert_eq!(service.name, "web");
+        assert_eq!(service.status.phase, ServicePhase::Running);
+        assert_eq!(service.endpoints.len(), 1);
+        assert_eq!(
+            service.usage.as_ref().unwrap().kind,
+            ServiceExposeUsageKind::Web
+        );
+    }
+
+    #[test]
+    fn keeps_stopped_managed_service_without_connectable_endpoint() {
+        let snapshot = merge_device_service_snapshot(
+            PeerId::random(),
+            vec![service_instance("web", ServiceStatus::stopped())],
+            Vec::new(),
+        );
+
+        assert_eq!(snapshot.services.len(), 1);
+        let service = &snapshot.services[0];
+        assert_eq!(service.name, "web");
+        assert_eq!(service.status.phase, ServicePhase::Stopped);
+        assert!(service.endpoints.is_empty());
+    }
+
+    #[test]
+    fn keeps_discovery_only_service_from_published_snapshot() {
+        let snapshot = merge_device_service_snapshot(
+            PeerId::random(),
+            Vec::new(),
+            vec![published_service("web", ServiceStatus::running())],
+        );
+
+        assert_eq!(snapshot.services.len(), 1);
+        let service = &snapshot.services[0];
+        assert_eq!(service.name, "web");
+        assert_eq!(service.status.phase, ServicePhase::Running);
+        assert_eq!(service.endpoints.len(), 1);
+    }
+
     #[tokio::test]
-    async fn invalidates_managed_and_published_service_caches_for_device() {
+    async fn removes_cached_device_service_snapshot_for_device() {
         let daemon = TestDaemon::spawn().await.unwrap();
         let peer_id = PeerId::random();
         let fungi_dir = daemon.daemon().config_fungi_dir().unwrap();
-        let managed_cache =
-            fungi_config::service_cache::ServiceCache::apply_managed_services_from_dir(&fungi_dir)
+        let cache =
+            fungi_config::service_cache::DeviceServiceSnapshotCache::apply_from_dir(&fungi_dir)
                 .unwrap();
-        let published_cache =
-            fungi_config::service_cache::ServiceCache::apply_published_services_from_dir(
-                &fungi_dir,
-            )
-            .unwrap();
 
-        managed_cache
-            .set_device_services_json(peer_id.to_string(), "[{\"name\":\"svc-a\"}]".to_string())
-            .unwrap();
-        published_cache
-            .set_device_services_json(
+        let snapshot = DeviceServiceSnapshot {
+            peer_id: peer_id.to_string(),
+            services: vec![DeviceService {
+                name: "svc-a".to_string(),
+                runtime: RuntimeKind::External,
+                usage: None,
+                icon_url: None,
+                ports: Vec::new(),
+                endpoints: Vec::new(),
+                status: ServiceStatus::running(),
+            }],
+            updated_at: SystemTime::now(),
+        };
+        cache
+            .set_device_snapshot_json(
                 peer_id.to_string(),
-                "[{\"service_name\":\"svc-a\"}]".to_string(),
+                serde_json::to_string(&snapshot).unwrap(),
             )
             .unwrap();
 
         assert!(
-            managed_cache
-                .get_device_services_json(&peer_id.to_string())
-                .unwrap()
-                .is_some()
-        );
-        assert!(
-            published_cache
-                .get_device_services_json(&peer_id.to_string())
+            cache
+                .get_device_snapshot_json(&peer_id.to_string())
                 .unwrap()
                 .is_some()
         );
@@ -743,27 +810,58 @@ mod tests {
         assert!(
             daemon
                 .daemon()
-                .invalidate_cached_device_managed_services(peer_id)
+                .remove_device_service_snapshot(peer_id)
                 .unwrap()
         );
         assert!(
-            daemon
-                .daemon()
-                .invalidate_cached_device_published_services(peer_id)
+            cache
+                .get_device_snapshot_json(&peer_id.to_string())
                 .unwrap()
+                .is_none()
         );
+    }
 
-        assert!(
-            managed_cache
-                .get_device_services_json(&peer_id.to_string())
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            published_cache
-                .get_device_services_json(&peer_id.to_string())
-                .unwrap()
-                .is_none()
-        );
+    fn service_instance(name: &str, status: ServiceStatus) -> ServiceInstance {
+        ServiceInstance {
+            id: format!("external:{name}"),
+            runtime: RuntimeKind::External,
+            name: name.to_string(),
+            definition_id: None,
+            source: "127.0.0.1".to_string(),
+            labels: BTreeMap::new(),
+            ports: vec![service_port("web")],
+            exposed_endpoints: Vec::new(),
+            status,
+        }
+    }
+
+    fn published_service(name: &str, status: ServiceStatus) -> DeviceService {
+        DeviceService {
+            name: name.to_string(),
+            runtime: RuntimeKind::External,
+            usage: Some(ServiceExposeUsage {
+                kind: ServiceExposeUsageKind::Web,
+                path: Some("/".to_string()),
+            }),
+            icon_url: Some("https://example.test/icon.svg".to_string()),
+            ports: vec![service_port("web")],
+            endpoints: vec![DeviceServiceEndpoint {
+                name: "web".to_string(),
+                protocol: format!("/fungi/service/{name}/web/0.2.0"),
+                host_port: 18080,
+                service_port: 8080,
+            }],
+            status,
+        }
+    }
+
+    fn service_port(name: &str) -> ServicePort {
+        ServicePort {
+            name: Some(name.to_string()),
+            host_port: 18080,
+            host_port_allocation: ServicePortAllocation::Fixed,
+            service_port: 8080,
+            protocol: ServicePortProtocol::Tcp,
+        }
     }
 }

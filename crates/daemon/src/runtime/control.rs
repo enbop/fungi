@@ -386,7 +386,7 @@ impl RuntimeControl {
         self.logs(runtime, name, options).await
     }
 
-    pub async fn list_catalog_services(&self) -> Result<Vec<CatalogService>> {
+    pub async fn list_published_device_services(&self) -> Result<Vec<DeviceService>> {
         let manifests = self
             .service_manifests
             .lock()
@@ -416,16 +416,15 @@ impl RuntimeControl {
                 continue;
             }
 
-            services.push(CatalogService {
-                service_name: manifest.name.clone(),
+            services.push(DeviceService {
+                name: manifest.name.clone(),
                 runtime: manifest.runtime,
-                transport: expose.transport,
                 usage: expose.usage,
                 icon_url: expose.icon_url,
-                catalog_id: expose.catalog_id,
+                ports: manifest.ports.clone(),
                 endpoints: service_expose_endpoint_bindings(&manifest)
                     .into_iter()
-                    .map(|endpoint| CatalogServiceEndpoint {
+                    .map(|endpoint| DeviceServiceEndpoint {
                         name: endpoint.name,
                         protocol: endpoint.protocol,
                         host_port: endpoint.host_port,
@@ -436,7 +435,7 @@ impl RuntimeControl {
             });
         }
 
-        services.sort_by(|left, right| left.service_name.cmp(&right.service_name));
+        services.sort_by(|left, right| left.name.cmp(&right.name));
         Ok(services)
     }
 
