@@ -251,22 +251,23 @@ pub struct DeviceServiceSnapshot {
 pub struct DeviceService {
     pub name: String,
     pub runtime: RuntimeKind,
-    pub usage: Option<ServiceExposeUsage>,
-    pub icon_url: Option<String>,
     #[serde(default)]
-    pub ports: Vec<ServicePort>,
+    pub metadata: DeviceServiceMetadata,
     #[serde(default)]
     pub endpoints: Vec<DeviceServiceEndpoint>,
     pub status: ServiceStatus,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DeviceServiceMetadata {
+    pub usage: Option<ServiceExposeUsage>,
+    pub icon_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceServiceEndpoint {
     pub name: String,
     pub protocol: String,
-    #[serde(default)]
-    pub host_port: u16,
-    pub service_port: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

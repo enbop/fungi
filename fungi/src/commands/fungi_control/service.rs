@@ -1369,15 +1369,15 @@ fn device_service_to_instance(service: DeviceService) -> ServiceInstance {
         definition_id: None,
         source: String::new(),
         labels: Default::default(),
-        ports: service.ports,
+        ports: Vec::new(),
         exposed_endpoints: service
             .endpoints
             .into_iter()
             .map(|endpoint| ServiceExposeEndpointBinding {
                 name: endpoint.name,
                 protocol: endpoint.protocol,
-                host_port: endpoint.host_port,
-                service_port: endpoint.service_port,
+                host_port: 0,
+                service_port: 0,
             })
             .collect(),
         status: service.status,
@@ -1575,7 +1575,7 @@ fn build_web_url(
     entry: Option<&str>,
 ) -> Option<String> {
     if !matches!(
-        service.usage.as_ref().map(|usage| usage.kind),
+        service.metadata.usage.as_ref().map(|usage| usage.kind),
         Some(ServiceExposeUsageKind::Web)
     ) {
         return None;
@@ -1584,6 +1584,7 @@ fn build_web_url(
     let endpoint = select_access_endpoint(access, entry)?;
     let mut value = format!("http://{}:{}", endpoint.local_host, endpoint.local_port);
     if let Some(path) = service
+        .metadata
         .usage
         .as_ref()
         .and_then(|usage| usage.path.as_deref())
@@ -1606,7 +1607,7 @@ fn open_or_print_remote_service(
     entry: Option<&str>,
 ) {
     if matches!(
-        service.usage.as_ref().map(|usage| usage.kind),
+        service.metadata.usage.as_ref().map(|usage| usage.kind),
         Some(ServiceExposeUsageKind::Web)
     ) {
         let Some(url) = build_web_url(service, access, entry) else {
@@ -1620,7 +1621,12 @@ fn open_or_print_remote_service(
     let Some(endpoint) = select_access_endpoint(access, entry) else {
         fatal("No connectable entry is available for this service")
     };
-    print_access_details(access, endpoint, device_name, service.usage.as_ref());
+    print_access_details(
+        access,
+        endpoint,
+        device_name,
+        service.metadata.usage.as_ref(),
+    );
 }
 
 fn print_access_details(
@@ -1630,15 +1636,14 @@ fn print_access_details(
     usage: Option<&fungi_daemon::ServiceExposeUsage>,
 ) {
     let usage = service_usage_label(usage);
-    let remote_port = format_remote_port(endpoint.remote_port);
     println!("{}@{}", access.service_name, device_name);
     println!("type: {usage}");
     println!("state: connected");
     println!();
     println!("forward:");
     println!(
-        "  {}  {}:{} -> {}:{}",
-        endpoint.name, endpoint.local_host, endpoint.local_port, device_name, remote_port
+        "  {}  {}:{} -> {}",
+        endpoint.name, endpoint.local_host, endpoint.local_port, device_name
     );
     println!();
     println!("local address:");
@@ -2333,32 +2338,16 @@ impl ServiceOverviewRow {
                 .endpoints
                 .iter()
                 .map(|endpoint| {
-                    let remote_port = service
-                        .endpoints
-                        .iter()
-                        .find(|remote_endpoint| remote_endpoint.name == endpoint.name)
-                        .map(|remote_endpoint| remote_endpoint.service_port)
-                        .unwrap_or(endpoint.remote_port);
-                    let remote_port = format_remote_port(remote_port);
                     format!(
-                        "{} {}:{} -> {}:{}",
-                        endpoint.name,
-                        endpoint.local_host,
-                        endpoint.local_port,
-                        device_name,
-                        remote_port
+                        "{} {}:{} -> {}",
+                        endpoint.name, endpoint.local_host, endpoint.local_port, device_name
                     )
                 })
                 .collect(),
             None => service
                 .endpoints
                 .iter()
-                .map(|endpoint| {
-                    format!(
-                        "{} remote:{}:{}",
-                        endpoint.name, device_name, endpoint.service_port
-                    )
-                })
+                .map(|endpoint| format!("{} remote:{}", endpoint.name, device_name))
                 .collect(),
         };
 
@@ -2366,7 +2355,7 @@ impl ServiceOverviewRow {
             reference: format!("{}@{}", service.name, device_name),
             device: device_name,
             kind: "remote".to_string(),
-            usage: service_usage_label(service.usage.as_ref()).to_string(),
+            usage: service_usage_label(service.metadata.usage.as_ref()).to_string(),
             state: overview_state_label(&service.status),
             entries,
             note: saved_access.map(|_| "local address saved".to_string()),
@@ -2389,20 +2378,9 @@ impl ServiceOverviewRow {
                 .endpoints
                 .iter()
                 .map(|endpoint| {
-                    let remote_port = service
-                        .ports
-                        .iter()
-                        .find(|port| port.name.as_deref().unwrap_or("main") == endpoint.name)
-                        .map(|port| port.service_port)
-                        .unwrap_or(endpoint.remote_port);
-                    let remote_port = format_remote_port(remote_port);
                     format!(
-                        "{} {}:{} -> {}:{}",
-                        endpoint.name,
-                        endpoint.local_host,
-                        endpoint.local_port,
-                        device_name,
-                        remote_port
+                        "{} {}:{} -> {}",
+                        endpoint.name, endpoint.local_host, endpoint.local_port, device_name
                     )
                 })
                 .collect(),
@@ -2411,7 +2389,7 @@ impl ServiceOverviewRow {
                 .iter()
                 .map(|port| {
                     let name = port.name.clone().unwrap_or_else(|| "main".to_string());
-                    format!("{name} remote:{}:{}", device_name, port.service_port)
+                    format!("{name} remote:{}", device_name)
                 })
                 .collect(),
         };
@@ -2528,14 +2506,6 @@ fn resolved_device_display_name(device: &super::shared::ResolvedPeerTarget) -> S
                 .cloned()
         })
         .unwrap_or_else(|| device.peer_id.clone())
-}
-
-fn format_remote_port(port: u16) -> String {
-    if port == 0 {
-        "?".to_string()
-    } else {
-        port.to_string()
-    }
 }
 
 #[derive(Debug, Serialize)]
@@ -2875,7 +2845,7 @@ mod tests {
         assert_eq!(row.kind, "remote");
         assert_eq!(row.usage, "web");
         assert_eq!(row.state, "exited");
-        assert_eq!(row.entries, vec!["web remote:nas:80"]);
+        assert_eq!(row.entries, vec!["web remote:nas"]);
     }
 
     #[test]
@@ -3030,17 +3000,16 @@ publish:
         RemoteService {
             name: "demo".to_string(),
             runtime: RuntimeKind::Docker,
-            usage: Some(ServiceExposeUsage {
-                kind: ServiceExposeUsageKind::Web,
-                path: Some(path.to_string()),
-            }),
-            icon_url: None,
-            ports: vec![service_port("web", 28080)],
+            metadata: fungi_daemon::DeviceServiceMetadata {
+                usage: Some(ServiceExposeUsage {
+                    kind: ServiceExposeUsageKind::Web,
+                    path: Some(path.to_string()),
+                }),
+                icon_url: None,
+            },
             endpoints: vec![DeviceServiceEndpoint {
                 name: "web".to_string(),
                 protocol: "/fungi/service/demo/web/0.2.0".to_string(),
-                host_port: 28080,
-                service_port: 80,
             }],
             status: ServiceStatus::running(),
         }

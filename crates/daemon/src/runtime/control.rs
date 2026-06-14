@@ -419,16 +419,15 @@ impl RuntimeControl {
             services.push(DeviceService {
                 name: manifest.name.clone(),
                 runtime: manifest.runtime,
-                usage: expose.usage,
-                icon_url: expose.icon_url,
-                ports: manifest.ports.clone(),
+                metadata: crate::DeviceServiceMetadata {
+                    usage: expose.usage,
+                    icon_url: expose.icon_url,
+                },
                 endpoints: service_expose_endpoint_bindings(&manifest)
                     .into_iter()
                     .map(|endpoint| DeviceServiceEndpoint {
                         name: endpoint.name,
                         protocol: endpoint.protocol,
-                        host_port: endpoint.host_port,
-                        service_port: endpoint.service_port,
                     })
                     .collect(),
                 status: instance.status,
