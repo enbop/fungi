@@ -94,10 +94,6 @@ libp2p-identity = { version = "0.2", features = ["secp256k1", "serde", "rand"] }
 libp2p-swarm = "0.47"
 parking_lot = "0.12"
 
-[patch.crates-io]
-# workaround for fixing the build error on macOS
-if-watch = { git = "https://github.com/Heap-Hop/if-watch.git", branch = "no_system_configuration_on_macos" }
-
 [profile.release]
 lto = true
 codegen-units = 1
