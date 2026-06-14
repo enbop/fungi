@@ -304,7 +304,9 @@ impl SwarmControl {
             return Err(ConnectError::NoDialAddresses { peer_id });
         }
         let relay_addresses = self.relay_peers.circuit_addresses_for_target(peer_id);
-        self.prepare_for_relay_fallback(peer_id).await;
+        log::debug!(
+            "Dialing relay circuit addresses for peer {peer_id} without UDP prepare refresh"
+        );
         self.dial_with_addresses(peer_id, relay_addresses, PeerCondition::Always)
             .await
     }

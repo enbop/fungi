@@ -31,7 +31,6 @@ const RELAY_RETRY_FAST_ATTEMPTS: u32 = 4;
 const RELAY_RETRY_BASE_DELAY_MS: u64 = 500;
 const RELAY_RETRY_MAX_DELAY: Duration = Duration::from_secs(60);
 const RELAY_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(600);
-const RELAY_PREPARE_REFRESH_GRACE_WINDOW: Duration = Duration::from_millis(800);
 const RELAY_REFRESH_MIN_INTERVAL: Duration = Duration::from_secs(2);
 
 struct TaskGuard {
@@ -444,63 +443,6 @@ impl SwarmControl {
 
         self.refresh_external_addresses_via_relays(preferred_relay)
             .await
-    }
-
-    async fn send_prepare_refresh_notification(
-        &self,
-        relay_peer: PeerId,
-        target_peer: PeerId,
-    ) -> Result<()> {
-        self.invoke_swarm(move |swarm| {
-            swarm
-                .behaviour_mut()
-                .send_relay_refresh(&relay_peer, target_peer)
-        })
-        .await?;
-
-        Ok(())
-    }
-
-    pub(super) async fn prepare_for_relay_fallback(&self, target_peer: PeerId) {
-        let local_refresh_started = self.trigger_external_address_refresh(None).await;
-        let mut remote_refresh_requested = false;
-
-        for relay_peer in self.relay_peers.peer_ids().iter().copied() {
-            // prepare-refresh rides on the existing TCP relay reservation. If
-            // that carrier is down, the relay management loop is responsible
-            // for rebuilding it; this path should not create extra relay dials.
-            if !self.state().relay_tcp_ready(relay_peer) {
-                log::debug!(
-                    "Skipping prepare-refresh via relay {} because no healthy TCP reservation is active",
-                    relay_peer
-                );
-                continue;
-            }
-
-            match self
-                .send_prepare_refresh_notification(relay_peer, target_peer)
-                .await
-            {
-                Ok(()) => {
-                    remote_refresh_requested = true;
-                    break;
-                }
-                Err(error) => {
-                    log::debug!(
-                        "Relay {} prepare-refresh notify for target {} failed: {}",
-                        relay_peer,
-                        target_peer,
-                        error
-                    );
-                }
-            }
-        }
-
-        if local_refresh_started || remote_refresh_requested {
-            // TODO: Replace this fixed grace window with an event-driven wait for a new or
-            // refreshed UDP external address candidate.
-            tokio::time::sleep(RELAY_PREPARE_REFRESH_GRACE_WINDOW).await;
-        }
     }
 }
 
