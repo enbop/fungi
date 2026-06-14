@@ -11,7 +11,7 @@ use fungi_config::{
 };
 use libp2p::PeerId;
 
-use crate::{DeviceServiceEndpoint, FungiDaemon};
+use crate::{DeviceService, DeviceServiceEndpoint, FungiDaemon};
 
 use super::types::{ServiceAccess, ServiceAccessEndpoint};
 
@@ -388,18 +388,30 @@ impl FungiDaemon {
                 continue;
             };
 
-            let Some(endpoint) = service
-                .endpoints
-                .iter()
-                .find(|endpoint| endpoint.name == record.remote_service_port_name)
-            else {
-                log::warn!(
-                    "Cached device service snapshot for {} service {} does not include entry {}; skipping service access restore",
-                    record.remote_peer_id,
-                    record.remote_service_name,
-                    record.remote_service_port_name
-                );
-                continue;
+            let endpoint = match cached_connectable_endpoint(
+                service,
+                &record.remote_service_port_name,
+            ) {
+                CachedConnectableEndpoint::Found(endpoint) => endpoint,
+                CachedConnectableEndpoint::PortOnly => {
+                    log::debug!(
+                        "Cached device service snapshot for {} service {} includes entry {} as a service port but no connectable endpoint (status={}); leaving local preference unchanged and skipping startup listener restore",
+                        record.remote_peer_id,
+                        record.remote_service_name,
+                        record.remote_service_port_name,
+                        service.status.state_label()
+                    );
+                    continue;
+                }
+                CachedConnectableEndpoint::MissingEntry => {
+                    log::warn!(
+                        "Cached device service snapshot for {} service {} does not include entry {}; skipping service access restore",
+                        record.remote_peer_id,
+                        record.remote_service_name,
+                        record.remote_service_port_name
+                    );
+                    continue;
+                }
             };
 
             if let Err(error) = self
@@ -583,6 +595,35 @@ fn device_service_endpoint_listen_port(endpoint: &DeviceServiceEndpoint) -> u16 
     }
 }
 
+enum CachedConnectableEndpoint<'a> {
+    Found(&'a DeviceServiceEndpoint),
+    PortOnly,
+    MissingEntry,
+}
+
+fn cached_connectable_endpoint<'a>(
+    service: &'a DeviceService,
+    entry: &str,
+) -> CachedConnectableEndpoint<'a> {
+    if let Some(endpoint) = service
+        .endpoints
+        .iter()
+        .find(|endpoint| endpoint.name == entry)
+    {
+        return CachedConnectableEndpoint::Found(endpoint);
+    }
+
+    if service
+        .ports
+        .iter()
+        .any(|port| port.name.as_deref() == Some(entry))
+    {
+        return CachedConnectableEndpoint::PortOnly;
+    }
+
+    CachedConnectableEndpoint::MissingEntry
+}
+
 fn ensure_local_port_available(port: u16, reserved_ports: &BTreeSet<u16>) -> Result<()> {
     if reserved_ports.contains(&port) {
         bail!(
@@ -621,9 +662,10 @@ fn allocate_preferred_local_port(
 mod tests {
     use super::*;
     use crate::{
-        RuntimeKind, ServiceExpose, ServiceExposeTransport, ServiceExposeTransportKind,
-        ServiceExposeUsage, ServiceExposeUsageKind, ServiceManifest, ServiceMount, ServicePort,
-        ServicePortAllocation, ServicePortProtocol, ServiceRunMode, ServiceSource,
+        DeviceService, RuntimeKind, ServiceExpose, ServiceExposeTransport,
+        ServiceExposeTransportKind, ServiceExposeUsage, ServiceExposeUsageKind, ServiceManifest,
+        ServiceMount, ServicePort, ServicePortAllocation, ServicePortProtocol, ServiceRunMode,
+        ServiceSource, ServiceStatus,
         test_support::{TestDaemon, spawn_connected_pair},
     };
     use libp2p::swarm::dial_opts::DialOpts;
@@ -745,6 +787,34 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(active_ports, vec![second_local_port]);
         Ok(())
+    }
+
+    #[test]
+    fn cached_connectable_endpoint_reports_port_only_snapshot() {
+        let service = DeviceService {
+            name: "fb".to_string(),
+            runtime: RuntimeKind::Wasmtime,
+            usage: None,
+            icon_url: None,
+            ports: vec![ServicePort {
+                name: Some("http".to_string()),
+                host_port: 8082,
+                host_port_allocation: ServicePortAllocation::Fixed,
+                service_port: 8082,
+                protocol: ServicePortProtocol::Tcp,
+            }],
+            endpoints: Vec::new(),
+            status: ServiceStatus::exited(Some(1)),
+        };
+
+        assert!(matches!(
+            cached_connectable_endpoint(&service, "http"),
+            CachedConnectableEndpoint::PortOnly
+        ));
+        assert!(matches!(
+            cached_connectable_endpoint(&service, "ssh"),
+            CachedConnectableEndpoint::MissingEntry
+        ));
     }
 
     async fn setup_access_test_pair(
