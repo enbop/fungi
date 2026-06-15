@@ -109,7 +109,7 @@ fn relay_udp_refresh_plan_deduplicates_udp_addresses_and_prioritizes_preferred_r
 }
 
 #[test]
-fn relay_circuit_addresses_only_use_tcp_relay_endpoints() {
+fn relay_circuit_addresses_prefer_udp_relay_endpoints() {
     let relay_peer = libp2p::identity::Keypair::generate_ed25519()
         .public()
         .to_peer_id();
@@ -124,12 +124,98 @@ fn relay_circuit_addresses_only_use_tcp_relay_endpoints() {
         .parse()
         .unwrap();
 
-    let relay_peers = RelayPeers::new(vec![tcp_addr.clone(), udp_addr]);
+    let relay_peers = RelayPeers::new(vec![tcp_addr.clone(), udp_addr.clone()]);
+    let state = State::new(HashSet::new());
+    relay_peers.register_with_state(&state);
 
     assert_eq!(relay_peers.peer_ids(), &[relay_peer]);
     assert_eq!(
-        relay_peers.circuit_addresses_for_target(target_peer),
-        vec![super::relay::peer_addr_with_relay(target_peer, tcp_addr)]
+        relay_peers.circuit_addresses_for_target(target_peer, &state),
+        vec![
+            super::relay::peer_addr_with_relay(target_peer, udp_addr),
+            super::relay::peer_addr_with_relay(target_peer, tcp_addr)
+        ]
+    );
+}
+
+#[test]
+fn relay_circuit_addresses_keep_peer_order_and_sort_candidates_udp_first() {
+    let first_relay = libp2p::identity::Keypair::generate_ed25519()
+        .public()
+        .to_peer_id();
+    let second_relay = libp2p::identity::Keypair::generate_ed25519()
+        .public()
+        .to_peer_id();
+    let target_peer = libp2p::identity::Keypair::generate_ed25519()
+        .public()
+        .to_peer_id();
+
+    let first_tcp: Multiaddr = format!("/ip4/127.0.0.1/tcp/30001/p2p/{first_relay}")
+        .parse()
+        .unwrap();
+    let first_udp: Multiaddr = format!("/ip4/127.0.0.1/udp/30001/quic-v1/p2p/{first_relay}")
+        .parse()
+        .unwrap();
+    let second_tcp: Multiaddr = format!("/ip4/127.0.0.1/tcp/30002/p2p/{second_relay}")
+        .parse()
+        .unwrap();
+    let second_udp: Multiaddr = format!("/ip4/127.0.0.1/udp/30002/quic-v1/p2p/{second_relay}")
+        .parse()
+        .unwrap();
+
+    let relay_peers = RelayPeers::new(vec![
+        first_tcp.clone(),
+        second_tcp.clone(),
+        first_udp.clone(),
+        second_udp.clone(),
+    ]);
+    let state = State::new(HashSet::new());
+    relay_peers.register_with_state(&state);
+
+    assert_eq!(relay_peers.peer_ids(), &[first_relay, second_relay]);
+    assert_eq!(
+        relay_peers.circuit_addresses_for_target(target_peer, &state),
+        vec![
+            super::relay::peer_addr_with_relay(target_peer, first_udp),
+            super::relay::peer_addr_with_relay(target_peer, first_tcp),
+            super::relay::peer_addr_with_relay(target_peer, second_udp),
+            super::relay::peer_addr_with_relay(target_peer, second_tcp),
+        ]
+    );
+}
+
+#[test]
+fn relay_circuit_addresses_keep_active_tcp_first_without_upgrading() {
+    let relay_peer = libp2p::identity::Keypair::generate_ed25519()
+        .public()
+        .to_peer_id();
+    let target_peer = libp2p::identity::Keypair::generate_ed25519()
+        .public()
+        .to_peer_id();
+
+    let tcp_addr: Multiaddr = format!("/ip4/127.0.0.1/tcp/30001/p2p/{relay_peer}")
+        .parse()
+        .unwrap();
+    let udp_addr: Multiaddr = format!("/ip4/127.0.0.1/udp/30001/quic-v1/p2p/{relay_peer}")
+        .parse()
+        .unwrap();
+    let relay_peers = RelayPeers::new(vec![tcp_addr.clone(), udp_addr.clone()]);
+    let state = State::new(HashSet::new());
+    relay_peers.register_with_state(&state);
+
+    state.record_relay_connection_established(
+        relay_peer,
+        ConnectionId::new_unchecked(8),
+        &tcp_addr,
+    );
+    state.record_relay_listener_check(&tcp_addr, true);
+
+    assert_eq!(
+        relay_peers.circuit_addresses_for_target(target_peer, &state),
+        vec![
+            super::relay::peer_addr_with_relay(target_peer, tcp_addr),
+            super::relay::peer_addr_with_relay(target_peer, udp_addr)
+        ]
     );
 }
 
