@@ -30,14 +30,13 @@ impl FungiDaemon {
         &self,
         record: &LocalServicePreference,
         remote_protocol: String,
-        remote_port: u16,
     ) -> Result<String> {
         let rule = ForwardingRule {
             local_host: record.local_host.clone(),
             local_port: record.local_port,
             remote_peer_id: record.remote_peer_id.clone(),
             remote_protocol: Some(remote_protocol),
-            remote_port,
+            remote_port: None,
             remote_service_id: None,
             remote_service_name: Some(record.remote_service_name.clone()),
             remote_service_port_name: Some(record.remote_service_port_name.clone()),
@@ -50,7 +49,6 @@ impl FungiDaemon {
         record: &LocalServicePreference,
         endpoint: &DeviceServiceEndpoint,
     ) -> Result<()> {
-        let remote_port = device_service_endpoint_listen_port(endpoint);
         let existing_active_rule = find_active_rule(
             &self.get_service_access_forwarding_rules(),
             &record.remote_peer_id,
@@ -61,7 +59,6 @@ impl FungiDaemon {
         let active_rule_matches = existing_active_rule.as_ref().is_some_and(|(_, rule)| {
             rule.local_host == record.local_host
                 && rule.local_port == record.local_port
-                && rule.remote_port == remote_port
                 && rule.remote_protocol.as_deref() == Some(endpoint.protocol.as_str())
         });
         if active_rule_matches {
@@ -75,7 +72,7 @@ impl FungiDaemon {
         }
 
         match self
-            .start_service_access_forwarding_rule(record, endpoint.protocol.clone(), remote_port)
+            .start_service_access_forwarding_rule(record, endpoint.protocol.clone())
             .await
         {
             Ok(_) => Ok(()),
@@ -153,7 +150,6 @@ impl FungiDaemon {
         }
 
         for endpoint in endpoints {
-            let remote_port = device_service_endpoint_listen_port(&endpoint);
             let existing_record = local_preferences
                 .find_record(&peer_id_string, &service.name, &endpoint.name)
                 .cloned();
@@ -174,9 +170,7 @@ impl FungiDaemon {
             let selected_local_port = match (local_port, existing_record.as_ref()) {
                 (Some(local_port), _) => local_port,
                 (None, Some(record)) => record.local_port,
-                (None, None) => {
-                    allocate_preferred_local_port(endpoint.service_port, &reserved_local_ports)?
-                }
+                (None, None) => allocate_free_local_port(&reserved_local_ports)?,
             };
             let local_port_source = if local_port.is_some() {
                 LocalPortSource::User
@@ -190,7 +184,6 @@ impl FungiDaemon {
             let active_rule_matches = existing_active_rule.as_ref().is_some_and(|(_, rule)| {
                 rule.local_host == "127.0.0.1"
                     && rule.local_port == selected_local_port
-                    && rule.remote_port == remote_port
                     && rule.remote_protocol.as_deref() == Some(endpoint.protocol.as_str())
             });
             let active_rule_owns_selected_port =
@@ -223,11 +216,7 @@ impl FungiDaemon {
                 }
 
                 match self
-                    .start_service_access_forwarding_rule(
-                        &record,
-                        endpoint.protocol.clone(),
-                        remote_port,
-                    )
+                    .start_service_access_forwarding_rule(&record, endpoint.protocol.clone())
                     .await
                 {
                     Ok(rule_id) => started_rule_id = Some(rule_id),
@@ -269,7 +258,6 @@ impl FungiDaemon {
                 protocol: endpoint.protocol,
                 local_host: record.local_host,
                 local_port: record.local_port,
-                remote_port,
             });
         }
 
@@ -530,7 +518,6 @@ impl FungiDaemon {
                     protocol: String::new(),
                     local_host: record.local_host,
                     local_port: record.local_port,
-                    remote_port: 0,
                 });
         }
 
@@ -575,14 +562,6 @@ fn find_active_rule(
         .cloned()
 }
 
-fn device_service_endpoint_listen_port(endpoint: &DeviceServiceEndpoint) -> u16 {
-    if endpoint.host_port == 0 {
-        endpoint.service_port
-    } else {
-        endpoint.host_port
-    }
-}
-
 fn ensure_local_port_available(port: u16, reserved_ports: &BTreeSet<u16>) -> Result<()> {
     if reserved_ports.contains(&port) {
         bail!(
@@ -595,17 +574,7 @@ fn ensure_local_port_available(port: u16, reserved_ports: &BTreeSet<u16>) -> Res
         .map_err(|error| anyhow::anyhow!("local port {} is not available: {}", port, error))
 }
 
-fn allocate_preferred_local_port(
-    preferred_port: u16,
-    reserved_ports: &BTreeSet<u16>,
-) -> Result<u16> {
-    if preferred_port != 0
-        && !reserved_ports.contains(&preferred_port)
-        && StdTcpListener::bind(("127.0.0.1", preferred_port)).is_ok()
-    {
-        return Ok(preferred_port);
-    }
-
+fn allocate_free_local_port(reserved_ports: &BTreeSet<u16>) -> Result<u16> {
     for _ in 0..32 {
         let listener = StdTcpListener::bind(("127.0.0.1", 0))?;
         let port = listener.local_addr()?.port();

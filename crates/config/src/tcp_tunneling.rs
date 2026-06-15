@@ -26,7 +26,8 @@ pub struct ForwardingRule {
     pub remote_peer_id: String,
     #[serde(default)]
     pub remote_protocol: Option<String>,
-    pub remote_port: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_port: Option<u16>,
     #[serde(default)]
     pub remote_service_id: Option<String>,
     #[serde(default)]

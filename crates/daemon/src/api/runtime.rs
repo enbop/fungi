@@ -657,12 +657,8 @@ fn merge_device_service_snapshot(
         services_by_name
             .entry(service.name.clone())
             .and_modify(|existing| {
-                existing.usage = service.usage.clone();
-                existing.icon_url = service.icon_url.clone();
+                existing.metadata = service.metadata.clone();
                 existing.endpoints = service.endpoints.clone();
-                if existing.ports.is_empty() {
-                    existing.ports = service.ports.clone();
-                }
             })
             .or_insert(service);
     }
@@ -678,9 +674,7 @@ fn device_service_from_instance(instance: ServiceInstance) -> DeviceService {
     DeviceService {
         name: instance.name,
         runtime: instance.runtime,
-        usage: None,
-        icon_url: None,
-        ports: instance.ports,
+        metadata: Default::default(),
         endpoints: Vec::new(),
         status: instance.status,
     }
@@ -736,9 +730,14 @@ mod tests {
         assert_eq!(service.status.phase, ServicePhase::Running);
         assert_eq!(service.endpoints.len(), 1);
         assert_eq!(
-            service.usage.as_ref().unwrap().kind,
+            service.metadata.usage.as_ref().unwrap().kind,
             ServiceExposeUsageKind::Web
         );
+        let snapshot_json = serde_json::to_value(&snapshot).unwrap();
+        let service_json = &snapshot_json["services"][0];
+        assert!(service_json.get("ports").is_none());
+        assert!(service_json["endpoints"][0].get("service_port").is_none());
+        assert!(service_json["endpoints"][0].get("host_port").is_none());
     }
 
     #[test]
@@ -785,9 +784,7 @@ mod tests {
             services: vec![DeviceService {
                 name: "svc-a".to_string(),
                 runtime: RuntimeKind::External,
-                usage: None,
-                icon_url: None,
-                ports: Vec::new(),
+                metadata: Default::default(),
                 endpoints: Vec::new(),
                 status: ServiceStatus::running(),
             }],
@@ -839,17 +836,16 @@ mod tests {
         DeviceService {
             name: name.to_string(),
             runtime: RuntimeKind::External,
-            usage: Some(ServiceExposeUsage {
-                kind: ServiceExposeUsageKind::Web,
-                path: Some("/".to_string()),
-            }),
-            icon_url: Some("https://example.test/icon.svg".to_string()),
-            ports: vec![service_port("web")],
+            metadata: crate::DeviceServiceMetadata {
+                usage: Some(ServiceExposeUsage {
+                    kind: ServiceExposeUsageKind::Web,
+                    path: Some("/".to_string()),
+                }),
+                icon_url: Some("https://example.test/icon.svg".to_string()),
+            },
             endpoints: vec![DeviceServiceEndpoint {
                 name: "web".to_string(),
                 protocol: format!("/fungi/service/{name}/web/0.2.0"),
-                host_port: 18080,
-                service_port: 8080,
             }],
             status,
         }
