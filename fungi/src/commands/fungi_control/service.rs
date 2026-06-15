@@ -5,9 +5,9 @@ use std::process::Command;
 use clap::{Args, Subcommand};
 use fungi_config::{FungiConfig, FungiDir, paths::FungiPaths};
 use fungi_daemon::{
-    DeviceService, DeviceServiceSnapshot, RuntimeKind, ServiceAccess, ServiceExposeEndpointBinding,
-    ServiceExposeUsageKind, ServiceInstance, ServicePhase, ServicePortProtocol, ServiceStatus,
-    parse_service_manifest_yaml, service_manifest_with_instance_name,
+    DeviceService, DeviceServiceSnapshot, RuntimeKind, ServiceAccess, ServiceExposeUsageKind,
+    ServiceInstance, ServicePhase, ServicePortProtocol, ServiceStatus, parse_service_manifest_yaml,
+    service_manifest_with_instance_name,
 };
 use fungi_daemon_grpc::{
     Request,
@@ -185,8 +185,8 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
         ServiceCommands::List { verbose, refresh } => {
             if let Some(device) = device {
                 print_target_device(&device);
-                let instances = list_remote_service_instances(&mut client, &device.peer_id).await;
-                print_service_instances_value(instances, verbose);
+                let services = list_remote_services(&mut client, &device.peer_id).await;
+                print_remote_services_value(services, verbose);
             } else {
                 print_service_overview(&mut client, verbose, service_args.refresh || refresh).await;
             }
@@ -316,9 +316,9 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             let device = resolve_service_device_target(&args, device, target.device);
             if let Some(device) = device {
                 print_target_device(&device);
-                let instance =
+                let service =
                     inspect_remote_service(&mut client, &device.peer_id, target.name).await;
-                print_service_instance_value(instance, verbose);
+                print_remote_service_inspect_value(service, verbose);
             } else {
                 let req = ServiceNameRequest {
                     runtime: 0,
@@ -1339,48 +1339,17 @@ async fn list_local_service_instances(client: &mut RpcClient) -> Vec<ServiceInst
     }
 }
 
-async fn list_saved_devices(client: &mut RpcClient) -> Vec<DeviceInfo> {
-    match client.list_devices(Request::new(Empty {})).await {
-        Ok(resp) => resp.into_inner().devices,
-        Err(error) => fatal_grpc(error),
-    }
-}
-
-async fn list_remote_service_instances(
-    client: &mut RpcClient,
-    peer_id: &str,
-) -> Vec<ServiceInstance> {
+async fn list_remote_services(client: &mut RpcClient, peer_id: &str) -> Vec<RemoteService> {
     match fetch_device_service_snapshot(client, peer_id, true).await {
-        Ok(snapshot) => snapshot
-            .snapshot
-            .services
-            .into_iter()
-            .map(device_service_to_instance)
-            .collect(),
+        Ok(snapshot) => snapshot.snapshot.services,
         Err(error) => fatal(error),
     }
 }
 
-fn device_service_to_instance(service: DeviceService) -> ServiceInstance {
-    ServiceInstance {
-        id: format!("remote:{}", service.name),
-        runtime: service.runtime,
-        name: service.name,
-        definition_id: None,
-        source: String::new(),
-        labels: Default::default(),
-        ports: Vec::new(),
-        exposed_endpoints: service
-            .endpoints
-            .into_iter()
-            .map(|endpoint| ServiceExposeEndpointBinding {
-                name: endpoint.name,
-                protocol: endpoint.protocol,
-                host_port: 0,
-                service_port: 0,
-            })
-            .collect(),
-        status: service.status,
+async fn list_saved_devices(client: &mut RpcClient) -> Vec<DeviceInfo> {
+    match client.list_devices(Request::new(Empty {})).await {
+        Ok(resp) => resp.into_inner().devices,
+        Err(error) => fatal_grpc(error),
     }
 }
 
@@ -1440,12 +1409,16 @@ async fn inspect_remote_service(
     client: &mut RpcClient,
     peer_id: &str,
     name: String,
-) -> ServiceInstance {
-    list_remote_service_instances(client, peer_id)
-        .await
-        .into_iter()
-        .find(|instance| instance.name == name)
-        .unwrap_or_else(|| fatal(format!("Remote service not found: {name}")))
+) -> RemoteService {
+    match fetch_device_service_snapshot(client, peer_id, true).await {
+        Ok(snapshot) => snapshot
+            .snapshot
+            .services
+            .into_iter()
+            .find(|service| service.name == name)
+            .unwrap_or_else(|| fatal(format!("Remote service not found: {name}"))),
+        Err(error) => fatal(error),
+    }
 }
 
 async fn list_accesses(client: &mut RpcClient, peer_id: &str) -> Vec<ServiceAccess> {
@@ -2000,6 +1973,29 @@ fn manifest_parse_fungi_home(args: &CommonArgs) -> std::path::PathBuf {
     }
 }
 
+struct ExistingService {
+    runtime: RuntimeKind,
+    definition_id: Option<String>,
+}
+
+impl From<ServiceInstance> for ExistingService {
+    fn from(service: ServiceInstance) -> Self {
+        Self {
+            runtime: service.runtime,
+            definition_id: service.definition_id,
+        }
+    }
+}
+
+impl From<RemoteService> for ExistingService {
+    fn from(service: RemoteService) -> Self {
+        Self {
+            runtime: service.runtime,
+            definition_id: None,
+        }
+    }
+}
+
 async fn confirm_apply_if_existing(
     client: &mut RpcClient,
     device: Option<&super::shared::ResolvedPeerTarget>,
@@ -2009,14 +2005,16 @@ async fn confirm_apply_if_existing(
 ) {
     let (service_name, new_runtime, new_definition_id) = manifest_apply_identity(created, args);
     let existing = match device {
-        Some(device) => list_remote_service_instances(client, &device.peer_id)
+        Some(device) => list_remote_services(client, &device.peer_id)
             .await
             .into_iter()
-            .find(|service| service.name == service_name),
+            .find(|service| service.name == service_name)
+            .map(ExistingService::from),
         None => list_local_service_instances(client)
             .await
             .into_iter()
-            .find(|service| service.name == service_name),
+            .find(|service| service.name == service_name)
+            .map(ExistingService::from),
     };
 
     let Some(existing) = existing else {
@@ -2078,7 +2076,7 @@ async fn confirm_apply_if_existing(
 
 fn reject_definition_id_mismatch(
     service_name: &str,
-    existing: &ServiceInstance,
+    existing: &ExistingService,
     new_definition_id: Option<&str>,
 ) {
     match (existing.definition_id.as_deref(), new_definition_id) {
@@ -2094,7 +2092,7 @@ fn reject_definition_id_mismatch(
 
 fn print_existing_apply_notice(
     service_name: &str,
-    existing: &ServiceInstance,
+    existing: &ExistingService,
     new_runtime: RuntimeKind,
     new_definition_id: Option<&str>,
 ) {
@@ -2254,6 +2252,18 @@ fn print_service_instance_value(instance: ServiceInstance, verbose: bool) {
     }
 }
 
+fn print_remote_service_inspect_value(service: RemoteService, verbose: bool) {
+    let pretty = if verbose {
+        serde_json::to_string_pretty(&RemoteServiceInspectVerboseView::from(service))
+    } else {
+        serde_json::to_string_pretty(&RemoteServiceInspectView::from(service))
+    };
+    match pretty {
+        Ok(pretty) => println!("{}", pretty),
+        Err(error) => fatal(format!("Failed to format remote service: {error}")),
+    }
+}
+
 fn decode_service_instance(resp: ServiceInstanceResponse) -> ServiceInstance {
     match serde_json::from_str::<ServiceInstance>(&resp.instance_json) {
         Ok(instance) => instance,
@@ -2261,23 +2271,23 @@ fn decode_service_instance(resp: ServiceInstanceResponse) -> ServiceInstance {
     }
 }
 
-fn print_service_instances_value(services: Vec<ServiceInstance>, verbose: bool) {
+fn print_remote_services_value(services: Vec<RemoteService>, verbose: bool) {
     let pretty = if verbose {
         let views = services
             .into_iter()
-            .map(LocalServiceListVerboseEntry::from)
+            .map(RemoteServiceListVerboseEntry::from)
             .collect::<Vec<_>>();
         serde_json::to_string_pretty(&views)
     } else {
         let views = services
             .into_iter()
-            .map(LocalServiceListEntry::from)
+            .map(RemoteServiceListEntry::from)
             .collect::<Vec<_>>();
         serde_json::to_string_pretty(&views)
     };
     match pretty {
         Ok(pretty) => println!("{}", pretty),
-        Err(error) => fatal(format!("Failed to format service list: {error}")),
+        Err(error) => fatal(format!("Failed to format remote service list: {error}")),
     }
 }
 
@@ -2508,6 +2518,7 @@ fn resolved_device_display_name(device: &super::shared::ResolvedPeerTarget) -> S
         .unwrap_or_else(|| device.peer_id.clone())
 }
 
+#[cfg(test)]
 #[derive(Debug, Serialize)]
 struct LocalServiceListEntry {
     service_name: String,
@@ -2518,13 +2529,24 @@ struct LocalServiceListEntry {
 }
 
 #[derive(Debug, Serialize)]
-struct LocalServiceListVerboseEntry {
+struct RemoteServiceListEntry {
     service_name: String,
-    runtime: RuntimeKind,
     phase: ServicePhase,
     #[serde(skip_serializing_if = "Option::is_none")]
     detail: Option<String>,
-    local_endpoints: Vec<LocalServiceEndpointVerboseView>,
+    entries: Vec<ServiceEntryView>,
+}
+
+#[derive(Debug, Serialize)]
+struct RemoteServiceListVerboseEntry {
+    service_name: String,
+    runtime: RuntimeKind,
+    #[serde(skip_serializing_if = "device_service_metadata_is_empty")]
+    metadata: fungi_daemon::DeviceServiceMetadata,
+    phase: ServicePhase,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<String>,
+    entries: Vec<RemoteServiceEntryVerboseView>,
 }
 
 #[derive(Debug, Serialize)]
@@ -2552,8 +2574,35 @@ struct LocalServiceInspectVerboseView {
 }
 
 #[derive(Debug, Serialize)]
+struct RemoteServiceInspectView {
+    name: String,
+    phase: ServicePhase,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<String>,
+    entries: Vec<ServiceEntryView>,
+}
+
+#[derive(Debug, Serialize)]
+struct RemoteServiceInspectVerboseView {
+    name: String,
+    runtime: RuntimeKind,
+    #[serde(skip_serializing_if = "device_service_metadata_is_empty")]
+    metadata: fungi_daemon::DeviceServiceMetadata,
+    phase: ServicePhase,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<String>,
+    entries: Vec<RemoteServiceEntryVerboseView>,
+}
+
+#[derive(Debug, Serialize)]
 struct ServiceEntryView {
     name: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct RemoteServiceEntryVerboseView {
+    name: String,
+    protocol: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -2574,6 +2623,11 @@ struct PublishedEndpointVerboseView {
     service_port: u16,
 }
 
+fn device_service_metadata_is_empty(metadata: &fungi_daemon::DeviceServiceMetadata) -> bool {
+    metadata.usage.is_none() && metadata.icon_url.is_none()
+}
+
+#[cfg(test)]
 impl From<ServiceInstance> for LocalServiceListEntry {
     fn from(instance: ServiceInstance) -> Self {
         let entries = local_entry_views(&instance);
@@ -2587,16 +2641,41 @@ impl From<ServiceInstance> for LocalServiceListEntry {
     }
 }
 
-impl From<ServiceInstance> for LocalServiceListVerboseEntry {
-    fn from(instance: ServiceInstance) -> Self {
-        let local_endpoints = local_endpoint_verbose_views(&instance);
-        let status = instance.status;
+impl From<RemoteService> for RemoteServiceListEntry {
+    fn from(service: RemoteService) -> Self {
+        let status = service.status;
         Self {
-            service_name: instance.name,
-            runtime: instance.runtime,
+            service_name: service.name,
             phase: status.phase,
             detail: status.detail,
-            local_endpoints,
+            entries: service
+                .endpoints
+                .into_iter()
+                .map(|endpoint| ServiceEntryView {
+                    name: Some(endpoint.name),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<RemoteService> for RemoteServiceListVerboseEntry {
+    fn from(service: RemoteService) -> Self {
+        let status = service.status;
+        Self {
+            service_name: service.name,
+            runtime: service.runtime,
+            metadata: service.metadata,
+            phase: status.phase,
+            detail: status.detail,
+            entries: service
+                .endpoints
+                .into_iter()
+                .map(|endpoint| RemoteServiceEntryVerboseView {
+                    name: endpoint.name,
+                    protocol: endpoint.protocol,
+                })
+                .collect(),
         }
     }
 }
@@ -2643,6 +2722,45 @@ impl From<ServiceInstance> for LocalServiceInspectVerboseView {
                     local_host: "127.0.0.1".to_string(),
                     local_port: endpoint.host_port,
                     service_port: endpoint.service_port,
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<RemoteService> for RemoteServiceInspectView {
+    fn from(service: RemoteService) -> Self {
+        let status = service.status;
+        Self {
+            name: service.name,
+            phase: status.phase,
+            detail: status.detail,
+            entries: service
+                .endpoints
+                .into_iter()
+                .map(|endpoint| ServiceEntryView {
+                    name: Some(endpoint.name),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<RemoteService> for RemoteServiceInspectVerboseView {
+    fn from(service: RemoteService) -> Self {
+        let status = service.status;
+        Self {
+            name: service.name,
+            runtime: service.runtime,
+            metadata: service.metadata,
+            phase: status.phase,
+            detail: status.detail,
+            entries: service
+                .endpoints
+                .into_iter()
+                .map(|endpoint| RemoteServiceEntryVerboseView {
+                    name: endpoint.name,
+                    protocol: endpoint.protocol,
                 })
                 .collect(),
         }
@@ -2833,6 +2951,26 @@ mod tests {
     }
 
     #[test]
+    fn remote_service_inspect_view_omits_port_fields() {
+        let service = remote_web_service("/dashboard");
+
+        let view = RemoteServiceInspectVerboseView::from(service);
+        let json = serde_json::to_value(view).unwrap();
+        let text = serde_json::to_string(&json).unwrap();
+
+        assert_eq!(json["entries"][0]["name"], "web");
+        assert_eq!(
+            json["entries"][0]["protocol"],
+            "/fungi/service/demo/web/0.2.0"
+        );
+        assert!(json.get("published_endpoints").is_none());
+        assert!(!text.contains("local_port"));
+        assert!(!text.contains("service_port"));
+        assert!(!text.contains("remote_port"));
+        assert!(!text.contains("host_port"));
+    }
+
+    #[test]
     fn remote_managed_overview_row_keeps_stopped_state() {
         let mut instance = service_instance(vec![service_port("web", 28080)]);
         instance.status = ServiceStatus::exited(None);
@@ -2992,7 +3130,6 @@ publish:
             protocol: format!("/fungi/service/demo/{name}/0.2.0"),
             local_host: "127.0.0.1".to_string(),
             local_port,
-            remote_port: local_port,
         }
     }
 

@@ -81,12 +81,13 @@ impl TcpTunnelingControl {
             .parse()
             .map_err(|e| anyhow::anyhow!("Invalid peer ID: {}", e))?;
 
-        let target_protocol = StreamProtocol::try_from_owned(
-            rule.remote_protocol
-                .clone()
-                .unwrap_or_else(|| format!("{}/{}", FUNGI_TUNNEL_PROTOCOL, rule.remote_port)),
-        )
-        .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
+        let target_protocol_name = match (&rule.remote_protocol, rule.remote_port) {
+            (Some(remote_protocol), _) => remote_protocol.clone(),
+            (None, Some(remote_port)) => format!("{FUNGI_TUNNEL_PROTOCOL}/{remote_port}"),
+            (None, None) => bail!("Forwarding rule requires a remote protocol or remote port"),
+        };
+        let target_protocol = StreamProtocol::try_from_owned(target_protocol_name)
+            .map_err(|e| anyhow::anyhow!("Invalid protocol: {}", e))?;
 
         let swarm_control = self.swarm_control.clone();
 
@@ -240,10 +241,16 @@ impl TcpTunnelingControl {
                 rule.remote_peer_id,
                 sanitize_rule_component(remote_protocol),
             ),
-            None => format!(
-                "forward_{}:{}_to_{}_{}",
-                rule.local_host, rule.local_port, rule.remote_peer_id, rule.remote_port
-            ),
+            None => match rule.remote_port {
+                Some(remote_port) => format!(
+                    "forward_{}:{}_to_{}_{}",
+                    rule.local_host, rule.local_port, rule.remote_peer_id, remote_port
+                ),
+                None => format!(
+                    "forward_{}:{}_to_{}_missing-target",
+                    rule.local_host, rule.local_port, rule.remote_peer_id
+                ),
+            },
         }
     }
 

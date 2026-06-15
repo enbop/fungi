@@ -36,7 +36,7 @@ impl FungiDaemon {
             local_port: record.local_port,
             remote_peer_id: record.remote_peer_id.clone(),
             remote_protocol: Some(remote_protocol),
-            remote_port: 0,
+            remote_port: None,
             remote_service_id: None,
             remote_service_name: Some(record.remote_service_name.clone()),
             remote_service_port_name: Some(record.remote_service_port_name.clone()),
@@ -258,7 +258,6 @@ impl FungiDaemon {
                 protocol: endpoint.protocol,
                 local_host: record.local_host,
                 local_port: record.local_port,
-                remote_port: 0,
             });
         }
 
@@ -519,7 +518,6 @@ impl FungiDaemon {
                     protocol: String::new(),
                     local_host: record.local_host,
                     local_port: record.local_port,
-                    remote_port: 0,
                 });
         }
 

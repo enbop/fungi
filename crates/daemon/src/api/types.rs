@@ -161,6 +161,4 @@ pub struct ServiceAccessEndpoint {
     pub protocol: String,
     pub local_host: String,
     pub local_port: u16,
-    #[serde(default)]
-    pub remote_port: u16,
 }
