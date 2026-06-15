@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use std::process::Command;
 
 use clap::{Args, Subcommand};
-use fungi_config::{FungiConfig, FungiDir, paths::FungiPaths};
+use fungi_config::{FungiDir, devices::LOCAL_DEVICE_NAME, paths::FungiPaths};
 use fungi_daemon::{
     DeviceService, DeviceServiceSnapshot, RuntimeKind, ServiceAccess, ServiceExposeUsageKind,
     ServiceInstance, ServicePhase, ServicePortProtocol, ServiceStatus, parse_service_manifest_yaml,
@@ -615,43 +615,40 @@ pub struct DynamicThingInvocation {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DynamicThingTarget {
     pub name: String,
+    pub local: bool,
     pub device: Option<DeviceInput>,
     pub entry: Option<String>,
 }
 
-pub async fn execute_dynamic_thing(
-    args: CommonArgs,
-    device_context: Option<DeviceInput>,
-    tokens: Vec<String>,
-) {
-    let invocation = parse_dynamic_thing_invocation(tokens.clone()).unwrap_or_else(|error| {
-        if let Some((name, command)) =
-            crate::commands::dynamic_builtin_typo_hint_for_tokens(&tokens, device_context.as_ref())
-        {
-            fatal_dynamic_builtin_typo(&name, &command)
-        }
-        fatal(error)
-    });
+pub async fn execute_dynamic_thing(args: CommonArgs, tokens: Vec<String>) {
+    if !tokens
+        .first()
+        .is_some_and(|token| dynamic_token_has_explicit_target(token))
+    {
+        crate::commands::exit_unknown_dynamic_subcommand(&tokens)
+    }
+
+    let invocation = parse_dynamic_thing_invocation(tokens).unwrap_or_else(|error| fatal(error));
 
     if invocation.target.name.starts_with(':') {
         fatal("Shortcuts are not implemented yet")
     }
 
-    if device_context.is_some() && invocation.target.device.is_some() {
-        fatal("Device specified twice. Use either -d <device> or thing@device.")
-    }
-
-    let device = invocation.target.device.or(device_context);
-    if device.is_none() {
-        open_dynamic_service_without_device(args, invocation.target.name, invocation.target.entry)
-            .await;
+    if invocation.target.local {
+        open_local_dynamic_service(args, invocation.target.name, invocation.target.entry).await;
         return;
     }
+
+    let Some(device) = invocation.target.device else {
+        crate::commands::exit_unknown_dynamic_subcommand(&[invocation.target.name])
+    };
 
     execute_service(
         args,
         ServiceArgs {
-            device: OptionalDeviceTargetArg { device },
+            device: OptionalDeviceTargetArg {
+                device: Some(device),
+            },
             refresh: false,
             command: Some(ServiceCommands::Open {
                 service: invocation.target.name,
@@ -660,6 +657,13 @@ pub async fn execute_dynamic_thing(
         },
     )
     .await;
+}
+
+fn dynamic_token_has_explicit_target(token: &str) -> bool {
+    token
+        .split_once('/')
+        .map_or(token, |(head, _)| head)
+        .contains('@')
 }
 
 pub fn parse_dynamic_thing_invocation(
@@ -676,8 +680,9 @@ pub fn parse_dynamic_thing_invocation(
         return Err(format!(
             "Unexpected argument `{unexpected}` after `{target}`.
 
-Dynamic service shortcuts accept one service target, for example:
+Dynamic service shortcuts accept one explicit service target, for example:
 
+  fungi filebrowser@local
   fungi filebrowser@nas
 
 Use `fungi service ...` for service subcommands."
@@ -704,30 +709,36 @@ pub fn parse_dynamic_thing_target(value: String) -> Result<DynamicThingTarget, S
         None => (value, None),
     };
 
-    let (name, device) =
-        match name_and_device.split_once('@') {
-            Some((name, device)) => {
-                if name.trim().is_empty() {
-                    return Err("Thing name cannot be empty".to_string());
-                }
-                if device.trim().is_empty() {
-                    return Err("Device name cannot be empty".to_string());
-                }
-                if device.contains('@') {
-                    return Err("Thing target can only include one @device suffix".to_string());
-                }
+    let (name, local, device) = match name_and_device.split_once('@') {
+        Some((name, device)) => {
+            let device = device.trim();
+            if name.trim().is_empty() {
+                return Err("Thing name cannot be empty".to_string());
+            }
+            if device.is_empty() {
+                return Err("Device name cannot be empty".to_string());
+            }
+            if device.contains('@') {
+                return Err("Thing target can only include one @device suffix".to_string());
+            }
+            if device.eq_ignore_ascii_case(LOCAL_DEVICE_NAME) {
+                (name.to_string(), true, None)
+            } else {
                 (
                     name.to_string(),
+                    false,
                     Some(device.parse::<DeviceInput>().map_err(|error| {
                         format!("Invalid device in thing target {value}: {error}")
                     })?),
                 )
             }
-            None => (name_and_device.to_string(), None),
-        };
+        }
+        None => (name_and_device.to_string(), false, None),
+    };
 
     Ok(DynamicThingTarget {
         name,
+        local,
         device,
         entry,
     })
@@ -738,20 +749,6 @@ fn parse_service_reference(value: String) -> DynamicThingTarget {
     target
 }
 
-pub fn fatal_dynamic_builtin_typo(name: &str, command: &str) -> ! {
-    fatal(format!(
-        "No service named `{name}` was found.
-
-Hint: `{name}` looks like a built-in command typo.
-Did you mean:
-
-  fungi {command}
-
-For dynamic services, use:
-
-  fungi filebrowser@nas"
-    ))
-}
 async fn apply_service_from_recipe(
     client: &mut RpcClient,
     args: &CommonArgs,
@@ -1200,33 +1197,10 @@ async fn inspect_local_service(client: &mut RpcClient, name: String) -> ServiceI
     }
 }
 
-async fn open_dynamic_service_without_device(
-    args: CommonArgs,
-    service: String,
-    entry: Option<String>,
-) {
-    let builtin_hint = if entry.is_none() {
-        let tokens = [service.clone()];
-        crate::commands::dynamic_builtin_typo_hint_for_tokens(&tokens, None)
-            .map(|(_, command)| command)
-    } else {
-        None
-    };
-
-    if let Some(command) = builtin_hint.as_ref()
-        && FungiConfig::try_read_from_dir(&args.fungi_dir()).is_err()
-    {
-        fatal_dynamic_builtin_typo(&service, command)
-    }
-
+async fn open_local_dynamic_service(args: CommonArgs, service: String, entry: Option<String>) {
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
-        None => {
-            if let Some(command) = builtin_hint {
-                fatal_dynamic_builtin_typo(&service, &command)
-            }
-            fatal("Cannot connect to Fungi daemon. Is it running?")
-        }
+        None => fatal("Cannot connect to Fungi daemon. Is it running?"),
     };
 
     if let Some(instance) = find_local_service(&mut client, &service).await {
@@ -1238,13 +1212,10 @@ async fn open_dynamic_service_without_device(
         return;
     }
 
-    if let Some(command) = builtin_hint {
-        fatal_dynamic_builtin_typo(&service, &command)
-    }
-
     fatal(format!(
         "Local service not found: {service}
-Remote services must be addressed explicitly with `fungi <service>@<device>` or `fungi service -d <device> open <service>`."
+Local services use `fungi <service>@local`.
+Remote services use `fungi <service>@<device>` or `fungi service -d <device> open <service>`."
     ));
 }
 async fn find_local_service(client: &mut RpcClient, service: &str) -> Option<ServiceInstance> {
@@ -3046,7 +3017,28 @@ mod tests {
         let target = parse_dynamic_thing_target("filebrowser@nas/admin".to_string()).unwrap();
 
         assert_eq!(target.name, "filebrowser");
+        assert!(!target.local);
         assert!(matches!(target.device, Some(DeviceInput::Name(name)) if name == "nas"));
+        assert_eq!(target.entry.as_deref(), Some("admin"));
+    }
+
+    #[test]
+    fn parse_dynamic_thing_target_supports_explicit_local_scope() {
+        let target = parse_dynamic_thing_target("filebrowser@local/admin".to_string()).unwrap();
+
+        assert_eq!(target.name, "filebrowser");
+        assert!(target.local);
+        assert!(target.device.is_none());
+        assert_eq!(target.entry.as_deref(), Some("admin"));
+    }
+
+    #[test]
+    fn parse_dynamic_thing_target_treats_local_scope_case_insensitively() {
+        let target = parse_dynamic_thing_target("filebrowser@Local/admin".to_string()).unwrap();
+
+        assert_eq!(target.name, "filebrowser");
+        assert!(target.local);
+        assert!(target.device.is_none());
         assert_eq!(target.entry.as_deref(), Some("admin"));
     }
 
@@ -3062,7 +3054,7 @@ mod tests {
         assert!(
             result
                 .unwrap_err()
-                .contains("Dynamic service shortcuts accept one service target")
+                .contains("Dynamic service shortcuts accept one explicit service target")
         );
     }
 
@@ -3105,7 +3097,6 @@ publish:
         let current_dir = std::env::current_dir().unwrap();
         let args = CommonArgs {
             fungi_dir: Some("target/tmp_a".to_string()),
-            dynamic_device: None,
             #[cfg(target_os = "android")]
             default_device_name: String::new(),
         };

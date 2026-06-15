@@ -9,6 +9,7 @@ use std::{
 };
 
 pub const DEFAULT_DEVICES_CONFIG_FILE: &str = "devices.toml";
+pub const LOCAL_DEVICE_NAME: &str = "local";
 const MDNS_DEVICE_TIMEOUT_SECONDS: u64 = 3600; // 60 minutes
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -266,6 +267,11 @@ impl DevicesConfig {
         if trimmed.is_empty() {
             return Err(anyhow::anyhow!("Name cannot be empty"));
         }
+        if Self::normalize_name(trimmed) == LOCAL_DEVICE_NAME {
+            return Err(anyhow::anyhow!(
+                "Device name `{LOCAL_DEVICE_NAME}` is reserved for the local device"
+            ));
+        }
         Ok(trimmed.to_string())
     }
 
@@ -485,6 +491,31 @@ mod tests {
         };
 
         assert!(config.add_or_update_device(device_info).is_err());
+    }
+
+    #[test]
+    fn test_add_peer_rejects_reserved_local_name_case_insensitive() {
+        let (config, _temp_dir) = create_temp_devices_config();
+        let device_info = DeviceInfo {
+            peer_id: PeerId::random(),
+            name: Some(" Local ".to_string()),
+            hostname: Some("host1".to_string()),
+            multiaddrs: vec![],
+            os: Os::this_device(),
+            public_ip: None,
+            private_ips: vec![],
+            version: "1.0.0".to_string(),
+            created_at: SystemTime::now(),
+            last_connected: SystemTime::now(),
+        };
+
+        let error = config.add_or_update_device(device_info).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Device name `local` is reserved"),
+            "{error}"
+        );
     }
 
     #[test]

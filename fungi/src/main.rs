@@ -39,14 +39,7 @@ fn main() -> Result<()> {
             interval_ms,
             verbose,
         } => block_on(execute_ping(fungi_args.common, peer, interval_ms, verbose)),
-        Commands::Dynamic(tokens) => {
-            let device_context = fungi_args.common.dynamic_device.clone();
-            block_on(execute_dynamic_thing(
-                fungi_args.common,
-                device_context,
-                tokens,
-            ))
-        }
+        Commands::Dynamic(tokens) => block_on(execute_dynamic_thing(fungi_args.common, tokens)),
     }
 
     Ok(())

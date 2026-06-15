@@ -21,52 +21,6 @@ impl Drop for DaemonChild {
 }
 
 #[test]
-fn cli_suggests_builtin_command_for_dynamic_typo_without_config() {
-    let home = TempDir::new().unwrap();
-    let output = run_cli_result(home.path(), ["devices"], "");
-
-    assert!(!output.status.success());
-    assert_eq!(output.stdout, "");
-    assert_eq!(
-        output.stderr,
-        concat!(
-            "No service named `devices` was found.
-",
-            "
-",
-            "Hint: `devices` looks like a built-in command typo.
-",
-            "Did you mean:
-",
-            "
-",
-            "  fungi device
-",
-            "
-",
-            "For dynamic services, use:
-",
-            "
-",
-            "  fungi filebrowser@nas
-"
-        )
-    );
-}
-
-#[test]
-fn cli_suggests_builtin_command_for_dynamic_typo_with_trailing_arg() {
-    let home = TempDir::new().unwrap();
-    let output = run_cli_result(home.path(), ["devices", "list"], "");
-
-    assert!(!output.status.success());
-    assert_eq!(output.stdout, "");
-    assert!(output.stderr.contains("Did you mean:"));
-    assert!(output.stderr.contains("  fungi device"));
-    assert!(!output.stderr.contains("Dynamic tool execution"));
-}
-
-#[test]
 fn service_apply_file_without_target_prints_order_hint() {
     let home = TempDir::new().unwrap();
     let manifest = home.path().join("demo.fungi.md");
@@ -207,7 +161,7 @@ fn service_apply_rejects_mismatched_definition_id() {
 }
 
 #[test]
-fn cli_prefers_existing_dynamic_service_over_builtin_typo_hint() {
+fn cli_requires_local_scope_for_existing_dynamic_service() {
     let home = TempDir::new().unwrap();
     let rpc = reserve_port();
     let swarm = reserve_port();
@@ -234,9 +188,44 @@ fn cli_prefers_existing_dynamic_service_over_builtin_typo_hint() {
 
     assert!(!output.status.success());
     assert_eq!(output.stdout, "");
+    assert!(
+        output.stderr.contains("unrecognized subcommand 'devices'")
+            || output.stderr.contains("unrecognized subcommand `devices`"),
+        "{}",
+        output.stderr
+    );
+    assert!(output.stderr.contains("device"), "{}", output.stderr);
+
+    let output = run_cli_result(home.path(), ["devices@local"], "");
+
+    assert!(!output.status.success());
+    assert_eq!(output.stdout, "");
     assert_eq!(
         output.stderr,
         "No web entry is available for this service\n"
+    );
+}
+
+#[test]
+fn cli_rejects_reserved_local_device_name() {
+    let home = TempDir::new().unwrap();
+    let rpc = reserve_port();
+    let swarm = reserve_port();
+
+    init_fungi_dir(home.path(), rpc, swarm);
+    let _daemon = start_daemon(home.path());
+    let peer = wait_peer_id(home.path());
+
+    let output = run_cli_result(home.path(), ["device", "add", "local", peer.as_str()], "");
+
+    assert!(!output.status.success());
+    assert_eq!(output.stdout, "");
+    assert!(
+        output
+            .stderr
+            .contains("Device name `local` is reserved for the local device"),
+        "{}",
+        output.stderr
     );
 }
 
