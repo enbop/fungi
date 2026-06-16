@@ -209,14 +209,8 @@ fn cli_requires_local_scope_for_existing_dynamic_service() {
 #[test]
 fn cli_rejects_reserved_local_device_name() {
     let home = TempDir::new().unwrap();
-    let rpc = reserve_port();
-    let swarm = reserve_port();
 
-    init_fungi_dir(home.path(), rpc, swarm);
-    let _daemon = start_daemon(home.path());
-    let peer = wait_peer_id(home.path());
-
-    let output = run_cli_result(home.path(), ["device", "add", "local", peer.as_str()], "");
+    let output = run_cli_result(home.path(), ["device", "add", "local", "not-a-peer-id"], "");
 
     assert!(!output.status.success());
     assert_eq!(output.stdout, "");
