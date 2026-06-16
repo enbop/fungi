@@ -144,7 +144,7 @@ impl RelayRuntimeTestContext {
                 .find(']')
                 .map(|offset| start + offset)
                 .context("failed to find end of custom_relay_addresses")?;
-            let replacement = format!("custom_relay_addresses = [{}, {}]", relay_tcp, relay_udp);
+            let replacement = format!("custom_relay_addresses = [{}, {}]", relay_udp, relay_tcp);
             content.replace_range(start..=end, &replacement);
         } else {
             bail!("custom_relay_addresses field not found in config file");

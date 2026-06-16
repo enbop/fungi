@@ -786,7 +786,7 @@ fn spawn_relay_reconcile_task(swarm_control: &SwarmControl, group: &RelayPeerGro
             .set_relay_task_running(relay_endpoint.addr(), true);
         swarm_control.state().record_relay_management_action(
             relay_endpoint.addr(),
-            crate::RelayManagementAction::ListenTaskStarted,
+            crate::RelayManagementAction::ReconcileTaskStarted,
         );
     }
 
@@ -807,7 +807,7 @@ fn spawn_relay_reconcile_task(swarm_control: &SwarmControl, group: &RelayPeerGro
                     }
                     swarm_control_cl.state().record_relay_management_action(
                         ready_endpoint.addr(),
-                        crate::RelayManagementAction::ListenTaskSucceeded,
+                        crate::RelayManagementAction::ReconcileTaskSucceeded,
                     );
                     log::info!(
                         "Successfully connected to relay {} via {} on attempt {attempt}",

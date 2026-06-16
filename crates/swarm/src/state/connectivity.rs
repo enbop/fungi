@@ -88,21 +88,20 @@ impl AddressFreshness {
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum RelayManagementAction {
-    ListenTaskStarted,
-    ListenTaskSucceeded,
+    ReconcileTaskStarted,
+    ReconcileTaskSucceeded,
     ListenerMissingReconcile,
     DirectConnectionMissingReconcile,
     ReservationEstablished,
     ReservationRenewed,
     DirectConnectionClosed,
-    DirectConnectionClosedAwaitingManagementLoop,
 }
 
 impl RelayManagementAction {
     pub fn as_str(&self) -> &'static str {
         match self {
-            RelayManagementAction::ListenTaskStarted => "listen-task-started",
-            RelayManagementAction::ListenTaskSucceeded => "listen-task-succeeded",
+            RelayManagementAction::ReconcileTaskStarted => "reconcile-task-started",
+            RelayManagementAction::ReconcileTaskSucceeded => "reconcile-task-succeeded",
             RelayManagementAction::ListenerMissingReconcile => "listener-missing-reconcile",
             RelayManagementAction::DirectConnectionMissingReconcile => {
                 "direct-connection-missing-reconcile"
@@ -110,9 +109,6 @@ impl RelayManagementAction {
             RelayManagementAction::ReservationEstablished => "reservation-established",
             RelayManagementAction::ReservationRenewed => "reservation-renewed",
             RelayManagementAction::DirectConnectionClosed => "direct-connection-closed",
-            RelayManagementAction::DirectConnectionClosedAwaitingManagementLoop => {
-                "direct-connection-closed-awaiting-management-loop"
-            }
         }
     }
 }

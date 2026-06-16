@@ -37,11 +37,10 @@ pub struct Network {
     pub relay_enabled: bool,
     #[serde(default = "default_use_community_relays")]
     pub use_community_relays: bool,
-    /// Relay/observer multiaddrs kept in one user-facing list.
+    /// Relay multiaddrs kept in one user-facing list.
     ///
-    /// TCP entries maintain durable relay reservations and relay circuits.
-    /// UDP/QUIC entries are observer endpoints used only to refresh external
-    /// UDP address candidates before direct hole punching.
+    /// Candidates are grouped by relay peer. Each group is tried UDP/QUIC
+    /// first, then TCP for reservation and circuit availability.
     #[serde(default)]
     pub custom_relay_addresses: Vec<Multiaddr>,
     #[serde(default = "default_idle_connection_timeout_secs")]

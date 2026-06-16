@@ -28,7 +28,7 @@ pub enum RelayCommands {
         #[arg(value_enum)]
         mode: RelayMode,
     },
-    /// Add a custom relay multiaddr. TCP entries carry relay reservations; UDP/QUIC entries are observer-only.
+    /// Add a custom relay multiaddr. Candidates are grouped by relay peer and tried UDP/QUIC first, then TCP.
     Add { address: String },
     /// Remove a custom relay multiaddr
     Remove { address: String },
@@ -255,6 +255,6 @@ fn print_local_relay_config(config: &FungiConfig) {
 
 fn print_relay_transport_policy_note() {
     println!(
-        "note: TCP relay addresses maintain reservations/circuits; UDP/QUIC relay addresses are observer-only for UDP address refresh."
+        "note: relay candidates are grouped by relay peer; each group tries UDP/QUIC first and falls back to TCP for reservation/circuit availability."
     );
 }
