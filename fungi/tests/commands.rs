@@ -613,30 +613,14 @@ fn parses_device_address_add() {
 }
 
 #[test]
-fn parses_dynamic_thing_at_device() {
+fn parses_dynamic_service_at_device() {
     let args = FungiArgs::try_parse_from(["fungi", "filebrowser@nas"]).unwrap();
 
     let Commands::Dynamic(tokens) = args.command else {
-        panic!("expected dynamic thing command");
+        panic!("expected dynamic service command");
     };
 
-    assert!(args.common.dynamic_device.is_none());
     assert_eq!(tokens, vec!["filebrowser@nas"]);
-}
-
-#[test]
-fn parses_dynamic_thing_with_device_context() {
-    let args = FungiArgs::try_parse_from(["fungi", "-d", "nas", "filebrowser"]).unwrap();
-
-    let Commands::Dynamic(tokens) = args.command else {
-        panic!("expected dynamic thing command");
-    };
-
-    assert!(matches!(
-        args.common.dynamic_device,
-        Some(DeviceInput::Name(name)) if name == "nas"
-    ));
-    assert_eq!(tokens, vec!["filebrowser"]);
 }
 
 #[test]

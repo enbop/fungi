@@ -1,4 +1,5 @@
 use clap::{Args, Subcommand};
+use fungi_config::devices::DevicesConfig;
 use fungi_daemon_grpc::{
     Request,
     fungi_daemon_grpc::{
@@ -129,6 +130,8 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
         }
         _ => {}
     }
+
+    validate_device_command_before_connect(&cmd);
 
     let mut client = match get_rpc_client(&args).await {
         Some(c) => c,
@@ -297,6 +300,17 @@ pub async fn execute_device(args: CommonArgs, device_args: DeviceArgs) {
                 Err(e) => fatal_grpc(e),
             }
         }
+    }
+}
+
+fn validate_device_command_before_connect(cmd: &DeviceCommands) {
+    match cmd {
+        DeviceCommands::Add { name, .. } | DeviceCommands::Rename { name, .. } => {
+            if let Err(error) = DevicesConfig::validate_name(name) {
+                fatal(error)
+            }
+        }
+        _ => {}
     }
 }
 
