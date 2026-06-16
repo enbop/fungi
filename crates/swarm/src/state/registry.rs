@@ -259,12 +259,6 @@ impl State {
             .relay_peer_ready(relay_peer_id)
     }
 
-    pub fn relay_peer_active_endpoint(&self, relay_peer_id: PeerId) -> Option<Multiaddr> {
-        self.connectivity_state
-            .lock()
-            .relay_peer_active_endpoint(relay_peer_id)
-    }
-
     pub fn record_external_address_candidate(
         &self,
         address: Multiaddr,

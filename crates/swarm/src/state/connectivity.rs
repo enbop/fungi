@@ -405,14 +405,6 @@ impl ConnectivityState {
         })
     }
 
-    pub fn relay_peer_active_endpoint(&self, relay_peer_id: PeerId) -> Option<Multiaddr> {
-        self.relay_endpoint_statuses
-            .values()
-            .filter(|status| status.relay_peer_id == Some(relay_peer_id))
-            .find(|status| relay_endpoint_status_ready(status))
-            .map(|status| status.relay_addr.clone())
-    }
-
     pub fn record_external_address_candidate(
         &mut self,
         address: Multiaddr,
@@ -1008,10 +1000,7 @@ mod tests {
         assert!(!state.relay_peer_ready(relay_peer_id));
         state.record_relay_listener_check(&udp_addr, true);
         assert!(state.relay_peer_ready(relay_peer_id));
-        assert_eq!(
-            state.relay_peer_active_endpoint(relay_peer_id),
-            Some(udp_addr.clone())
-        );
+        assert!(state.relay_endpoint_ready(&udp_addr));
 
         assert!(state.record_relay_connection_closed(
             relay_peer_id,

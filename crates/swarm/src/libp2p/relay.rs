@@ -157,6 +157,12 @@ impl RelayPeerGroup {
         self.endpoints()
             .any(|endpoint| endpoint.transport_kind() == Some(transport_kind))
     }
+
+    fn active_endpoint(&self, state: &State) -> Option<RelayEndpoint> {
+        self.endpoints()
+            .find(|endpoint| state.relay_endpoint_ready(endpoint.addr()))
+            .cloned()
+    }
 }
 
 #[derive(Clone)]
@@ -288,8 +294,8 @@ impl RelayPeers {
         let mut seen = HashSet::<String>::new();
 
         for group in self.groups() {
-            if let Some(active_addr) = state.relay_peer_active_endpoint(group.peer_id()) {
-                push_relay_addr_once(&mut relays, &mut seen, active_addr);
+            if let Some(active_endpoint) = group.active_endpoint(state) {
+                push_relay_addr_once(&mut relays, &mut seen, active_endpoint.addr().clone());
             }
         }
 
@@ -459,7 +465,11 @@ impl SwarmControl {
             let address_summary = summarize_multiaddrs(&target.addresses);
             let addresses = target.addresses;
 
-            let active_endpoint = self.state().relay_peer_active_endpoint(relay_peer);
+            let active_endpoint = self
+                .relay_peers
+                .group_for_peer(relay_peer)
+                .and_then(|group| group.active_endpoint(self.state()))
+                .map(|endpoint| endpoint.addr().clone());
             if active_endpoint.as_ref().and_then(relay_transport_kind)
                 != Some(RelayTransportKind::Udp)
             {
@@ -603,7 +613,7 @@ pub(super) async fn relay_management_loop(swarm_control: SwarmControl) {
         }
 
         for group in swarm_control.relay_peers.groups() {
-            let mut peer_has_listener = false;
+            let mut listener_states = Vec::new();
             for relay_endpoint in group.endpoints() {
                 let listener_registered =
                     match relay_listener_registered(&swarm_control, relay_endpoint).await {
@@ -625,20 +635,19 @@ pub(super) async fn relay_management_loop(swarm_control: SwarmControl) {
                 swarm_control
                     .state()
                     .record_relay_listener_check(relay_endpoint.addr(), listener_registered);
-                peer_has_listener |= listener_registered;
+                listener_states.push((relay_endpoint.clone(), listener_registered));
             }
 
             if swarm_control.state().relay_peer_ready(group.peer_id()) {
                 continue;
             }
 
-            let action = if peer_has_listener {
-                crate::RelayManagementAction::DirectConnectionMissingReconcile
-            } else {
-                crate::RelayManagementAction::ListenerMissingReconcile
-            };
-
-            for relay_endpoint in group.endpoints() {
+            for (relay_endpoint, listener_registered) in listener_states {
+                let action = if listener_registered {
+                    crate::RelayManagementAction::DirectConnectionMissingReconcile
+                } else {
+                    crate::RelayManagementAction::ListenerMissingReconcile
+                };
                 swarm_control
                     .state()
                     .record_relay_management_action(relay_endpoint.addr(), action);
