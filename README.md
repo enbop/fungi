@@ -85,6 +85,7 @@ Starting from 2026, the Fungi project actively adopts AI-assisted coding.
 - Rust ensures safety in most cases
 - Modular design
 - Following TDD as much as possible
+- Maintainers can use AI-assisted PR review for additional feedback
 
 ## License
 
