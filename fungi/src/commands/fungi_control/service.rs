@@ -608,19 +608,19 @@ fn looks_like_windows_drive_path(value: &str) -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DynamicThingInvocation {
-    pub target: DynamicThingTarget,
+pub struct DynamicServiceInvocation {
+    pub target: DynamicServiceTarget,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DynamicThingTarget {
+pub struct DynamicServiceTarget {
     pub name: String,
     pub local: bool,
     pub device: Option<DeviceInput>,
     pub entry: Option<String>,
 }
 
-pub async fn execute_dynamic_thing(args: CommonArgs, tokens: Vec<String>) {
+pub async fn execute_dynamic_service(args: CommonArgs, tokens: Vec<String>) {
     if !tokens
         .first()
         .is_some_and(|token| dynamic_token_has_explicit_target(token))
@@ -628,7 +628,7 @@ pub async fn execute_dynamic_thing(args: CommonArgs, tokens: Vec<String>) {
         crate::commands::exit_unknown_dynamic_subcommand(&tokens)
     }
 
-    let invocation = parse_dynamic_thing_invocation(tokens).unwrap_or_else(|error| fatal(error));
+    let invocation = parse_dynamic_service_invocation(tokens).unwrap_or_else(|error| fatal(error));
 
     if invocation.target.name.starts_with(':') {
         fatal("Shortcuts are not implemented yet")
@@ -666,16 +666,16 @@ fn dynamic_token_has_explicit_target(token: &str) -> bool {
         .contains('@')
 }
 
-pub fn parse_dynamic_thing_invocation(
+pub fn parse_dynamic_service_invocation(
     mut tokens: Vec<String>,
-) -> Result<DynamicThingInvocation, String> {
+) -> Result<DynamicServiceInvocation, String> {
     if tokens.is_empty() {
-        return Err("Missing thing name".to_string());
+        return Err("Missing service name".to_string());
     }
 
     if tokens.len() > 1 {
         let target = tokens.remove(0);
-        parse_dynamic_thing_target(target.clone())?;
+        parse_dynamic_service_target(target.clone())?;
         let unexpected = &tokens[0];
         return Err(format!(
             "Unexpected argument `{unexpected}` after `{target}`.
@@ -689,14 +689,14 @@ Use `fungi service ...` for service subcommands."
         ));
     }
 
-    let target = parse_dynamic_thing_target(tokens.remove(0))?;
-    Ok(DynamicThingInvocation { target })
+    let target = parse_dynamic_service_target(tokens.remove(0))?;
+    Ok(DynamicServiceInvocation { target })
 }
 
-pub fn parse_dynamic_thing_target(value: String) -> Result<DynamicThingTarget, String> {
+pub fn parse_dynamic_service_target(value: String) -> Result<DynamicServiceTarget, String> {
     let value = value.trim();
     if value.is_empty() {
-        return Err("Thing name cannot be empty".to_string());
+        return Err("Service name cannot be empty".to_string());
     }
 
     let (name_and_device, entry) = match value.split_once('/') {
@@ -713,13 +713,13 @@ pub fn parse_dynamic_thing_target(value: String) -> Result<DynamicThingTarget, S
         Some((name, device)) => {
             let device = device.trim();
             if name.trim().is_empty() {
-                return Err("Thing name cannot be empty".to_string());
+                return Err("Service name cannot be empty".to_string());
             }
             if device.is_empty() {
                 return Err("Device name cannot be empty".to_string());
             }
             if device.contains('@') {
-                return Err("Thing target can only include one @device suffix".to_string());
+                return Err("Service target can only include one @device suffix".to_string());
             }
             if device.eq_ignore_ascii_case(LOCAL_DEVICE_NAME) {
                 (name.to_string(), true, None)
@@ -728,7 +728,7 @@ pub fn parse_dynamic_thing_target(value: String) -> Result<DynamicThingTarget, S
                     name.to_string(),
                     false,
                     Some(device.parse::<DeviceInput>().map_err(|error| {
-                        format!("Invalid device in thing target {value}: {error}")
+                        format!("Invalid device in service target {value}: {error}")
                     })?),
                 )
             }
@@ -736,7 +736,7 @@ pub fn parse_dynamic_thing_target(value: String) -> Result<DynamicThingTarget, S
         None => (name_and_device.to_string(), false, None),
     };
 
-    Ok(DynamicThingTarget {
+    Ok(DynamicServiceTarget {
         name,
         local,
         device,
@@ -744,8 +744,8 @@ pub fn parse_dynamic_thing_target(value: String) -> Result<DynamicThingTarget, S
     })
 }
 
-fn parse_service_reference(value: String) -> DynamicThingTarget {
-    let target = parse_dynamic_thing_target(value).unwrap_or_else(|error| fatal(error));
+fn parse_service_reference(value: String) -> DynamicServiceTarget {
+    let target = parse_dynamic_service_target(value).unwrap_or_else(|error| fatal(error));
     target
 }
 
@@ -1074,7 +1074,7 @@ async fn apply_created_service(
     }
 }
 
-fn reject_service_entry(target: &DynamicThingTarget, action: &str) {
+fn reject_service_entry(target: &DynamicServiceTarget, action: &str) {
     if target.entry.is_some() {
         fatal(format!("Entry-specific {action} is not implemented yet"))
     }
@@ -1755,7 +1755,7 @@ pub(crate) fn read_manifest_yaml_file(path: &str) -> CreatedServiceManifest {
 }
 
 fn create_tcp_service_interactively(
-    target: Option<DynamicThingTarget>,
+    target: Option<DynamicServiceTarget>,
     start_flag: bool,
 ) -> (String, Option<DeviceInput>, CreatedServiceManifest) {
     if let Some(target) = &target {
@@ -3013,8 +3013,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_dynamic_thing_target_supports_device_and_entry() {
-        let target = parse_dynamic_thing_target("filebrowser@nas/admin".to_string()).unwrap();
+    fn parse_dynamic_service_target_supports_device_and_entry() {
+        let target = parse_dynamic_service_target("filebrowser@nas/admin".to_string()).unwrap();
 
         assert_eq!(target.name, "filebrowser");
         assert!(!target.local);
@@ -3023,8 +3023,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_dynamic_thing_target_supports_explicit_local_scope() {
-        let target = parse_dynamic_thing_target("filebrowser@local/admin".to_string()).unwrap();
+    fn parse_dynamic_service_target_supports_explicit_local_scope() {
+        let target = parse_dynamic_service_target("filebrowser@local/admin".to_string()).unwrap();
 
         assert_eq!(target.name, "filebrowser");
         assert!(target.local);
@@ -3033,8 +3033,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_dynamic_thing_target_treats_local_scope_case_insensitively() {
-        let target = parse_dynamic_thing_target("filebrowser@Local/admin".to_string()).unwrap();
+    fn parse_dynamic_service_target_treats_local_scope_case_insensitively() {
+        let target = parse_dynamic_service_target("filebrowser@Local/admin".to_string()).unwrap();
 
         assert_eq!(target.name, "filebrowser");
         assert!(target.local);
@@ -3043,8 +3043,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_dynamic_thing_invocation_rejects_extra_args() {
-        let result = parse_dynamic_thing_invocation(vec![
+    fn parse_dynamic_service_invocation_rejects_extra_args() {
+        let result = parse_dynamic_service_invocation(vec![
             "rg@nas".to_string(),
             "todo".to_string(),
             "/data".to_string(),
@@ -3059,8 +3059,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_dynamic_thing_target_rejects_empty_device() {
-        let result = parse_dynamic_thing_target("filebrowser@".to_string());
+    fn parse_dynamic_service_target_rejects_empty_device() {
+        let result = parse_dynamic_service_target("filebrowser@".to_string());
 
         assert!(result.is_err());
     }
