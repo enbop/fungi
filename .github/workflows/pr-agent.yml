@@ -39,6 +39,7 @@ jobs:
           DEEPSEEK.KEY: ${{ secrets.DEEPSEEK_KEY }}
           config.model: deepseek/deepseek-v4-pro
           config.fallback_models: '["deepseek/deepseek-v4-pro"]'
+          config.custom_model_max_tokens: "1000000"
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "true"
           github_action_config.auto_improve: "false"
