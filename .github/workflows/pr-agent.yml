@@ -1,8 +1,6 @@
 name: PR-Agent
 
 on:
-  pull_request:
-    types: [opened, reopened, ready_for_review, synchronize]
   issue_comment:
     types: [created]
 
@@ -17,18 +15,9 @@ jobs:
     if: >-
       ${{
         github.event.sender.type != 'Bot' &&
-        (
-          (
-            github.event_name == 'pull_request' &&
-            github.event.pull_request.head.repo.full_name == github.repository
-          ) ||
-          (
-            github.event_name == 'issue_comment' &&
-            github.event.issue.pull_request != null &&
-            startsWith(github.event.comment.body, '/review') &&
-            contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
-          )
-        )
+        github.event.issue.pull_request != null &&
+        startsWith(github.event.comment.body, '/review') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
       }}
     runs-on: ubuntu-latest
     steps:
@@ -40,7 +29,3 @@ jobs:
           config.model: deepseek/deepseek-v4-pro
           config.fallback_models: '["deepseek/deepseek-v4-pro"]'
           config.custom_model_max_tokens: "1000000"
-          github_action_config.auto_review: "true"
-          github_action_config.auto_describe: "true"
-          github_action_config.auto_improve: "false"
-          github_action_config.pr_actions: '["opened", "reopened", "ready_for_review", "synchronize"]'
