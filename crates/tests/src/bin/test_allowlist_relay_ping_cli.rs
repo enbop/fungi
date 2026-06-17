@@ -559,7 +559,7 @@ fn write_test_config(
     let relay_tcp = format!("/ip4/127.0.0.1/tcp/{relay_tcp_port}/p2p/{relay_peer_id}");
     let relay_udp = format!("/ip4/127.0.0.1/udp/{relay_udp_port}/quic-v1/p2p/{relay_peer_id}");
     let config = format!(
-        "[rpc]\nlisten_address = \"127.0.0.1:{rpc_port}\"\n\n[network]\nlisten_tcp_port = {listen_tcp_port}\nlisten_udp_port = {listen_udp_port}\nrelay_enabled = true\nuse_community_relays = false\ncustom_relay_addresses = [\"{relay_tcp}\", \"{relay_udp}\"]\n"
+        "[rpc]\nlisten_address = \"127.0.0.1:{rpc_port}\"\n\n[network]\nlisten_tcp_port = {listen_tcp_port}\nlisten_udp_port = {listen_udp_port}\nrelay_enabled = true\nuse_community_relays = false\ncustom_relay_addresses = [\"{relay_udp}\", \"{relay_tcp}\"]\n"
     );
 
     fs::write(fungi_dir.join("config.toml"), config).with_context(|| {

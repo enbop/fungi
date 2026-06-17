@@ -304,8 +304,8 @@ pub(crate) fn parse_peer_id(text: &str) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-pub(crate) fn circuit_addr(relay_tcp_addr: &str, peer_id: &str) -> String {
-    format!("{relay_tcp_addr}/p2p-circuit/p2p/{peer_id}")
+pub(crate) fn circuit_addr(relay_addr: &str, peer_id: &str) -> String {
+    format!("{relay_addr}/p2p-circuit/p2p/{peer_id}")
 }
 
 pub(crate) fn epoch_secs() -> u64 {

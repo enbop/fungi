@@ -247,10 +247,16 @@ impl State {
             .relay_endpoint_active(relay_addr)
     }
 
-    pub fn relay_tcp_ready(&self, relay_peer_id: PeerId) -> bool {
+    pub fn relay_endpoint_ready(&self, relay_addr: &Multiaddr) -> bool {
         self.connectivity_state
             .lock()
-            .relay_tcp_ready(relay_peer_id)
+            .relay_endpoint_ready(relay_addr)
+    }
+
+    pub fn relay_peer_ready(&self, relay_peer_id: PeerId) -> bool {
+        self.connectivity_state
+            .lock()
+            .relay_peer_ready(relay_peer_id)
     }
 
     pub fn record_external_address_candidate(
