@@ -16,7 +16,7 @@ jobs:
       ${{
         github.event.sender.type != 'Bot' &&
         github.event.issue.pull_request != null &&
-        startsWith(github.event.comment.body, '/review') &&
+        startsWith(github.event.comment.body, '/') &&
         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
       }}
     runs-on: ubuntu-latest
