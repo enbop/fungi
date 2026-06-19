@@ -76,8 +76,9 @@ pub async fn run(common: CommonArgs, args: fungi_daemon::DaemonArgs) -> Result<(
     };
 
     tokio::select! {
-        _ = tokio::signal::ctrl_c() => {
-            log::info!("Received Ctrl+C, shutting down Fungi daemon...");
+        signal = termination_signal() => {
+            let signal = signal.context("Failed to wait for daemon termination signal")?;
+            log::info!("Received {signal}, shutting down Fungi daemon...");
         },
         res = server_fut => {
             if let Err(error) = res {
@@ -98,6 +99,26 @@ pub async fn run(common: CommonArgs, args: fungi_daemon::DaemonArgs) -> Result<(
     }
 
     Ok(())
+}
+
+#[cfg(unix)]
+async fn termination_signal() -> std::io::Result<&'static str> {
+    use tokio::signal::unix::{SignalKind, signal};
+
+    let mut terminate = signal(SignalKind::terminate())?;
+    tokio::select! {
+        result = tokio::signal::ctrl_c() => {
+            result?;
+            Ok("Ctrl+C")
+        },
+        _ = terminate.recv() => Ok("SIGTERM"),
+    }
+}
+
+#[cfg(not(unix))]
+async fn termination_signal() -> std::io::Result<&'static str> {
+    tokio::signal::ctrl_c().await?;
+    Ok("Ctrl+C")
 }
 
 fn print_grpc_startup_error(rpc_listen_address: &str, error: &anyhow::Error) {
