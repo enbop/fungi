@@ -4,7 +4,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const CURRENT_FUNGI_DIR_VERSION: u32 = 2;
+pub const CURRENT_FUNGI_DIR_VERSION: u32 = 3;
+pub(crate) const PREVIOUS_FUNGI_DIR_VERSION: u32 = 2;
 
 pub(crate) const CONFIG_FILE: &str = "config.toml";
 pub(crate) const BACKUP_ROOT_DIR: &str = "bk";
@@ -12,9 +13,15 @@ pub(crate) const STAGING_DIR_PREFIX: &str = ".fungi-migrate-staging-";
 pub(crate) const APPLY_ROLLBACK_DIR_NAME: &str = ".apply-rollback";
 pub(crate) const LEGACY_ADDRESS_BOOK_FILE: &str = "address_book.toml";
 pub(crate) const DEVICES_FILE: &str = "devices.toml";
+pub(crate) const TRUSTED_DEVICES_FILE: &str = "trusted_devices.toml";
+pub(crate) const LEGACY_LOCAL_ACCESS_FILE: &str = "access/local_access.json";
+pub(crate) const LOCAL_PREFERENCES_FILE: &str = "cache/local_preferences.json";
+pub(crate) const LEGACY_REMOTE_SERVICES_CACHE_DIR: &str = "cache/remote_services";
+pub(crate) const LEGACY_MANAGED_SERVICES_CACHE_DIR: &str = "cache/device_managed_services";
 pub(crate) const LEGACY_SERVICE_STATE_FILE: &str = "services-state.json";
 pub(crate) const SERVICES_ROOT_DIR: &str = "services";
-pub(crate) const DATA_ROOT_DIR: &str = "data";
+pub(crate) const APPDATA_SERVICES_ROOT_DIR: &str = "appdata/services";
+pub(crate) const ARTIFACTS_SERVICES_ROOT_DIR: &str = "artifacts/services";
 pub(crate) const CURRENT_SERVICE_STATE_SCHEMA_VERSION: u32 = 2;
 pub(crate) const LEGACY_SERVICE_STATE_SCHEMA_VERSION: u32 = 1;
 
@@ -71,6 +78,9 @@ impl MigrationReport {
 #[derive(Debug, Default)]
 pub(crate) struct MigrationPlan {
     pub(crate) update_config: bool,
+    pub(crate) migrate_incoming_allowed_peers: bool,
+    pub(crate) migrate_legacy_local_access: bool,
+    pub(crate) remove_legacy_service_caches: bool,
     pub(crate) migrate_address_book: bool,
     pub(crate) migrate_legacy_managed_services: bool,
     pub(crate) touched_paths: Vec<PathBuf>,

@@ -191,7 +191,7 @@ pub(crate) fn write_node_config(
         .collect::<Vec<_>>()
         .join(", ");
     let config = format!(
-        "version = 2\n\n[rpc]\nlisten_address = \"127.0.0.1:{rpc_port}\"\n\n[network]\nlisten_tcp_port = {tcp_port}\nlisten_udp_port = {udp_port}\nrelay_enabled = true\nuse_community_relays = false\ncustom_relay_addresses = [{relay_list}]\n\n[runtime]\ndisable_docker = false\ndisable_wasmtime = false\n"
+        "version = 3\n\n[rpc]\nlisten_address = \"127.0.0.1:{rpc_port}\"\n\n[network]\nlisten_tcp_port = {tcp_port}\nlisten_udp_port = {udp_port}\nrelay_enabled = true\nuse_community_relays = false\ncustom_relay_addresses = [{relay_list}]\n\n[runtime]\ndisable_docker = false\ndisable_wasmtime = false\n"
     );
     fs::write(fungi_dir.join("config.toml"), config).with_context(|| {
         format!(
