@@ -250,13 +250,7 @@ fn migrate_legacy_service_manifest(
             .mounts
             .into_iter()
             .map(|mount| CurrentServiceMount {
-                from: rewrite_legacy_managed_path(
-                    mount.host_path,
-                    old_service_data_dir,
-                    Path::new("$fungi.service.data"),
-                )
-                .display()
-                .to_string(),
+                from: rewrite_legacy_managed_manifest_path(mount.host_path, old_service_data_dir),
                 to: mount.runtime_path,
             })
             .collect(),
@@ -312,16 +306,21 @@ fn legacy_usage_to_current_client_kind(kind: LegacyServiceExposeUsageKind) -> St
     .to_string()
 }
 
-fn rewrite_legacy_managed_path(path: PathBuf, old_root: &Path, new_root: &Path) -> PathBuf {
+fn rewrite_legacy_managed_manifest_path(path: PathBuf, old_root: &Path) -> String {
     if path == old_root {
-        return new_root.to_path_buf();
+        return "$fungi.service.data".to_string();
     }
 
     if let Ok(suffix) = path.strip_prefix(old_root) {
-        return new_root.join(suffix);
+        let suffix = suffix
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        return format!("$fungi.service.data/{suffix}");
     }
 
-    path
+    path.display().to_string()
 }
 
 fn default_legacy_service_state_schema_version() -> u32 {
