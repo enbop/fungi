@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - Unreleased
+
+### Changed
+
+- The Fungi directory is migrated to schema v3 before commands run. Existing managed service data is moved into per-service `appdata/services/<local_service_id>/` directories, while service manifests and state use the new `services/<local_service_id>/` layout.
+- Migration creates a full snapshot under `bk/` before changing the live Fungi directory. Back up the Fungi directory separately before upgrading if the existing service data or legacy forwarding configuration is important.
+
+### Removed
+
+- Legacy `tcp_tunneling` and `file_transfer` configuration sections are removed during migration and are not retained as runtime compatibility paths. Legacy service access records are migrated to `local_preferences`, but other legacy forwarding rules must be recreated after upgrading.
+- Obsolete remote service cache directories are removed after being included in the migration backup.
+
 ## [0.6.1] - 2026-04-01
 
 ### Changed

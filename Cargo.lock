@@ -1458,7 +1458,7 @@ dependencies = [
 
 [[package]]
 name = "fungi"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1491,7 +1491,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-config"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "fungi-config-migrate",
@@ -1509,7 +1509,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-config-migrate"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1523,7 +1523,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-daemon"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1562,7 +1562,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-daemon-grpc"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "fungi-config",
@@ -1582,7 +1582,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-docker-agent"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "bytes",
  "clap",
@@ -1599,7 +1599,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-lab"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1611,7 +1611,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-stream"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -1626,7 +1626,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-swarm"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "async-result",
@@ -1645,7 +1645,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-tests"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "env_logger 0.11.8",
@@ -1657,7 +1657,7 @@ dependencies = [
 
 [[package]]
 name = "fungi-util"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "futures",

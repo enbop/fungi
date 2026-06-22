@@ -1,6 +1,7 @@
 mod apply;
 mod config_files;
 mod detection;
+mod local_preferences;
 mod model;
 mod services;
 
@@ -10,10 +11,17 @@ mod tests;
 use anyhow::{Result, bail};
 use std::path::Path;
 
-use apply::{MigrationTransaction, apply_staged_paths, copy_selected_paths, validate_migrated_dir};
-use config_files::{migrate_config_toml_to_current, migrate_legacy_address_book};
+use apply::{
+    MigrationTransaction, apply_staged_paths, copy_backup_snapshot, copy_selected_paths,
+    validate_migrated_dir,
+};
+use config_files::{
+    migrate_config_toml_to_current, migrate_legacy_address_book,
+    migrate_legacy_incoming_allowed_peers,
+};
 use detection::build_migration_plan;
 pub use detection::detect_source_version;
+use local_preferences::migrate_legacy_local_access;
 pub use model::{CURRENT_FUNGI_DIR_VERSION, DetectedVersion, MigrationReport};
 use services::migrate_legacy_services_state;
 
@@ -34,7 +42,9 @@ pub fn migrate_if_needed(fungi_dir: &Path) -> Result<MigrationReport> {
         {
             Ok(MigrationReport::no_changes(source_version))
         }
-        DetectedVersion::LegacyNoVersion | DetectedVersion::Version(CURRENT_FUNGI_DIR_VERSION) => {
+        DetectedVersion::LegacyNoVersion
+        | DetectedVersion::Version(model::PREVIOUS_FUNGI_DIR_VERSION)
+        | DetectedVersion::Version(CURRENT_FUNGI_DIR_VERSION) => {
             migrate_with_plan(fungi_dir, source_version, plan)
         }
         DetectedVersion::Version(version) => bail!(
@@ -55,9 +65,18 @@ fn migrate_with_plan(
 
     let transaction =
         MigrationTransaction::prepare(fungi_dir, &source_version, CURRENT_FUNGI_DIR_VERSION)?;
-    copy_selected_paths(fungi_dir, &transaction.backup_dir, &plan.touched_paths)?;
+    copy_backup_snapshot(fungi_dir, &transaction.backup_dir)?;
     copy_selected_paths(fungi_dir, &transaction.staging_dir, &plan.touched_paths)?;
 
+    if plan.migrate_incoming_allowed_peers {
+        migrate_legacy_incoming_allowed_peers(&transaction.staging_dir)?;
+    }
+    if plan.migrate_legacy_local_access {
+        migrate_legacy_local_access(&transaction.staging_dir)?;
+    }
+    if plan.remove_legacy_service_caches {
+        remove_legacy_service_caches(&transaction.staging_dir)?;
+    }
     if plan.update_config {
         migrate_config_toml_to_current(&transaction.staging_dir, fungi_dir)?;
     }
@@ -80,4 +99,17 @@ fn migrate_with_plan(
         migrated_paths: plan.touched_paths,
         changed: true,
     })
+}
+
+fn remove_legacy_service_caches(staging_root: &Path) -> Result<()> {
+    for relative_path in [
+        model::LEGACY_REMOTE_SERVICES_CACHE_DIR,
+        model::LEGACY_MANAGED_SERVICES_CACHE_DIR,
+    ] {
+        let path = staging_root.join(relative_path);
+        if path.exists() {
+            std::fs::remove_dir_all(&path)?;
+        }
+    }
+    Ok(())
 }

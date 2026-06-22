@@ -9,8 +9,10 @@ use crate::{
     detection::detect_source_version,
     model::{
         APPLY_ROLLBACK_DIR_NAME, BACKUP_ROOT_DIR, CURRENT_FUNGI_DIR_VERSION, DEVICES_FILE,
-        DetectedVersion, LEGACY_ADDRESS_BOOK_FILE, LEGACY_SERVICE_STATE_FILE, MigrationPlan,
-        STAGING_DIR_PREFIX,
+        DetectedVersion, LEGACY_ADDRESS_BOOK_FILE, LEGACY_LOCAL_ACCESS_FILE,
+        LEGACY_MANAGED_SERVICES_CACHE_DIR, LEGACY_REMOTE_SERVICES_CACHE_DIR,
+        LEGACY_SERVICE_STATE_FILE, LOCAL_PREFERENCES_FILE, MigrationPlan, STAGING_DIR_PREFIX,
+        TRUSTED_DEVICES_FILE,
     },
 };
 
@@ -42,44 +44,76 @@ impl MigrationTransaction {
             )
         })?;
 
-        let backup_dir = backup_root.join(format!(
+        let backup_dir_name = format!(
             "{timestamp}-from-{}-to-v{target_version}",
             source_version.backup_label()
-        ));
-        let staging_dir =
-            fungi_dir.join(format!("{STAGING_DIR_PREFIX}{timestamp}-v{target_version}"));
-
-        if backup_dir.exists() {
-            bail!(
-                "Refusing to overwrite existing migration backup directory: {}",
-                backup_dir.display()
-            );
-        }
-        if staging_dir.exists() {
-            bail!(
-                "Refusing to overwrite existing migration staging directory: {}",
-                staging_dir.display()
-            );
-        }
-
-        fs::create_dir_all(&backup_dir).with_context(|| {
-            format!(
-                "Failed to create migration backup directory: {}",
-                backup_dir.display()
-            )
-        })?;
-        fs::create_dir_all(&staging_dir).with_context(|| {
-            format!(
-                "Failed to create migration staging directory: {}",
-                staging_dir.display()
-            )
-        })?;
+        );
+        let staging_dir_name = format!("{STAGING_DIR_PREFIX}{timestamp}-v{target_version}");
+        let (backup_dir, staging_dir) = allocate_transaction_dirs(
+            &backup_root,
+            fungi_dir,
+            &backup_dir_name,
+            &staging_dir_name,
+        )?;
 
         Ok(Self {
             backup_dir,
             staging_dir,
         })
     }
+}
+
+fn allocate_transaction_dirs(
+    backup_root: &Path,
+    fungi_dir: &Path,
+    backup_dir_name: &str,
+    staging_dir_name: &str,
+) -> Result<(PathBuf, PathBuf)> {
+    for attempt in 0..1000 {
+        let suffix = if attempt == 0 {
+            String::new()
+        } else {
+            format!("-{attempt}")
+        };
+        let backup_dir = backup_root.join(format!("{backup_dir_name}{suffix}"));
+        let staging_dir = fungi_dir.join(format!("{staging_dir_name}{suffix}"));
+        if backup_dir.exists() || staging_dir.exists() {
+            continue;
+        }
+
+        match fs::create_dir(&backup_dir) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!(
+                        "Failed to create migration backup directory: {}",
+                        backup_dir.display()
+                    )
+                });
+            }
+        }
+        match fs::create_dir(&staging_dir) {
+            Ok(()) => return Ok((backup_dir, staging_dir)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let _ = fs::remove_dir_all(&backup_dir);
+            }
+            Err(error) => {
+                let _ = fs::remove_dir_all(&backup_dir);
+                return Err(error).with_context(|| {
+                    format!(
+                        "Failed to create migration staging directory: {}",
+                        staging_dir.display()
+                    )
+                });
+            }
+        }
+    }
+
+    bail!(
+        "Failed to allocate a unique migration backup directory under {}",
+        backup_root.display()
+    )
 }
 
 pub(crate) fn copy_selected_paths(
@@ -105,6 +139,25 @@ pub(crate) fn copy_selected_paths(
     Ok(())
 }
 
+pub(crate) fn copy_backup_snapshot(source_root: &Path, target_root: &Path) -> Result<()> {
+    for entry in fs::read_dir(source_root).with_context(|| {
+        format!(
+            "Failed to read source directory during migration backup: {}",
+            source_root.display()
+        )
+    })? {
+        let entry = entry?;
+        let file_name = entry.file_name();
+        let display_name = file_name.to_string_lossy();
+        if display_name == BACKUP_ROOT_DIR || display_name.starts_with(STAGING_DIR_PREFIX) {
+            continue;
+        }
+
+        copy_path_recursively(&entry.path(), &target_root.join(file_name))?;
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_migrated_dir(staging_root: &Path, plan: &MigrationPlan) -> Result<()> {
     if plan.update_config {
         match detect_source_version(staging_root)? {
@@ -126,6 +179,28 @@ pub(crate) fn validate_migrated_dir(staging_root: &Path, plan: &MigrationPlan) -
         if !staging_root.join(DEVICES_FILE).exists() {
             bail!("Migration validation failed; devices.toml was not created in staging");
         }
+    }
+
+    if plan.migrate_incoming_allowed_peers && !staging_root.join(TRUSTED_DEVICES_FILE).exists() {
+        bail!("Migration validation failed; trusted_devices.toml was not created in staging");
+    }
+
+    if plan.migrate_legacy_local_access {
+        if staging_root.join(LEGACY_LOCAL_ACCESS_FILE).exists() {
+            bail!("Migration validation failed; legacy local_access.json still exists in staging");
+        }
+        if !staging_root.join(LOCAL_PREFERENCES_FILE).exists() {
+            bail!("Migration validation failed; local_preferences.json was not created in staging");
+        }
+    }
+
+    if plan.remove_legacy_service_caches
+        && (staging_root.join(LEGACY_REMOTE_SERVICES_CACHE_DIR).exists()
+            || staging_root
+                .join(LEGACY_MANAGED_SERVICES_CACHE_DIR)
+                .exists())
+    {
+        bail!("Migration validation failed; obsolete remote service caches still exist in staging");
     }
 
     if plan.migrate_legacy_managed_services && staging_root.join(LEGACY_SERVICE_STATE_FILE).exists()

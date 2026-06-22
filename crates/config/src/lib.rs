@@ -252,7 +252,7 @@ mod tests {
         FungiConfig::init_config_file(config_path.clone()).unwrap();
         assert!(config_path.exists());
         let content = std::fs::read_to_string(&config_path).unwrap();
-        assert!(content.contains("version = 2"));
+        assert!(content.contains("version = 3"));
         assert!(content.contains("[network]"));
         assert!(content.contains("[runtime]"));
         assert!(!content.contains("allowed_ports"));
