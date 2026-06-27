@@ -520,6 +520,7 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                     )
                 }
                 let instance = inspect_local_service(&mut client, target.name).await;
+                require_local_service_running(&instance);
                 select_local_port(&instance, entry.as_deref())
                     .map(|port| format!("127.0.0.1:{}", port.host_port))
             };
@@ -1204,6 +1205,7 @@ async fn open_local_dynamic_service(args: CommonArgs, service: String, entry: Op
     };
 
     if let Some(instance) = find_local_service(&mut client, &service).await {
+        require_local_service_running(&instance);
         let Some(url) = build_local_web_url(&instance, entry.as_deref()) else {
             fatal("No web entry is available for this service")
         };
@@ -1600,6 +1602,8 @@ fn build_local_web_url(instance: &ServiceInstance, entry: Option<&str>) -> Optio
 }
 
 fn open_or_print_local_service(instance: &ServiceInstance, entry: Option<&str>) {
+    require_local_service_running(instance);
+
     if let Some(url) = build_local_web_url(instance, entry) {
         open_url(&url);
         println!("Opened {url}");
@@ -1610,6 +1614,15 @@ fn open_or_print_local_service(instance: &ServiceInstance, entry: Option<&str>) 
         fatal("No connectable entry is available for this service")
     };
     println!("127.0.0.1:{}", port.host_port);
+}
+
+fn require_local_service_running(instance: &ServiceInstance) {
+    if !instance.status.is_running() {
+        fatal(format!(
+            "Local service {} exists but is not running (phase: {}). Start it with:\n  fungi service start {}",
+            instance.name, instance.status.phase, instance.name
+        ));
+    }
 }
 
 fn select_access_endpoint<'a>(

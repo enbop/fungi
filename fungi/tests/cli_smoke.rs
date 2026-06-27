@@ -207,6 +207,70 @@ fn cli_requires_local_scope_for_existing_dynamic_service() {
 }
 
 #[test]
+fn cli_rejects_open_and_connect_for_stopped_local_service() {
+    let home = TempDir::new().unwrap();
+    let rpc = reserve_port();
+    let swarm = reserve_port();
+    let target = reserve_port();
+
+    init_fungi_dir(home.path(), rpc, swarm);
+    let _daemon = start_daemon(home.path());
+    let _peer = wait_peer_id(home.path());
+
+    let manifest = write_existing_tcp_service_manifest(home.path(), "stopped-web", target, "web");
+    let manifest_path = manifest.to_string_lossy();
+    run_cli(
+        home.path(),
+        [
+            "service",
+            "apply",
+            "stopped-web",
+            "--yes",
+            manifest_path.as_ref(),
+        ],
+    );
+
+    let assert_rejected = |output: CliOutput| {
+        assert!(
+            !output.status.success(),
+            "{:?} unexpectedly succeeded",
+            output.args
+        );
+        assert_eq!(output.stdout, "");
+        assert!(
+            output
+                .stderr
+                .contains("Local service stopped-web exists but is not running (phase: stopped)"),
+            "command {:?}\nstderr:\n{}",
+            output.args,
+            output.stderr
+        );
+        assert!(
+            output.stderr.contains("fungi service start stopped-web"),
+            "command {:?}\nstderr:\n{}",
+            output.args,
+            output.stderr
+        );
+    };
+
+    assert_rejected(run_cli_result_with_retry(
+        home.path(),
+        ["service", "open", "stopped-web"],
+        "",
+    ));
+    assert_rejected(run_cli_result_with_retry(
+        home.path(),
+        ["service", "connect", "stopped-web"],
+        "",
+    ));
+    assert_rejected(run_cli_result_with_retry(
+        home.path(),
+        ["stopped-web@local"],
+        "",
+    ));
+}
+
+#[test]
 fn cli_rejects_reserved_local_device_name() {
     let home = TempDir::new().unwrap();
 
