@@ -24,6 +24,8 @@
   <img src="https://fungi.rs/img/fungi-filebrowser-dark.gif" alt="Access a remote File Browser service with Fungi" width="640">
   <br>
   <sub>Open an app from another device as if it were running locally.</sub>
+  <br>
+  <sub><em>(Demo: <a href="https://github.com/enbop/filebrowser-lite">File Browser Lite</a>, a WASI fork of <a href="https://github.com/filebrowser/filebrowser">File Browser</a>, Apache-2.0.)</em></sub>
 </div>
 
 <br>
