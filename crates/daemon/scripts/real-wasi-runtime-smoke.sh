@@ -9,6 +9,7 @@ PROVIDER_PORT="${FUNGI_WASI_PROVIDER_PORT:-18081}"
 DIRECT_PORT="${FUNGI_WASI_DIRECT_PORT:-18082}"
 NAME="${FUNGI_WASI_SMOKE_NAME:-fungi-wasi-smoke}"
 WASM_URL="${FUNGI_WASI_WASM_URL:-https://github.com/enbop/spore-box/releases/download/v0.2.0/spore-box.wasm}"
+WAIT_SECS="${FUNGI_WASI_WAIT_SECS:-10}"
 DIRECT_PID=""
 
 cleanup() {
@@ -37,7 +38,7 @@ cargo run -q -p fungi-daemon --bin test_wasi_runtime -- \
   --mount-dir "$DATA_DIR" \
   --mount-target data \
   --port "$PROVIDER_PORT" \
-  --wait-secs 3
+  --wait-secs "$WAIT_SECS"
 echo
 
 echo "== direct fungi serve compare =="

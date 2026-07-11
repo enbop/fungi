@@ -30,7 +30,7 @@ struct Args {
     mount_dir: PathBuf,
     #[arg(long, default_value = "data")]
     mount_target: String,
-    #[arg(long, default_value_t = 3)]
+    #[arg(long, default_value_t = 10)]
     wait_secs: u64,
 }
 
@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         name: args.name.clone(),
         definition_id: None,
         runtime: RuntimeKind::Wasmtime,
-        run_mode: ServiceRunMode::Command,
+        run_mode: ServiceRunMode::Http,
         source,
         expose: None,
         env: BTreeMap::new(),
@@ -103,9 +103,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("start: ok");
 
     tokio::time::sleep(Duration::from_secs(args.wait_secs)).await;
-    let response = http_get(args.port)?;
-    println!("http.get:\n{response}");
-
     let logs = runtime
         .logs(
             RuntimeKind::Wasmtime,
@@ -116,6 +113,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
     println!("logs.text:\n{}", logs.text);
+
+    let response = http_get(args.port)?;
+    println!("http.get:\n{response}");
 
     runtime.stop(RuntimeKind::Wasmtime, &args.name).await?;
     println!("stop: ok");
