@@ -2,17 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.0] - Unreleased
+## [0.7.0]
+
+### Added
+
+- Device-first service access with named devices and `service@device` shortcuts.
+- `fungi service connect` for creating or reusing a local address for a remote service.
+- Service recipes for quickly creating services with `fungi service apply <name[@device]> --recipe <id>`.
+- A lightweight per-device service snapshot cache for offline display and startup fallback.
+- Daemon startup restore for previously saved local service access.
+- UDP-first relay reservation with TCP fallback.
 
 ### Changed
 
-- The Fungi directory is migrated to schema v3 before commands run. Existing managed service data is moved into per-service `appdata/services/<local_service_id>/` directories, while service manifests and state use the new `services/<local_service_id>/` layout.
-- Migration creates a full snapshot under `bk/` before changing the live Fungi directory. Back up the Fungi directory separately before upgrading if the existing service data or legacy forwarding configuration is important.
+- The CLI is now centered around `device` and `service`, with remote service listing, recipes, lifecycle control, and local access under `fungi service`.
+- Plain `fungi service list` uses local state and cached snapshots. Use `fungi service list --refresh` to refresh saved devices.
+- The Fungi directory is migrated to schema v3 before commands run. Managed service data moves to `appdata/services/<local_service_id>/`, and service state moves to `services/<local_service_id>/`.
+- Migration creates a full backup under `bk/` before changing the live Fungi directory.
 
 ### Removed
 
-- Legacy `tcp_tunneling` and `file_transfer` configuration sections are removed during migration and are not retained as runtime compatibility paths. Legacy service access records are migrated to `local_preferences`, but other legacy forwarding rules must be recreated after upgrading.
-- Obsolete remote service cache directories are removed after being included in the migration backup.
+- Removed the old `peer`, `catalog`, `access`, `tunnel`, `ft-service`, and `ft-client` command groups.
+- Removed runtime compatibility paths for legacy `tcp_tunneling` and `file_transfer` configuration.
+- Removed old remote service cache directories after including them in the migration backup.
 
 ## [0.6.1] - 2026-04-01
 
@@ -121,16 +133,19 @@ All notable changes to this project will be documented in this file.
 ## [0.3.1] - 2025-08-11
 
 ### Added
+
 - **Select from Local Devices (mDNS)**: Quick device selection for devices currently online in the same local network
 - **Select from Address Book**: Each manually added device is automatically saved to the Address Book for quick re-selection in future sessions
 - **Minimize to tray**
 
 ### Fixed
+
 - **Windows File Transfer**: Fixed incorrect file transfer path handling on Windows systems
 
 ## [0.3.0] - 2024-07-25
 
 ### Added
+
 - **Complete Flutter UI**: Full graphical user interface with cross-platform desktop support (macOS, Windows, Linux)
 - **File Transfer System**: End-to-end encrypted file sharing between devices with FTP/WebDAV mounting support
 - **Port Forwarding**: End-to-end encrypted TCP port tunneling between devices
@@ -139,9 +154,11 @@ All notable changes to this project will be documented in this file.
 - **Cross-platform Support**: Ready for macOS, Windows, and Linux
 
 ### Removed
+
 - **WASI Module**: Temporarily removed for this release
 
 ### Changed
+
 - **Release Format**: Now available in two versions:
   - `fungi-cli`: Command-line interface for server deployments
   - `fungi-app`: Graphical user interface for desktop users
