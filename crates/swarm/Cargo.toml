@@ -15,7 +15,5 @@ fungi-stream = { workspace = true }
 fungi-util = { workspace = true }
 void = { workspace = true }
 async-result = { workspace = true }
-bincode = { workspace = true }
-serde = { workspace = true }
 parking_lot = { workspace = true }
 thiserror = { workspace = true }

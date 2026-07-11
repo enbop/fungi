@@ -2,9 +2,9 @@ use super::{
     SwarmAsyncCall, SwarmControl, TSwarm,
     governance::connection_governance_loop,
     relay::{
-        RefreshThrottle, RelayPeers, handle_expired_listen_addr, handle_listener_closed,
-        handle_new_listen_addr, handle_relay_behaviour_event, handle_relay_refresh_behaviour_event,
-        record_relay_connection_closed, record_relay_connection_established, relay_management_loop,
+        RelayPeers, handle_expired_listen_addr, handle_listener_closed, handle_new_listen_addr,
+        handle_relay_behaviour_event, record_relay_connection_closed,
+        record_relay_connection_established, relay_management_loop,
     },
 };
 use crate::{
@@ -53,13 +53,7 @@ impl FungiSwarm {
             .with_quic()
             .with_relay_client(noise::Config::new, yamux::Config::default)?
             .with_behaviour(|keypair, relay| {
-                FungiBehaviours::new(
-                    keypair,
-                    relay,
-                    mdns,
-                    state.clone(),
-                    relay_peers.peer_ids().to_vec(),
-                )
+                FungiBehaviours::new(keypair, relay, mdns, state.clone())
             })?
             .with_swarm_config(|config| {
                 config.with_idle_connection_timeout(idle_connection_timeout)
@@ -68,8 +62,6 @@ impl FungiSwarm {
 
         let local_peer_id = *swarm.local_peer_id();
         let stream_control = swarm.behaviour().stream.new_control();
-        let refresh_throttle = RefreshThrottle::default();
-
         apply(&mut swarm);
 
         let (swarm_caller_tx, swarm_caller_rx) = mpsc::unbounded_channel::<SwarmAsyncCall>();
@@ -81,7 +73,6 @@ impl FungiSwarm {
             Arc::new(local_peer_id),
             swarm_caller_tx,
             stream_control,
-            refresh_throttle,
             relay_peers,
             state,
         );
@@ -165,9 +156,6 @@ async fn handle_swarm_event(
             }
             SwarmEvent::Behaviour(FungiBehavioursEvent::Relay(event)) => {
                 handle_relay_behaviour_event(&swarm_control, event);
-            }
-            SwarmEvent::Behaviour(FungiBehavioursEvent::RelayRefresh(event)) => {
-                handle_relay_refresh_behaviour_event(&swarm_control, event);
             }
             SwarmEvent::Behaviour(FungiBehavioursEvent::Dcutr(event)) => {
                 handle_dcutr_behaviour_event(event);

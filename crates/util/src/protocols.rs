@@ -3,8 +3,6 @@ use libp2p_swarm::StreamProtocol;
 pub const FUNGI_REMOTE_ACCESS_PROTOCOL: StreamProtocol =
     StreamProtocol::new("/fungi/remote-access/0.1.0");
 pub const FUNGI_PROBE_PROTOCOL: StreamProtocol = StreamProtocol::new("/fungi/probe/0.1.0");
-pub const FUNGI_RELAY_REFRESH_PROTOCOL: StreamProtocol =
-    StreamProtocol::new("/fungi/relay-refresh/0.1.0");
 pub const FUNGI_FILE_TRANSFER_PROTOCOL: StreamProtocol =
     StreamProtocol::new("/fungi/file-transfer/0.1.0");
 pub const FUNGI_PEER_HANDSHAKE_PROTOCOL: StreamProtocol =

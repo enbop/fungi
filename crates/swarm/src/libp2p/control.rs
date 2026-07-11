@@ -1,7 +1,6 @@
 use super::{
-    ConnectionRecordSliceExt, ConnectionSelectionStrategy, TSwarm,
-    dial_plan::DialPlan,
-    relay::{RefreshThrottle, RelayPeers},
+    ConnectionRecordSliceExt, ConnectionSelectionStrategy, TSwarm, dial_plan::DialPlan,
+    relay::RelayPeers,
 };
 use crate::{ConnectionRecord, State, StreamObservationHandle, ping};
 use anyhow::{Result, bail};
@@ -65,7 +64,6 @@ pub struct SwarmControl {
     stream_control: fungi_stream::Control,
     connection_selection_strategy: ConnectionSelectionStrategy,
     connect_locks: Arc<Mutex<HashMap<PeerId, Arc<AsyncMutex<()>>>>>,
-    pub(super) refresh_throttle: RefreshThrottle,
     pub(super) relay_peers: RelayPeers,
     state: State,
 }
@@ -83,7 +81,6 @@ impl SwarmControl {
         local_peer_id: Arc<PeerId>,
         swarm_caller_tx: UnboundedSender<SwarmAsyncCall>,
         stream_control: fungi_stream::Control,
-        refresh_throttle: RefreshThrottle,
         relay_peers: RelayPeers,
         state: State,
     ) -> Self {
@@ -94,7 +91,6 @@ impl SwarmControl {
             stream_control,
             connection_selection_strategy: ConnectionSelectionStrategy::default(),
             connect_locks: Arc::new(Mutex::new(HashMap::new())),
-            refresh_throttle,
             relay_peers,
             state,
         }

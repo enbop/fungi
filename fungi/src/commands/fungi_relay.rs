@@ -1,6 +1,5 @@
 use anyhow::Result;
 use clap::Parser;
-use fungi_swarm::behaviours::relay_refresh;
 use libp2p::{
     Swarm,
     core::{Multiaddr, multiaddr::Protocol},
@@ -13,13 +12,11 @@ use libp2p::{
 };
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
-use tokio::time::Instant;
 
 const DEFAULT_CONFIG_DIR: &str = ".fungi-relay-server";
 const DEFAULT_LISTEN_PORT: u16 = 30001;
 const DEFAULT_MAX_CIRCUIT_DURATION_SECS: u64 = 24 * 60 * 60;
 const DEFAULT_MAX_CIRCUIT_BYTES: u64 = u64::MAX;
-const RELAY_REFRESH_MIN_INTERVAL: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Parser)]
 pub struct RelayArgs {
@@ -62,7 +59,6 @@ struct Behaviour {
     relay: relay::Behaviour,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
-    relay_refresh: relay_refresh::Behaviour,
 }
 
 pub async fn run(args: RelayArgs) -> Result<()> {
@@ -94,7 +90,6 @@ pub async fn run(args: RelayArgs) -> Result<()> {
                 "/fungi-relay/0.1.0".to_string(),
                 key.public(),
             )),
-            relay_refresh: relay_refresh::Behaviour::new_allow_all(),
         })?
         .build();
 
@@ -125,13 +120,8 @@ pub async fn run(args: RelayArgs) -> Result<()> {
     println!("{tcp_listen_addr}");
     println!("{udp_listen_addr}");
 
-    let mut last_refresh_at = None;
-
     loop {
         match swarm.next().await.expect("Infinite Stream.") {
-            SwarmEvent::Behaviour(BehaviourEvent::RelayRefresh(event)) => {
-                handle_relay_refresh_event(&mut swarm, &mut last_refresh_at, event);
-            }
             SwarmEvent::Behaviour(event) => {
                 log::info!("{event:?}")
             }
@@ -182,47 +172,6 @@ fn add_external_address(
     swarm.add_external_address(tcp_listen_addr);
     swarm.add_external_address(udp_listen_addr);
     Ok(())
-}
-
-fn relay_refresh_is_rate_limited(last_refresh_at: &mut Option<Instant>) -> bool {
-    let now = Instant::now();
-    if let Some(last_refresh_at_value) = *last_refresh_at
-        && now.duration_since(last_refresh_at_value) < RELAY_REFRESH_MIN_INTERVAL
-    {
-        return true;
-    }
-
-    *last_refresh_at = Some(now);
-    false
-}
-
-fn handle_relay_refresh_event(
-    swarm: &mut Swarm<Behaviour>,
-    last_refresh_at: &mut Option<Instant>,
-    event: relay_refresh::Event,
-) {
-    if relay_refresh_is_rate_limited(last_refresh_at) {
-        log::debug!(
-            "Dropping relay refresh request from {} due to rate limit",
-            event.peer
-        );
-        return;
-    }
-
-    let target_peer_id = event.announced_peer_id;
-    if !swarm.is_connected(&target_peer_id) {
-        log::debug!(
-            "Ignoring relay refresh prepare from {} because target {} is not connected",
-            event.peer,
-            target_peer_id
-        );
-        return;
-    }
-
-    swarm
-        .behaviour_mut()
-        .relay_refresh
-        .send(&target_peer_id, event.peer);
 }
 
 fn get_or_init_keypair() -> Result<Keypair> {
