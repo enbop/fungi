@@ -28,7 +28,6 @@ serde = { workspace = true }
 fungi-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["compat", "io"] }
 anyhow = { workspace = true }
-tarpc = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }

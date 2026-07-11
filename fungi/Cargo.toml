@@ -35,7 +35,6 @@ bincode = { workspace = true }
 interprocess = { workspace = true }
 rand = { workspace = true }
 anyhow = { workspace = true }
-tarpc = { workspace = true }
 wasmtime-cli = { workspace = true, optional = true }
 
 [dev-dependencies]
