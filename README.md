@@ -7,53 +7,53 @@
   <br>
 </h1>
 
-<p align="center" style="font-size: 1.2rem;">Build a private P2P device network for capability-first services</p>
+<p align="center" style="font-size: 1.2rem;">
+  Fungi turns your devices into a personal app platform.<br />
+  Run apps on any device, and access them securely from anywhere.
+</p>
 
-With Fungi, you can securely connect your own devices, run container or WASI services under explicit runtime policy, 
-manage remote services with simple commands, and access them locally without exposing them to the public internet.
+<div align="center">
+  <img src="https://fungi.rs/img/fungi-ping-dark.gif" alt="Connect two devices with Fungi" width="640">
+  <br>
+  <sub>Connect trusted devices into your private network.</sub>
+</div>
 
-| Demo |
-| --- |
-|Build a secure private P2P network with ease:<br /><img src="https://fungi.rs/assets/images/ping-ad101ea46e9e8bd25649d55fe290e801.gif" alt="Build a secure private P2P network" /> |
-| Create a remote service and access it locally right away:<br /><img src="https://fungi.rs/assets/images/service-8e947b850359183aa2fc709388327e31.gif" alt="Create and start a remote service locally" /><br />(This demo shows creating a no-client file manager service running on a remote device, and accessing it with a browser locally) |
-||
+<br>
 
+<div align="center">
+  <img src="https://fungi.rs/img/fungi-filebrowser-dark.gif" alt="Access a remote File Browser service with Fungi" width="640">
+  <br>
+  <sub>Open an app from another device as if it were running locally.</sub>
+</div>
+
+<br>
 
 > **Need help or want to follow updates?**
 > Join the **[Fungi Discord](https://discord.gg/A2vUXXB726)**.
 
 ## Key Features
 
-*   **P2P Connectivity**: Built on [rust-libp2p](https://github.com/libp2p/rust-libp2p), supporting automatic NAT traversal and mDNS discovery.
-*   **Secure**: End-to-end encryption with PeerID-based authentication.
-*   **Fast and Lightweight**: Built in Rust, around 20 MB idle RAM, with support for macOS, Windows, Linux, and Android.
-*   **Sandboxed Services**: Run sandboxed services with the built-in WASI runtime or an optional Docker backend.
-*   **Simple Remote Service Control**: Use a few commands like `pull`, `start`, `stop`, and `remove` to manage remote services locally.
-*   **Local Service Access**: open remote service endpoints locally without exposing them to the public internet.
-*   **Modular architecture:**
-    *   **`fungi-daemon`**: The background service that handles P2P networking and manage services.
-    *   **`fungi-cli`**: A command-line tool to interact with the daemon via gRPC.
-    *   **`fungi-app`**: (optional, external) An official GUI client for easier management (see [fungi-app](https://github.com/enbop/fungi-app)).
+- **Private Device Network**: Connect your devices with end-to-end encryption, directly when possible or through a relay when needed.
+- **Explicit Device Trust**: Only devices you approve can initiate service access and management.
+- **Sandboxed Apps as Services**: Run portable WebAssembly apps as services in the built-in WASI sandbox(Wasmtime), or use an optional constrained Docker backend.
+- **Easy Service Access**: Access services across your device network without exposing them to the public internet.
+- **Cross-Platform**: Run Fungi on macOS, Windows, Linux, and Android.
+
+Use Fungi for private web apps, file access, APIs, and existing TCP or HTTP services.
 
 ## Download
+
 macOS / Linux quick install:
 
 ```bash
 curl -fsSL https://fungi.rs/install.sh | sh
 ```
 
-- Or install from Homebrew on macOS:
+- Or install with Homebrew using the official Fungi tap (macOS):
 
 ```bash
 brew tap enbop/fungi
 brew install fungi
-```
-
-- Or install the nightly Homebrew channel on macOS:
-
-```bash
-brew tap enbop/fungi
-brew install fungi-nightly
 ```
 
 - Or download from [GitHub Releases](https://github.com/enbop/fungi/releases/latest) (Windows/Linux/macOS/Android binaries available)
@@ -70,21 +70,13 @@ Full documentation: [fungi.rs/docs](https://fungi.rs/docs/intro).
 
 ## Platform Support
 
-| Platform | Status |
-|----------|--------|
-| macOS    | ✅ Ready |
-| Windows  | ✅ Ready |
-| Linux    | ✅ Ready |
-| Android  | ✅ Ready |
+| Platform | Status         |
+| -------- | -------------- |
+| macOS    | ✅ Ready       |
+| Windows  | ✅ Ready       |
+| Linux    | ✅ Ready       |
+| Android  | ✅ Ready       |
 | iOS      | 🚧 In progress |
-
-## Development
-Starting from 2026, the Fungi project actively adopts AI-assisted coding.
-
-#### Code Quality
-- Rust ensures safety in most cases
-- Modular design
-- Following TDD as much as possible
 
 ## License
 
