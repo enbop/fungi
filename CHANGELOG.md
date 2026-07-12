@@ -2,11 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.0]
+## [0.7.0] - 2026-07-12
 
 ### Added
 
-- Device-first service access with named devices and `service@device` shortcuts.
+- Device-first service access with named devices and `fungi service@device` shortcuts.
 - `fungi service connect` for creating or reusing a local address for a remote service.
 - Service recipes for quickly creating services with `fungi service apply <name[@device]> --recipe <id>`.
 - A lightweight per-device service snapshot cache for offline display and startup fallback.
@@ -15,7 +15,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- The daemon now selects an available loopback RPC port at startup and publishes it through the Fungi directory, avoiding fixed-port conflicts on Windows and other platforms.
+- The daemon now selects an available loopback RPC port at startup and publishes it through the Fungi directory, avoiding fixed-port conflicts.
 - The CLI is now centered around `device` and `service`, with remote service listing, recipes, lifecycle control, and local access under `fungi service`.
 - Plain `fungi service list` uses local state and cached snapshots. Use `fungi service list --refresh` to refresh saved devices.
 - The Fungi directory is migrated to schema v3 before commands run. Managed service data moves to `appdata/services/<local_service_id>/`, and service state moves to `services/<local_service_id>/`.
