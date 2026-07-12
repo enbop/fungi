@@ -1385,8 +1385,15 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(windows)]
     fn rejects_timestamps_that_overflow_system_time() {
         assert!(i64_to_system_time(i64::MAX).is_err());
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn handles_max_timestamp_without_panicking() {
+        let _ = i64_to_system_time(i64::MAX);
     }
 
     #[test]
