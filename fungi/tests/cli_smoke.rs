@@ -20,6 +20,65 @@ impl Drop for DaemonChild {
     }
 }
 
+impl DaemonChild {
+    fn stop_gracefully(mut self) {
+        drop(self.child.stdin.take());
+        let status = self.child.wait().unwrap();
+        assert!(status.success(), "daemon exited with {status}");
+    }
+
+    fn kill_and_wait(&mut self) {
+        self.child.kill().unwrap();
+        self.child.wait().unwrap();
+    }
+}
+
+#[test]
+fn daemon_publishes_dynamic_endpoint_and_enforces_one_instance_per_fungi_dir() {
+    let home = TempDir::new().unwrap();
+    let swarm = reserve_port();
+    init_fungi_dir(home.path(), 0, swarm);
+
+    let daemon = start_daemon(home.path());
+    let _peer = wait_peer_id(home.path());
+    let endpoint = fungi_config::read_daemon_endpoint(home.path()).unwrap();
+    let address = endpoint.strip_prefix("http://").unwrap();
+    let address: std::net::SocketAddr = address.parse().unwrap();
+    assert_ne!(address.port(), 0);
+
+    let output = run_cli(home.path(), ["info", "rpc-address"]);
+    assert_eq!(output.stdout.trim(), address.to_string());
+
+    let duplicate = run_cli_result(home.path(), ["daemon", "--exit-on-stdin-close"], "");
+    assert!(!duplicate.status.success());
+    assert!(
+        duplicate.stdout.contains("already running")
+            || duplicate.stderr.contains("already running"),
+        "stdout:\n{}\nstderr:\n{}",
+        duplicate.stdout,
+        duplicate.stderr
+    );
+    assert_eq!(
+        fungi_config::read_daemon_endpoint(home.path()).unwrap(),
+        endpoint
+    );
+
+    daemon.stop_gracefully();
+    assert!(!fungi_config::daemon_endpoint_path(home.path()).exists());
+    assert!(fungi_config::daemon_lock_path(home.path()).exists());
+
+    let mut restarted = start_daemon(home.path());
+    let _peer = wait_peer_id(home.path());
+    restarted.kill_and_wait();
+    assert!(fungi_config::daemon_endpoint_path(home.path()).exists());
+
+    let recovered = start_daemon(home.path());
+    let _peer = wait_peer_id(home.path());
+    let recovered_endpoint = fungi_config::read_daemon_endpoint(home.path()).unwrap();
+    assert!(recovered_endpoint.starts_with("http://127.0.0.1:"));
+    recovered.stop_gracefully();
+}
+
 #[test]
 fn service_apply_file_without_target_prints_order_hint() {
     let home = TempDir::new().unwrap();

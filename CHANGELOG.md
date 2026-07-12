@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- The daemon now selects an available loopback RPC port at startup and publishes it through the Fungi directory, avoiding fixed-port conflicts on Windows and other platforms.
 - The CLI is now centered around `device` and `service`, with remote service listing, recipes, lifecycle control, and local access under `fungi service`.
 - Plain `fungi service list` uses local state and cached snapshots. Use `fungi service list --refresh` to refresh saved devices.
 - The Fungi directory is migrated to schema v3 before commands run. Managed service data moves to `appdata/services/<local_service_id>/`, and service state moves to `services/<local_service_id>/`.

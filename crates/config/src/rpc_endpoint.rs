@@ -63,14 +63,6 @@ impl PublishedDaemonEndpoint {
             })?;
             drop(file);
 
-            if path.exists() {
-                fs::remove_file(&path).with_context(|| {
-                    format!(
-                        "Failed to replace stale daemon endpoint at {}",
-                        path.display()
-                    )
-                })?;
-            }
             fs::rename(&temp_path, &path).with_context(|| {
                 format!(
                     "Failed to publish daemon endpoint from {} to {}",
