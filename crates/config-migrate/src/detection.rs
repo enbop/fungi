@@ -162,6 +162,16 @@ fn config_requires_current_normalization(
         return Ok(true);
     }
 
+    if table
+        .get("rpc")
+        .and_then(toml::Value::as_table)
+        .and_then(|rpc| rpc.get("listen_address"))
+        .and_then(toml::Value::as_str)
+        .is_some_and(|address| matches!(address, "127.0.0.1:5405" | "127.0.0.1:5406"))
+    {
+        return Ok(true);
+    }
+
     let Some(runtime_table) = table.get("runtime").and_then(toml::Value::as_table) else {
         return Ok(false);
     };

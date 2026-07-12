@@ -27,6 +27,17 @@ pub(crate) fn migrate_config_toml_to_current(staging_root: &Path, fungi_dir: &Pa
     table.remove("incoming_allowed_peers");
     table.remove("tcp_tunneling");
     table.remove("file_transfer");
+    if let Some(rpc_table) = table.get_mut("rpc").and_then(toml::Value::as_table_mut)
+        && rpc_table
+            .get("listen_address")
+            .and_then(toml::Value::as_str)
+            .is_some_and(|address| matches!(address, "127.0.0.1:5405" | "127.0.0.1:5406"))
+    {
+        rpc_table.insert(
+            "listen_address".to_string(),
+            toml::Value::String("127.0.0.1:0".to_string()),
+        );
+    }
     if let Some(network_table) = table.get_mut("network").and_then(toml::Value::as_table_mut) {
         network_table.remove("incoming_allowed_peers");
     }

@@ -7,6 +7,7 @@ pub mod local_preferences;
 pub mod paths;
 pub mod recipe_cache;
 mod rpc;
+mod rpc_endpoint;
 pub mod runtime;
 pub mod service_cache;
 pub mod tcp_tunneling;
@@ -22,6 +23,7 @@ pub use fungi_config_migrate::{
     DetectedVersion as FungiDirDetectedVersion, MigrationReport, migrate_if_needed,
 };
 pub use init::init;
+pub use rpc_endpoint::{PublishedDaemonEndpoint, daemon_endpoint_path, read_daemon_endpoint};
 
 use anyhow::{Context as _, Result};
 use multiaddr::Multiaddr;
@@ -253,6 +255,7 @@ mod tests {
         assert!(config_path.exists());
         let content = std::fs::read_to_string(&config_path).unwrap();
         assert!(content.contains("version = 3"));
+        assert!(content.contains("listen_address = \"127.0.0.1:0\""));
         assert!(content.contains("[network]"));
         assert!(content.contains("[runtime]"));
         assert!(!content.contains("allowed_ports"));

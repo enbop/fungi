@@ -109,6 +109,45 @@ fn current_version_is_a_noop() {
 }
 
 #[test]
+fn current_version_replaces_legacy_default_rpc_address() {
+    for legacy_address in ["127.0.0.1:5405", "127.0.0.1:5406"] {
+        let dir = TempDir::new().unwrap();
+        let config_path = dir.path().join(CONFIG_FILE);
+        fs::write(
+            &config_path,
+            format!("version = 3\n\n[rpc]\nlisten_address = \"{legacy_address}\"\n"),
+        )
+        .unwrap();
+
+        let report = migrate_if_needed(dir.path()).unwrap();
+
+        assert!(report.changed);
+        let migrated = fs::read_to_string(config_path).unwrap();
+        assert!(migrated.contains("listen_address = \"127.0.0.1:0\""));
+    }
+}
+
+#[test]
+fn current_version_preserves_explicit_rpc_address() {
+    let dir = TempDir::new().unwrap();
+    let config_path = dir.path().join(CONFIG_FILE);
+    fs::write(
+        &config_path,
+        "version = 3\n\n[rpc]\nlisten_address = \"127.0.0.1:6601\"\n",
+    )
+    .unwrap();
+
+    let report = migrate_if_needed(dir.path()).unwrap();
+
+    assert!(!report.changed);
+    assert!(
+        fs::read_to_string(config_path)
+            .unwrap()
+            .contains("listen_address = \"127.0.0.1:6601\"")
+    );
+}
+
+#[test]
 fn migrates_legacy_config_transactionally_and_keeps_full_backup_snapshot() {
     let dir = TempDir::new().unwrap();
     fs::write(
