@@ -3178,8 +3178,8 @@ publish:
             os: String::new(),
             public_ip: String::new(),
             private_ips: Vec::new(),
-            created_at: 0,
-            last_connected: 0,
+            created_at_unix_secs: 0,
+            last_connected_unix_secs: 0,
             version: String::new(),
             multiaddrs: Vec::new(),
         }

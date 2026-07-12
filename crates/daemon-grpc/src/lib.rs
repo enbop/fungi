@@ -1309,8 +1309,8 @@ fn device_info_to_proto(info: fungi_config::devices::DeviceInfo) -> DeviceInfo {
         os: os_to_string(info.os),
         public_ip: info.public_ip.unwrap_or_default(),
         private_ips: info.private_ips,
-        created_at: system_time_to_i64(info.created_at),
-        last_connected: system_time_to_i64(info.last_connected),
+        created_at_unix_secs: system_time_to_i64(info.created_at),
+        last_connected_unix_secs: system_time_to_i64(info.last_connected),
         version: info.version,
         multiaddrs: info.multiaddrs,
     }
@@ -1340,8 +1340,8 @@ fn proto_to_device_info(proto: DeviceInfo) -> Result<fungi_config::devices::Devi
             Some(proto.public_ip)
         },
         private_ips: proto.private_ips,
-        created_at: i64_to_system_time(proto.created_at),
-        last_connected: i64_to_system_time(proto.last_connected),
+        created_at: i64_to_system_time(proto.created_at_unix_secs)?,
+        last_connected: i64_to_system_time(proto.last_connected_unix_secs)?,
         version: proto.version,
     })
 }
@@ -1374,6 +1374,26 @@ fn system_time_to_i64(time: SystemTime) -> i64 {
         .as_secs() as i64
 }
 
-fn i64_to_system_time(secs: i64) -> SystemTime {
-    UNIX_EPOCH + std::time::Duration::from_secs(secs.max(0) as u64)
+fn i64_to_system_time(secs: i64) -> Result<SystemTime, String> {
+    UNIX_EPOCH
+        .checked_add(std::time::Duration::from_secs(secs.max(0) as u64))
+        .ok_or_else(|| format!("timestamp {secs} is outside the supported SystemTime range"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_timestamps_that_overflow_system_time() {
+        assert!(i64_to_system_time(i64::MAX).is_err());
+    }
+
+    #[test]
+    fn converts_unix_seconds_to_system_time() {
+        assert_eq!(
+            system_time_to_i64(i64_to_system_time(1_752_299_892).unwrap()),
+            1_752_299_892
+        );
+    }
 }

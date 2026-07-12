@@ -132,9 +132,9 @@ pub struct DeviceInfo {
     #[prost(string, repeated, tag = "6")]
     pub private_ips: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(int64, tag = "7")]
-    pub created_at: i64,
+    pub created_at_unix_secs: i64,
     #[prost(int64, tag = "8")]
-    pub last_connected: i64,
+    pub last_connected_unix_secs: i64,
     #[prost(string, tag = "9")]
     pub version: ::prost::alloc::string::String,
     #[prost(string, repeated, tag = "10")]

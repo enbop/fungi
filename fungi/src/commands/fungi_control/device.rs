@@ -360,7 +360,7 @@ fn new_minimal_device_info(peer_id: String, name: String, multiaddrs: Vec<String
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
-        .as_millis() as i64;
+        .as_secs() as i64;
 
     DeviceInfo {
         peer_id,
@@ -369,8 +369,8 @@ fn new_minimal_device_info(peer_id: String, name: String, multiaddrs: Vec<String
         os: "Unknown".to_string(),
         public_ip: String::new(),
         private_ips: Vec::new(),
-        created_at: now,
-        last_connected: now,
+        created_at_unix_secs: now,
+        last_connected_unix_secs: now,
         version: String::new(),
         multiaddrs,
     }
@@ -429,5 +429,26 @@ fn print_device_info_detailed(device: &DeviceInfo) {
         for address in &device.multiaddrs {
             println!("  {address}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn minimal_device_timestamps_are_unix_seconds() {
+        let before = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let device = new_minimal_device_info("peer".to_string(), "kinoko".to_string(), vec![]);
+        let after = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        assert!((before..=after).contains(&device.created_at_unix_secs));
+        assert_eq!(device.created_at_unix_secs, device.last_connected_unix_secs);
     }
 }

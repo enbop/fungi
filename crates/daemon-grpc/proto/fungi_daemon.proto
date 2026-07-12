@@ -252,8 +252,8 @@ message DeviceInfo {
   string          os             = 4;
   string          public_ip      = 5;
   repeated string private_ips    = 6;
-  int64           created_at     = 7;
-  int64           last_connected = 8;
+  int64           created_at_unix_secs     = 7;
+  int64           last_connected_unix_secs = 8;
   string          version        = 9;
   repeated string multiaddrs     = 10;
 }
