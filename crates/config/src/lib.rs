@@ -1,4 +1,5 @@
 mod build_info;
+mod daemon_lock;
 pub mod devices;
 pub mod direct_addresses;
 mod init;
@@ -19,6 +20,7 @@ pub use build_info::{
     STABLE_RPC_ADDRESS, build_commit, build_time, default_fungi_dir_name, default_rpc_address,
     dist_channel,
 };
+pub use daemon_lock::{DaemonInstanceLock, daemon_lock_path};
 pub use fungi_config_migrate::{
     DetectedVersion as FungiDirDetectedVersion, MigrationReport, migrate_if_needed,
 };
