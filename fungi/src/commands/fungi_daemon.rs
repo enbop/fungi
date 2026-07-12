@@ -37,9 +37,18 @@ pub async fn run(common: CommonArgs, args: fungi_daemon::DaemonArgs) -> Result<(
         return Err(error);
     }
 
+    let fungi_dir = common.fungi_dir();
+    let _instance_lock = match fungi_config::DaemonInstanceLock::acquire(&fungi_dir) {
+        Ok(lock) => lock,
+        Err(error) => {
+            print_startup_error("Failed to acquire daemon instance lock", &error);
+            return Err(error);
+        }
+    };
+
     log::info!("Starting Fungi daemon...");
 
-    let daemon = match FungiDaemon::start(common.fungi_dir(), args.clone()).await {
+    let daemon = match FungiDaemon::start(fungi_dir.clone(), args.clone()).await {
         Ok(daemon) => daemon,
         Err(error) => {
             print_startup_error("Failed to start Fungi daemon", &error);
@@ -57,17 +66,20 @@ pub async fn run(common: CommonArgs, args: fungi_daemon::DaemonArgs) -> Result<(
     log::info!("Network info: {network_info:?}");
 
     let rpc_listen_address = daemon.config().lock().rpc.listen_address.clone();
-    let rpc_socket_addr = match rpc_listen_address
-        .parse()
-        .with_context(|| format!("Invalid RPC listen address: {rpc_listen_address}"))
-    {
-        Ok(addr) => addr,
+    let rpc_listener = match bind_rpc_listener(&rpc_listen_address).await {
+        Ok(listener) => listener,
         Err(error) => {
-            print_startup_error("Failed to parse daemon RPC listen address", &error);
+            print_grpc_startup_error(&rpc_listen_address, &error);
             return Err(error);
         }
     };
-    let server_fut = start_grpc_server(daemon, rpc_socket_addr);
+    let rpc_socket_addr = rpc_listener
+        .local_addr()
+        .context("Failed to read daemon RPC listener address")?;
+    let _published_endpoint =
+        fungi_config::PublishedDaemonEndpoint::publish(&fungi_dir, rpc_socket_addr)?;
+    log::info!("Daemon RPC endpoint: http://{rpc_socket_addr}");
+    let server_fut = start_grpc_server(daemon, rpc_listener);
 
     let stdin_monitor = if args.exit_on_stdin_close {
         Some(tokio::spawn(stdin_monitor()))
@@ -99,6 +111,15 @@ pub async fn run(common: CommonArgs, args: fungi_daemon::DaemonArgs) -> Result<(
     }
 
     Ok(())
+}
+
+async fn bind_rpc_listener(listen_address: &str) -> Result<tokio::net::TcpListener> {
+    let socket_addr: std::net::SocketAddr = listen_address
+        .parse()
+        .with_context(|| format!("Invalid RPC listen address: {listen_address}"))?;
+    tokio::net::TcpListener::bind(socket_addr)
+        .await
+        .with_context(|| format!("Failed to bind daemon RPC listener: {listen_address}"))
 }
 
 #[cfg(unix)]
@@ -146,6 +167,17 @@ fn print_grpc_startup_error(rpc_listen_address: &str, error: &anyhow::Error) {
 fn print_startup_error(summary: &str, error: &anyhow::Error) {
     println!("{summary}.");
     print_error_reasons(error);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bind_rpc_listener;
+
+    #[tokio::test]
+    async fn dynamic_rpc_listener_reports_an_allocated_port() {
+        let listener = bind_rpc_listener("127.0.0.1:0").await.unwrap();
+        assert_ne!(listener.local_addr().unwrap().port(), 0);
+    }
 }
 
 fn print_error_reasons(error: &anyhow::Error) {

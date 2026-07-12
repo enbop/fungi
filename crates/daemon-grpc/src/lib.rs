@@ -5,7 +5,6 @@ pub mod fungi_daemon_grpc {
 }
 
 use std::collections::HashSet;
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -23,6 +22,7 @@ use multiaddr::Multiaddr;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::wrappers::TcpListenerStream;
 pub use tonic::{Request, Response, Status};
 
 type PingEventSendError = mpsc::error::SendError<Result<PingPeerEvent, Status>>;
@@ -133,7 +133,7 @@ impl PingPeerError {
 
 pub async fn start_grpc_server(
     daemon: fungi_daemon::FungiDaemon,
-    addr: SocketAddr,
+    listener: tokio::net::TcpListener,
 ) -> anyhow::Result<()> {
     tonic::transport::Server::builder()
         .add_service(
@@ -141,7 +141,7 @@ pub async fn start_grpc_server(
                 FungiDaemonRpcImpl::new(daemon),
             ),
         )
-        .serve(addr)
+        .serve_with_incoming(TcpListenerStream::new(listener))
         .await?;
     Ok(())
 }

@@ -16,7 +16,7 @@ libp2p-identity = { workspace = true }
 libp2p-swarm = { workspace = true }
 multiaddr = { workspace = true }
 tokio = { workspace = true, features = ["time", "sync", "rt"] }
-tokio-stream = { workspace = true }
+tokio-stream = { workspace = true, features = ["net"] }
 
 [build-dependencies]
 tonic-prost-build = { workspace = true }

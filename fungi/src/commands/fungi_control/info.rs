@@ -6,7 +6,7 @@ use serde_json::json;
 use crate::commands::CommonArgs;
 
 use super::{
-    client::get_rpc_client,
+    client::{get_rpc_client, read_rpc_endpoint, rpc_address_from_endpoint},
     shared::{fatal, fatal_grpc},
 };
 
@@ -39,9 +39,12 @@ pub async fn execute_info(args: CommonArgs, cmd: InfoCommands) {
     }
 
     if matches!(cmd, InfoCommands::RpcAddress) {
-        let fungi_config = FungiConfig::try_read_from_dir(&args.fungi_dir())
-            .unwrap_or_else(|error| fatal(format!("Failed to read configuration: {error}")));
-        println!("{}", fungi_config.rpc.listen_address);
+        let endpoint = read_rpc_endpoint(&args.fungi_dir())
+            .unwrap_or_else(|error| fatal(format!("Failed to discover Fungi daemon: {error}")));
+        let address = rpc_address_from_endpoint(&endpoint).unwrap_or_else(|error| {
+            fatal(format!("Failed to parse Fungi daemon endpoint: {error}"))
+        });
+        println!("{address}");
         return;
     }
 
