@@ -252,7 +252,7 @@ fn selected_connection(
 
 #[test]
 fn sort_selected_connections_prefers_stable_order_when_relay_status_matches() {
-    let mut selected = vec![
+    let mut selected = [
         selected_connection(8, "/ip4/1.1.1.1/tcp/4002", Some(10)),
         selected_connection(6, "/ip4/1.1.1.1/tcp/4001", Some(30)),
     ];
@@ -266,7 +266,7 @@ fn sort_selected_connections_prefers_stable_order_when_relay_status_matches() {
 fn sort_selected_connections_prefers_earlier_established_when_other_signals_match() {
     let earlier = SystemTime::UNIX_EPOCH + Duration::from_secs(10);
     let later = SystemTime::UNIX_EPOCH + Duration::from_secs(20);
-    let mut selected = vec![
+    let mut selected = [
         ConnectionRecord {
             established_at: later,
             ..selected_connection(8, "/ip4/1.1.1.1/tcp/4002", Some(30))

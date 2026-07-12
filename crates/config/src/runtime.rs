@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::paths::FungiPaths;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Runtime {
     #[serde(default)]
     pub disable_docker: bool,
@@ -14,17 +14,6 @@ pub struct Runtime {
     pub docker_socket_path: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allowed_host_paths: Vec<PathBuf>,
-}
-
-impl Default for Runtime {
-    fn default() -> Self {
-        Self {
-            disable_docker: false,
-            disable_wasmtime: false,
-            docker_socket_path: None,
-            allowed_host_paths: Vec::new(),
-        }
-    }
 }
 
 impl Runtime {

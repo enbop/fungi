@@ -241,10 +241,10 @@ pub(crate) fn default_root() -> Result<PathBuf> {
 pub(crate) fn find_repo_root() -> Result<PathBuf> {
     let mut candidates = Vec::new();
     candidates.push(std::env::current_dir()?);
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            candidates.push(parent.to_path_buf());
-        }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(parent) = exe.parent()
+    {
+        candidates.push(parent.to_path_buf());
     }
     for start in candidates {
         for path in start.ancestors() {

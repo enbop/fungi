@@ -58,30 +58,6 @@ pub fn patch_rpc_port(config_file: &Path, port: u16) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::patch_rpc_port;
-
-    #[test]
-    fn patches_the_dynamic_default_rpc_port() {
-        let dir = tempfile::tempdir().unwrap();
-        let config = dir.path().join("config.toml");
-        std::fs::write(
-            &config,
-            "version = 3\n\n[rpc]\nlisten_address = \"127.0.0.1:0\"\n",
-        )
-        .unwrap();
-
-        patch_rpc_port(&config, 61234).unwrap();
-
-        assert!(
-            std::fs::read_to_string(config)
-                .unwrap()
-                .contains("listen_address = \"127.0.0.1:61234\"")
-        );
-    }
-}
-
 pub fn assert_contains(haystack: &str, needle: &str) -> Result<()> {
     if haystack.contains(needle) {
         return Ok(());
@@ -321,5 +297,29 @@ pub(crate) fn detach_process_group(command: &mut Command) {
     #[cfg(not(unix))]
     {
         let _ = command;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::patch_rpc_port;
+
+    #[test]
+    fn patches_the_dynamic_default_rpc_port() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config.toml");
+        std::fs::write(
+            &config,
+            "version = 3\n\n[rpc]\nlisten_address = \"127.0.0.1:0\"\n",
+        )
+        .unwrap();
+
+        patch_rpc_port(&config, 61234).unwrap();
+
+        assert!(
+            std::fs::read_to_string(config)
+                .unwrap()
+                .contains("listen_address = \"127.0.0.1:61234\"")
+        );
     }
 }

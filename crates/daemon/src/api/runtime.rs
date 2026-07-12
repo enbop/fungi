@@ -126,7 +126,7 @@ impl FungiDaemon {
     }
 
     fn manifest_resolution_policy(&self) -> ManifestResolutionPolicy {
-        ManifestResolutionPolicy::default()
+        ManifestResolutionPolicy
     }
 
     fn apply_runtime_config_update(&self, updated_config: fungi_config::FungiConfig) -> Result<()> {
@@ -336,7 +336,7 @@ impl FungiDaemon {
         let managed = managed_response
             .services_json
             .as_deref()
-            .map(|services_json| serde_json::from_str::<Vec<ServiceInstance>>(services_json))
+            .map(serde_json::from_str::<Vec<ServiceInstance>>)
             .transpose()
             .map_err(|error| {
                 anyhow::anyhow!(

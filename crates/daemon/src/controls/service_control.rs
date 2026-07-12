@@ -305,7 +305,7 @@ impl ServiceControlProtocolControl {
     }
 
     fn manifest_resolution_policy(&self) -> ManifestResolutionPolicy {
-        ManifestResolutionPolicy::default()
+        ManifestResolutionPolicy
     }
 
     async fn sync_service_endpoint_listeners_by_name(

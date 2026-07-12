@@ -375,7 +375,7 @@ fn cli_can_interactively_create_local_tcp_service() {
 
     let output = run_cli(home.path(), ["service", "connect", "created-raw"]);
     let local_addr = output.stdout.trim();
-    let mut stream = connect_with_retry(&local_addr, Duration::from_secs(5));
+    let mut stream = connect_with_retry(local_addr, Duration::from_secs(5));
     stream.write_all(b"ping").unwrap();
     let mut response = [0_u8; 4];
     stream.read_exact(&mut response).unwrap();

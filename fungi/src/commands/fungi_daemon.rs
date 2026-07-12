@@ -169,17 +169,6 @@ fn print_startup_error(summary: &str, error: &anyhow::Error) {
     print_error_reasons(error);
 }
 
-#[cfg(test)]
-mod tests {
-    use super::bind_rpc_listener;
-
-    #[tokio::test]
-    async fn dynamic_rpc_listener_reports_an_allocated_port() {
-        let listener = bind_rpc_listener("127.0.0.1:0").await.unwrap();
-        assert_ne!(listener.local_addr().unwrap().port(), 0);
-    }
-}
-
 fn print_error_reasons(error: &anyhow::Error) {
     println!("Reason: {}", error);
     for cause in error.chain().skip(1) {
@@ -215,5 +204,16 @@ async fn stdin_monitor() {
                 break;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bind_rpc_listener;
+
+    #[tokio::test]
+    async fn dynamic_rpc_listener_reports_an_allocated_port() {
+        let listener = bind_rpc_listener("127.0.0.1:0").await.unwrap();
+        assert_ne!(listener.local_addr().unwrap().port(), 0);
     }
 }

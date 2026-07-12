@@ -464,12 +464,9 @@ mod tests {
             .open_stream(victim.peer_id(), REVERSE_STREAM_TEST_PROTOCOL)
             .await;
 
-        match open_result {
-            Ok((mut stream, _handle, _connection_id)) => {
-                let _ = stream.write_all(b"ping").await;
-                let _ = stream.close().await;
-            }
-            Err(_) => {}
+        if let Ok((mut stream, _handle, _connection_id)) = open_result {
+            let _ = stream.write_all(b"ping").await;
+            let _ = stream.close().await;
         }
 
         let next = tokio::time::timeout(Duration::from_millis(500), incoming.next()).await;

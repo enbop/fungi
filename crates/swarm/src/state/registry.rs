@@ -28,8 +28,9 @@ pub enum ConnectionDirection {
     Outbound,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
 pub enum ConnectionGovernanceState {
+    #[default]
     Unknown,
     Recommended,
     Deprecated,
@@ -44,12 +45,6 @@ impl ConnectionGovernanceState {
             ConnectionGovernanceState::Deprecated => "deprecated",
             ConnectionGovernanceState::Closing => "closing",
         }
-    }
-}
-
-impl Default for ConnectionGovernanceState {
-    fn default() -> Self {
-        Self::Unknown
     }
 }
 
@@ -489,7 +484,7 @@ impl State {
         let stream_state = self.stream_state.lock();
         let mut streams: Vec<ObservedStreamEntry> =
             stream_state.streams_by_id.values().cloned().collect();
-        streams.sort_by(|a, b| a.stream_id.cmp(&b.stream_id));
+        streams.sort_by_key(|a| a.stream_id);
         streams
     }
 

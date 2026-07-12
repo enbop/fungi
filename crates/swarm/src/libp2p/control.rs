@@ -156,12 +156,12 @@ impl SwarmControl {
         let stream = stream_control
             .open_stream_by_id(first.connection_id, protocol.clone())
             .await?;
-        return Ok((
+        Ok((
             stream,
             self.state
                 .track_outbound_stream_opened(peer_id, first.connection_id, protocol),
             first.connection_id,
-        ));
+        ))
     }
 
     pub async fn connect(&self, peer_id: PeerId) -> Result<Vec<ConnectionRecord>, ConnectError> {

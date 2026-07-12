@@ -230,15 +230,14 @@ impl FungiDaemon {
             }
 
             if let Err(error) = updated_local_preferences.save_to_file() {
-                if let Some(rule_id) = started_rule_id {
-                    if let Err(rollback_error) =
+                if let Some(rule_id) = started_rule_id
+                    && let Err(rollback_error) =
                         self.remove_service_access_forwarding_rule_internal(&rule_id)
-                    {
-                        log::warn!(
-                            "Failed to roll back service access listener after save failure: {}",
-                            rollback_error
-                        );
-                    }
+                {
+                    log::warn!(
+                        "Failed to roll back service access listener after save failure: {}",
+                        rollback_error
+                    );
                 }
                 if let Some(rule) = removed_active_rule {
                     self.restore_service_access_forwarding_rule(rule).await;

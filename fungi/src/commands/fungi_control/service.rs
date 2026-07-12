@@ -235,13 +235,15 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
                 apply_service_from_recipe(
                     &mut client,
                     &args,
-                    device,
-                    service_name,
-                    recipe_id,
-                    refresh,
-                    dry_run,
-                    start,
-                    yes,
+                    RecipeApplyOptions {
+                        scoped_device: device,
+                        service_name,
+                        recipe_id,
+                        refresh,
+                        dry_run,
+                        start,
+                        yes,
+                    },
                 )
                 .await;
                 return;
@@ -746,13 +748,10 @@ pub fn parse_dynamic_service_target(value: String) -> Result<DynamicServiceTarge
 }
 
 fn parse_service_reference(value: String) -> DynamicServiceTarget {
-    let target = parse_dynamic_service_target(value).unwrap_or_else(|error| fatal(error));
-    target
+    parse_dynamic_service_target(value).unwrap_or_else(|error| fatal(error))
 }
 
-async fn apply_service_from_recipe(
-    client: &mut RpcClient,
-    args: &CommonArgs,
+struct RecipeApplyOptions {
     scoped_device: Option<super::shared::ResolvedPeerTarget>,
     service_name: String,
     recipe_id: String,
@@ -760,7 +759,22 @@ async fn apply_service_from_recipe(
     dry_run: bool,
     start: bool,
     yes: bool,
+}
+
+async fn apply_service_from_recipe(
+    client: &mut RpcClient,
+    args: &CommonArgs,
+    options: RecipeApplyOptions,
 ) {
+    let RecipeApplyOptions {
+        scoped_device,
+        service_name,
+        recipe_id,
+        refresh,
+        dry_run,
+        start,
+        yes,
+    } = options;
     let device = scoped_device;
     let target_device_name = device.as_ref().map(resolved_device_display_name);
     let req = ResolveRecipeRequest {

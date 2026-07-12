@@ -71,9 +71,9 @@ fn daemon_log_format(
     now: &mut DeferredNow,
     record: &Record<'_>,
 ) -> std::io::Result<()> {
-    write!(
+    writeln!(
         write,
-        "{} {:<5} [{}] {}\n",
+        "{} {:<5} [{}] {}",
         now.now().format("%Y-%m-%d %H:%M:%S%.3f%:z"),
         record.level(),
         record.module_path().unwrap_or(record.target()),

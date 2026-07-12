@@ -96,15 +96,11 @@ pub struct ServicePort {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum ServicePortAllocation {
     Auto,
+    #[default]
     Fixed,
-}
-
-impl Default for ServicePortAllocation {
-    fn default() -> Self {
-        Self::Fixed
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

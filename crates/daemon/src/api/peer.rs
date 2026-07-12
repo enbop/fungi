@@ -213,7 +213,7 @@ impl FungiDaemon {
             })
             .collect::<Vec<_>>();
 
-        streams.sort_by(|a, b| a.stream_id.cmp(&b.stream_id));
+        streams.sort_by_key(|a| a.stream_id);
         streams
     }
 
@@ -235,7 +235,7 @@ impl FungiDaemon {
             })
             .collect::<Vec<_>>();
 
-        streams.sort_by(|a, b| a.stream_id.cmp(&b.stream_id));
+        streams.sort_by_key(|a| a.stream_id);
         streams
     }
 }

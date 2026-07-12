@@ -447,7 +447,7 @@ publish:
         yaml,
         Path::new("."),
         &fungi_home,
-        &ManifestResolutionPolicy::default(),
+        &ManifestResolutionPolicy,
         &used_host_ports,
     )
     .unwrap();
@@ -491,7 +491,7 @@ publish:
         yaml,
         Path::new("."),
         &path_roots,
-        &ManifestResolutionPolicy::default(),
+        &ManifestResolutionPolicy,
         &BTreeSet::new(),
     )
     .unwrap();
@@ -997,7 +997,7 @@ publish:
             &manifest_v1,
             temp_dir.path(),
             &fungi_home,
-            &ManifestResolutionPolicy::default(),
+            &ManifestResolutionPolicy,
         )
         .await
         .unwrap();
@@ -1039,7 +1039,7 @@ publish:
             &manifest_v2,
             temp_dir.path(),
             &fungi_home,
-            &ManifestResolutionPolicy::default(),
+            &ManifestResolutionPolicy,
         )
         .await
         .unwrap();
@@ -1115,7 +1115,7 @@ async fn apply_manifest_yaml_allows_same_service_fixed_host_port_reapply_only() 
             &demo_manifest,
             temp_dir.path(),
             &fungi_home,
-            &ManifestResolutionPolicy::default(),
+            &ManifestResolutionPolicy,
         )
         .await
         .unwrap();
@@ -1124,7 +1124,7 @@ async fn apply_manifest_yaml_allows_same_service_fixed_host_port_reapply_only() 
             &demo_manifest,
             temp_dir.path(),
             &fungi_home,
-            &ManifestResolutionPolicy::default(),
+            &ManifestResolutionPolicy,
         )
         .await
         .unwrap();
@@ -1134,11 +1134,10 @@ async fn apply_manifest_yaml_allows_same_service_fixed_host_port_reapply_only() 
             &wasmtime_manifest_yaml("other", &component, 19100),
             temp_dir.path(),
             &fungi_home,
-            &ManifestResolutionPolicy::default(),
+            &ManifestResolutionPolicy,
         )
         .await
-        .err()
-        .expect("different service should not reuse a fixed publish port");
+        .expect_err("different service should not reuse a fixed publish port");
 
     assert!(
         error
@@ -1178,7 +1177,7 @@ publish:
             code_server,
             temp_dir.path(),
             &fungi_home,
-            &ManifestResolutionPolicy::default(),
+            &ManifestResolutionPolicy,
         )
         .await
         .unwrap();
@@ -1200,7 +1199,7 @@ publish:
             filebrowser_as_code_server,
             temp_dir.path(),
             &fungi_home,
-            &ManifestResolutionPolicy::default(),
+            &ManifestResolutionPolicy,
         )
         .await
         .expect_err("different definition ids should not replace an existing service");

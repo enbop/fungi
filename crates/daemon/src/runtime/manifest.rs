@@ -27,7 +27,7 @@ pub fn parse_service_manifest_yaml(
         content,
         base_dir,
         fungi_home,
-        &ManifestResolutionPolicy::default(),
+        &ManifestResolutionPolicy,
         &BTreeSet::new(),
     )
 }
@@ -42,7 +42,7 @@ pub(crate) fn parse_managed_service_manifest_yaml(
         content,
         base_dir,
         &ManifestPathRoots::for_local_service_id(fungi_home, local_service_id),
-        &ManifestResolutionPolicy::default(),
+        &ManifestResolutionPolicy,
         &BTreeSet::new(),
     )
 }

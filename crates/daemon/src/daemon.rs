@@ -562,91 +562,6 @@ fn normalize_direct_address_groups(
     grouped
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn new_direct_address_successes_only_returns_new_pairs() {
-        let mut last_synced_pairs = BTreeSet::new();
-
-        let first = new_direct_address_successes(
-            BTreeMap::from([
-                (
-                    "peer-a".to_string(),
-                    vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
-                ),
-                (
-                    "peer-b".to_string(),
-                    vec!["/ip4/192.168.1.8/tcp/4001".to_string()],
-                ),
-            ]),
-            &mut last_synced_pairs,
-        );
-        assert_eq!(first.len(), 2);
-
-        let second = new_direct_address_successes(
-            BTreeMap::from([
-                (
-                    "peer-a".to_string(),
-                    vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
-                ),
-                (
-                    "peer-b".to_string(),
-                    vec![
-                        "/ip4/192.168.1.8/tcp/4001".to_string(),
-                        "/ip4/192.168.1.9/tcp/4001".to_string(),
-                    ],
-                ),
-            ]),
-            &mut last_synced_pairs,
-        );
-        assert_eq!(
-            second,
-            BTreeMap::from([(
-                "peer-b".to_string(),
-                vec!["/ip4/192.168.1.9/tcp/4001".to_string()]
-            )])
-        );
-
-        let third = new_direct_address_successes(
-            BTreeMap::from([
-                (
-                    "peer-a".to_string(),
-                    vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
-                ),
-                (
-                    "peer-b".to_string(),
-                    vec![
-                        "/ip4/192.168.1.8/tcp/4001".to_string(),
-                        "/ip4/192.168.1.9/tcp/4001".to_string(),
-                    ],
-                ),
-            ]),
-            &mut last_synced_pairs,
-        );
-        assert!(third.is_empty());
-
-        let empty = new_direct_address_successes(BTreeMap::new(), &mut last_synced_pairs);
-        assert!(empty.is_empty());
-
-        let after_disconnect = new_direct_address_successes(
-            BTreeMap::from([(
-                "peer-a".to_string(),
-                vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
-            )]),
-            &mut last_synced_pairs,
-        );
-        assert_eq!(
-            after_disconnect,
-            BTreeMap::from([(
-                "peer-a".to_string(),
-                vec!["/ip4/192.168.1.7/tcp/4001".to_string()]
-            )])
-        );
-    }
-}
-
 async fn restore_service_endpoint_listener(
     tcp_tunneling_control: &TcpTunnelingControl,
     listening_rules: &mut Vec<(String, fungi_config::tcp_tunneling::ListeningRule)>,
@@ -741,4 +656,89 @@ fn apply_listen(swarm: &mut TSwarm, config: &FungiConfig) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_direct_address_successes_only_returns_new_pairs() {
+        let mut last_synced_pairs = BTreeSet::new();
+
+        let first = new_direct_address_successes(
+            BTreeMap::from([
+                (
+                    "peer-a".to_string(),
+                    vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
+                ),
+                (
+                    "peer-b".to_string(),
+                    vec!["/ip4/192.168.1.8/tcp/4001".to_string()],
+                ),
+            ]),
+            &mut last_synced_pairs,
+        );
+        assert_eq!(first.len(), 2);
+
+        let second = new_direct_address_successes(
+            BTreeMap::from([
+                (
+                    "peer-a".to_string(),
+                    vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
+                ),
+                (
+                    "peer-b".to_string(),
+                    vec![
+                        "/ip4/192.168.1.8/tcp/4001".to_string(),
+                        "/ip4/192.168.1.9/tcp/4001".to_string(),
+                    ],
+                ),
+            ]),
+            &mut last_synced_pairs,
+        );
+        assert_eq!(
+            second,
+            BTreeMap::from([(
+                "peer-b".to_string(),
+                vec!["/ip4/192.168.1.9/tcp/4001".to_string()]
+            )])
+        );
+
+        let third = new_direct_address_successes(
+            BTreeMap::from([
+                (
+                    "peer-a".to_string(),
+                    vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
+                ),
+                (
+                    "peer-b".to_string(),
+                    vec![
+                        "/ip4/192.168.1.8/tcp/4001".to_string(),
+                        "/ip4/192.168.1.9/tcp/4001".to_string(),
+                    ],
+                ),
+            ]),
+            &mut last_synced_pairs,
+        );
+        assert!(third.is_empty());
+
+        let empty = new_direct_address_successes(BTreeMap::new(), &mut last_synced_pairs);
+        assert!(empty.is_empty());
+
+        let after_disconnect = new_direct_address_successes(
+            BTreeMap::from([(
+                "peer-a".to_string(),
+                vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
+            )]),
+            &mut last_synced_pairs,
+        );
+        assert_eq!(
+            after_disconnect,
+            BTreeMap::from([(
+                "peer-a".to_string(),
+                vec!["/ip4/192.168.1.7/tcp/4001".to_string()]
+            )])
+        );
+    }
 }

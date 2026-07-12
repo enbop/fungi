@@ -368,14 +368,12 @@ impl ConnectivityState {
         for status in self.relay_endpoint_statuses.values_mut() {
             if status.relay_peer_id == Some(relay_peer_id)
                 && status.transport_kind == remote_transport
+                && status.current_direct_connection_id == Some(connection_id)
             {
-                if status.current_direct_connection_id == Some(connection_id) {
-                    status.current_direct_connection_id = None;
-                    closed_active_connection = true;
-                    status.last_direct_connection_closed_at = Some(now);
-                    status.last_management_action =
-                        Some(RelayManagementAction::DirectConnectionClosed);
-                }
+                status.current_direct_connection_id = None;
+                closed_active_connection = true;
+                status.last_direct_connection_closed_at = Some(now);
+                status.last_management_action = Some(RelayManagementAction::DirectConnectionClosed);
             }
         }
 
@@ -425,7 +423,7 @@ impl ConnectivityState {
 
     pub fn list_external_address_candidates(&self) -> Vec<ExternalAddressCandidateRecord> {
         let mut candidates: Vec<_> = self.external_address_candidates.values().cloned().collect();
-        candidates.sort_by(|left, right| left.address.to_string().cmp(&right.address.to_string()));
+        candidates.sort_by_key(|left| left.address.to_string());
         candidates
     }
 
