@@ -316,7 +316,7 @@ fn apply_service(fungi_bin: &Path, fungi_dir: &Path, target: &str, manifest: &Pa
     args.extend(["apply", name, "--yes"]);
     args.push(manifest);
     let output = run_cli(fungi_bin, fungi_dir, args)?;
-    if !output.contains("Remote service applied:") && !output.contains("\"name\":") {
+    if !output.contains("Remote service applied:") && !output.contains("Service applied:") {
         bail!("unexpected apply output:\n{output}");
     }
     Ok(())

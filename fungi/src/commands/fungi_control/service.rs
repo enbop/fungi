@@ -6,12 +6,13 @@ use clap::{Args, Subcommand};
 use fungi_config::{FungiDir, devices::LOCAL_DEVICE_NAME, paths::FungiPaths};
 use fungi_daemon::{
     DEFAULT_REMOTE_SERVICE_LOG_TAIL, DeviceService, DeviceServiceSnapshot,
-    MAX_REMOTE_SERVICE_LOG_TAIL, RuntimeKind, ServiceAccess, ServiceExposeUsageKind,
-    ServiceInstance, ServicePhase, ServicePortProtocol, ServiceStatus, parse_service_manifest_yaml,
+    MAX_REMOTE_SERVICE_LOG_TAIL, RuntimeKind, ServiceAccess, ServiceApplyOutcome,
+    ServiceExposeUsageKind, ServiceInstance, ServiceManifestChange, ServicePhase,
+    ServicePortProtocol, ServiceStatus, ServiceWorkloadAction, parse_service_manifest_yaml,
     service_manifest_with_instance_name,
 };
 use fungi_daemon_grpc::{
-    Request,
+    Request, decode_service_apply_failure_status,
     fungi_daemon_grpc::{
         AttachServiceAccessRequest, DetachServiceAccessRequest, DeviceInfo,
         DeviceServiceSnapshotRequest, Empty, GetRecipeRequest, GetServiceLogsRequest,
@@ -70,7 +71,10 @@ pub enum ServiceCommands {
         #[arg(long, default_value_t = false)]
         refresh: bool,
     },
-    /// Apply a service file
+    /// Apply a service definition
+    #[command(
+        after_long_help = "State behavior:\n  First deployment: add --start to finish in the running phase.\n  Running service update: apply preserves running state and restarts the workload.\n  Stopped service update: apply preserves stopped state; add --start to finish running."
+    )]
     Apply {
         /// Service instance target to create or update
         #[arg(value_name = "NAME[@DEVICE]")]
@@ -90,7 +94,7 @@ pub enum ServiceCommands {
         /// Preview parsing, validation, and runtime intent without changing state
         #[arg(long, default_value_t = false)]
         dry_run: bool,
-        /// Start the service after applying it
+        /// Ensure the service is running after applying it
         #[arg(long, default_value_t = false)]
         start: bool,
         /// Skip service apply confirmation prompts
@@ -292,7 +296,7 @@ pub async fn execute_service(args: CommonArgs, service_args: ServiceArgs) {
             };
             match client.pull_service(Request::new(req)).await {
                 Ok(resp) => print_service_instance(resp.into_inner(), false),
-                Err(e) => fatal_grpc(e),
+                Err(error) => fatal_apply_grpc(error, None),
             }
         }
         ServiceCommands::Start { name } => {
@@ -873,23 +877,9 @@ async fn apply_service_from_recipe(
         };
         match client.remote_pull_service(Request::new(req)).await {
             Ok(resp) => {
-                let response = resp.into_inner();
-                let service_name = response_service_name(&response);
-                print_remote_service_applied(response);
-                if start {
-                    let req = RemoteServiceNameRequest {
-                        peer_id: device.peer_id.clone(),
-                        name: service_name.clone(),
-                    };
-                    match client.remote_start_service(Request::new(req)).await {
-                        Ok(resp) => print_remote_service_result("started", resp.into_inner()),
-                        Err(error) => fatal_remote_device_grpc(error),
-                    }
-                }
-                refresh_remote_device_services(client, &device.peer_id).await;
-                print_remote_apply_next_steps(&service_name, &device, start);
+                finish_remote_apply(client, &device, resp.into_inner(), start).await;
             }
-            Err(error) => fatal_remote_device_grpc(error),
+            Err(error) => fatal_apply_grpc(error, Some(&device)),
         }
     } else {
         print_recipe_runtime_wait_notice(&detail);
@@ -899,18 +889,9 @@ async fn apply_service_from_recipe(
         };
         match client.pull_service(Request::new(req)).await {
             Ok(resp) => {
-                let instance = decode_service_instance(resp.into_inner());
-                let name = instance.name.clone();
-                print_service_instance_value(instance, false);
-                if start {
-                    let req = ServiceNameRequest { runtime: 0, name };
-                    match client.start_service(Request::new(req)).await {
-                        Ok(_) => println!("Service started"),
-                        Err(error) => fatal_grpc(error),
-                    }
-                }
+                finish_local_apply(client, resp.into_inner(), start).await;
             }
-            Err(error) => fatal_grpc(error),
+            Err(error) => fatal_apply_grpc(error, None),
         }
     }
 }
@@ -1082,6 +1063,252 @@ fn print_remote_apply_next_steps(
     }
 }
 
+fn decode_apply_outcome(value: &str) -> Option<ServiceApplyOutcome> {
+    if value.trim().is_empty() {
+        return None;
+    }
+    Some(
+        serde_json::from_str(value).unwrap_or_else(|error| {
+            fatal(format!("Failed to decode service apply outcome: {error}"))
+        }),
+    )
+}
+
+fn fallback_apply_outcome(status: ServiceStatus) -> ServiceApplyOutcome {
+    ServiceApplyOutcome {
+        manifest_change: ServiceManifestChange::Unknown,
+        workload_action: ServiceWorkloadAction::Unknown,
+        final_status: status,
+        failure: None,
+    }
+}
+
+fn print_service_apply_outcome(
+    service_name: &str,
+    device_name: Option<&str>,
+    outcome: &ServiceApplyOutcome,
+) {
+    match device_name {
+        Some(device_name) => println!("Remote service applied: {service_name}@{device_name}"),
+        None => println!("Service applied: {service_name}"),
+    }
+    println!("Manifest: {}", outcome.manifest_change);
+    println!("Workload: {}", outcome.workload_action);
+    println!("Final phase: {}", outcome.final_status.phase);
+    if let Some(detail) = outcome.final_status.detail.as_deref() {
+        println!("Final detail: {detail}");
+    }
+}
+
+fn apply_failure_message(service_name: &str, outcome: &ServiceApplyOutcome) -> String {
+    let failure = outcome
+        .failure
+        .as_ref()
+        .expect("apply failure message requires a failed outcome");
+    format!(
+        "Service manifest applied for {service_name}, but {failure}. Final state: {}.",
+        outcome.final_status.state_label()
+    )
+}
+
+fn fatal_failed_apply(
+    service_name: &str,
+    device_name: Option<&str>,
+    outcome: &ServiceApplyOutcome,
+) -> ! {
+    print_service_apply_outcome(service_name, device_name, outcome);
+    let target = match device_name {
+        Some(device_name) => format!("{service_name}@{device_name}"),
+        None => service_name.to_string(),
+    };
+    fatal(apply_failure_message(&target, outcome))
+}
+
+fn fatal_apply_grpc(error: tonic::Status, device: Option<&super::shared::ResolvedPeerTarget>) -> ! {
+    if let Some(response) = decode_service_apply_failure_status(&error) {
+        let service_name = response
+            .service
+            .map(|service| service.name)
+            .unwrap_or_else(|| "<unknown>".to_string());
+        let outcome = response
+            .apply_outcome
+            .expect("decoded partial apply status requires an outcome");
+        let device_name = device.map(resolved_device_display_name);
+        fatal_failed_apply(&service_name, device_name.as_deref(), &outcome);
+    }
+
+    match device {
+        Some(_) => fatal_remote_device_grpc(error),
+        None => fatal_grpc(error),
+    }
+}
+
+fn fatal_partial_apply(
+    service_name: &str,
+    requested_phase: Option<ServicePhase>,
+    final_status: Option<&ServiceStatus>,
+    action_error: Option<&str>,
+    inspect_error: Option<&str>,
+) -> ! {
+    fatal(partial_apply_message(
+        service_name,
+        requested_phase,
+        final_status,
+        action_error,
+        inspect_error,
+    ))
+}
+
+fn partial_apply_message(
+    service_name: &str,
+    requested_phase: Option<ServicePhase>,
+    final_status: Option<&ServiceStatus>,
+    action_error: Option<&str>,
+    inspect_error: Option<&str>,
+) -> String {
+    let final_state = final_status
+        .map(|status| status.state_label())
+        .unwrap_or_else(|| "unknown".to_string());
+    let mut message = match requested_phase {
+        Some(requested_phase) => format!(
+            "Service manifest applied for {service_name}, but the requested final phase `{requested_phase}` was not verified. Final state: {final_state}."
+        ),
+        None => format!(
+            "Service manifest applied for {service_name}, but its final state could not be verified. Final state: {final_state}."
+        ),
+    };
+    if let Some(error) = action_error {
+        message.push_str(&format!(" Start error: {error}."));
+    }
+    if let Some(error) = inspect_error {
+        message.push_str(&format!(" Inspect error: {error}."));
+    }
+    message
+}
+
+fn running_phase_verified(status: &ServiceStatus, start_error: Option<&str>) -> bool {
+    status.is_running() && start_error.is_none()
+}
+
+async fn finish_local_apply(
+    client: &mut RpcClient,
+    response: ServiceInstanceResponse,
+    start_requested: bool,
+) {
+    let decoded_outcome = decode_apply_outcome(&response.apply_outcome_json);
+    let instance = decode_service_instance(response);
+    let service_name = instance.name.clone();
+    let has_managed_workload = instance.runtime != RuntimeKind::External;
+    let mut outcome =
+        decoded_outcome.unwrap_or_else(|| fallback_apply_outcome(instance.status.clone()));
+
+    if outcome.failure.is_some() {
+        fatal_failed_apply(&service_name, None, &outcome);
+    }
+
+    if start_requested {
+        let was_running = outcome.final_status.is_running();
+        let start_error = client
+            .start_service(Request::new(ServiceNameRequest {
+                runtime: 0,
+                name: service_name.clone(),
+            }))
+            .await
+            .err()
+            .map(|error| error.message().to_string());
+        let inspected = try_inspect_local_service(client, service_name.clone()).await;
+        match inspected {
+            Ok(instance) if running_phase_verified(&instance.status, start_error.as_deref()) => {
+                outcome.final_status = instance.status;
+                if !was_running && has_managed_workload {
+                    outcome.workload_action = ServiceWorkloadAction::Started;
+                }
+            }
+            Ok(instance) => fatal_partial_apply(
+                &service_name,
+                Some(ServicePhase::Running),
+                Some(&instance.status),
+                start_error.as_deref(),
+                None,
+            ),
+            Err(inspect_error) => fatal_partial_apply(
+                &service_name,
+                Some(ServicePhase::Running),
+                None,
+                start_error.as_deref(),
+                Some(&inspect_error),
+            ),
+        }
+    }
+
+    print_service_apply_outcome(&service_name, None, &outcome);
+}
+
+async fn finish_remote_apply(
+    client: &mut RpcClient,
+    device: &super::shared::ResolvedPeerTarget,
+    response: RemoteServiceControlResponse,
+    start_requested: bool,
+) {
+    let service_name = response_service_name(&response);
+    let mut outcome = match decode_apply_outcome(&response.apply_outcome_json) {
+        Some(outcome) => outcome,
+        None => match try_inspect_remote_service(client, &device.peer_id, &service_name).await {
+            Ok(service) => fallback_apply_outcome(service.status),
+            Err(error) => fatal_partial_apply(
+                &service_name,
+                start_requested.then_some(ServicePhase::Running),
+                None,
+                None,
+                Some(&error),
+            ),
+        },
+    };
+    let device_name = resolved_device_display_name(device);
+
+    if outcome.failure.is_some() {
+        fatal_failed_apply(&service_name, Some(&device_name), &outcome);
+    }
+
+    if start_requested {
+        let was_running = outcome.final_status.is_running();
+        let start_error = client
+            .remote_start_service(Request::new(RemoteServiceNameRequest {
+                peer_id: device.peer_id.clone(),
+                name: service_name.clone(),
+            }))
+            .await
+            .err()
+            .map(|error| error.message().to_string());
+        let inspected = try_inspect_remote_service(client, &device.peer_id, &service_name).await;
+        match inspected {
+            Ok(service) if running_phase_verified(&service.status, start_error.as_deref()) => {
+                outcome.final_status = service.status;
+                if !was_running && service.runtime != RuntimeKind::External {
+                    outcome.workload_action = ServiceWorkloadAction::Started;
+                }
+            }
+            Ok(service) => fatal_partial_apply(
+                &service_name,
+                Some(ServicePhase::Running),
+                Some(&service.status),
+                start_error.as_deref(),
+                None,
+            ),
+            Err(inspect_error) => fatal_partial_apply(
+                &service_name,
+                Some(ServicePhase::Running),
+                None,
+                start_error.as_deref(),
+                Some(&inspect_error),
+            ),
+        }
+    }
+
+    print_service_apply_outcome(&service_name, Some(&device_name), &outcome);
+    print_remote_apply_next_steps(&service_name, device, start_requested);
+}
+
 async fn apply_created_service(
     client: &mut RpcClient,
     args: &CommonArgs,
@@ -1098,23 +1325,9 @@ async fn apply_created_service(
         };
         match client.remote_pull_service(Request::new(req)).await {
             Ok(resp) => {
-                let response = resp.into_inner();
-                let applied_service_name = response_service_name(&response);
-                print_remote_service_applied(response);
-                if created.start_now {
-                    let req = RemoteServiceNameRequest {
-                        peer_id: device.peer_id.clone(),
-                        name: applied_service_name.clone(),
-                    };
-                    match client.remote_start_service(Request::new(req)).await {
-                        Ok(resp) => print_remote_service_result("started", resp.into_inner()),
-                        Err(error) => fatal_remote_device_grpc(error),
-                    }
-                }
-                refresh_remote_device_services(client, &device.peer_id).await;
-                print_remote_apply_next_steps(&applied_service_name, &device, created.start_now);
+                finish_remote_apply(client, &device, resp.into_inner(), created.start_now).await;
             }
-            Err(error) => fatal_remote_device_grpc(error),
+            Err(error) => fatal_apply_grpc(error, Some(&device)),
         }
     } else {
         let req = PullServiceRequest {
@@ -1123,18 +1336,9 @@ async fn apply_created_service(
         };
         match client.pull_service(Request::new(req)).await {
             Ok(resp) => {
-                let instance = decode_service_instance(resp.into_inner());
-                let name = instance.name.clone();
-                print_service_instance_value(instance, false);
-                if created.start_now {
-                    let req = ServiceNameRequest { runtime: 0, name };
-                    match client.start_service(Request::new(req)).await {
-                        Ok(_) => println!("Service started"),
-                        Err(error) => fatal_grpc(error),
-                    }
-                }
+                finish_local_apply(client, resp.into_inner(), created.start_now).await;
             }
-            Err(error) => fatal_grpc(error),
+            Err(error) => fatal_apply_grpc(error, None),
         }
     }
 }
@@ -1212,11 +1416,6 @@ fn response_service_name(resp: &RemoteServiceControlResponse) -> String {
     service_name.to_string()
 }
 
-fn print_remote_service_applied(resp: RemoteServiceControlResponse) {
-    let service_name = response_service_name(&resp);
-    println!("Remote service applied: {service_name}");
-}
-
 fn print_remote_service_result(action: &str, resp: RemoteServiceControlResponse) {
     let service_name = response_service_name(&resp);
     if resp.forgotten_locally {
@@ -1275,14 +1474,23 @@ async fn refresh_remote_device_services(client: &mut RpcClient, peer_id: &str) {
 }
 
 async fn inspect_local_service(client: &mut RpcClient, name: String) -> ServiceInstance {
+    try_inspect_local_service(client, name)
+        .await
+        .unwrap_or_else(|error| fatal(error))
+}
+
+async fn try_inspect_local_service(
+    client: &mut RpcClient,
+    name: String,
+) -> Result<ServiceInstance, String> {
     let req = ServiceNameRequest { runtime: 0, name };
     match client.inspect_service(Request::new(req)).await {
         Ok(resp) => match serde_json::from_str::<ServiceInstance>(&resp.into_inner().instance_json)
         {
-            Ok(instance) => instance,
-            Err(error) => fatal(format!("Failed to decode service instance: {error}")),
+            Ok(instance) => Ok(instance),
+            Err(error) => Err(format!("Failed to decode service instance: {error}")),
         },
-        Err(error) => fatal_grpc(error),
+        Err(error) => Err(error.message().to_string()),
     }
 }
 
@@ -1468,19 +1676,29 @@ async fn inspect_remote_service(
     peer_id: &str,
     name: String,
 ) -> RemoteService {
+    try_inspect_remote_service(client, peer_id, &name)
+        .await
+        .unwrap_or_else(|error| fatal_remote_device_message(&error))
+}
+
+async fn try_inspect_remote_service(
+    client: &mut RpcClient,
+    peer_id: &str,
+    name: &str,
+) -> Result<RemoteService, String> {
     match fetch_device_service_snapshot(client, peer_id, true).await {
         Ok(snapshot) => {
             if snapshot.error.is_some() {
-                fatal(REMOTE_DEVICE_CONNECTION_MESSAGE);
+                return Err(REMOTE_DEVICE_CONNECTION_MESSAGE.to_string());
             }
             snapshot
                 .snapshot
                 .services
                 .into_iter()
                 .find(|service| service.name == name)
-                .unwrap_or_else(|| fatal(format!("Remote service not found: {name}")))
+                .ok_or_else(|| format!("Remote service not found: {name}"))
         }
-        Err(error) => fatal_remote_device_message(&error),
+        Err(error) => Err(error),
     }
 }
 
@@ -2009,7 +2227,7 @@ fn print_service_apply_dry_run(created: &CreatedServiceManifest, args: &CommonAr
         }
     }
     if created.start_now {
-        println!("After apply: start service");
+        println!("After apply: ensure service is running");
     } else {
         println!("After apply: leave service stopped unless it was already running");
     }
@@ -2917,6 +3135,53 @@ mod tests {
         };
 
         assert_eq!(service_request_timeout(&list), DEFAULT_RPC_REQUEST_TIMEOUT);
+    }
+
+    #[test]
+    fn partial_apply_message_reports_applied_manifest_and_final_state() {
+        let status = ServiceStatus::stopped();
+        let message = partial_apply_message(
+            "demo",
+            Some(ServicePhase::Running),
+            Some(&status),
+            Some("launcher failed"),
+            None,
+        );
+
+        assert!(message.contains("Service manifest applied for demo"));
+        assert!(message.contains("requested final phase `running`"));
+        assert!(message.contains("Final state: stopped"));
+        assert!(message.contains("Start error: launcher failed"));
+    }
+
+    #[test]
+    fn running_phase_is_not_verified_when_start_reports_an_error() {
+        let status = ServiceStatus::running();
+
+        assert!(running_phase_verified(&status, None));
+        assert!(!running_phase_verified(
+            &status,
+            Some("listener synchronization failed")
+        ));
+    }
+
+    #[test]
+    fn apply_failure_message_reports_internal_restart_and_final_state() {
+        let outcome = ServiceApplyOutcome {
+            manifest_change: ServiceManifestChange::Changed,
+            workload_action: ServiceWorkloadAction::None,
+            final_status: ServiceStatus::stopped(),
+            failure: Some(fungi_daemon::ServiceApplyFailure {
+                stage: fungi_daemon::ServiceApplyFailureStage::Restart,
+                message: "Failed to spawn fungi WASI process".to_string(),
+            }),
+        };
+
+        let message = apply_failure_message("demo", &outcome);
+
+        assert!(message.contains("Service manifest applied for demo"));
+        assert!(message.contains("restart failed"));
+        assert!(message.contains("Final state: stopped"));
     }
 
     #[test]

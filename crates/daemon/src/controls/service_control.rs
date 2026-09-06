@@ -17,9 +17,9 @@ use crate::{
     ManifestResolutionPolicy, RuntimeControl, ServiceControlRequest, ServiceControlResponse,
     ServiceManifest,
     service_endpoints::{
-        sync_service_endpoint_listeners_by_name, sync_service_endpoint_listeners_for_manifest,
+        sync_applied_service_endpoint_listeners, sync_service_endpoint_listeners_by_name,
+        sync_service_endpoint_listeners_for_manifest,
     },
-    service_state::DesiredServiceState,
 };
 
 const MAX_CONTROL_FRAME_LEN: usize = 2 * 1024 * 1024;
@@ -68,14 +68,15 @@ impl ServiceControlProtocolControl {
         peer_id: PeerId,
         manifest_yaml: String,
     ) -> Result<ServiceControlResponse> {
-        self.send_request(
+        self.send_request_raw(
             peer_id,
             ServiceControlRequest::PullService {
                 request_id: None,
                 manifest_yaml,
             },
         )
-        .await
+        .await?
+        .into_apply_result()
     }
 
     pub async fn start_peer_service(
@@ -153,6 +154,14 @@ impl ServiceControlProtocolControl {
         peer_id: PeerId,
         request: ServiceControlRequest,
     ) -> Result<ServiceControlResponse> {
+        self.send_request_raw(peer_id, request).await?.into_result()
+    }
+
+    async fn send_request_raw(
+        &self,
+        peer_id: PeerId,
+        request: ServiceControlRequest,
+    ) -> Result<ServiceControlResponse> {
         let (mut stream, _handle, _connection_id) = self
             .swarm_control
             .open_stream(peer_id, FUNGI_SERVICE_CONTROL_PROTOCOL)
@@ -169,8 +178,7 @@ impl ServiceControlProtocolControl {
             .await
             .map_err(|e| {
                 anyhow::anyhow!("Failed to read service-control response from peer {peer_id}: {e}")
-            })?
-            .into_result()
+            })
     }
 
     async fn listen_from_incoming_streams(self, mut incoming_streams: IncomingStreams) {
@@ -225,42 +233,18 @@ impl ServiceControlProtocolControl {
                     )
                     .await
                 {
-                    Ok(applied) => {
-                        if applied.desired_state == DesiredServiceState::Running {
-                            match self
-                                .sync_service_endpoint_listeners_for_manifest(
-                                    applied.previous_manifest.as_ref(),
-                                    false,
-                                )
-                                .await
-                            {
-                                Ok(()) => {}
-                                Err(error) => {
-                                    return ServiceControlResponse::error(
-                                        request_id.clone(),
-                                        "execution_failed",
-                                        error.to_string(),
-                                    );
-                                }
-                            }
-                            match self
-                                .sync_service_endpoint_listeners_by_name(
-                                    &applied.instance.name,
-                                    true,
-                                )
-                                .await
-                            {
-                                Ok(()) => {}
-                                Err(error) => {
-                                    return ServiceControlResponse::error(
-                                        request_id.clone(),
-                                        "execution_failed",
-                                        error.to_string(),
-                                    );
-                                }
-                            }
-                        }
-                        Ok(applied.instance.name)
+                    Ok(mut applied) => {
+                        sync_applied_service_endpoint_listeners(
+                            &self.runtime_control,
+                            &self.tcp_tunneling_control,
+                            &mut applied,
+                        )
+                        .await;
+                        return ServiceControlResponse::applied(
+                            request_id,
+                            applied.instance.name,
+                            applied.outcome,
+                        );
                     }
                     Err(error) => Err(error),
                 }

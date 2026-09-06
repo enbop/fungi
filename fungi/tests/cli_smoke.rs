@@ -210,7 +210,86 @@ fn service_apply_dry_run_prints_resolved_intent() {
             .stdout
             .contains("$fungi.root exposes the full Fungi user root")
     );
-    assert!(output.stdout.contains("After apply: start service"));
+    assert!(
+        output
+            .stdout
+            .contains("After apply: ensure service is running")
+    );
+}
+
+#[test]
+fn service_apply_start_reports_and_preserves_the_final_running_state() {
+    let home = TempDir::new().unwrap();
+    let rpc = reserve_port();
+    let swarm = reserve_port();
+    let target = reserve_port();
+
+    init_fungi_dir(home.path(), rpc, swarm);
+    let _daemon = start_daemon(home.path());
+    let _peer = wait_peer_id(home.path());
+    let manifest = write_existing_tcp_service_manifest(home.path(), "apply-start", target, "raw");
+    let manifest_path = manifest.to_string_lossy();
+
+    let first = run_cli_result(
+        home.path(),
+        [
+            "service",
+            "apply",
+            "apply-start",
+            "--yes",
+            "--start",
+            manifest_path.as_ref(),
+        ],
+        "",
+    );
+    assert!(
+        first.status.success(),
+        "first apply failed\nstdout:\n{}\nstderr:\n{}",
+        first.stdout,
+        first.stderr
+    );
+    assert!(first.stdout.contains("Service applied: apply-start"));
+    assert!(first.stdout.contains("Manifest: created"));
+    assert!(first.stdout.contains("Workload: none"));
+    assert!(first.stdout.contains("Final phase: running"));
+
+    let second = run_cli_result(
+        home.path(),
+        [
+            "service",
+            "apply",
+            "apply-start",
+            "--yes",
+            "--start",
+            manifest_path.as_ref(),
+        ],
+        "",
+    );
+    assert!(
+        second.status.success(),
+        "second apply failed\nstdout:\n{}\nstderr:\n{}",
+        second.stdout,
+        second.stderr
+    );
+    assert!(second.stdout.contains("Manifest: unchanged"));
+    assert!(second.stdout.contains("Workload: none"));
+    assert!(second.stdout.contains("Final phase: running"));
+}
+
+#[test]
+fn service_apply_help_explains_state_aware_start_behavior() {
+    let home = TempDir::new().unwrap();
+    let output = run_cli_result(home.path(), ["service", "apply", "--help"], "");
+
+    assert!(output.status.success(), "{}", output.stderr);
+    assert!(
+        output
+            .stdout
+            .contains("Ensure the service is running after applying it")
+    );
+    assert!(output.stdout.contains("First deployment"));
+    assert!(output.stdout.contains("Running service update"));
+    assert!(output.stdout.contains("Stopped service update"));
 }
 
 #[test]
@@ -526,6 +605,26 @@ fn cli_can_create_and_access_remote_tcp_service() {
     );
 
     run_cli(a.path(), ["service", "start", "test-tcp@b"]);
+    let reapplied = run_cli(
+        a.path(),
+        [
+            "service",
+            "apply",
+            "test-tcp@b",
+            "--yes",
+            "--start",
+            manifest_path.as_ref(),
+        ],
+    );
+    assert!(
+        reapplied
+            .stdout
+            .contains("Remote service applied: test-tcp@b")
+    );
+    assert!(reapplied.stdout.contains("Manifest: unchanged"));
+    assert!(reapplied.stdout.contains("Workload: none"));
+    assert!(reapplied.stdout.contains("Final phase: running"));
+
     let output = run_cli(a.path(), ["test-tcp@b"]);
     let local_addr = extract_local_address(&output.stdout);
     assert!(
