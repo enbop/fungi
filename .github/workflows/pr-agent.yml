@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run PR-Agent
-        uses: the-pr-agent/pr-agent@6ad7cf75d95cb3bbb54cf2ad92050eb03804964a # v0.40.0
+        uses: the-pr-agent/pr-agent@ab6ec54bfeb37933ddb74259338752e9272016c6 # v0.44.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEEPSEEK.KEY: ${{ secrets.DEEPSEEK_KEY }}
