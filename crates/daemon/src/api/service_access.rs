@@ -108,7 +108,7 @@ mod tests {
     use crate::{
         RuntimeKind, ServiceExpose, ServiceExposeTransport, ServiceExposeTransportKind,
         ServiceExposeUsage, ServiceExposeUsageKind, ServiceManifest, ServiceMount, ServicePort,
-        ServicePortAllocation, ServicePortProtocol, ServiceRunMode, ServiceSource,
+        ServicePortAllocation, ServicePortProtocol, ServiceSource,
         test_support::{TestDaemon, spawn_connected_pair},
     };
     use libp2p::swarm::dial_opts::DialOpts;
@@ -477,7 +477,6 @@ mod tests {
             name: service_name.to_string(),
             definition_id: None,
             runtime: RuntimeKind::External,
-            run_mode: ServiceRunMode::Command,
             source: ServiceSource::ExistingTcp {
                 host: "127.0.0.1".to_string(),
                 port: first_port,

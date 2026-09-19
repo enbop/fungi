@@ -115,7 +115,6 @@ pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
     let run = match &manifest.source {
         ServiceSource::Docker { image } => Some(FungiServiceRun {
             provider: FungiServiceProvider::Docker,
-            mode: None,
             source: FungiServiceSource {
                 image: Some(image.clone()),
                 ..FungiServiceSource::default()
@@ -126,7 +125,6 @@ pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
         }),
         ServiceSource::WasmtimeFile { component } => Some(FungiServiceRun {
             provider: FungiServiceProvider::Wasmtime,
-            mode: (manifest.run_mode == ServiceRunMode::Http).then_some(FungiServiceRunMode::Http),
             source: FungiServiceSource {
                 file: Some(component.display().to_string()),
                 ..FungiServiceSource::default()
@@ -137,7 +135,6 @@ pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
         }),
         ServiceSource::WasmtimeUrl { url } => Some(FungiServiceRun {
             provider: FungiServiceProvider::Wasmtime,
-            mode: (manifest.run_mode == ServiceRunMode::Http).then_some(FungiServiceRunMode::Http),
             source: FungiServiceSource {
                 url: Some(url.clone()),
                 ..FungiServiceSource::default()
@@ -246,7 +243,6 @@ fn manifest_client_to_fungi(expose: Option<&ServiceExpose>) -> Option<FungiServi
 
 struct RuntimeAndSource {
     runtime: RuntimeKind,
-    run_mode: ServiceRunMode,
     source: ServiceSource,
 }
 
@@ -272,8 +268,6 @@ struct FungiServiceDocument {
 #[serde(deny_unknown_fields)]
 struct FungiServiceRun {
     provider: FungiServiceProvider,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    mode: Option<FungiServiceRunMode>,
     source: FungiServiceSource,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     args: Vec<String>,
@@ -288,12 +282,6 @@ struct FungiServiceRun {
 enum FungiServiceProvider {
     Docker,
     Wasmtime,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum FungiServiceRunMode {
-    Http,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -519,7 +507,6 @@ impl FungiServiceDocument {
             name: service_name,
             definition_id: Some(definition_id),
             runtime: runtime_and_source.runtime,
-            run_mode: runtime_and_source.run_mode,
             source: runtime_and_source.source,
             expose,
             env,
@@ -547,13 +534,9 @@ fn parse_fungi_run(
 
     match run.provider {
         FungiServiceProvider::Docker => {
-            if run.mode.is_some() {
-                bail!("run.mode is currently supported only with provider: wasmtime");
-            }
             let image = exactly_one_source(&run.source, "run.source", SourceField::Image)?;
             Ok(RuntimeAndSource {
                 runtime: RuntimeKind::Docker,
-                run_mode: ServiceRunMode::Command,
                 source: ServiceSource::Docker { image },
             })
         }
@@ -577,10 +560,6 @@ fn parse_fungi_run(
             };
             Ok(RuntimeAndSource {
                 runtime: RuntimeKind::Wasmtime,
-                run_mode: match run.mode {
-                    Some(FungiServiceRunMode::Http) => ServiceRunMode::Http,
-                    None => ServiceRunMode::Command,
-                },
                 source,
             })
         }
@@ -632,7 +611,6 @@ fn parse_fungi_existing_tcp_run(
     }
     Ok(RuntimeAndSource {
         runtime: RuntimeKind::External,
-        run_mode: ServiceRunMode::Command,
         source: ServiceSource::ExistingTcp {
             host,
             port: entry.tcp.port,
@@ -664,6 +642,7 @@ fn parse_fungi_publish_entry(
     }
 
     match runtime {
+        RuntimeKind::Unknown => bail!("unknown service runtime"),
         RuntimeKind::Docker => {
             if entry.tcp.host.is_some() {
                 bail!("publish.{name}.tcp.host is not used with provider: docker; omit it");

@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -13,7 +13,8 @@ use tempfile::NamedTempFile;
 use ulid::Ulid;
 
 use crate::runtime::{
-    ServiceManifest, parse_managed_service_manifest_yaml, service_manifest_to_yaml,
+    RuntimeKind, ServiceInstance, ServiceManifest, ServiceStatus,
+    parse_managed_service_manifest_yaml, service_manifest_to_yaml,
 };
 
 const SERVICE_STATE_SCHEMA_VERSION: u32 = 2;
@@ -34,6 +35,8 @@ pub struct PersistedService {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ServiceStateFile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    configuration_error: Option<String>,
     #[serde(default = "default_schema_version")]
     schema_version: u32,
     local_service_id: String,
@@ -45,6 +48,7 @@ struct ServiceStateFile {
 impl ServiceStateFile {
     fn default_for_local_service_id(local_service_id: String) -> Self {
         Self {
+            configuration_error: None,
             schema_version: SERVICE_STATE_SCHEMA_VERSION,
             local_service_id,
             updated_at: String::new(),
@@ -57,6 +61,8 @@ pub struct ServiceStateStore {
     services_root: PathBuf,
     state: BTreeMap<String, PersistedService>,
     name_index: BTreeMap<String, String>,
+    failures: BTreeMap<String, ServiceInstance>,
+    ambiguous_names: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl ServiceStateStore {
@@ -74,80 +80,139 @@ impl ServiceStateStore {
         })?;
 
         let mut state = BTreeMap::new();
-        let mut name_index = BTreeMap::new();
+        let mut failures = BTreeMap::new();
 
-        for entry in fs::read_dir(&services_root).with_context(|| {
-            format!(
-                "Failed to read services directory: {}",
-                services_root.display()
-            )
-        })? {
-            let entry = entry?;
+        let mut entries = fs::read_dir(&services_root)
+            .with_context(|| {
+                format!(
+                    "Failed to read services directory: {}",
+                    services_root.display()
+                )
+            })?
+            .collect::<std::io::Result<Vec<_>>>()?;
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
             let service_dir = entry.path();
             if !service_dir.is_dir() {
                 continue;
             }
 
             let manifest_path = service_dir.join("service.yaml");
-            if !manifest_path.exists() {
+            if !manifest_path.exists() && !service_dir.join("state.json").exists() {
                 continue;
             }
 
-            let manifest_yaml = fs::read_to_string(&manifest_path).with_context(|| {
-                format!(
-                    "Failed to read managed service manifest: {}",
-                    manifest_path.display()
+            let loaded = (|| -> Result<PersistedService> {
+                let manifest_yaml = fs::read_to_string(&manifest_path).with_context(|| {
+                    format!(
+                        "Failed to read managed service manifest: {}",
+                        manifest_path.display()
+                    )
+                })?;
+                let state_file =
+                    load_service_state_file(&service_dir.join("state.json"), &service_dir)?;
+                if let Some(error) = &state_file.configuration_error {
+                    bail!("{error}");
+                }
+                let manifest = parse_managed_service_manifest_yaml(
+                    &manifest_yaml,
+                    &service_dir,
+                    &fungi_home,
+                    &state_file.local_service_id,
                 )
-            })?;
-            let state_file =
-                load_service_state_file(&service_dir.join("state.json"), &service_dir)?;
-            let manifest = parse_managed_service_manifest_yaml(
-                &manifest_yaml,
-                &service_dir,
-                &fungi_home,
-                &state_file.local_service_id,
-            )
-            .with_context(|| {
-                format!(
-                    "Failed to parse managed service manifest: {}",
-                    manifest_path.display()
-                )
-            })?;
+                .with_context(|| {
+                    format!(
+                        "Failed to parse managed service manifest: {}",
+                        manifest_path.display()
+                    )
+                })?;
 
-            if let Some(existing_local_service_id) =
-                name_index.insert(manifest.name.clone(), state_file.local_service_id.clone())
-            {
-                bail!(
-                    "Duplicate managed service name '{}' for local ids '{}' and '{}'",
-                    manifest.name,
-                    existing_local_service_id,
-                    state_file.local_service_id
-                );
+                Ok(PersistedService {
+                    local_service_id: state_file.local_service_id,
+                    manifest,
+                    desired_state: state_file.desired_state,
+                })
+            })();
+            match loaded {
+                Ok(service) => {
+                    state.insert(service.local_service_id.clone(), service);
+                }
+                Err(error) => {
+                    let failure = failed_service_instance(&service_dir, &error);
+                    log::warn!("{}: {}", failure.name, failure.status.state_label());
+                    failures.insert(failure.id.clone(), failure);
+                }
             }
+        }
 
-            if state
-                .insert(
-                    state_file.local_service_id.clone(),
-                    PersistedService {
-                        local_service_id: state_file.local_service_id,
-                        manifest,
-                        desired_state: state_file.desired_state,
-                    },
-                )
-                .is_some()
+        // Ambiguous names must never select an arbitrary service's data for an apply.
+        let mut counts = BTreeMap::<String, usize>::new();
+        for service in state.values() {
+            *counts.entry(service.manifest.name.clone()).or_default() += 1;
+        }
+        for failure in failures.values() {
+            *counts.entry(failure.name.clone()).or_default() += 1;
+        }
+        let duplicate_ids = state
+            .values()
+            .filter(|service| {
+                counts[&service.manifest.name] > 1
+                    || services_root.join(&service.manifest.name).exists()
+                        && service.manifest.name != service.local_service_id
+            })
+            .map(|service| service.local_service_id.clone())
+            .collect::<Vec<_>>();
+        for id in duplicate_ids {
+            state.remove(&id);
+            failures.insert(
+                id.clone(),
+                failed_service_instance(
+                    &services_root.join(&id),
+                    &anyhow::anyhow!("duplicate managed service name"),
+                ),
+            );
+        }
+        let mut name_index = BTreeMap::new();
+        let mut ambiguous_names = BTreeMap::<String, BTreeSet<String>>::new();
+        for service in state.values() {
+            name_index.insert(
+                service.manifest.name.clone(),
+                service.local_service_id.clone(),
+            );
+        }
+        for failure in failures.values_mut() {
+            if counts.get(&failure.name).copied().unwrap_or(0) > 1
+                || name_index.contains_key(&failure.name)
+                || services_root.join(&failure.name).exists() && failure.name != failure.id
             {
-                bail!(
-                    "Duplicate managed service local id in {}",
-                    services_root.display()
-                );
+                ambiguous_names
+                    .entry(failure.name.clone())
+                    .or_default()
+                    .insert(failure.id.clone());
+                failure.status = failure.status.clone().with_detail(format!(
+                    "{} The instance name '{}' is ambiguous; use local service id '{}' to inspect/remove this entry.",
+                    failure.status.state_label(), failure.name, failure.id
+                ));
+                failure.name = failure.id.clone();
             }
+            name_index.insert(failure.name.clone(), failure.id.clone());
         }
 
         Ok(Self {
             services_root,
             state,
             name_index,
+            failures,
+            ambiguous_names,
         })
+    }
+
+    pub fn failed_services(&self) -> Vec<ServiceInstance> {
+        self.failures.values().cloned().collect()
+    }
+
+    pub fn failed_service(&self, name: &str) -> Option<ServiceInstance> {
+        self.failures.get(self.name_index.get(name)?).cloned()
     }
 
     pub fn persisted_services(&self) -> Vec<PersistedService> {
@@ -167,6 +232,7 @@ impl ServiceStateStore {
     }
 
     pub fn preview_local_service_id(&self, service_name: &str) -> Result<String> {
+        self.ensure_unambiguous_name(service_name)?;
         if let Some(local_service_id) = self.name_index.get(service_name) {
             return Ok(local_service_id.clone());
         }
@@ -186,9 +252,10 @@ impl ServiceStateStore {
     ) -> Result<String> {
         let local_service_id =
             self.resolve_upsert_local_service_id(&manifest.name, requested_local_service_id)?;
-        self.name_index
+        let previous_index = self
+            .name_index
             .insert(manifest.name.clone(), local_service_id.clone());
-        self.state.insert(
+        let previous_service = self.state.insert(
             local_service_id.clone(),
             PersistedService {
                 local_service_id: local_service_id.clone(),
@@ -196,7 +263,27 @@ impl ServiceStateStore {
                 desired_state,
             },
         );
-        self.save_service(&local_service_id)?;
+        if let Err(error) = self.save_service(&local_service_id) {
+            match previous_service {
+                Some(service) => {
+                    self.state.insert(local_service_id.clone(), service);
+                }
+                None => {
+                    self.state.remove(&local_service_id);
+                }
+            }
+            match previous_index {
+                Some(id) => {
+                    self.name_index.insert(manifest.name.clone(), id);
+                }
+                None => {
+                    self.name_index.remove(&manifest.name);
+                }
+            }
+            return Err(error);
+        }
+        self.failures.remove(&local_service_id);
+        self.clear_ambiguous_id(&local_service_id);
         Ok(local_service_id)
     }
 
@@ -210,16 +297,20 @@ impl ServiceStateStore {
             .state
             .get_mut(&local_service_id)
             .ok_or_else(|| anyhow::anyhow!("persisted service not found: {service_name}"))?;
+        let previous = service.desired_state;
         service.desired_state = desired_state;
-        self.save_service(&local_service_id)
+        if let Err(error) = self.save_service(&local_service_id) {
+            self.state.get_mut(&local_service_id).unwrap().desired_state = previous;
+            return Err(error);
+        }
+        Ok(())
     }
 
     pub fn remove_service(&mut self, service_name: &str) -> Result<()> {
-        let Some(local_service_id) = self.name_index.remove(service_name) else {
+        let Some(local_service_id) = self.name_index.get(service_name).cloned() else {
             return Ok(());
         };
 
-        self.state.remove(&local_service_id);
         let service_dir = self.service_dir(&local_service_id);
         if service_dir.exists() {
             fs::remove_dir_all(&service_dir).with_context(|| {
@@ -229,6 +320,10 @@ impl ServiceStateStore {
                 )
             })?;
         }
+        self.name_index.remove(service_name);
+        self.state.remove(&local_service_id);
+        self.failures.remove(&local_service_id);
+        self.clear_ambiguous_id(&local_service_id);
         Ok(())
     }
 
@@ -247,9 +342,18 @@ impl ServiceStateStore {
         self.ensure_service_appdata_dir(local_service_id)?;
 
         let manifest_yaml = service_manifest_to_yaml(&service.manifest)?;
-        atomic_write(&service_dir.join("service.yaml"), manifest_yaml.as_bytes())?;
+        let manifest_path = service_dir.join("service.yaml");
+        let previous_manifest = match fs::read(&manifest_path) {
+            Ok(bytes) => Some(bytes),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("Failed to back up {}", manifest_path.display()));
+            }
+        };
 
         let state_file = ServiceStateFile {
+            configuration_error: None,
             schema_version: SERVICE_STATE_SCHEMA_VERSION,
             local_service_id: local_service_id.to_string(),
             updated_at: Utc::now().to_rfc3339(),
@@ -257,7 +361,21 @@ impl ServiceStateStore {
         };
         let state_bytes =
             serde_json::to_vec_pretty(&state_file).context("Failed to encode service state")?;
-        atomic_write(&service_dir.join("state.json"), &state_bytes)
+        atomic_write(&manifest_path, manifest_yaml.as_bytes())?;
+        if let Err(error) = atomic_write(&service_dir.join("state.json"), &state_bytes) {
+            let rollback = match previous_manifest {
+                Some(bytes) => atomic_write(&manifest_path, &bytes),
+                None => fs::remove_file(&manifest_path)
+                    .context("Failed to remove uncommitted service manifest"),
+            };
+            return match rollback {
+                Ok(()) => Err(error),
+                Err(rollback_error) => {
+                    Err(error.context(format!("Manifest rollback also failed: {rollback_error:#}")))
+                }
+            };
+        }
+        Ok(())
     }
 
     fn service_dir(&self, local_service_id: &str) -> PathBuf {
@@ -294,6 +412,7 @@ impl ServiceStateStore {
         service_name: &str,
         requested_local_service_id: Option<&str>,
     ) -> Result<String> {
+        self.ensure_unambiguous_name(service_name)?;
         let requested_local_service_id = requested_local_service_id
             .map(|value| normalize_local_service_id(value, "local_service_id"))
             .transpose()?;
@@ -313,6 +432,13 @@ impl ServiceStateStore {
         }
 
         if let Some(requested_local_service_id) = requested_local_service_id {
+            if let Some(failure) = self.failures.get(&requested_local_service_id) {
+                bail!(
+                    "local_service_id '{}' is already assigned to service '{}'",
+                    requested_local_service_id,
+                    failure.name
+                );
+            }
             if let Some(existing_service) = self.state.get(&requested_local_service_id)
                 && existing_service.manifest.name != service_name
             {
@@ -331,12 +457,76 @@ impl ServiceStateStore {
     fn generate_unique_local_service_id(&self) -> Result<String> {
         for _ in 0..16 {
             let candidate = format!("svc_{}", Ulid::new().to_string().to_ascii_lowercase());
-            if !self.state.contains_key(&candidate) {
+            if !self.services_root.join(&candidate).exists() {
                 return Ok(candidate);
             }
         }
 
         bail!("failed to allocate unique local_service_id")
+    }
+
+    fn ensure_unambiguous_name(&self, name: &str) -> Result<()> {
+        if self.ambiguous_names.contains_key(name) {
+            bail!(
+                "duplicate managed service name '{name}'; inspect/remove the conflicting services by their local service ids before applying again"
+            );
+        }
+        Ok(())
+    }
+
+    fn clear_ambiguous_id(&mut self, id: &str) {
+        self.ambiguous_names.retain(|_, ids| {
+            ids.remove(id);
+            !ids.is_empty()
+        });
+    }
+}
+
+fn failed_service_instance(service_dir: &Path, error: &anyhow::Error) -> ServiceInstance {
+    let id = service_dir
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
+    let document = fs::read_to_string(service_dir.join("service.yaml"))
+        .ok()
+        .and_then(|content| serde_yaml::from_str::<serde_yaml::Value>(&content).ok())
+        .unwrap_or_default();
+    let field = |key: &str| {
+        document[key]
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+    };
+    let definition_id = field("id");
+    let name = field("instance")
+        .or_else(|| definition_id.clone())
+        .unwrap_or_else(|| id.clone());
+    let runtime = match document["run"]["provider"].as_str() {
+        Some("wasmtime") => RuntimeKind::Wasmtime,
+        Some("docker") => RuntimeKind::Docker,
+        None if document["run"].is_null() && document["publish"].is_mapping() => {
+            RuntimeKind::External
+        }
+        _ => RuntimeKind::Unknown,
+    };
+    let hint = if document["run"]["mode"].as_str() == Some("http") {
+        "The legacy Wasmtime HTTP serve runtime is no longer supported. Apply an upgraded run-compatible service recipe using the same instance name; removing run.mode alone does not convert the component."
+    } else {
+        "Correct the saved configuration or apply a supported service recipe using the same instance name."
+    };
+    ServiceInstance {
+        id,
+        name,
+        definition_id,
+        runtime,
+        source: service_dir.join("service.yaml").display().to_string(),
+        labels: BTreeMap::new(),
+        ports: Vec::new(),
+        exposed_endpoints: Vec::new(),
+        status: ServiceStatus::unknown()
+            .with_detail(format!("configuration error: {error:#}. {hint}")),
     }
 }
 
@@ -428,17 +618,64 @@ fn local_service_id_from_service_dir(service_dir: &Path) -> Result<String> {
                 service_dir.display()
             )
         })?;
-    normalize_local_service_id(value, "service directory name")
+    let normalized = normalize_local_service_id(value, "service directory name")?;
+    if normalized != value {
+        bail!("service directory name must not contain surrounding whitespace");
+    }
+    Ok(normalized)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::runtime::{
-        RuntimeKind, ServicePort, ServicePortAllocation, ServicePortProtocol, ServiceRunMode,
-        ServiceSource,
+        RuntimeKind, ServicePort, ServicePortAllocation, ServicePortProtocol, ServiceSource,
     };
     use fungi_config::paths::FungiPaths;
+
+    #[test]
+    fn duplicate_names_are_quarantined_without_rebinding_service_data() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = dir.path().join("services");
+        for id in ["svc_a", "svc_b"] {
+            let path = root.join(id);
+            fs::create_dir_all(&path).unwrap();
+            fs::write(
+                path.join("service.yaml"),
+                "fungi: service/v1\nid: demo\npublish:\n  main:\n    tcp:\n      port: 54321\n",
+            )
+            .unwrap();
+        }
+        let mut store = ServiceStateStore::load(root).unwrap();
+        assert!(store.persisted_services().is_empty());
+        assert_eq!(store.failed_services().len(), 2);
+        assert!(store.preview_local_service_id("demo").is_err());
+        assert_eq!(store.failed_service("svc_a").unwrap().id, "svc_a");
+        store.remove_service("svc_a").unwrap();
+        assert!(store.preview_local_service_id("demo").is_err());
+        store.remove_service("svc_b").unwrap();
+        assert!(store.preview_local_service_id("demo").is_ok());
+    }
+
+    #[test]
+    fn missing_manifest_is_reported_and_can_be_removed() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = dir.path().join("services");
+        let service_dir = root.join("svc_missing");
+        fs::create_dir_all(&service_dir).unwrap();
+        fs::write(service_dir.join("state.json"), "{}").unwrap();
+        let mut store = ServiceStateStore::load(root).unwrap();
+        let failure = store.failed_service("svc_missing").unwrap();
+        assert_eq!(failure.runtime, RuntimeKind::Unknown);
+        assert!(
+            failure
+                .status
+                .state_label()
+                .contains("Failed to read managed service manifest")
+        );
+        store.remove_service("svc_missing").unwrap();
+        assert!(!service_dir.exists());
+    }
 
     #[test]
     fn round_trips_persisted_services() {
@@ -450,7 +687,6 @@ mod tests {
             name: "demo".into(),
             definition_id: Some("demo-definition".into()),
             runtime: RuntimeKind::Docker,
-            run_mode: ServiceRunMode::Command,
             source: ServiceSource::Docker {
                 image: "nginx:latest".into(),
             },
@@ -523,7 +759,6 @@ mod tests {
             name: "demo".into(),
             definition_id: None,
             runtime: RuntimeKind::Docker,
-            run_mode: ServiceRunMode::Command,
             source: ServiceSource::Docker {
                 image: "nginx:latest".into(),
             },

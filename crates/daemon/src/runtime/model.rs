@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RuntimeKind {
+    Unknown,
     Docker,
     Wasmtime,
     External,
@@ -16,8 +17,6 @@ pub struct ServiceManifest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub definition_id: Option<String>,
     pub runtime: RuntimeKind,
-    #[serde(default)]
-    pub run_mode: ServiceRunMode,
     pub source: ServiceSource,
     pub expose: Option<ServiceExpose>,
     pub env: BTreeMap<String, String>,
@@ -27,14 +26,6 @@ pub struct ServiceManifest {
     pub entrypoint: Vec<String>,
     pub working_dir: Option<String>,
     pub labels: BTreeMap<String, String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum ServiceRunMode {
-    #[default]
-    Command,
-    Http,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

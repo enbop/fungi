@@ -1,16 +1,9 @@
 use clap::Parser;
 use fungi_daemon::{
     RuntimeControl, RuntimeKind, ServiceLogsOptions, ServiceManifest, ServiceMount, ServicePort,
-    ServicePortProtocol, ServiceRunMode, ServiceSource,
+    ServicePortProtocol, ServiceSource,
 };
-use std::{
-    collections::BTreeMap,
-    fs,
-    io::{Read, Write},
-    net::TcpStream,
-    path::PathBuf,
-    time::Duration,
-};
+use std::{collections::BTreeMap, fs, net::TcpStream, path::PathBuf, time::Duration};
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -32,6 +25,8 @@ struct Args {
     mount_target: String,
     #[arg(long, default_value_t = 10)]
     wait_secs: u64,
+    #[arg(last = true)]
+    component_args: Vec<String>,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -70,7 +65,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         name: args.name.clone(),
         definition_id: None,
         runtime: RuntimeKind::Wasmtime,
-        run_mode: ServiceRunMode::Http,
         source,
         expose: None,
         env: BTreeMap::new(),
@@ -85,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             service_port: args.port,
             protocol: ServicePortProtocol::Tcp,
         }],
-        command: Vec::new(),
+        command: args.component_args,
         entrypoint: Vec::new(),
         working_dir: None,
         labels: BTreeMap::new(),
@@ -114,8 +108,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("logs.text:\n{}", logs.text);
 
-    let response = http_get(args.port)?;
-    println!("http.get:\n{response}");
+    TcpStream::connect(("127.0.0.1", args.port))?;
+    println!("tcp.connect: ok");
 
     runtime.stop(RuntimeKind::Wasmtime, &args.name).await?;
     println!("stop: ok");
@@ -126,15 +120,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     runtime.remove(RuntimeKind::Wasmtime, &args.name).await?;
     println!("remove: ok");
     Ok(())
-}
-
-fn http_get(port: u16) -> Result<String, Box<dyn std::error::Error>> {
-    let mut stream = TcpStream::connect(("127.0.0.1", port))?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    stream.write_all(
-        b"GET /?device=smoke HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
-    )?;
-    let mut response = String::new();
-    stream.read_to_string(&mut response)?;
-    Ok(response)
 }

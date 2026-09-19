@@ -2171,15 +2171,7 @@ fn print_service_apply_dry_run(created: &CreatedServiceManifest, args: &CommonAr
         println!("  runtime: {}", runtime_kind_label(manifest.runtime));
     }
     if manifest.runtime == RuntimeKind::Wasmtime {
-        println!("  mode: {}", wasmtime_run_mode_label(manifest.run_mode));
-        println!(
-            "  invocation: {}",
-            if manifest.run_mode == fungi_daemon::ServiceRunMode::Http {
-                "serve"
-            } else {
-                "run"
-            }
-        );
+        println!("  invocation: run");
     }
     if !manifest.mounts.is_empty() {
         println!("Mounts:");
@@ -2207,18 +2199,21 @@ fn print_service_apply_dry_run(created: &CreatedServiceManifest, args: &CommonAr
             }
         );
     }
-    if manifest.runtime == RuntimeKind::Wasmtime
-        && manifest
+    if manifest.runtime == RuntimeKind::Wasmtime {
+        println!("Runtime grants:");
+        println!("  - outgoing HTTP/HTTPS");
+        if manifest
             .ports
             .iter()
             .any(|port| port.protocol == ServicePortProtocol::Tcp)
-    {
-        println!("Runtime grants:");
-        println!("  - tcp");
-        println!("  - inherited network");
-        println!("  - DNS lookup");
-        warnings
-            .push("Wasmtime TCP services currently receive broad host network access.".to_string());
+        {
+            println!("  - tcp");
+            println!("  - inherited network");
+            println!("  - DNS lookup");
+            warnings.push(
+                "Wasmtime TCP services currently receive broad host network access.".to_string(),
+            );
+        }
     }
     if !warnings.is_empty() {
         println!("Warnings:");
@@ -2230,13 +2225,6 @@ fn print_service_apply_dry_run(created: &CreatedServiceManifest, args: &CommonAr
         println!("After apply: ensure service is running");
     } else {
         println!("After apply: leave service stopped unless it was already running");
-    }
-}
-
-fn wasmtime_run_mode_label(mode: fungi_daemon::ServiceRunMode) -> &'static str {
-    match mode {
-        fungi_daemon::ServiceRunMode::Command => "command (default)",
-        fungi_daemon::ServiceRunMode::Http => "http",
     }
 }
 
@@ -2422,6 +2410,7 @@ fn print_existing_apply_notice(
 
 fn runtime_kind_label(runtime: RuntimeKind) -> &'static str {
     match runtime {
+        RuntimeKind::Unknown => "unknown",
         RuntimeKind::Docker => "docker",
         RuntimeKind::Wasmtime => "wasmtime",
         RuntimeKind::External => "external",

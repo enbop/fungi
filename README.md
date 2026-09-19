@@ -70,6 +70,8 @@ Start with the quick starts:
 
 Full documentation: [fungi.rs/docs](https://fungi.rs/docs/intro).
 
+For existing Wasmtime HTTP services, see the [run migration guide](WASMTIME-RUN-MIGRATION.md).
+
 ## Platform Support
 
 | Platform | Status         |

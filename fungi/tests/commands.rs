@@ -9,6 +9,19 @@ use fungi::commands::{
 };
 
 #[test]
+#[cfg(feature = "wasi")]
+fn exposes_only_wasmtime_run_command() {
+    let command = FungiArgs::command();
+    let subcommands = command
+        .get_subcommands()
+        .map(|command| command.get_name())
+        .collect::<Vec<_>>();
+
+    assert!(subcommands.contains(&"run"));
+    assert!(!subcommands.contains(&"serve"));
+}
+
+#[test]
 fn parses_service_apply_with_device() {
     let args = FungiArgs::try_parse_from([
         "fungi",

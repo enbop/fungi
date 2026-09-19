@@ -640,9 +640,20 @@ fn migrates_legacy_service_state_into_local_service_id_layout_and_moves_service_
 
     let manifest: serde_yaml::Value = serde_yaml::from_str(&manifest_yaml).unwrap();
     assert_eq!(manifest["fungi"], "service/v1");
-    assert_eq!(manifest["id"], "demo");
+    assert!(manifest["id"].is_null());
+    assert_eq!(manifest["instance"], "demo");
     assert_eq!(manifest["run"]["provider"], "wasmtime");
-    assert_eq!(manifest["run"]["mode"], "http");
+    assert!(manifest["run"]["mode"].is_null());
+    let state: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(manifest_path.with_file_name("state.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(
+        state["configuration_error"]
+            .as_str()
+            .unwrap()
+            .contains("run-compatible")
+    );
     assert_eq!(
         manifest["run"]["source"]["file"],
         "$fungi.service.artifacts/component.wasm"

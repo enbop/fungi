@@ -31,7 +31,6 @@ fn docker_manifest_maps_to_container_spec() {
         name: "filebrowser".into(),
         definition_id: None,
         runtime: RuntimeKind::Docker,
-        run_mode: ServiceRunMode::Command,
         source: ServiceSource::Docker {
             image: "filebrowser/filebrowser:latest".into(),
         },
@@ -66,7 +65,6 @@ fn docker_manifest_can_use_internal_container_name() {
         name: "c".into(),
         definition_id: Some("code-server".into()),
         runtime: RuntimeKind::Docker,
-        run_mode: ServiceRunMode::Command,
         source: ServiceSource::Docker {
             image: "ghcr.io/coder/code-server:latest".into(),
         },
@@ -94,7 +92,6 @@ fn ensure_manifest_mount_dirs_creates_missing_host_paths() {
         name: "mount-test".into(),
         definition_id: None,
         runtime: RuntimeKind::Wasmtime,
-        run_mode: ServiceRunMode::Command,
         source: ServiceSource::WasmtimeFile {
             component: temp_dir.path().join("demo.wasm"),
         },
@@ -146,7 +143,6 @@ fn docker_manifest_rejects_wrong_source_type() {
         name: "bad".into(),
         definition_id: None,
         runtime: RuntimeKind::Docker,
-        run_mode: ServiceRunMode::Command,
         source: ServiceSource::WasmtimeFile {
             component: PathBuf::from("/tmp/app.wasm"),
         },
@@ -180,7 +176,6 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
         name: "demo-service".into(),
         definition_id: None,
         runtime: RuntimeKind::Wasmtime,
-        run_mode: ServiceRunMode::Http,
         source: ServiceSource::WasmtimeFile {
             component: component.clone(),
         },
@@ -242,7 +237,9 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
         sleep(Duration::from_millis(100)).await;
     }
     assert!(logs.text.contains("fake-launcher"));
-    assert!(logs.text.contains("serve"));
+    assert!(logs.text.contains("run"));
+    assert!(!logs.text.contains("serve"));
+    assert!(logs.text.contains("-Shttp"));
     assert!(logs.text.contains("-Stcp"));
     assert!(logs.text.contains("-Sinherit-network"));
     assert!(logs.text.contains("-Sallow-ip-name-lookup"));
@@ -263,7 +260,6 @@ fn wasmtime_tcp_entry_runs_command_with_network_permissions() {
         name: "tcp-service".into(),
         definition_id: None,
         runtime: RuntimeKind::Wasmtime,
-        run_mode: ServiceRunMode::Command,
         source: ServiceSource::WasmtimeFile {
             component: component.clone(),
         },
@@ -277,7 +273,10 @@ fn wasmtime_tcp_entry_runs_command_with_network_permissions() {
             }),
             icon_url: None,
         }),
-        env: BTreeMap::new(),
+        env: BTreeMap::from([
+            ("SFTP_FS_ROOT".into(), "appdata/files with spaces".into()),
+            ("HOME".into(), "guest-home=value".into()),
+        ]),
         mounts: Vec::new(),
         ports: vec![ServicePort {
             name: Some("socks5".into()),
@@ -312,10 +311,30 @@ fn wasmtime_tcp_entry_runs_command_with_network_permissions() {
     assert!(args.iter().any(|arg| arg == "run"));
     assert!(!args.iter().any(|arg| arg == "serve"));
     assert!(args.iter().any(|arg| arg == "-Scli"));
+    assert!(args.iter().any(|arg| arg == "-Shttp"));
     assert!(args.iter().any(|arg| arg == "-Stcp"));
     assert!(args.iter().any(|arg| arg == "-Sinherit-network"));
     assert!(args.iter().any(|arg| arg == "-Sallow-ip-name-lookup"));
     assert!(args.iter().any(|arg| arg == "--listen"));
+    let component_index = args
+        .iter()
+        .position(|arg| arg == &state.staged_component_path.to_string_lossy())
+        .unwrap();
+    for expected in [
+        "SFTP_FS_ROOT=appdata/files with spaces",
+        "HOME=guest-home=value",
+    ] {
+        assert!(
+            args[..component_index]
+                .windows(2)
+                .any(|pair| pair == ["--env", expected])
+        );
+    }
+    // Guest configuration must not overwrite the launcher's own environment
+    // (notably the Android-specific HOME set by build_wasmtime_command).
+    assert!(!command.as_std().get_envs().any(|(name, value)| {
+        name == "SFTP_FS_ROOT" || (name == "HOME" && value == Some("guest-home=value".as_ref()))
+    }));
 }
 
 #[test]
@@ -326,7 +345,6 @@ fn wasmtime_command_android_home_override_matches_target_behavior() {
         name: "android-home".into(),
         definition_id: None,
         runtime: RuntimeKind::Wasmtime,
-        run_mode: ServiceRunMode::Command,
         source: ServiceSource::WasmtimeFile {
             component: component.clone(),
         },
@@ -372,14 +390,13 @@ fn wasmtime_command_android_home_override_matches_target_behavior() {
 }
 
 #[test]
-fn wasmtime_http_mode_without_tcp_port_returns_error() {
+fn wasmtime_command_without_tcp_ports_omits_network_permissions() {
     let temp_dir = TempDir::new().unwrap();
     let component = temp_dir.path().join("demo.wasm");
     let manifest = ServiceManifest {
         name: "http-service".into(),
         definition_id: None,
         runtime: RuntimeKind::Wasmtime,
-        run_mode: ServiceRunMode::Http,
         source: ServiceSource::WasmtimeFile {
             component: component.clone(),
         },
@@ -412,10 +429,19 @@ fn wasmtime_http_mode_without_tcp_port_returns_error() {
         last_exit_code: None,
     };
 
-    let error = build_wasmtime_command(Path::new("/bin/fungi"), temp_dir.path(), &state)
-        .expect_err("http mode without a TCP port should be rejected");
+    let command = build_wasmtime_command(Path::new("/bin/fungi"), temp_dir.path(), &state).unwrap();
+    let args = command
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
 
-    assert!(error.to_string().contains("requires at least one TCP port"));
+    assert!(args.iter().any(|arg| arg == "run"));
+    assert!(!args.iter().any(|arg| arg == "serve"));
+    assert!(args.iter().any(|arg| arg == "-Shttp"));
+    assert!(!args.iter().any(|arg| arg == "-Stcp"));
+    assert!(!args.iter().any(|arg| arg == "-Sinherit-network"));
+    assert!(!args.iter().any(|arg| arg == "-Sallow-ip-name-lookup"));
 }
 
 #[test]
@@ -540,7 +566,6 @@ publish:
 
     assert_eq!(manifest.name, "code-server");
     assert_eq!(manifest.runtime, RuntimeKind::Docker);
-    assert_eq!(manifest.run_mode, ServiceRunMode::Command);
     assert_eq!(manifest.mounts[0].host_path, paths.user_home());
     assert_eq!(manifest.ports[0].service_port, 8080);
     assert_eq!(
@@ -561,7 +586,7 @@ publish:
 }
 
 #[test]
-fn fungi_service_file_maps_wasmtime_http_mode_to_serve_intent() {
+fn fungi_service_file_rejects_removed_wasmtime_http_mode() {
     let content = r#"
 fungi: service/v1
 id: filebrowser-lite
@@ -579,11 +604,41 @@ publish:
       path: /
 "#;
 
+    let error = parse_service_manifest_yaml(content, Path::new("."), Path::new("/tmp/fungi-home"))
+        .unwrap_err();
+
+    assert!(error.to_string().contains("unknown field `mode`"));
+}
+
+#[test]
+fn fungi_service_file_maps_wasmtime_listener_to_run_args() {
+    let content = r#"
+fungi: service/v1
+id: filebrowser-lite
+run:
+  provider: wasmtime
+  source:
+    url: https://example.test/filebrowser.wasm
+  args:
+    - --listen
+    - 127.0.0.1:8082
+publish:
+  http:
+    tcp:
+      port: 8082
+    client:
+      kind: web
+      path: /
+"#;
+
     let manifest =
         parse_service_manifest_yaml(content, Path::new("."), Path::new("/tmp/fungi-home")).unwrap();
 
     assert_eq!(manifest.runtime, RuntimeKind::Wasmtime);
-    assert_eq!(manifest.run_mode, ServiceRunMode::Http);
+    assert_eq!(
+        manifest.command,
+        ["--listen".to_string(), "127.0.0.1:8082".to_string()]
+    );
     assert_eq!(manifest.ports[0].host_port, 8082);
     assert_eq!(
         manifest.ports[0].host_port_allocation,
@@ -928,7 +983,6 @@ async fn wasmtime_provider_downloads_remote_component() {
         name: "download-service".into(),
         definition_id: None,
         runtime: RuntimeKind::Wasmtime,
-        run_mode: ServiceRunMode::Command,
         source: ServiceSource::WasmtimeUrl {
             url: server.url.clone(),
         },
@@ -1169,6 +1223,355 @@ async fn runtime_control_apply_reports_restart_failure_after_persisting_manifest
     assert_eq!(
         control.inspect_by_name("demo").await.unwrap().status.phase,
         ServicePhase::Stopped
+    );
+
+    // The compatibility APIs cannot return an outcome, so a restart failure
+    // must remain an error. Bound both calls to catch recursive operation locks.
+    let manifest = control.get_service_manifest("demo").unwrap();
+    let error = tokio::time::timeout(Duration::from_secs(5), control.pull(&manifest))
+        .await
+        .expect("pull must not acquire the service operation lock twice")
+        .unwrap_err();
+    assert!(error.to_string().contains("restart failed"));
+    let error = tokio::time::timeout(
+        Duration::from_secs(5),
+        control.pull_manifest_yaml(
+            &manifest_v2,
+            temp_dir.path(),
+            &fungi_home,
+            &ManifestResolutionPolicy,
+        ),
+    )
+    .await
+    .expect("pull_manifest_yaml must not acquire the service operation lock twice")
+    .unwrap_err();
+    assert!(error.to_string().contains("restart failed"));
+}
+
+#[tokio::test]
+async fn first_apply_persistence_failure_can_be_retried_without_restart() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path();
+    let component = home.join("component.wasm");
+    fs::write(&component, b"component").unwrap();
+    let manifest = parse_service_manifest_yaml(&format!(
+        "fungi: service/v1\nid: retryable\nrun:\n  provider: wasmtime\n  source:\n    file: {}\npublish:\n  main:\n    tcp:\n      port: 8082\n", component.display()
+    ), home, home).unwrap();
+    let provider = WasmtimeRuntimeProvider::new(
+        home.join("runtime"),
+        create_fake_launcher(home).unwrap(),
+        home.to_path_buf(),
+        vec![home.to_path_buf()],
+    );
+    let services = home.join("services");
+    let control =
+        RuntimeControl::with_wasmtime_provider(provider.clone(), None, services.clone(), true)
+            .unwrap();
+
+    // A non-directory obstruction fails identically for root and non-root test runners.
+    fs::remove_dir(&services).unwrap();
+    fs::write(&services, b"blocked").unwrap();
+    let error = control.apply(&manifest).await.unwrap_err();
+    assert!(format!("{error:#}").contains("Failed to create managed service directory"));
+    assert!(!provider.has_service("retryable"));
+    assert!(control.list_services().await.unwrap().is_empty());
+    assert_eq!(
+        fs::read_dir(home.join("artifacts/services"))
+            .unwrap()
+            .count(),
+        0
+    );
+
+    fs::remove_file(&services).unwrap();
+    fs::create_dir(&services).unwrap();
+    control.apply(&manifest).await.unwrap();
+    control.start_by_name("retryable").await.unwrap();
+    assert!(
+        control
+            .inspect_by_name("retryable")
+            .await
+            .unwrap()
+            .status
+            .is_running()
+    );
+    control.remove_by_name("retryable").await.unwrap();
+    assert!(!provider.has_service("retryable"));
+}
+
+#[tokio::test]
+async fn failed_upgrade_restores_manifest_and_remains_retryable() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path();
+    let component = home.join("component.wasm");
+    fs::write(&component, b"upgraded").unwrap();
+    let yaml = format!(
+        "fungi: service/v1\nid: demo\nrun:\n  provider: wasmtime\n  source:\n    file: {}\npublish:\n  main:\n    tcp:\n      port: 8082\n",
+        component.display()
+    );
+    let legacy = yaml.replace("  provider: wasmtime", "  provider: wasmtime\n  mode: http");
+    let saved = home.join("services/svc_old");
+    fs::create_dir_all(&saved).unwrap();
+    fs::write(saved.join("service.yaml"), &legacy).unwrap();
+    let old_state =
+        br#"{"schema_version":2,"local_service_id":"svc_old","desired_state":"running"}"#;
+    fs::write(saved.join("state.json"), old_state).unwrap();
+    let data = home.join("appdata/services/svc_old");
+    fs::create_dir_all(&data).unwrap();
+    fs::write(data.join("keep.txt"), b"user data").unwrap();
+    let provider = WasmtimeRuntimeProvider::new(
+        home.join("runtime"),
+        create_fake_launcher(home).unwrap(),
+        home.to_path_buf(),
+        vec![home.to_path_buf()],
+    );
+    let control =
+        RuntimeControl::with_wasmtime_provider(provider.clone(), None, home.join("services"), true)
+            .unwrap();
+    control.restore_persisted_state().await.unwrap();
+
+    fs::rename(saved.join("state.json"), saved.join("state.backup")).unwrap();
+    fs::create_dir(saved.join("state.json")).unwrap();
+    let error = control
+        .apply_manifest_yaml(&yaml, home, home, &ManifestResolutionPolicy)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("Failed to persist service state file"));
+    assert_eq!(
+        fs::read_to_string(saved.join("service.yaml")).unwrap(),
+        legacy
+    );
+    assert!(!provider.has_service("demo"));
+    assert!(
+        control
+            .inspect_by_name("demo")
+            .await
+            .unwrap()
+            .status
+            .state_label()
+            .contains("configuration error")
+    );
+    assert!(control.start_by_name("demo").await.is_err());
+    assert_eq!(fs::read(data.join("keep.txt")).unwrap(), b"user data");
+
+    fs::remove_dir(saved.join("state.json")).unwrap();
+    fs::rename(saved.join("state.backup"), saved.join("state.json")).unwrap();
+    assert_eq!(fs::read(saved.join("state.json")).unwrap(), old_state);
+    control
+        .apply_manifest_yaml(&yaml, home, home, &ManifestResolutionPolicy)
+        .await
+        .unwrap();
+    control.start_by_name("demo").await.unwrap();
+    assert!(
+        control
+            .inspect_by_name("demo")
+            .await
+            .unwrap()
+            .status
+            .is_running()
+    );
+    control.remove_by_name("demo").await.unwrap();
+    assert_eq!(fs::read(data.join("keep.txt")).unwrap(), b"user data");
+}
+
+#[tokio::test]
+async fn invalid_persisted_services_are_isolated_and_can_be_upgraded_or_removed() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path().join("home");
+    let component = temp.path().join("upgraded.wasm");
+    fs::write(&component, b"upgraded component").unwrap();
+    let manifest = format!(
+        "fungi: service/v1\nid: filebrowser-lite\ninstance: files\nrun:\n  provider: wasmtime\n  source:\n    file: {}\n  mounts:\n    - from: $fungi.service.data\n      to: /data\npublish:\n  http:\n    tcp:\n      port: 8082\n",
+        component.display()
+    );
+    let legacy = manifest.replace("  provider: wasmtime", "  provider: wasmtime\n  mode: http");
+    let service_dir = home.join("services/svc_old");
+    fs::create_dir_all(&service_dir).unwrap();
+    fs::write(service_dir.join("service.yaml"), &legacy).unwrap();
+    fs::write(
+        service_dir.join("state.json"),
+        r#"{"schema_version":2,"local_service_id":"svc_old","desired_state":"running"}"#,
+    )
+    .unwrap();
+    let data = home.join("appdata/services/svc_old");
+    fs::create_dir_all(&data).unwrap();
+    fs::write(data.join("keep.txt"), "user data").unwrap();
+    let broken_dir = home.join("services/svc_broken");
+    fs::create_dir_all(&broken_dir).unwrap();
+    fs::write(broken_dir.join("service.yaml"), "fungi: [invalid YAML").unwrap();
+
+    let control = RuntimeControl::new(
+        home.join("runtime"),
+        create_fake_launcher(temp.path()).unwrap(),
+        home.clone(),
+        None,
+        home.join("services"),
+        vec![temp.path().to_path_buf()],
+        true,
+    )
+    .unwrap();
+    control.restore_persisted_state().await.unwrap();
+    assert!(control.desired_running_service_manifests().is_empty());
+    let listed = control.list_services().await.unwrap();
+    assert_eq!(listed.len(), 2);
+    let failed = control.inspect_by_name("files").await.unwrap();
+    assert_eq!(failed.status.phase, ServicePhase::Unknown);
+    assert_eq!(failed.definition_id.as_deref(), Some("filebrowser-lite"));
+    assert!(failed.status.detail.unwrap().contains("run-compatible"));
+    assert!(
+        control
+            .start_by_name("files")
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("configuration error")
+    );
+    assert!(control.stop_by_name("files").await.is_err());
+    assert_eq!(
+        fs::read_to_string(service_dir.join("service.yaml")).unwrap(),
+        legacy
+    );
+    assert!(
+        control
+            .list_published_device_services()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    let mismatch = manifest.replace("id: filebrowser-lite", "id: different");
+    assert!(
+        control
+            .apply_manifest_yaml(&mismatch, temp.path(), &home, &ManifestResolutionPolicy)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("definition id")
+    );
+    assert!(
+        control
+            .apply_manifest_yaml(&legacy, temp.path(), &home, &ManifestResolutionPolicy)
+            .await
+            .is_err()
+    );
+
+    let applied = control
+        .apply_manifest_yaml(&manifest, temp.path(), &home, &ManifestResolutionPolicy)
+        .await
+        .unwrap();
+    assert_eq!(applied.instance.status.phase, ServicePhase::Stopped);
+    assert_eq!(
+        fs::read_to_string(data.join("keep.txt")).unwrap(),
+        "user data"
+    );
+    assert_eq!(
+        fs::read(home.join("artifacts/services/svc_old/component.wasm")).unwrap(),
+        b"upgraded component"
+    );
+    let saved = fs::read_to_string(service_dir.join("service.yaml")).unwrap();
+    assert!(!saved.contains("mode:"));
+    assert_eq!(
+        control.get_service_manifest("files").unwrap().mounts[0].host_path,
+        data
+    );
+    control.start_by_name("files").await.unwrap();
+    assert!(
+        control
+            .inspect_by_name("files")
+            .await
+            .unwrap()
+            .status
+            .is_running()
+    );
+    control.stop_by_name("files").await.unwrap();
+    control.remove_by_name("svc_broken").await.unwrap();
+    assert!(!broken_dir.exists());
+    assert_eq!(control.list_services().await.unwrap().len(), 1);
+
+    let reloaded = crate::service_state::ServiceStateStore::load(home.join("services")).unwrap();
+    assert!(reloaded.failed_services().is_empty());
+    assert_eq!(reloaded.local_service_id("files").unwrap(), "svc_old");
+}
+
+#[tokio::test]
+async fn state_errors_do_not_block_healthy_services_and_apply_clears_migration_error() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path();
+    let manifest = "fungi: service/v1\nid: demo\npublish:\n  main:\n    tcp:\n      port: 54321\n";
+    for (id, name, state) in [
+        (
+            "svc_migrated",
+            "migrated",
+            r#"{"schema_version":2,"local_service_id":"svc_migrated","desired_state":"running","configuration_error":"Legacy Wasmtime HTTP service requires a run-compatible component"}"#,
+        ),
+        (
+            "svc_future",
+            "future",
+            r#"{"schema_version":999,"local_service_id":"svc_future","desired_state":"running"}"#,
+        ),
+        ("svc_bad_state", "bad-state", "not json"),
+        (
+            "svc_healthy",
+            "healthy",
+            r#"{"schema_version":2,"local_service_id":"svc_healthy","desired_state":"running"}"#,
+        ),
+    ] {
+        let dir = home.join("services").join(id);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("service.yaml"),
+            manifest.replace("id: demo", &format!("id: {name}")),
+        )
+        .unwrap();
+        fs::write(dir.join("state.json"), state).unwrap();
+    }
+    let control = RuntimeControl::new(
+        home.join("runtime"),
+        PathBuf::from("unused"),
+        home.to_path_buf(),
+        None,
+        home.join("services"),
+        vec![],
+        false,
+    )
+    .unwrap();
+    control.restore_persisted_state().await.unwrap();
+    assert_eq!(control.list_services().await.unwrap().len(), 4);
+    assert!(
+        control
+            .inspect_by_name("healthy")
+            .await
+            .unwrap()
+            .status
+            .is_running()
+    );
+    for name in ["migrated", "future", "bad-state"] {
+        assert_eq!(
+            control.inspect_by_name(name).await.unwrap().status.phase,
+            ServicePhase::Unknown
+        );
+        assert!(
+            control
+                .start_by_name(name)
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("configuration error")
+        );
+    }
+    let updated = manifest
+        .replace("id: demo", "id: migrated")
+        .replace("54321", "54322");
+    control
+        .apply_manifest_yaml(&updated, home, home, &ManifestResolutionPolicy)
+        .await
+        .unwrap();
+    let state = fs::read_to_string(home.join("services/svc_migrated/state.json")).unwrap();
+    assert!(!state.contains("configuration_error"));
+    assert!(
+        crate::service_state::ServiceStateStore::load(home.join("services"))
+            .unwrap()
+            .persisted_service("migrated")
+            .is_some()
     );
 }
 
@@ -1528,7 +1931,6 @@ fn existing_tcp_manifest(name: &str, host: &str, port: u16) -> ServiceManifest {
         name: name.to_string(),
         definition_id: None,
         runtime: RuntimeKind::External,
-        run_mode: ServiceRunMode::Command,
         source: ServiceSource::ExistingTcp {
             host: host.to_string(),
             port,

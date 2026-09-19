@@ -13,7 +13,7 @@ const DEFAULT_LOG_SPEC: &str = "info,libp2p_mdns::behaviour=warn";
 
 pub fn init_logging(fungi_args: &FungiArgs) -> Result<()> {
     #[cfg(feature = "wasi")]
-    if matches!(&fungi_args.command, Commands::Run(_) | Commands::Serve(_)) {
+    if matches!(&fungi_args.command, Commands::Run(_)) {
         return Ok(());
     }
 

@@ -532,25 +532,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "capstone"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f442ae0f2f3f1b923334b4a5386c95c69c1cfa072bafa23d6fae6d9682eb1dd4"
-dependencies = [
- "capstone-sys",
- "static_assertions",
-]
-
-[[package]]
-name = "capstone-sys"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4e8087cab6731295f5a2a2bd82989ba4f41d3a428aab2e7c98d8f4db38aac05"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "cc"
 version = "1.2.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -654,16 +635,6 @@ dependencies = [
  "anstyle",
  "clap_lex",
  "strsim",
- "terminal_size",
-]
-
-[[package]]
-name = "clap_complete"
-version = "4.6.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db8b397918185f0161ff3d6fcaa9e4bfc09b8367caf6e1d4a2848e5477ed027b"
-dependencies = [
- "clap",
 ]
 
 [[package]]
@@ -837,9 +808,7 @@ version = "0.133.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7780677247ad3577e3a6a3ebf43f39b325a11d6393db72b2c9968a910d4d13d"
 dependencies = [
- "anyhow",
  "bumpalo",
- "capstone",
  "cranelift-assembler-x64",
  "cranelift-bforest",
  "cranelift-bitset",
@@ -1557,6 +1526,7 @@ dependencies = [
  "log",
  "multiaddr",
  "rand 0.8.6",
+ "rustls",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -5051,16 +5021,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "terminal_size"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
-dependencies = [
- "rustix 1.1.4",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5840,41 +5800,28 @@ checksum = "ecbb7ede0fb533d605674047f066936ee535a62946f0bcdb7d117bfcf7f6d838"
 dependencies = [
  "async-trait",
  "bytes",
- "capstone",
  "cfg-if",
  "clap",
- "clap_complete",
- "cranelift-codegen",
  "futures",
- "gimli 0.33.0",
- "http",
- "http-body-util",
  "hyper",
  "listenfd",
  "log",
- "object",
- "pin-project-lite",
- "pulley-interpreter",
  "rustix 1.1.4",
  "serde",
  "serde_derive",
  "serde_json",
  "smallvec",
  "target-lexicon",
- "tempfile",
- "termcolor",
  "tokio",
  "tracing",
  "wasi-common",
  "wasmparser 0.251.0",
- "wasmprinter",
  "wasmtime",
  "wasmtime-cli-flags",
  "wasmtime-environ",
  "wasmtime-internal-cache",
  "wasmtime-internal-cranelift",
  "wasmtime-internal-debugger",
- "wasmtime-internal-explorer",
  "wasmtime-internal-unwinder",
  "wasmtime-wasi",
  "wasmtime-wasi-config",
@@ -6027,22 +5974,6 @@ dependencies = [
  "wasmtime",
  "wasmtime-wasi",
  "wasmtime-wasi-io",
-]
-
-[[package]]
-name = "wasmtime-internal-explorer"
-version = "46.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57fb31d435f8f645fb5a8c9edd5e644b53605f3b98c0e217d099d036ddc25e4a"
-dependencies = [
- "capstone",
- "serde",
- "serde_derive",
- "serde_json",
- "target-lexicon",
- "wasmprinter",
- "wasmtime",
- "wasmtime-environ",
 ]
 
 [[package]]

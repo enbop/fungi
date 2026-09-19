@@ -115,9 +115,6 @@ pub enum Commands {
     #[cfg(feature = "wasi")]
     /// [WASI runtime] Run a WebAssembly module (re-exported wasmtime command)
     Run(wasmtime_cli::commands::RunCommand),
-    #[cfg(feature = "wasi")]
-    /// [WASI runtime] Serve wasi-http requests (re-exported wasmtime command)
-    Serve(wasmtime_cli::commands::ServeCommand),
     /// Invoke a service by name
     #[command(external_subcommand)]
     Dynamic(Vec<String>),

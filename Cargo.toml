@@ -64,7 +64,38 @@ tonic-prost-build = "0.14.2"
 typed-path = "0.12"
 ulid = "1"
 void = "1"
-wasmtime-cli = "46.0.1"
+wasmtime-cli = { version = "46.0.1", default-features = false, features = [
+    "run",
+    "wasi-nn",
+    "wasi-threads",
+    "wasi-http",
+    "wasi-config",
+    "wasi-keyvalue",
+    "wasi-tls",
+    "backtrace",
+    "wat",
+    "parallel-compilation",
+    "pooling-allocator",
+    "cache",
+    "logging",
+    "demangle",
+    "cranelift",
+    "profiling",
+    "coredump",
+    "addr2line",
+    "debug-builtins",
+    "component-model",
+    "component-model-async",
+    "threads",
+    "gc",
+    "gc-copying",
+    "gc-drc",
+    "gc-null",
+    "stack-switching",
+    "winch",
+    "pulley",
+    "debug",
+] }
 webpki-roots = "1"
 libp2p = { version = "0.56", features = [
     "macros",

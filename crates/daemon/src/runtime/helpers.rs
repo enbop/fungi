@@ -271,20 +271,9 @@ pub(crate) fn build_wasmtime_command(
         command.env("HOME", &wasmtime_home);
     }
 
-    if should_serve_wasmtime_http(&state.manifest) {
-        let port = state
-            .manifest
-            .ports
-            .iter()
-            .find(|port| port.protocol == ServicePortProtocol::Tcp)
-            .map(|port| port.host_port)
-            .ok_or_else(|| anyhow::anyhow!("wasmtime http mode requires at least one TCP port"))?;
-        command.arg("serve");
-        command.arg(format!("--addr=127.0.0.1:{port}"));
-    } else {
-        command.arg("run");
-    }
+    command.arg("run");
     command.arg("-Scli");
+    command.arg("-Shttp");
     if has_tcp_ports(&state.manifest) {
         command.arg("-Stcp");
         command.arg("-Sinherit-network");
@@ -301,6 +290,11 @@ pub(crate) fn build_wasmtime_command(
         }
     }
 
+    // Wasmtime does not inherit the launcher's environment into the guest.
+    // Pass service configuration as run options, before the component path.
+    for (name, value) in &state.manifest.env {
+        command.arg("--env").arg(format!("{name}={value}"));
+    }
     command.arg(&state.staged_component_path);
     for arg in &state.manifest.command {
         command.arg(arg);
@@ -310,12 +304,7 @@ pub(crate) fn build_wasmtime_command(
     } else {
         command.current_dir(&state.service_dir);
     }
-    command.envs(&state.manifest.env);
     Ok(command)
-}
-
-fn should_serve_wasmtime_http(manifest: &ServiceManifest) -> bool {
-    manifest.run_mode == ServiceRunMode::Http
 }
 
 fn has_tcp_ports(manifest: &ServiceManifest) -> bool {
@@ -420,6 +409,7 @@ pub(crate) fn enrich_instance_from_manifest(
 
 fn service_instance_id(runtime: RuntimeKind, name: &str) -> String {
     let runtime_name = match runtime {
+        RuntimeKind::Unknown => "unknown",
         RuntimeKind::Docker => "docker",
         RuntimeKind::Wasmtime => "wasmtime",
         RuntimeKind::External => "external",

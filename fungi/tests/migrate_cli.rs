@@ -9,9 +9,7 @@ use std::{
 };
 
 use fungi_config::{FungiConfig, devices::DevicesConfig};
-use fungi_daemon::{
-    ServicePortAllocation, ServiceRunMode, ServiceSource, load_service_manifest_yaml_file,
-};
+use fungi_daemon::load_service_manifest_yaml_file;
 use libp2p::PeerId;
 use serde_json::json;
 use tempfile::TempDir;
@@ -196,21 +194,11 @@ fn cli_migrate_upgrades_real_v061_home_with_legacy_address_book_and_service_stat
     assert!(manifest_yaml.contains("$fungi.service.data/cache"));
     assert!(manifest_yaml.contains("$fungi.service.artifacts/component.wasm"));
 
-    let manifest = load_service_manifest_yaml_file(&manifest_path, home.path()).unwrap();
-    assert_eq!(manifest.name, "demo");
-    assert_eq!(manifest.run_mode, ServiceRunMode::Http);
-    assert_eq!(manifest.working_dir, None);
-    assert_eq!(manifest.mounts.len(), 1);
-    assert_eq!(manifest.ports[0].host_port, 18080);
-    assert_eq!(manifest.ports[0].service_port, 18080);
-    assert_eq!(
-        manifest.ports[0].host_port_allocation,
-        ServicePortAllocation::Fixed
-    );
-    match &manifest.source {
-        ServiceSource::WasmtimeFile { .. } => {}
-        other => panic!("unexpected migrated manifest source: {other:?}"),
-    }
+    assert!(load_service_manifest_yaml_file(&manifest_path, home.path()).is_err());
+    let manifest: serde_yaml::Value = serde_yaml::from_str(&manifest_yaml).unwrap();
+    assert_eq!(manifest["instance"], "demo");
+    assert!(manifest["id"].is_null());
+    assert_eq!(manifest["publish"]["http"]["tcp"]["port"], 18080);
 
     let state_value: serde_json::Value = serde_json::from_str(
         &fs::read_to_string(
@@ -225,6 +213,12 @@ fn cli_migrate_upgrades_real_v061_home_with_legacy_address_book_and_service_stat
     assert_eq!(state_value["schema_version"], 2);
     assert_eq!(state_value["local_service_id"], local_service_id);
     assert_eq!(state_value["desired_state"], "stopped");
+    assert!(
+        state_value["configuration_error"]
+            .as_str()
+            .unwrap()
+            .contains("run-compatible")
+    );
 
     let second_migrate = run_cli(current_fungi_bin(), home.path(), &["migrate"]);
     assert!(second_migrate.stdout.contains("already at version 3"));
@@ -403,7 +397,9 @@ spec:
         let _daemon = start_daemon(current, home.path());
         let inspect = run_cli(current, home.path(), &["service", "inspect", "cli-demo"]);
         assert!(inspect.stdout.contains("\"name\": \"cli-demo\""));
-        assert!(inspect.stdout.contains("\"phase\": \"stopped\""));
+        assert!(inspect.stdout.contains("\"phase\": \"unknown\""));
+        assert!(inspect.stdout.contains("configuration error"));
+        assert!(inspect.stdout.contains("run-compatible"));
     }
 
     let second_migrate = run_cli(current, home.path(), &["migrate"]);
@@ -412,6 +408,146 @@ spec:
 
 fn current_fungi_bin() -> &'static Path {
     Path::new(env!("CARGO_BIN_EXE_fungi"))
+}
+
+#[test]
+fn cli_apply_recovers_after_persistence_failure_without_daemon_restart() {
+    let home = TempDir::new().unwrap();
+    let binary = current_fungi_bin();
+    run_cli(binary, home.path(), &["init"]);
+    let component = home.path().join("component.wasm");
+    fs::write(&component, b"component used only for apply").unwrap();
+    let manifest = home.path().join("retryable.yaml");
+    fs::write(&manifest, format!(
+        "fungi: service/v1\nid: retryable\nrun:\n  provider: wasmtime\n  source:\n    file: {}\npublish:\n  main:\n    tcp:\n      port: {}\n",
+        component.display(), reserve_tcp_port()
+    )).unwrap();
+    let _daemon = start_daemon(binary, home.path());
+    let services = home.path().join("services");
+    fs::remove_dir(&services).unwrap();
+    fs::write(&services, b"blocked").unwrap();
+    let apply_args = [
+        "service",
+        "apply",
+        "retryable",
+        manifest.to_str().unwrap(),
+        "--yes",
+    ];
+    assert!(try_run_cli(binary, home.path(), &apply_args).is_none());
+    assert!(try_run_cli(binary, home.path(), &["service", "inspect", "retryable"]).is_none());
+    fs::remove_file(&services).unwrap();
+    fs::create_dir(&services).unwrap();
+    run_cli(binary, home.path(), &apply_args);
+    let inspect = run_cli(binary, home.path(), &["service", "inspect", "retryable"]);
+    assert!(
+        inspect.stdout.contains("\"phase\": \"stopped\""),
+        "{}",
+        inspect.stdout
+    );
+    run_cli(binary, home.path(), &["service", "remove", "retryable"]);
+    assert_eq!(fs::read_dir(&services).unwrap().count(), 0);
+}
+
+#[test]
+fn cli_keeps_legacy_http_services_manageable_after_upgrade() {
+    for legacy_layout in [false, true] {
+        let home = TempDir::new().unwrap();
+        let binary = current_fungi_bin();
+        run_cli(binary, home.path(), &["init"]);
+        let port = reserve_tcp_port();
+        let upgraded_component = home.path().join("upgraded.wasm");
+        fs::write(&upgraded_component, b"replacement component").unwrap();
+        let manifest = format!(
+            "fungi: service/v1\nid: official-recipe\ninstance: demo\nrun:\n  provider: wasmtime\n  source:\n    file: {}\npublish:\n  http:\n    tcp:\n      port: {port}\n",
+            upgraded_component.display()
+        );
+        if legacy_layout {
+            let old_dir = home.path().join("services/demo");
+            fs::create_dir_all(&old_dir).unwrap();
+            fs::write(old_dir.join("keep.txt"), "user data").unwrap();
+            fs::write(home.path().join("services-state.json"), serde_json::to_vec(&json!({
+                "schema_version": 1, "services": {"demo": {
+                    "manifest": {"name": "demo", "runtime": "wasmtime",
+                        "source": {"WasmtimeFile": {"component": upgraded_component}},
+                        "ports": [{"host_port": port, "service_port": port, "protocol": "tcp"}]},
+                    "desired_state": "running"
+                }}
+            })).unwrap()).unwrap();
+        } else {
+            let saved = home.path().join("services/svc_old");
+            fs::create_dir_all(&saved).unwrap();
+            fs::write(
+                saved.join("service.yaml"),
+                manifest.replace("  provider: wasmtime", "  provider: wasmtime\n  mode: http"),
+            )
+            .unwrap();
+            fs::write(
+                saved.join("state.json"),
+                r#"{"schema_version":2,"local_service_id":"svc_old","desired_state":"running"}"#,
+            )
+            .unwrap();
+            let data = home.path().join("appdata/services/svc_old");
+            fs::create_dir_all(&data).unwrap();
+            fs::write(data.join("keep.txt"), "user data").unwrap();
+        }
+        let upgraded_manifest = home.path().join("upgraded.service.yaml");
+        fs::write(&upgraded_manifest, &manifest).unwrap();
+        run_cli(binary, home.path(), &["migrate"]);
+        let daemon = start_daemon(binary, home.path());
+        let inspect = run_cli(binary, home.path(), &["service", "inspect", "demo"]);
+        assert!(
+            inspect.stdout.contains("configuration error"),
+            "{}",
+            inspect.stdout
+        );
+        assert!(inspect.stdout.contains("run-compatible"));
+        assert!(try_run_cli(binary, home.path(), &["service", "start", "demo"]).is_none());
+        let entries = fs::read_dir(home.path().join("services"))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(entries.len(), 1);
+        let id = entries[0].file_name();
+        let data = home
+            .path()
+            .join("appdata/services")
+            .join(&id)
+            .join("keep.txt");
+        run_cli(
+            binary,
+            home.path(),
+            &[
+                "service",
+                "apply",
+                "demo",
+                upgraded_manifest.to_str().unwrap(),
+                "--yes",
+            ],
+        );
+        assert_eq!(fs::read_to_string(&data).unwrap(), "user data");
+        assert!(
+            !fs::read_to_string(entries[0].path().join("service.yaml"))
+                .unwrap()
+                .contains("mode:")
+        );
+        assert!(
+            !fs::read_to_string(entries[0].path().join("state.json"))
+                .unwrap()
+                .contains("configuration_error")
+        );
+        assert_eq!(
+            fs::read_dir(home.path().join("services")).unwrap().count(),
+            1
+        );
+        drop(daemon);
+        let _restarted = start_daemon(binary, home.path());
+        let inspect = run_cli(binary, home.path(), &["service", "inspect", "demo"]);
+        assert!(
+            inspect.stdout.contains("\"phase\": \"stopped\""),
+            "{}",
+            inspect.stdout
+        );
+    }
 }
 
 fn legacy_fungi_bin() -> &'static Path {
@@ -549,6 +685,7 @@ fn reserve_udp_port() -> u16 {
 }
 
 fn start_daemon(binary: &Path, fungi_dir: &Path) -> RunningDaemon {
+    let stderr_path = fungi_dir.join("test-daemon.stderr");
     let mut child = Command::new(binary)
         .arg("--fungi-dir")
         .arg(fungi_dir)
@@ -556,22 +693,31 @@ fn start_daemon(binary: &Path, fungi_dir: &Path) -> RunningDaemon {
         .arg("--exit-on-stdin-close")
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(fs::File::create(&stderr_path).unwrap())
         .spawn()
         .unwrap();
     let stdin = child.stdin.take().unwrap();
-    let daemon = RunningDaemon {
+    let mut daemon = RunningDaemon {
         child,
         _stdin: stdin,
     };
 
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
+        if let Some(status) = daemon.child.try_wait().unwrap() {
+            panic!(
+                "daemon exited with {status}: {}",
+                fs::read_to_string(&stderr_path).unwrap()
+            );
+        }
         if try_run_cli(binary, fungi_dir, &["info", "version"]).is_some() {
             return daemon;
         }
         if Instant::now() >= deadline {
-            panic!("daemon did not become ready");
+            panic!(
+                "daemon did not become ready: {}",
+                fs::read_to_string(&stderr_path).unwrap()
+            );
         }
         thread::sleep(Duration::from_millis(100));
     }

@@ -8,7 +8,7 @@ default-run = "fungi"
 
 [features]
 default = ["wasi"]
-wasi = ["dep:wasmtime-cli"]
+wasi = ["dep:rustls", "dep:wasmtime-cli"]
 
 [dependencies]
 log = { workspace = true }
@@ -34,6 +34,7 @@ futures = { workspace = true }
 interprocess = { workspace = true }
 rand = { workspace = true }
 anyhow = { workspace = true }
+rustls = { workspace = true, optional = true, features = ["ring"] }
 wasmtime-cli = { workspace = true, optional = true }
 
 [dev-dependencies]

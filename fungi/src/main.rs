@@ -17,9 +17,17 @@ fn main() -> Result<()> {
         #[cfg(feature = "wasi")]
         // wasmtime commands
         // env_logger and tokio runtime have been initialized in wasmtime commands
-        Commands::Run(c) => c.execute()?,
-        #[cfg(feature = "wasi")]
-        Commands::Serve(c) => c.execute()?,
+        Commands::Run(c) => {
+            rustls::crypto::ring::default_provider()
+                .install_default()
+                .map_err(|_| {
+                    anyhow::anyhow!(
+                        "Rustls crypto provider was initialized before Wasmtime startup"
+                    )
+                })?;
+            c.execute()
+                .map_err(|error| anyhow::Error::from_boxed(error.into_boxed_dyn_error()))?
+        }
 
         // fungi commands
         Commands::Daemon(args) => block_on(fungi_daemon::execute(fungi_args.common.clone(), args))?,
@@ -55,7 +63,7 @@ fn main() -> Result<()> {
 
 fn run_migration_preflight(fungi_args: &FungiArgs) -> Result<()> {
     #[cfg(feature = "wasi")]
-    if matches!(&fungi_args.command, Commands::Run(_) | Commands::Serve(_)) {
+    if matches!(&fungi_args.command, Commands::Run(_)) {
         return Ok(());
     }
 
