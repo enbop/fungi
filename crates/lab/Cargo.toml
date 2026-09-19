@@ -14,10 +14,10 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
-clap = { workspace = true }
+clap = { workspace = true, features = ["env"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sysinfo = { workspace = true }
+toml = { workspace = true }
 
-[dev-dependencies]
 tempfile = { workspace = true }

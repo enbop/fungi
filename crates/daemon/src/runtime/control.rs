@@ -50,6 +50,7 @@ pub struct AppliedService {
     pub instance: ServiceInstance,
     pub previous_manifest: Option<ServiceManifest>,
     pub desired_state: DesiredServiceState,
+    pub outcome: ServiceApplyOutcome,
 }
 
 impl RuntimeControl {
@@ -112,7 +113,11 @@ impl RuntimeControl {
     }
 
     pub async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
-        Ok(self.apply(manifest).await?.instance)
+        let applied = self.apply(manifest).await?;
+        if let Some(message) = applied.outcome.failure_summary() {
+            bail!(message);
+        }
+        Ok(applied.instance)
     }
 
     pub async fn apply(&self, manifest: &ServiceManifest) -> Result<AppliedService> {
@@ -165,6 +170,11 @@ impl RuntimeControl {
             || previous_manifest.is_some()
             || previous_runtime.is_some()
             || failed_service.is_some();
+        let manifest_change = match previous_manifest.as_ref() {
+            None => ServiceManifestChange::Created,
+            Some(previous) if previous == manifest => ServiceManifestChange::Unchanged,
+            Some(_) => ServiceManifestChange::Changed,
+        };
 
         if let Some(previous_manifest) = previous_manifest.as_ref() {
             ensure_definition_id_compatible(previous_manifest, manifest)?;
@@ -251,14 +261,58 @@ impl RuntimeControl {
             .insert(manifest.name.clone(), manifest.clone());
 
         let mut instance = enrich_instance_from_manifest(instance, manifest);
+        let mut workload_action = ServiceWorkloadAction::None;
+        let mut failure = None;
         if desired_state == DesiredServiceState::Running {
-            self.start_locked(manifest.runtime, &manifest.name).await?;
-            instance = self
-                .inspect_locked(manifest.runtime, &manifest.name)
-                .await?;
+            match self.start_locked(manifest.runtime, &manifest.name).await {
+                Ok(()) => {
+                    if manifest.runtime != RuntimeKind::External {
+                        workload_action = ServiceWorkloadAction::Restarted;
+                    }
+                    match self.inspect_locked(manifest.runtime, &manifest.name).await {
+                        Ok(inspected) => instance = inspected,
+                        Err(error) => {
+                            instance.status = ServiceStatus::unknown();
+                            failure = Some(ServiceApplyFailure {
+                                stage: ServiceApplyFailureStage::FinalInspection,
+                                message: error.to_string(),
+                            });
+                        }
+                    }
+                }
+                Err(error) => {
+                    let mut message = error.to_string();
+                    match self.inspect_locked(manifest.runtime, &manifest.name).await {
+                        Ok(inspected) => {
+                            if inspected.status.is_running()
+                                && manifest.runtime != RuntimeKind::External
+                            {
+                                workload_action = ServiceWorkloadAction::Restarted;
+                            }
+                            instance = inspected;
+                        }
+                        Err(inspect_error) => {
+                            instance.status = ServiceStatus::unknown();
+                            message.push_str(&format!(
+                                "; failed to inspect final service state: {inspect_error}"
+                            ));
+                        }
+                    }
+                    failure = Some(ServiceApplyFailure {
+                        stage: ServiceApplyFailureStage::Restart,
+                        message,
+                    });
+                }
+            }
         }
 
         Ok(AppliedService {
+            outcome: ServiceApplyOutcome {
+                manifest_change,
+                workload_action,
+                final_status: instance.status.clone(),
+                failure,
+            },
             instance,
             previous_manifest,
             desired_state,
@@ -299,10 +353,13 @@ impl RuntimeControl {
         fungi_home: &Path,
         policy: &ManifestResolutionPolicy,
     ) -> Result<ServiceInstance> {
-        Ok(self
+        let applied = self
             .apply_manifest_yaml(content, base_dir, fungi_home, policy)
-            .await?
-            .instance)
+            .await?;
+        if let Some(message) = applied.outcome.failure_summary() {
+            bail!(message);
+        }
+        Ok(applied.instance)
     }
 
     pub fn resolve_manifest_yaml(

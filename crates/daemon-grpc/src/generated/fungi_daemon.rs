@@ -423,6 +423,8 @@ pub struct GetServiceLogsRequest {
 pub struct ServiceInstanceResponse {
     #[prost(string, tag = "1")]
     pub instance_json: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub apply_outcome_json: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ServiceLogsResponse {
@@ -576,6 +578,8 @@ pub struct RemoteServiceControlResponse {
     pub service_name: ::prost::alloc::string::String,
     #[prost(bool, tag = "2")]
     pub forgotten_locally: bool,
+    #[prost(string, tag = "3")]
+    pub apply_outcome_json: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AttachServiceAccessRequest {

@@ -26,6 +26,38 @@ pub use tonic::{Request, Response, Status};
 
 type PingEventSendError = mpsc::error::SendError<Result<PingPeerEvent, Status>>;
 
+fn service_apply_failure_status(
+    service_name: String,
+    outcome: fungi_daemon::ServiceApplyOutcome,
+) -> Status {
+    let response = fungi_daemon::ServiceControlResponse::applied(None, service_name, outcome);
+    let message = response
+        .error
+        .as_ref()
+        .map(|error| error.message.clone())
+        .unwrap_or_else(|| "service apply completed partially".to_string());
+    match serde_json::to_vec(&response) {
+        Ok(details) => Status::with_details(tonic::Code::Internal, message, details.into()),
+        Err(error) => Status::internal(format!(
+            "{message}; failed to serialize partial apply details: {error}"
+        )),
+    }
+}
+
+pub fn decode_service_apply_failure_status(
+    status: &Status,
+) -> Option<fungi_daemon::ServiceControlResponse> {
+    serde_json::from_slice::<fungi_daemon::ServiceControlResponse>(status.details())
+        .ok()
+        .filter(|response| {
+            !response.ok
+                && response
+                    .apply_outcome
+                    .as_ref()
+                    .is_some_and(|outcome| outcome.failure.is_some())
+        })
+}
+
 fn now_unix_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -836,9 +868,9 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         request: Request<PullServiceRequest>,
     ) -> Result<Response<ServiceInstanceResponse>, Status> {
         let req = request.into_inner();
-        let instance = self
+        let applied = self
             .inner
-            .pull_service_from_manifest_yaml(
+            .apply_service_from_manifest_yaml(
                 req.manifest_yaml,
                 if req.manifest_base_dir.trim().is_empty() {
                     None
@@ -849,9 +881,21 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .await
             .map_err(|e| Status::internal(format!("Failed to pull service: {e}")))?;
 
-        let instance_json = serde_json::to_string(&instance)
+        if applied.outcome.failure.is_some() {
+            return Err(service_apply_failure_status(
+                applied.instance.name,
+                applied.outcome,
+            ));
+        }
+
+        let instance_json = serde_json::to_string(&applied.instance)
             .map_err(|e| Status::internal(format!("Failed to serialize service instance: {e}")))?;
-        Ok(Response::new(ServiceInstanceResponse { instance_json }))
+        let apply_outcome_json = serde_json::to_string(&applied.outcome)
+            .map_err(|e| Status::internal(format!("Failed to serialize apply outcome: {e}")))?;
+        Ok(Response::new(ServiceInstanceResponse {
+            instance_json,
+            apply_outcome_json,
+        }))
     }
 
     async fn start_service(
@@ -937,7 +981,10 @@ impl FungiDaemon for FungiDaemonRpcImpl {
         };
         let instance_json = serde_json::to_string(&instance)
             .map_err(|e| Status::internal(format!("Failed to serialize service instance: {e}")))?;
-        Ok(Response::new(ServiceInstanceResponse { instance_json }))
+        Ok(Response::new(ServiceInstanceResponse {
+            instance_json,
+            apply_outcome_json: String::new(),
+        }))
     }
 
     async fn get_service_logs(
@@ -1102,12 +1149,31 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .await
             .map_err(|e| Status::internal(format!("Failed to pull remote service: {e}")))?;
 
+        let service_name = response
+            .service
+            .as_ref()
+            .map(|service| service.name.clone())
+            .unwrap_or_default();
+        if let Some(outcome) = response
+            .apply_outcome
+            .as_ref()
+            .filter(|outcome| outcome.failure.is_some())
+        {
+            return Err(service_apply_failure_status(service_name, outcome.clone()));
+        }
+
+        let apply_outcome_json = response
+            .apply_outcome
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|e| Status::internal(format!("Failed to serialize apply outcome: {e}")))?
+            .unwrap_or_default();
+
         Ok(Response::new(RemoteServiceControlResponse {
-            service_name: response
-                .service
-                .map(|service| service.name)
-                .unwrap_or_default(),
+            service_name,
             forgotten_locally: response.forgotten_locally,
+            apply_outcome_json,
         }))
     }
 
@@ -1131,6 +1197,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 .map(|service| service.name)
                 .unwrap_or_default(),
             forgotten_locally: response.forgotten_locally,
+            apply_outcome_json: String::new(),
         }))
     }
 
@@ -1174,6 +1241,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 .map(|service| service.name)
                 .unwrap_or_default(),
             forgotten_locally: response.forgotten_locally,
+            apply_outcome_json: String::new(),
         }))
     }
 
@@ -1197,6 +1265,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 .map(|service| service.name)
                 .unwrap_or_default(),
             forgotten_locally: response.forgotten_locally,
+            apply_outcome_json: String::new(),
         }))
     }
 
@@ -1220,6 +1289,7 @@ impl FungiDaemon for FungiDaemonRpcImpl {
                 .map(|service| service.name)
                 .unwrap_or_default(),
             forgotten_locally: response.forgotten_locally,
+            apply_outcome_json: String::new(),
         }))
     }
 
@@ -1468,5 +1538,25 @@ mod tests {
             system_time_to_i64(i64_to_system_time(1_752_299_892).unwrap()),
             1_752_299_892
         );
+    }
+
+    #[test]
+    fn partial_apply_status_preserves_structured_failure_details() {
+        let outcome = fungi_daemon::ServiceApplyOutcome {
+            manifest_change: fungi_daemon::ServiceManifestChange::Changed,
+            workload_action: fungi_daemon::ServiceWorkloadAction::None,
+            final_status: fungi_daemon::ServiceStatus::stopped(),
+            failure: Some(fungi_daemon::ServiceApplyFailure {
+                stage: fungi_daemon::ServiceApplyFailureStage::Restart,
+                message: "launcher failed".to_string(),
+            }),
+        };
+
+        let status = service_apply_failure_status("demo".to_string(), outcome.clone());
+        let decoded = decode_service_apply_failure_status(&status).unwrap();
+
+        assert_eq!(status.code(), tonic::Code::Internal);
+        assert_eq!(decoded.service.unwrap().name, "demo");
+        assert_eq!(decoded.apply_outcome.unwrap(), outcome);
     }
 }

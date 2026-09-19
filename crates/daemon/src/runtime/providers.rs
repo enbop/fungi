@@ -472,7 +472,7 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
 
         refresh_child_state(state)?;
         if state.child.is_some() {
-            bail!("wasmtime service is already running: {handle}");
+            return Ok(());
         }
 
         let mut command = build_wasmtime_command(&self.launcher_path, &self.fungi_home, state)?;

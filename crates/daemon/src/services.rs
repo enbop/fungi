@@ -13,16 +13,16 @@ use libp2p::PeerId;
 use parking_lot::Mutex;
 
 use crate::{
-    DeviceService, DeviceServiceSnapshot, ManifestResolutionPolicy, ServiceInstance, ServiceLogs,
-    ServiceLogsOptions,
+    DeviceService, DeviceServiceSnapshot, ManifestResolutionPolicy, ServiceApplyOutcome,
+    ServiceInstance, ServiceLogs, ServiceLogsOptions,
     controls::{
         DockerControl, ServiceControlProtocolControl, ServiceDiscoveryControl, TcpTunnelingControl,
     },
     runtime::RuntimeControl,
     service_endpoints::{
-        sync_service_endpoint_listeners_by_name, sync_service_endpoint_listeners_for_manifest,
+        sync_applied_service_endpoint_listeners, sync_service_endpoint_listeners_by_name,
+        sync_service_endpoint_listeners_for_manifest,
     },
-    service_state::DesiredServiceState,
 };
 
 const REMOTE_SERVICE_REFRESH_TIMEOUT: Duration = Duration::from_secs(15);
@@ -217,6 +217,11 @@ pub struct DeviceServices {
     services: Services,
 }
 
+pub(crate) struct AppliedServiceHandle {
+    pub service: ServiceHandle,
+    pub outcome: Option<ServiceApplyOutcome>,
+}
+
 impl DeviceServices {
     pub fn device_id(&self) -> PeerId {
         self.device_id
@@ -332,10 +337,28 @@ impl DeviceServices {
         manifest_yaml: String,
         manifest_base_dir: Option<PathBuf>,
     ) -> Result<ServiceHandle> {
+        let applied = self
+            .apply_manifest_yaml_with_outcome(manifest_yaml, manifest_base_dir)
+            .await?;
+        if let Some(message) = applied
+            .outcome
+            .as_ref()
+            .and_then(ServiceApplyOutcome::failure_summary)
+        {
+            anyhow::bail!(message);
+        }
+        Ok(applied.service)
+    }
+
+    pub(crate) async fn apply_manifest_yaml_with_outcome(
+        &self,
+        manifest_yaml: String,
+        manifest_base_dir: Option<PathBuf>,
+    ) -> Result<AppliedServiceHandle> {
         if self.is_local() {
             let fungi_home = self.services.inner.fungi_dir.clone();
             let base_dir = manifest_base_dir.unwrap_or_else(|| fungi_home.clone());
-            let applied = self
+            let mut applied = self
                 .services
                 .inner
                 .local
@@ -347,22 +370,16 @@ impl DeviceServices {
                     &ManifestResolutionPolicy,
                 )
                 .await?;
-            if applied.desired_state == DesiredServiceState::Running {
-                sync_service_endpoint_listeners_for_manifest(
-                    &self.services.inner.local.tcp_tunneling,
-                    applied.previous_manifest.as_ref(),
-                    false,
-                )
-                .await?;
-                sync_service_endpoint_listeners_by_name(
-                    &self.services.inner.local.runtime,
-                    &self.services.inner.local.tcp_tunneling,
-                    &applied.instance.name,
-                    true,
-                )
-                .await?;
-            }
-            Ok(self.service(applied.instance.name))
+            sync_applied_service_endpoint_listeners(
+                &self.services.inner.local.runtime,
+                &self.services.inner.local.tcp_tunneling,
+                &mut applied,
+            )
+            .await;
+            Ok(AppliedServiceHandle {
+                service: self.service(applied.instance.name),
+                outcome: Some(applied.outcome),
+            })
         } else {
             let response = self
                 .services
@@ -378,7 +395,10 @@ impl DeviceServices {
                 .ok_or_else(|| {
                     anyhow::anyhow!("service apply response did not include a service")
                 })?;
-            Ok(self.service(service_name))
+            Ok(AppliedServiceHandle {
+                service: self.service(service_name),
+                outcome: response.apply_outcome,
+            })
         }
     }
 

@@ -8,13 +8,13 @@ use fungi_config::runtime::Runtime as RuntimeConfig;
 use libp2p::PeerId;
 
 use crate::runtime::{
-    DeviceService, DeviceServiceSnapshot, RuntimeKind, ServiceInstance, ServiceLogs,
-    ServiceLogsOptions, ServiceManifest,
+    AppliedService, DeviceService, DeviceServiceSnapshot, RuntimeKind, ServiceInstance,
+    ServiceLogs, ServiceLogsOptions, ServiceManifest,
 };
 use crate::service_endpoints::{
-    sync_service_endpoint_listeners_by_name, sync_service_endpoint_listeners_for_manifest,
+    sync_applied_service_endpoint_listeners, sync_service_endpoint_listeners_by_name,
+    sync_service_endpoint_listeners_for_manifest,
 };
-use crate::service_state::DesiredServiceState;
 use crate::{
     FungiControl, LocalRuntimeStatus, ManifestResolutionPolicy, NodeCapabilities,
     ResolvedServiceRecipe, ServiceControlResponse, ServiceRecipeDetail, ServiceRecipeRuntime,
@@ -109,15 +109,11 @@ impl FungiControl {
     }
 
     pub async fn pull_service(&self, manifest: ServiceManifest) -> Result<ServiceInstance> {
-        let applied = self.services().runtime().apply(&manifest).await?;
-        if applied.desired_state == DesiredServiceState::Running {
-            self.sync_service_endpoint_listeners_for_manifest(
-                applied.previous_manifest.as_ref(),
-                false,
-            )
-            .await?;
-            self.sync_service_endpoint_listeners_by_name(&applied.instance.name, true)
-                .await?;
+        let mut applied = self.services().runtime().apply(&manifest).await?;
+        self.record_applied_service_listener_failure(&mut applied)
+            .await;
+        if let Some(message) = applied.outcome.failure_summary() {
+            anyhow::bail!(message);
         }
         Ok(applied.instance)
     }
@@ -127,24 +123,40 @@ impl FungiControl {
         manifest_yaml: String,
         manifest_base_dir: Option<PathBuf>,
     ) -> Result<ServiceInstance> {
+        let applied = self
+            .apply_service_from_manifest_yaml(manifest_yaml, manifest_base_dir)
+            .await?;
+        if let Some(message) = applied.outcome.failure_summary() {
+            anyhow::bail!(message);
+        }
+        Ok(applied.instance)
+    }
+
+    pub async fn apply_service_from_manifest_yaml(
+        &self,
+        manifest_yaml: String,
+        manifest_base_dir: Option<PathBuf>,
+    ) -> Result<AppliedService> {
         let fungi_home = self.fungi_home_dir();
         let base_dir = manifest_base_dir.unwrap_or_else(|| fungi_home.clone());
         let policy = self.manifest_resolution_policy();
-        let applied = self
+        let mut applied = self
             .services()
             .runtime()
             .apply_manifest_yaml(&manifest_yaml, &base_dir, &fungi_home, &policy)
             .await?;
-        if applied.desired_state == DesiredServiceState::Running {
-            self.sync_service_endpoint_listeners_for_manifest(
-                applied.previous_manifest.as_ref(),
-                false,
-            )
-            .await?;
-            self.sync_service_endpoint_listeners_by_name(&applied.instance.name, true)
-                .await?;
-        }
-        Ok(applied.instance)
+        self.record_applied_service_listener_failure(&mut applied)
+            .await;
+        Ok(applied)
+    }
+
+    async fn record_applied_service_listener_failure(&self, applied: &mut AppliedService) {
+        sync_applied_service_endpoint_listeners(
+            self.services().runtime(),
+            self.services().tcp_tunneling(),
+            applied,
+        )
+        .await;
     }
 
     pub async fn start_service(&self, runtime: RuntimeKind, name: String) -> Result<()> {
@@ -433,16 +445,17 @@ impl FungiControl {
         peer_id: PeerId,
         manifest_yaml: String,
     ) -> Result<ServiceControlResponse> {
-        let service = self
+        let applied = self
             .devices()
             .peer(peer_id)
             .services()
-            .apply_manifest_yaml(manifest_yaml, None)
+            .apply_manifest_yaml_with_outcome(manifest_yaml, None)
             .await?;
-        Ok(ServiceControlResponse::success(
-            None,
-            service.name().to_string(),
-        ))
+        let service_name = applied.service.name().to_string();
+        Ok(match applied.outcome {
+            Some(outcome) => ServiceControlResponse::applied(None, service_name, outcome),
+            None => ServiceControlResponse::success(None, service_name),
+        })
     }
 
     pub async fn remote_start_service(

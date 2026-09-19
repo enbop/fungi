@@ -2,9 +2,48 @@ use anyhow::Result;
 use fungi_config::tcp_tunneling::ListeningRule;
 
 use crate::{
-    RuntimeControl, ServiceManifest, controls::TcpTunnelingControl,
-    runtime::service_expose_endpoint_bindings,
+    AppliedService, RuntimeControl, ServiceApplyFailureStage, ServiceManifest,
+    controls::TcpTunnelingControl, runtime::service_expose_endpoint_bindings,
+    service_state::DesiredServiceState,
 };
+
+pub(crate) async fn sync_applied_service_endpoint_listeners(
+    runtime: &RuntimeControl,
+    tcp_tunneling: &TcpTunnelingControl,
+    applied: &mut AppliedService,
+) {
+    if applied.desired_state != DesiredServiceState::Running || applied.outcome.failure.is_some() {
+        return;
+    }
+
+    if let Err(error) = sync_service_endpoint_listeners_for_manifest(
+        tcp_tunneling,
+        applied.previous_manifest.as_ref(),
+        false,
+    )
+    .await
+    {
+        applied.outcome.record_failure(
+            ServiceApplyFailureStage::EndpointListeners,
+            format!("failed to update endpoint listeners: {error}"),
+        );
+        return;
+    }
+
+    if let Err(error) = sync_service_endpoint_listeners_by_name(
+        runtime,
+        tcp_tunneling,
+        &applied.instance.name,
+        true,
+    )
+    .await
+    {
+        applied.outcome.record_failure(
+            ServiceApplyFailureStage::EndpointListeners,
+            format!("failed to publish endpoint listeners: {error}"),
+        );
+    }
+}
 
 pub(crate) async fn sync_service_endpoint_listeners_by_name(
     runtime: &RuntimeControl,

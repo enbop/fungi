@@ -1,585 +1,395 @@
-use anyhow::{Context, Result, bail};
+use crate::{
+    adapter::{self, quote},
+    cli::StartArgs,
+    process::{ChildGuard, ProcessId},
+    state::{Lab, ProcessCommand, STATE_FILE, Target, TrustMode},
+    support::{get_fungi_binary_path, reserve_tcp_port, reserve_udp_port},
+};
+use anyhow::{Context, Result, anyhow, bail};
+use serde_json::json;
 use std::{
-    fs::{self, File, OpenOptions},
-    path::{Path, PathBuf},
+    ffi::OsString,
+    fs,
+    path::Path,
     process::{Command, Stdio},
-    thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-use crate::cli::{ManagerArgs, StartArgs, StatusArgs};
-use crate::process::{
-    detach_process_group, get_fungi_binary_path, process_is_running, reserve_tcp_port,
-    reserve_udp_port, stop_pid,
-};
-use crate::state::{
-    LabState, NodeCommand, NodeName, NodeState, ProcessCommand, RelayState, TrustMode,
-};
-use crate::util::{
-    circuit_addr, default_root, display_path_arg, epoch_secs, find_repo_root, print_process,
-    print_started_summary, read_state, run_cli_capture, run_cli_status, shell_quote,
-    shell_quote_path, wait_for_state, wait_peer_id, wait_relay_peer_id_from_log, write_node_config,
-    write_state,
-};
+pub(crate) const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+const ALL: [Target; 3] = [Target::Relay, Target::A, Target::B];
+const STOP_ORDER: [Target; 3] = [Target::B, Target::A, Target::Relay];
 
-const STATE_FILE: &str = crate::util::STATE_FILE;
-const MANAGER_LOG: &str = "manager.log";
-const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
-const STATE_VERSION: u32 = 1;
-
-#[derive(Clone, Debug)]
-pub struct LabOptions {
-    pub repo: PathBuf,
-    pub fungi_bin: PathBuf,
-    pub root: PathBuf,
-    pub node_a_dir: PathBuf,
-    pub node_b_dir: PathBuf,
-    pub ttl_secs: u64,
-    pub trust: TrustMode,
-    pub replace: bool,
+pub(crate) fn start(root: &Path, args: StartArgs) -> Result<()> {
+    let existing = root.join(STATE_FILE).exists();
+    let mut lab = if existing {
+        Lab::load(root)?
+    } else {
+        let bin = args
+            .fungi_bin
+            .clone()
+            .map_or_else(get_fungi_binary_path, Ok)?
+            .canonicalize()?;
+        Lab::new(root, bin, reserve_tcp_port()?, reserve_udp_port()?)
+    };
+    for target in ALL {
+        if lab.running(target)? {
+            bail!(
+                "{} is already running; stop this lab before starting it again",
+                target.label()
+            );
+        }
+    }
+    if let Some(bin) = args.fungi_bin {
+        lab.state.fungi_bin = bin.canonicalize()?;
+    }
+    lab.save()?;
+    lab.start_targets(&ALL, Some(args.trust), Instant::now() + STARTUP_TIMEOUT)?;
+    println!("Lab started. Processes run until stop/clean; there is no automatic expiry.");
+    print_status(&lab, false)
 }
 
-#[derive(Clone, Debug)]
-pub struct LocalLab {
-    state: LabState,
-}
-
-impl LocalLab {
-    pub fn start(options: LabOptions) -> Result<Self> {
-        let root = options.root.clone();
-        start_background_lab(StartArgs {
-            repo: Some(options.repo),
-            fungi_bin: Some(options.fungi_bin),
-            root: Some(options.root),
-            node_a_dir: Some(options.node_a_dir),
-            node_b_dir: Some(options.node_b_dir),
-            ttl_secs: options.ttl_secs,
-            trust: options.trust,
-            no_replace: !options.replace,
-        })?;
-        let state = read_state(&root)?;
-        Ok(Self { state })
+impl Lab {
+    // These exact arguments also identify processes during later stop/status commands.
+    pub(crate) fn args(&self, target: Target) -> Vec<OsString> {
+        if target == Target::Relay {
+            [
+                "daemon",
+                "relay-server",
+                "--public-ip",
+                "127.0.0.1",
+                "--tcp-listen-port",
+                &self.state.relay_tcp_port.to_string(),
+                "--udp-listen-port",
+                &self.state.relay_udp_port.to_string(),
+            ]
+            .into_iter()
+            .map(OsString::from)
+            .collect()
+        } else {
+            vec![
+                "--fungi-dir".into(),
+                self.dir(target).into_os_string(),
+                "daemon".into(),
+            ]
+        }
     }
 
-    pub fn status(root: &Path) -> Result<Self> {
-        Ok(Self {
-            state: read_state(root)?,
+    pub(crate) fn running(&self, target: Target) -> Result<bool> {
+        self.node(target)
+            .process
+            .map_or(Ok(false), |process| {
+                process.running(&self.state.fungi_bin, &self.args(target))
+            })
+            .with_context(|| format!("cannot identify {}", target.label()))
+    }
+
+    pub(crate) fn stop(&mut self, targets: &[Target]) -> Result<()> {
+        let mut errors = Vec::new();
+        for &target in targets {
+            let result = (|| {
+                if let Some(process) = self.node(target).process {
+                    process.stop(&self.state.fungi_bin, &self.args(target))?;
+                }
+                self.node_mut(target).process = None;
+                self.save()
+            })();
+            if let Err(error) = result {
+                errors.push(format!("{}: {error:#}", target.label()));
+            }
+        }
+        if !errors.is_empty() {
+            bail!(
+                "some lab processes could not be stopped; state retained:\n{}",
+                errors.join("\n")
+            );
+        }
+        Ok(())
+    }
+
+    pub(crate) fn manage(&mut self, target: Target, operation: ProcessCommand) -> Result<()> {
+        match operation {
+            ProcessCommand::Stop => self.stop(&[target])?,
+            ProcessCommand::Start if self.running(target)? => {
+                println!("{} is already running.", target.label());
+            }
+            ProcessCommand::Start | ProcessCommand::Restart => {
+                if matches!(operation, ProcessCommand::Restart) {
+                    self.stop(&[target])?;
+                }
+                self.start_targets(&[target], None, Instant::now() + STARTUP_TIMEOUT)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn start_targets(
+        &mut self,
+        targets: &[Target],
+        trust: Option<TrustMode>,
+        deadline: Instant,
+    ) -> Result<()> {
+        let mut started: Vec<(Target, ChildGuard)> = Vec::new();
+        let result = (|| {
+            for &target in targets {
+                self.launch(target, &mut started, deadline)?;
+            }
+            if let Some(mode) = trust {
+                self.add_devices(deadline)?;
+                self.trust(mode, deadline)?;
+            }
+            self.save()
+        })();
+        if let Err(error) = result {
+            let mut cleanup_errors = Vec::new();
+            for (target, child) in started.iter_mut().rev() {
+                match child.stop() {
+                    Ok(()) => self.node_mut(*target).process = None,
+                    Err(error) => cleanup_errors.push(format!("{}: {error:#}", target.label())),
+                }
+            }
+            if let Err(error) = self.save() {
+                cleanup_errors.push(format!("state: {error:#}"));
+            }
+            let outcome = if cleanup_errors.is_empty() {
+                "startup rollback completed".to_string()
+            } else {
+                format!(
+                    "rollback incomplete; retain state/logs:\n{}",
+                    cleanup_errors.join("\n")
+                )
+            };
+            return Err(anyhow!("{error:#}\n{outcome}"));
+        }
+        for (_, child) in started {
+            child.release();
+        }
+        Ok(())
+    }
+
+    fn launch(
+        &mut self,
+        target: Target,
+        started: &mut Vec<(Target, ChildGuard)>,
+        deadline: Instant,
+    ) -> Result<()> {
+        if Instant::now() >= deadline {
+            bail!("lab startup timed out");
+        }
+        if self.running(target)? {
+            bail!("{} is already running", target.label());
+        }
+        let dir = self.dir(target);
+        fs::create_dir_all(&dir).with_context(|| format!("cannot create {}", dir.display()))?;
+        if target != Target::Relay {
+            // Do not reconfigure or duplicate an unrecorded daemon using this fungi-dir.
+            if adapter::cli(
+                &self.state.fungi_bin,
+                &dir,
+                &["info", "id"],
+                None,
+                deadline.min(Instant::now() + Duration::from_secs(3)),
+            )
+            .is_ok()
+            {
+                bail!(
+                    "an unrecorded daemon is already using {}; refusing to replace it",
+                    dir.display()
+                );
+            }
+            adapter::cli(&self.state.fungi_bin, &dir, &["init"], None, deadline)?;
+            adapter::configure_node(&dir, &self.relay_addresses())?;
+        }
+        let log = self.log(target);
+        let output = adapter::open_log(&log)?;
+        let offset = output.metadata()?.len();
+        let mut command = Command::new(&self.state.fungi_bin);
+        command
+            .args(self.args(target))
+            .stdin(Stdio::null())
+            .stdout(output.try_clone()?)
+            .stderr(output);
+        if target == Target::Relay {
+            command.env("HOME", &dir);
+        }
+        let child = ChildGuard::spawn(&mut command)?;
+        started.push((target, child));
+        let child = &mut started.last_mut().unwrap().1;
+        self.node_mut(target).process = Some(ProcessId::capture(child.child().id())?);
+        self.save()?; // Journal before readiness checks; later commands can recover interrupted starts.
+        let id = if target == Target::Relay {
+            adapter::wait_relay(&log, offset, child, deadline)?
+        } else {
+            adapter::wait_node(&self.state.fungi_bin, &dir, child, deadline)?
+        };
+        let previous = &self.node(target).peer_id;
+        if !previous.is_empty() && previous != &id {
+            bail!(
+                "{} identity changed; stop/clean before reusing this lab",
+                target.label()
+            );
+        }
+        self.node_mut(target).peer_id = id;
+        self.save()?;
+        Ok(())
+    }
+
+    fn add_devices(&self, deadline: Instant) -> Result<()> {
+        let relay = &self.relay_addresses()[0];
+        for (node, other, name) in [(Target::A, Target::B, "b"), (Target::B, Target::A, "a")] {
+            let peer = &self.node(other).peer_id;
+            let address = format!("{relay}/p2p-circuit/p2p/{peer}");
+            adapter::cli(
+                &self.state.fungi_bin,
+                &self.dir(node),
+                &["device", "add", name, peer, "--addr", &address],
+                None,
+                deadline,
+            )?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn trust(&self, mode: TrustMode, deadline: Instant) -> Result<()> {
+        for target in [Target::A, Target::B] {
+            if !self.running(target)? {
+                bail!("both nodes must be running to configure trust");
+            }
+        }
+        for (node, other, grant) in [
+            (
+                Target::A,
+                Target::B,
+                matches!(mode, TrustMode::Both | TrustMode::ATrustsB),
+            ),
+            (
+                Target::B,
+                Target::A,
+                matches!(mode, TrustMode::Both | TrustMode::BTrustsA),
+            ),
+        ] {
+            let dir = self.dir(node);
+            let peer = &self.node(other).peer_id;
+            if grant {
+                println!(
+                    "{} ({}) grants service-management access to {peer} until revoked.",
+                    node.label(),
+                    self.node(node).peer_id
+                );
+                println!(
+                    "{}",
+                    adapter::cli(
+                        &self.state.fungi_bin,
+                        &dir,
+                        &["security", "show"],
+                        None,
+                        deadline
+                    )?
+                );
+                println!(
+                    "Rollback: fungi-lab --lab-dir {} trust none",
+                    quote(self.root.to_string_lossy())
+                );
+            }
+            adapter::cli(
+                &self.state.fungi_bin,
+                &dir,
+                &["device", if grant { "trust" } else { "untrust" }, peer],
+                if grant { Some("y\n") } else { None },
+                deadline,
+            )
+            .context("trust update may be partial; inspect both nodes with device trusted")?;
+        }
+        println!("Trust mode applied: {mode:?}.");
+        Ok(())
+    }
+}
+
+pub(crate) fn clean(root: &Path) -> Result<()> {
+    // Ownership is checked before any process or directory mutation.
+    crate::state::validate_layout(root)?;
+    let mut protected = vec![std::env::current_exe()?];
+    if let Some(home) = std::env::var_os("HOME") {
+        protected.push(home.into());
+    }
+    if root.parent().is_none() || protected.iter().any(|p| p.starts_with(root)) {
+        bail!("refusing to remove a broad/protected lab directory");
+    }
+    // A failed binary lookup can leave only the ownership marker and lock: no process
+    // can have been spawned before the initial state was written.
+    if fs::read_dir(root)?.all(|entry| {
+        entry.is_ok_and(|e| {
+            e.file_name() == ".fungi-lab" || e.file_name() == crate::state::LOCK_FILE
         })
-    }
-
-    pub fn stop(&self) -> Result<()> {
-        stop_lab(&self.state)
-    }
-
-    pub fn node_dir(&self, node: NodeName) -> &Path {
-        match node {
-            NodeName::A => &self.state.node_a.dir,
-            NodeName::B => &self.state.node_b.dir,
-        }
-    }
-
-    pub fn node_peer_id(&self, node: NodeName) -> &str {
-        match node {
-            NodeName::A => &self.state.node_a.peer_id,
-            NodeName::B => &self.state.node_b.peer_id,
-        }
-    }
-
-    pub fn run_cli<I, S>(&self, node: NodeName, args: I) -> Result<String>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        run_cli_capture(
-            &self.state.fungi_bin,
-            &self.state.repo,
-            self.node_dir(node),
-            args,
-            None,
-        )
-    }
-}
-
-pub(crate) fn start_background_lab(args: StartArgs) -> Result<()> {
-    let repo = match args.repo {
-        Some(repo) => repo,
-        None => find_repo_root()?,
-    };
-    let repo = repo.canonicalize().unwrap_or(repo);
-    let fungi_bin = match args.fungi_bin {
-        Some(path) => path,
-        None => get_fungi_binary_path()?,
-    };
-    let fungi_bin = fungi_bin.canonicalize().unwrap_or(fungi_bin);
-    let root = args.root.unwrap_or_else(|| repo.join("target/local-lab"));
-    let node_a_dir = args.node_a_dir.unwrap_or_else(|| repo.join("target/tmp_a"));
-    let node_b_dir = args.node_b_dir.unwrap_or_else(|| repo.join("target/tmp_b"));
-
-    if root.join(STATE_FILE).exists() {
-        let state = read_state(&root)?;
-        if args.no_replace
-            && process_is_running(state.manager_pid, &state.process_spec_for_manager())
-        {
-            bail!("local lab is already running. Use `fungi-lab stop` first.");
-        }
-        stop_lab(&state).context("failed to stop previous local lab; refusing to start over it")?;
-    }
-
-    fs::create_dir_all(&root)?;
-    let manager_log = root.join(MANAGER_LOG);
-    let stdout = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&manager_log)
-        .with_context(|| format!("failed to open {}", manager_log.display()))?;
-    let stderr = stdout
-        .try_clone()
-        .with_context(|| format!("failed to clone {}", manager_log.display()))?;
-
-    let current_exe = std::env::current_exe().context("failed to locate fungi-lab binary")?;
-    let mut command = Command::new(current_exe);
-    command
-        .arg("manager")
-        .arg("--repo")
-        .arg(&repo)
-        .arg("--fungi-bin")
-        .arg(&fungi_bin)
-        .arg("--root")
-        .arg(&root)
-        .arg("--node-a-dir")
-        .arg(&node_a_dir)
-        .arg("--node-b-dir")
-        .arg(&node_b_dir)
-        .arg("--ttl-secs")
-        .arg(args.ttl_secs.to_string())
-        .arg("--trust")
-        .arg(args.trust.as_arg())
-        .stdin(Stdio::null())
-        .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr));
-    detach_process_group(&mut command);
-    let mut child = command
-        .spawn()
-        .context("failed to start fungi-lab manager")?;
-
-    let state = wait_for_state(&root, STARTUP_TIMEOUT).inspect_err(|_| {
-        let _ = child.kill();
-        let _ = child.wait();
-    })?;
-    print_started_summary(&state);
-    Ok(())
-}
-
-pub(crate) fn run_manager(args: ManagerArgs) -> Result<()> {
-    fs::create_dir_all(&args.root)?;
-    let now = epoch_secs();
-    let mut state = LabState {
-        version: STATE_VERSION,
-        repo: args.repo.clone(),
-        root: args.root.clone(),
-        fungi_bin: args.fungi_bin.clone(),
-        manager_pid: Some(std::process::id()),
-        ready: false,
-        created_at_epoch_secs: now,
-        expires_at_epoch_secs: now.saturating_add(args.ttl_secs),
-        trust: args.trust,
-        relay: start_relay(&args)?,
-        node_a: NodeState::empty("a", args.node_a_dir.clone()),
-        node_b: NodeState::empty("b", args.node_b_dir.clone()),
-    };
-    write_state(&state)?;
-
-    state.node_a = start_node(&state, NodeName::A)?;
-    write_state(&state)?;
-    state.node_b = start_node(&state, NodeName::B)?;
-    write_state(&state)?;
-
-    add_lab_devices(&state)?;
-    apply_trust_mode(&state, state.trust)?;
-    state.ready = true;
-    write_state(&state)?;
-
-    loop {
-        thread::sleep(Duration::from_secs(1));
-        if epoch_secs() >= state.expires_at_epoch_secs {
-            let latest = read_state(&state.root).unwrap_or(state.clone());
-            let _ = stop_lab_processes(&latest, true);
-            return Ok(());
-        }
-    }
-}
-
-pub(crate) fn print_status(args: StatusArgs) -> Result<()> {
-    let root = default_root()?;
-    let state = read_state(&root)?;
-    if args.json {
-        println!("{}", serde_json::to_string_pretty(&state)?);
+    }) {
+        fs::remove_dir_all(root)?;
+        println!("Removed empty lab directory at {}.", root.display());
         return Ok(());
     }
-
-    println!("Fungi local lab");
-    println!("  root: {}", state.root.display());
-    println!("  ready: {}", state.ready);
-    println!("  expires_at_epoch_secs: {}", state.expires_at_epoch_secs);
-    print_process(
-        "manager",
-        state.manager_pid,
-        None,
-        None,
-        &state.process_spec_for_manager(),
-    );
-    print_process(
-        "relay",
-        state.relay.pid,
-        Some(&state.relay.peer_id),
-        Some(&state.relay.log),
-        &state.process_spec_for_relay(),
-    );
-    print_process(
-        "node-a",
-        state.node_a.pid,
-        Some(&state.node_a.peer_id),
-        Some(&state.node_a.log),
-        &state.process_spec_for_node(NodeName::A),
-    );
-    print_process(
-        "node-b",
-        state.node_b.pid,
-        Some(&state.node_b.peer_id),
-        Some(&state.node_b.log),
-        &state.process_spec_for_node(NodeName::B),
-    );
-    println!(
-        "  fungi a: {} -f {}",
-        state.fungi_bin.display(),
-        display_path_arg(&state.repo, &state.node_a.dir)
-    );
-    println!(
-        "  fungi b: {} -f {}",
-        state.fungi_bin.display(),
-        display_path_arg(&state.repo, &state.node_b.dir)
-    );
-    Ok(())
-}
-
-pub(crate) fn stop_default_lab() -> Result<()> {
-    let state = read_state(&default_root()?)?;
-    stop_lab(&state)?;
-    let mut state = state;
-    state.ready = false;
-    state.manager_pid = None;
-    state.relay.pid = None;
-    state.node_a.pid = None;
-    state.node_b.pid = None;
-    let _ = write_state(&state);
-    println!("Stopped Fungi local lab processes.");
-    Ok(())
-}
-
-pub(crate) fn clean_default_lab() -> Result<()> {
-    let root = default_root()?;
-    if let Ok(state) = read_state(&root) {
-        let _ = stop_lab(&state);
-        let _ = fs::remove_dir_all(&state.node_a.dir);
-        let _ = fs::remove_dir_all(&state.node_b.dir);
+    let mut lab = Lab::load(root)?;
+    if lab.state.fungi_bin.starts_with(root) {
+        bail!("lab directory contains its Fungi binary; refusing cleanup");
     }
-    let _ = fs::remove_dir_all(&root);
-    println!("Removed Fungi local lab directories.");
+    lab.stop(&STOP_ORDER)?;
+    fs::remove_dir_all(root)?;
+    println!("Removed lab processes and data at {}.", root.display());
     Ok(())
 }
 
-pub(crate) fn print_env() -> Result<()> {
-    let state = read_state(&default_root()?)?;
-    println!("export FUNGI_BIN={}", shell_quote_path(&state.fungi_bin));
-    println!("export FUNGI_LAB_ROOT={}", shell_quote_path(&state.root));
-    println!("export FUNGI_A_DIR={}", shell_quote_path(&state.node_a.dir));
-    println!("export FUNGI_B_DIR={}", shell_quote_path(&state.node_b.dir));
-    println!(
-        "export FUNGI_A_PEER_ID={}",
-        shell_quote(&state.node_a.peer_id)
-    );
-    println!(
-        "export FUNGI_B_PEER_ID={}",
-        shell_quote(&state.node_b.peer_id)
-    );
-    println!(
-        "export FUNGI_RELAY_TCP_ADDR={}",
-        shell_quote(&state.relay.tcp_addr)
-    );
-    println!(
-        "export FUNGI_RELAY_UDP_ADDR={}",
-        shell_quote(&state.relay.udp_addr)
-    );
-    Ok(())
-}
-
-pub(crate) fn manage_node(command: NodeCommand) -> Result<()> {
-    let root = default_root()?;
-    let mut state = read_state(&root)?;
-    match command {
-        NodeCommand::Stop { node } => {
-            let spec = state.process_spec_for_node(node);
-            let node_state = state.node_mut(node);
-            stop_pid(node_state.pid, &spec, true)?;
-            node_state.pid = None;
-        }
-        NodeCommand::Start { node } => {
-            let current_pid = state.node(node).pid;
-            if process_is_running(current_pid, &state.process_spec_for_node(node)) {
-                println!("node {:?} is already running.", node);
-                return Ok(());
-            }
-            let updated = start_node(&state, node)?;
-            *state.node_mut(node) = updated;
-        }
-        NodeCommand::Restart { node } => {
-            {
-                let spec = state.process_spec_for_node(node);
-                let node_state = state.node_mut(node);
-                stop_pid(node_state.pid, &spec, true)?;
-                node_state.pid = None;
-            }
-            let updated = start_node(&state, node)?;
-            *state.node_mut(node) = updated;
-        }
-    }
-    write_state(&state)?;
-    println!("Updated node {:?}.", command.node());
-    Ok(())
-}
-
-pub(crate) fn manage_relay(command: ProcessCommand) -> Result<()> {
-    let root = default_root()?;
-    let mut state = read_state(&root)?;
-    match command {
-        ProcessCommand::Stop => {
-            stop_pid(state.relay.pid, &state.process_spec_for_relay(), true)?;
-            state.relay.pid = None;
-        }
-        ProcessCommand::Start => {
-            if process_is_running(state.relay.pid, &state.process_spec_for_relay()) {
-                println!("relay is already running.");
-                return Ok(());
-            }
-            state.relay = restart_relay_from_state(&state)?;
-        }
-        ProcessCommand::Restart => {
-            stop_pid(state.relay.pid, &state.process_spec_for_relay(), true)?;
-            state.relay.pid = None;
-            state.relay = restart_relay_from_state(&state)?;
-        }
-    }
-    write_state(&state)?;
-    println!("Updated relay.");
-    Ok(())
-}
-
-pub(crate) fn apply_trust_mode_to_default_lab(mode: TrustMode) -> Result<()> {
-    let root = default_root()?;
-    let mut state = read_state(&root)?;
-    apply_trust_mode(&state, mode)?;
-    state.trust = mode;
-    write_state(&state)?;
-    println!("Trust mode set to {:?}.", mode);
-    Ok(())
-}
-
-fn start_relay(args: &ManagerArgs) -> Result<RelayState> {
-    let relay_home = args.root.join("relay-home");
-    let relay_log = args.root.join("relay.log");
-    fs::create_dir_all(&relay_home)?;
-    let tcp_port = reserve_tcp_port()?;
-    let udp_port = reserve_udp_port()?;
-    let stdout = File::create(&relay_log)
-        .with_context(|| format!("failed to create {}", relay_log.display()))?;
-    let stderr = stdout
-        .try_clone()
-        .with_context(|| format!("failed to clone {}", relay_log.display()))?;
-    let mut command = Command::new(&args.fungi_bin);
-    command
-        .env("HOME", &relay_home)
-        .arg("daemon")
-        .arg("relay-server")
-        .arg("--public-ip")
-        .arg("127.0.0.1")
-        .arg("--tcp-listen-port")
-        .arg(tcp_port.to_string())
-        .arg("--udp-listen-port")
-        .arg(udp_port.to_string())
-        .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr));
-    detach_process_group(&mut command);
-    let child = command.spawn().context("failed to start local relay")?;
-    let peer_id = wait_relay_peer_id_from_log(&relay_log, STARTUP_TIMEOUT)?;
-    let tcp_addr = format!("/ip4/127.0.0.1/tcp/{tcp_port}/p2p/{peer_id}");
-    let udp_addr = format!("/ip4/127.0.0.1/udp/{udp_port}/quic-v1/p2p/{peer_id}");
-
-    Ok(RelayState {
-        pid: Some(child.id()),
-        home: relay_home,
-        log: relay_log,
-        peer_id,
-        tcp_port,
-        udp_port,
-        tcp_addr,
-        udp_addr,
-    })
-}
-
-fn restart_relay_from_state(state: &LabState) -> Result<RelayState> {
-    let args = ManagerArgs {
-        repo: state.repo.clone(),
-        fungi_bin: state.fungi_bin.clone(),
-        root: state.root.clone(),
-        node_a_dir: state.node_a.dir.clone(),
-        node_b_dir: state.node_b.dir.clone(),
-        ttl_secs: state
-            .expires_at_epoch_secs
-            .saturating_sub(state.created_at_epoch_secs),
-        trust: state.trust,
+pub(crate) fn print_status(lab: &Lab, as_json: bool) -> Result<()> {
+    let node = |target| -> Result<serde_json::Value> {
+        Ok(
+            json!({"pid": lab.node(target).process.map(|p| p.pid), "running": lab.running(target)?,
+            "peer_id": lab.node(target).peer_id, "dir": lab.dir(target), "log": lab.log(target)}),
+        )
     };
-    let relay = start_relay(&args)?;
-    if relay.peer_id != state.relay.peer_id {
-        bail!(
-            "relay peer id changed from {} to {}; run `fungi-lab clean` before reusing node configs",
-            state.relay.peer_id,
-            relay.peer_id
+    let status = json!({"lab_dir": lab.root, "fungi_bin": lab.state.fungi_bin,
+        "relay": node(Target::Relay)?, "relay_addresses": lab.relay_addresses(),
+        "node_a": node(Target::A)?, "node_b": node(Target::B)?});
+    if as_json {
+        println!("{}", serde_json::to_string_pretty(&status)?);
+    } else {
+        println!("Lab directory: {}", lab.root.display());
+        for (target, field) in [
+            (Target::Relay, "relay"),
+            (Target::A, "node_a"),
+            (Target::B, "node_b"),
+        ] {
+            println!(
+                "  {}: {} pid={} peer={}",
+                target.label(),
+                if status[field]["running"] == true {
+                    "running"
+                } else {
+                    "stopped"
+                },
+                status[field]["pid"],
+                lab.node(target).peer_id
+            );
+            println!(
+                "    dir: {}\n    log: {}",
+                lab.dir(target).display(),
+                lab.log(target).display()
+            );
+        }
+        println!(
+            "Running means process identity matched; use fungi -f DIR info id/ping to check readiness/connectivity."
         );
     }
-    Ok(relay)
-}
-
-fn start_node(state: &LabState, node: NodeName) -> Result<NodeState> {
-    let (name, dir) = match node {
-        NodeName::A => ("a", state.node_a.dir.clone()),
-        NodeName::B => ("b", state.node_b.dir.clone()),
-    };
-    fs::create_dir_all(&dir)?;
-    run_cli_status(&state.fungi_bin, &state.repo, &dir, ["init"], None)?;
-
-    let rpc_port = reserve_tcp_port()?;
-    let tcp_port = reserve_tcp_port()?;
-    let udp_port = reserve_udp_port()?;
-    write_node_config(
-        &dir,
-        rpc_port,
-        tcp_port,
-        udp_port,
-        &[state.relay.tcp_addr.clone(), state.relay.udp_addr.clone()],
-    )?;
-
-    let log = state.root.join(format!("node-{name}.log"));
-    let stdout =
-        File::create(&log).with_context(|| format!("failed to create {}", log.display()))?;
-    let stderr = stdout
-        .try_clone()
-        .with_context(|| format!("failed to clone {}", log.display()))?;
-    let mut command = Command::new(&state.fungi_bin);
-    command
-        .arg("--fungi-dir")
-        .arg(&dir)
-        .arg("daemon")
-        .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr));
-    detach_process_group(&mut command);
-    let child = command
-        .spawn()
-        .with_context(|| format!("failed to start node-{name}"))?;
-    let peer_id = wait_peer_id(&state.fungi_bin, &state.repo, &dir, STARTUP_TIMEOUT)?;
-
-    Ok(NodeState {
-        name: name.to_string(),
-        pid: Some(child.id()),
-        dir,
-        log,
-        peer_id,
-        rpc_port,
-        tcp_port,
-        udp_port,
-    })
-}
-
-fn add_lab_devices(state: &LabState) -> Result<()> {
-    let a_relay = circuit_addr(&state.relay.tcp_addr, &state.node_a.peer_id);
-    let b_relay = circuit_addr(&state.relay.tcp_addr, &state.node_b.peer_id);
-    run_cli_status(
-        &state.fungi_bin,
-        &state.repo,
-        &state.node_a.dir,
-        [
-            "device",
-            "add",
-            "b",
-            &state.node_b.peer_id,
-            "--addr",
-            &b_relay,
-        ],
-        None,
-    )?;
-    run_cli_status(
-        &state.fungi_bin,
-        &state.repo,
-        &state.node_b.dir,
-        [
-            "device",
-            "add",
-            "a",
-            &state.node_a.peer_id,
-            "--addr",
-            &a_relay,
-        ],
-        None,
-    )?;
     Ok(())
 }
 
-fn apply_trust_mode(state: &LabState, mode: TrustMode) -> Result<()> {
-    set_trust(
-        state,
-        NodeName::A,
-        &state.node_b.peer_id,
-        matches!(mode, TrustMode::Both | TrustMode::ATrustsB),
-    )?;
-    set_trust(
-        state,
-        NodeName::B,
-        &state.node_a.peer_id,
-        matches!(mode, TrustMode::Both | TrustMode::BTrustsA),
-    )?;
-    Ok(())
-}
-
-fn set_trust(state: &LabState, node: NodeName, peer_id: &str, trusted: bool) -> Result<()> {
-    let dir = state.node(node).dir.clone();
-    let command = if trusted { "trust" } else { "untrust" };
-    run_cli_status(
-        &state.fungi_bin,
-        &state.repo,
-        &dir,
-        ["device", command, peer_id],
-        if trusted { Some("y\n") } else { None },
-    )?;
-    Ok(())
-}
-
-pub(crate) fn stop_lab(state: &LabState) -> Result<()> {
-    stop_lab_processes(state, false)
-}
-
-fn stop_lab_processes(state: &LabState, from_manager: bool) -> Result<()> {
-    stop_pid(
-        state.node_a.pid,
-        &state.process_spec_for_node(NodeName::A),
-        true,
-    )?;
-    stop_pid(
-        state.node_b.pid,
-        &state.process_spec_for_node(NodeName::B),
-        true,
-    )?;
-    stop_pid(state.relay.pid, &state.process_spec_for_relay(), true)?;
-    if !from_manager {
-        stop_pid(state.manager_pid, &state.process_spec_for_manager(), true)?;
+pub(crate) fn print_env(lab: &Lab) -> Result<()> {
+    for (name, value) in [
+        ("FUNGI_BIN", lab.state.fungi_bin.display().to_string()),
+        ("FUNGI_LAB_DIR", lab.root.display().to_string()),
+        ("FUNGI_A_DIR", lab.dir(Target::A).display().to_string()),
+        ("FUNGI_B_DIR", lab.dir(Target::B).display().to_string()),
+        ("FUNGI_A_PEER_ID", lab.state.node_a.peer_id.clone()),
+        ("FUNGI_B_PEER_ID", lab.state.node_b.peer_id.clone()),
+        ("FUNGI_RELAY_TCP_ADDR", lab.relay_addresses()[0].clone()),
+        ("FUNGI_RELAY_UDP_ADDR", lab.relay_addresses()[1].clone()),
+    ] {
+        println!("export {name}={}", quote(value));
     }
     Ok(())
 }
