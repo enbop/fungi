@@ -290,6 +290,11 @@ pub(crate) fn build_wasmtime_command(
         }
     }
 
+    // Wasmtime does not inherit the launcher's environment into the guest.
+    // Pass service configuration as run options, before the component path.
+    for (name, value) in &state.manifest.env {
+        command.arg("--env").arg(format!("{name}={value}"));
+    }
     command.arg(&state.staged_component_path);
     for arg in &state.manifest.command {
         command.arg(arg);
@@ -299,7 +304,6 @@ pub(crate) fn build_wasmtime_command(
     } else {
         command.current_dir(&state.service_dir);
     }
-    command.envs(&state.manifest.env);
     Ok(command)
 }
 

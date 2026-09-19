@@ -273,7 +273,10 @@ fn wasmtime_tcp_entry_runs_command_with_network_permissions() {
             }),
             icon_url: None,
         }),
-        env: BTreeMap::new(),
+        env: BTreeMap::from([
+            ("SFTP_FS_ROOT".into(), "appdata/files with spaces".into()),
+            ("HOME".into(), "guest-home=value".into()),
+        ]),
         mounts: Vec::new(),
         ports: vec![ServicePort {
             name: Some("socks5".into()),
@@ -313,6 +316,25 @@ fn wasmtime_tcp_entry_runs_command_with_network_permissions() {
     assert!(args.iter().any(|arg| arg == "-Sinherit-network"));
     assert!(args.iter().any(|arg| arg == "-Sallow-ip-name-lookup"));
     assert!(args.iter().any(|arg| arg == "--listen"));
+    let component_index = args
+        .iter()
+        .position(|arg| arg == &state.staged_component_path.to_string_lossy())
+        .unwrap();
+    for expected in [
+        "SFTP_FS_ROOT=appdata/files with spaces",
+        "HOME=guest-home=value",
+    ] {
+        assert!(
+            args[..component_index]
+                .windows(2)
+                .any(|pair| pair == ["--env", expected])
+        );
+    }
+    // Guest configuration must not overwrite the launcher's own environment
+    // (notably the Android-specific HOME set by build_wasmtime_command).
+    assert!(!command.as_std().get_envs().any(|(name, value)| {
+        name == "SFTP_FS_ROOT" || (name == "HOME" && value == Some("guest-home=value".as_ref()))
+    }));
 }
 
 #[test]
