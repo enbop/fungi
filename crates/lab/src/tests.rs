@@ -64,7 +64,7 @@ fn mutating_commands_are_exclusive_and_unowned_data_is_preserved() {
             .contains("another command is managing this lab")
     );
     drop(lock);
-    assert!(lock_lab(&root, false).is_ok());
+    lock_lab(&root, false).expect("the lab lock must be released when its guard is dropped");
     let root = temp.path().join("failed-start");
     let _lock = lock_lab(&root, true).unwrap();
     let missing_bin = temp.path().join("missing-fungi");
@@ -215,7 +215,7 @@ fn startup_timeout_reclaims_the_child_and_retains_logs() {
 
 struct RealLab {
     lab: Lab,
-    _lock: fs::File,
+    _lock: state::LabLock,
     _temp: tempfile::TempDir,
 }
 impl RealLab {
