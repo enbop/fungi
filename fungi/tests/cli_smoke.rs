@@ -922,14 +922,16 @@ publish:
 }
 
 fn start_daemon(path: &std::path::Path) -> DaemonChild {
+    let stdout = std::fs::File::create(path.join("test-daemon.stdout.log")).unwrap();
+    let stderr = std::fs::File::create(path.join("test-daemon.stderr.log")).unwrap();
     let child = Command::new(fungi_bin())
         .arg("--fungi-dir")
         .arg(path)
         .arg("daemon")
         .arg("--exit-on-stdin-close")
         .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(stdout)
+        .stderr(stderr)
         .spawn()
         .unwrap();
     DaemonChild { child }
@@ -944,8 +946,11 @@ fn wait_peer_id(path: &std::path::Path) -> String {
         }
         if Instant::now() >= deadline {
             panic!(
-                "daemon did not become ready\nstdout:\n{}\nstderr:\n{}",
-                output.stdout, output.stderr
+                "daemon did not become ready\nCLI stdout:\n{}\nCLI stderr:\n{}\ndaemon stdout:\n{}\ndaemon stderr:\n{}",
+                output.stdout,
+                output.stderr,
+                std::fs::read_to_string(path.join("test-daemon.stdout.log")).unwrap_or_default(),
+                std::fs::read_to_string(path.join("test-daemon.stderr.log")).unwrap_or_default()
             );
         }
         thread::sleep(Duration::from_millis(100));
