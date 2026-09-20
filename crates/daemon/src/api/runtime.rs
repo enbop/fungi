@@ -44,10 +44,6 @@ impl DeviceServiceSnapshotSource {
 }
 
 impl FungiControl {
-    pub fn docker_enabled(&self) -> bool {
-        self.settings().runtime().docker_enabled()
-    }
-
     pub fn get_runtime_config(&self) -> RuntimeConfig {
         self.settings().runtime()
     }
@@ -394,12 +390,6 @@ impl FungiControl {
     fn build_local_recipe_runtime_warnings(&self, runtime: ServiceRecipeRuntime) -> Vec<String> {
         let status = self.local_runtime_status();
         match runtime {
-            ServiceRecipeRuntime::Docker => runtime_status_warning(
-                "Docker",
-                status.docker.config_enabled,
-                status.docker.detected,
-                status.docker.active,
-            ),
             ServiceRecipeRuntime::Wasmtime => runtime_status_warning(
                 "Wasmtime",
                 status.wasmtime.config_enabled,
@@ -426,11 +416,6 @@ impl FungiControl {
         };
 
         match runtime {
-            ServiceRecipeRuntime::Docker if !capabilities.runtimes.docker => {
-                vec![format!(
-                    "Target device {label} does not report Docker runtime support"
-                )]
-            }
             ServiceRecipeRuntime::Wasmtime if !capabilities.runtimes.wasmtime => {
                 vec![format!(
                     "Target device {label} does not report Wasmtime runtime support"
@@ -577,7 +562,7 @@ mod tests {
     use crate::test_support::TestDaemon;
     use crate::{
         DeviceServiceEndpoint, ServiceExposeUsage, ServiceExposeUsageKind, ServicePhase,
-        ServicePort, ServicePortAllocation, ServicePortProtocol, ServiceStatus,
+        ServicePort, ServicePortProtocol, ServiceStatus,
     };
 
     use super::*;
@@ -718,7 +703,6 @@ mod tests {
         ServicePort {
             name: Some(name.to_string()),
             host_port: 18080,
-            host_port_allocation: ServicePortAllocation::Fixed,
             service_port: 8080,
             protocol: ServicePortProtocol::Tcp,
         }

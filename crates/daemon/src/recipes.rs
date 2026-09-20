@@ -14,7 +14,6 @@ const OFFICIAL_RECIPE_LATEST_RELEASE_URL: &str =
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServiceRecipeRuntime {
-    Docker,
     Wasmtime,
     Tcp,
 }
@@ -86,6 +85,7 @@ pub async fn list_official_service_recipes(
         .index
         .recipes
         .iter()
+        .filter(|recipe| parse_recipe_runtime(&recipe.runtime).is_ok())
         .map(|recipe| build_recipe_summary(recipe, &loaded.release_version))
         .collect()
 }
@@ -316,7 +316,6 @@ fn release_version_from_release_page_url(url: &reqwest::Url) -> Result<String> {
 
 fn parse_recipe_runtime(value: &str) -> Result<ServiceRecipeRuntime> {
     match value.trim().to_ascii_lowercase().as_str() {
-        "docker" => Ok(ServiceRecipeRuntime::Docker),
         "wasmtime" => Ok(ServiceRecipeRuntime::Wasmtime),
         "tcp" => Ok(ServiceRecipeRuntime::Tcp),
         other => bail!("unsupported recipe runtime `{other}`"),
@@ -335,6 +334,51 @@ fn resolved_service_name(recipe: &OfficialRecipeRecord, service_name: Option<&st
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn cached_catalog_skips_unsupported_runtimes_but_rejects_direct_requests() {
+        let temp = tempfile::tempdir().unwrap();
+        let cache = RecipeCache::apply_from_dir(temp.path()).unwrap();
+        let records = ["docker", "wasmtime", "tcp", "future-runtime"].map(|runtime| {
+            serde_json::json!({
+                "id": runtime,
+                "name": runtime,
+                "description": "test recipe",
+                "runtime": runtime,
+                "manifestAsset": format!("{runtime}.yaml"),
+                "stability": "experimental"
+            })
+        });
+        cache
+            .write_index(
+                "v-test",
+                &serde_json::to_vec(&serde_json::json!({"recipes": records})).unwrap(),
+            )
+            .unwrap();
+        cache.set_latest_release_version("v-test").unwrap();
+
+        let recipes = list_official_service_recipes(temp.path(), false)
+            .await
+            .unwrap();
+        assert_eq!(
+            recipes
+                .iter()
+                .map(|recipe| recipe.id.as_str())
+                .collect::<Vec<_>>(),
+            ["wasmtime", "tcp"]
+        );
+        for id in ["docker", "future-runtime"] {
+            let error = get_official_service_recipe(temp.path(), id, false)
+                .await
+                .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("unsupported recipe runtime `{id}`")),
+                "{error:#}"
+            );
+        }
+    }
 
     #[test]
     fn maps_tcp_recipe_runtime_to_tcp() {

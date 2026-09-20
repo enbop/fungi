@@ -8,105 +8,20 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use async_trait::async_trait;
 use fungi_config::paths::FungiPaths;
-use fungi_docker_agent::LogsOptions;
 use parking_lot::Mutex;
 use tokio::process::Child;
 
-use crate::controls::DockerControl;
-
 use super::{
     helpers::{
-        build_wasmtime_command, build_wasmtime_state, docker_spec_from_manifest_with_name,
-        ensure_manifest_mount_dirs, map_docker_instance, map_wasmtime_instance,
-        refresh_child_state, tail_lines,
+        build_wasmtime_command, build_wasmtime_state, map_wasmtime_instance, refresh_child_state,
+        tail_lines,
     },
     model::*,
 };
 
-#[async_trait]
-pub trait RuntimeProvider: Send + Sync {
-    fn runtime_kind(&self) -> RuntimeKind;
-    async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance>;
-    async fn start(&self, name: &str) -> Result<()>;
-    async fn stop(&self, name: &str) -> Result<()>;
-    async fn remove(&self, name: &str) -> Result<()>;
-    async fn inspect(&self, name: &str) -> Result<ServiceInstance>;
-    async fn logs(&self, name: &str, options: &ServiceLogsOptions) -> Result<ServiceLogs>;
-}
-
 pub const fn wasmtime_runtime_supported() -> bool {
     true
-}
-
-#[derive(Clone)]
-pub struct DockerRuntimeProvider {
-    docker: DockerControl,
-}
-
-impl DockerRuntimeProvider {
-    pub fn new(docker: DockerControl) -> Self {
-        Self { docker }
-    }
-
-    pub(crate) async fn pull_with_container_name(
-        &self,
-        manifest: &ServiceManifest,
-        container_name: &str,
-    ) -> Result<ServiceInstance> {
-        ensure_manifest_mount_dirs(manifest)?;
-        let spec = docker_spec_from_manifest_with_name(manifest, container_name)?;
-        let details = self.docker.create_container(&spec).await?;
-        Ok(map_docker_instance(details))
-    }
-}
-
-#[async_trait]
-impl RuntimeProvider for DockerRuntimeProvider {
-    fn runtime_kind(&self) -> RuntimeKind {
-        RuntimeKind::Docker
-    }
-
-    async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
-        self.pull_with_container_name(manifest, &manifest.name)
-            .await
-    }
-
-    async fn start(&self, name: &str) -> Result<()> {
-        self.docker.start_container(name).await
-    }
-
-    async fn stop(&self, name: &str) -> Result<()> {
-        self.docker.stop_container(name).await
-    }
-
-    async fn remove(&self, name: &str) -> Result<()> {
-        self.docker.remove_container(name).await
-    }
-
-    async fn inspect(&self, name: &str) -> Result<ServiceInstance> {
-        let details = self.docker.inspect_container(name).await?;
-        Ok(map_docker_instance(details))
-    }
-
-    async fn logs(&self, name: &str, options: &ServiceLogsOptions) -> Result<ServiceLogs> {
-        let logs = self
-            .docker
-            .container_logs(
-                name,
-                &LogsOptions {
-                    stdout: true,
-                    stderr: true,
-                    tail: options.tail.clone(),
-                },
-            )
-            .await?;
-        Ok(ServiceLogs {
-            raw: logs.raw,
-            text: logs.text,
-        })
-    }
 }
 
 #[derive(Clone)]
@@ -453,18 +368,13 @@ fn with_default_mount_roots(fungi_home: &Path, mut paths: Vec<PathBuf>) -> Vec<P
     paths
 }
 
-#[async_trait]
-impl RuntimeProvider for WasmtimeRuntimeProvider {
-    fn runtime_kind(&self) -> RuntimeKind {
-        RuntimeKind::Wasmtime
-    }
-
-    async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
+impl WasmtimeRuntimeProvider {
+    pub async fn pull(&self, manifest: &ServiceManifest) -> Result<ServiceInstance> {
         self.pull_with_local_service_id(manifest, &manifest.name)
             .await
     }
 
-    async fn start(&self, handle: &str) -> Result<()> {
+    pub async fn start(&self, handle: &str) -> Result<()> {
         let mut services = self.services.lock();
         let state = services
             .get_mut(handle)
@@ -508,7 +418,7 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
         Ok(())
     }
 
-    async fn stop(&self, handle: &str) -> Result<()> {
+    pub async fn stop(&self, handle: &str) -> Result<()> {
         let mut child = {
             let mut services = self.services.lock();
             let state = services
@@ -540,11 +450,11 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
         Ok(())
     }
 
-    async fn remove(&self, handle: &str) -> Result<()> {
+    pub async fn remove(&self, handle: &str) -> Result<()> {
         self.remove_artifacts_and_runtime(handle, None).await
     }
 
-    async fn inspect(&self, handle: &str) -> Result<ServiceInstance> {
+    pub async fn inspect(&self, handle: &str) -> Result<ServiceInstance> {
         let mut services = self.services.lock();
         let state = services
             .get_mut(handle)
@@ -553,7 +463,7 @@ impl RuntimeProvider for WasmtimeRuntimeProvider {
         Ok(map_wasmtime_instance(handle, state))
     }
 
-    async fn logs(&self, handle: &str, options: &ServiceLogsOptions) -> Result<ServiceLogs> {
+    pub async fn logs(&self, handle: &str, options: &ServiceLogsOptions) -> Result<ServiceLogs> {
         let log_file_path = {
             let services = self.services.lock();
             services

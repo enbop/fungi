@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Removed
+
+- **Breaking:** removed the managed Docker service runtime, Docker configuration and capability fields, Docker RPC enum values, and Docker image manifests. Managed execution uses Wasmtime; existing host services remain accessible through TCP forwarding.
+- Removed the shared runtime-provider trait, container port allocation policy, and Docker-only entrypoint field.
+
+### Changed
+
+- Recipe lists omit unsupported runtimes in older cached catalogs. Direct requests for unsupported recipes fail before downloading or creating a service.
+- Saved unsupported service manifests remain isolated as configuration errors, without preventing healthy services from restoring.
+
 ## [0.7.1] - 2026-08-29
 
 ### Added

@@ -113,7 +113,6 @@ async fn send_idle_ping_event(
 fn proto_runtime_kind(kind: i32) -> Result<Option<fungi_daemon::RuntimeKind>, Status> {
     match ServiceRuntimeKind::try_from(kind) {
         Ok(ServiceRuntimeKind::Unspecified) => Ok(None),
-        Ok(ServiceRuntimeKind::Docker) => Ok(Some(fungi_daemon::RuntimeKind::Docker)),
         Ok(ServiceRuntimeKind::Wasmtime) => Ok(Some(fungi_daemon::RuntimeKind::Wasmtime)),
         _ => Err(Status::invalid_argument("Invalid runtime kind")),
     }
@@ -121,7 +120,6 @@ fn proto_runtime_kind(kind: i32) -> Result<Option<fungi_daemon::RuntimeKind>, St
 
 fn proto_recipe_runtime_kind(kind: fungi_daemon::ServiceRecipeRuntime) -> i32 {
     match kind {
-        fungi_daemon::ServiceRecipeRuntime::Docker => RecipeRuntimeKind::Docker as i32,
         fungi_daemon::ServiceRecipeRuntime::Wasmtime => RecipeRuntimeKind::Wasmtime as i32,
         fungi_daemon::ServiceRecipeRuntime::Tcp => RecipeRuntimeKind::Tcp as i32,
     }
@@ -389,7 +387,6 @@ impl FungiDaemon for FungiDaemonRpcImpl {
             .config_fungi_dir()
             .map_err(|e| Status::internal(format!("Failed to resolve fungi dir: {e}")))?;
         Ok(Response::new(RuntimeConfigResponse {
-            disable_docker: config.disable_docker,
             disable_wasmtime: config.disable_wasmtime,
             allowed_host_paths: config
                 .effective_allowed_host_paths(&fungi_dir)
@@ -405,12 +402,6 @@ impl FungiDaemon for FungiDaemonRpcImpl {
     ) -> Result<Response<LocalRuntimeStatusResponse>, Status> {
         let status = self.inner.local_runtime_status();
         Ok(Response::new(LocalRuntimeStatusResponse {
-            docker: Some(RuntimeAvailabilityStatus {
-                config_enabled: status.docker.config_enabled,
-                detected: status.docker.detected,
-                active: status.docker.active,
-                endpoint: status.docker.endpoint.unwrap_or_default(),
-            }),
             wasmtime: Some(RuntimeAvailabilityStatus {
                 config_enabled: status.wasmtime.config_enabled,
                 detected: status.wasmtime.detected,

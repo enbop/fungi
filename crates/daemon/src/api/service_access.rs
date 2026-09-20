@@ -108,7 +108,7 @@ mod tests {
     use crate::{
         RuntimeKind, ServiceExpose, ServiceExposeTransport, ServiceExposeTransportKind,
         ServiceExposeUsage, ServiceExposeUsageKind, ServiceManifest, ServiceMount, ServicePort,
-        ServicePortAllocation, ServicePortProtocol, ServiceSource,
+        ServicePortProtocol, ServiceSource,
         test_support::{TestDaemon, spawn_connected_pair},
     };
     use libp2p::swarm::dial_opts::DialOpts;
@@ -498,13 +498,11 @@ mod tests {
                 .map(|(name, port)| ServicePort {
                     name: Some(name.to_string()),
                     host_port: port,
-                    host_port_allocation: ServicePortAllocation::Fixed,
                     service_port: port,
                     protocol: ServicePortProtocol::Tcp,
                 })
                 .collect(),
             command: Vec::new(),
-            entrypoint: Vec::new(),
             working_dir: None,
             labels: BTreeMap::new(),
         }

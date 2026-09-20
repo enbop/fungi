@@ -15,9 +15,7 @@ use parking_lot::Mutex;
 use crate::{
     DeviceService, DeviceServiceSnapshot, ManifestResolutionPolicy, ServiceApplyOutcome,
     ServiceInstance, ServiceLogs, ServiceLogsOptions,
-    controls::{
-        DockerControl, ServiceControlProtocolControl, ServiceDiscoveryControl, TcpTunnelingControl,
-    },
+    controls::{ServiceControlProtocolControl, ServiceDiscoveryControl, TcpTunnelingControl},
     runtime::RuntimeControl,
     service_endpoints::{
         sync_applied_service_endpoint_listeners, sync_service_endpoint_listeners_by_name,
@@ -29,7 +27,6 @@ const REMOTE_SERVICE_REFRESH_TIMEOUT: Duration = Duration::from_secs(15);
 
 struct LocalServiceBackend {
     runtime: RuntimeControl,
-    docker: Option<DockerControl>,
     tcp_tunneling: TcpTunnelingControl,
 }
 
@@ -120,7 +117,6 @@ pub(crate) struct ServicesInit {
     pub local_device_id: PeerId,
     pub fungi_dir: PathBuf,
     pub runtime: RuntimeControl,
-    pub docker: Option<DockerControl>,
     pub service_discovery: ServiceDiscoveryControl,
     pub service_control: ServiceControlProtocolControl,
     pub tcp_tunneling: TcpTunnelingControl,
@@ -145,7 +141,6 @@ impl Services {
                 snapshots,
                 local: LocalServiceBackend {
                     runtime: init.runtime,
-                    docker: init.docker,
                     tcp_tunneling: init.tcp_tunneling,
                 },
                 remote: RemoteServiceBackend {
@@ -168,9 +163,6 @@ impl Services {
     }
 
     pub(crate) fn apply_runtime_config(&self, config: &RuntimeConfig) -> Result<()> {
-        if let Some(docker) = &self.inner.local.docker {
-            docker.update_runtime_config(config)?;
-        }
         self.inner
             .local
             .runtime

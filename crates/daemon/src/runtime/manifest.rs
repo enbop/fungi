@@ -1,7 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    net::{TcpListener as StdTcpListener, UdpSocket as StdUdpSocket},
     path::{Path, PathBuf},
 };
 
@@ -113,16 +112,6 @@ fn yaml_without_document_start(yaml: String) -> String {
 
 pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
     let run = match &manifest.source {
-        ServiceSource::Docker { image } => Some(FungiServiceRun {
-            provider: FungiServiceProvider::Docker,
-            source: FungiServiceSource {
-                image: Some(image.clone()),
-                ..FungiServiceSource::default()
-            },
-            args: manifest.command.clone(),
-            env: manifest.env.clone(),
-            mounts: manifest_mounts_to_fungi(&manifest.mounts),
-        }),
         ServiceSource::WasmtimeFile { component } => Some(FungiServiceRun {
             provider: FungiServiceProvider::Wasmtime,
             source: FungiServiceSource {
@@ -146,9 +135,6 @@ pub fn service_manifest_to_yaml(manifest: &ServiceManifest) -> Result<String> {
         ServiceSource::ExistingTcp { .. } => None,
     };
 
-    if !manifest.entrypoint.is_empty() {
-        bail!("fungi: service/v1 does not support entrypoint");
-    }
     if manifest.working_dir.is_some() {
         bail!("fungi: service/v1 does not support working_dir");
     }
@@ -280,7 +266,6 @@ struct FungiServiceRun {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum FungiServiceProvider {
-    Docker,
     Wasmtime,
 }
 
@@ -291,8 +276,6 @@ struct FungiServiceSource {
     url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     file: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    image: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -513,7 +496,6 @@ impl FungiServiceDocument {
             mounts,
             ports,
             command,
-            entrypoint: Vec::new(),
             working_dir: None,
             labels: BTreeMap::new(),
         })
@@ -533,27 +515,16 @@ fn parse_fungi_run(
     }
 
     match run.provider {
-        FungiServiceProvider::Docker => {
-            let image = exactly_one_source(&run.source, "run.source", SourceField::Image)?;
-            Ok(RuntimeAndSource {
-                runtime: RuntimeKind::Docker,
-                source: ServiceSource::Docker { image },
-            })
-        }
         FungiServiceProvider::Wasmtime => {
             let source = match (
                 normalize_optional(run.source.file.clone()),
                 normalize_optional(run.source.url.clone()),
-                normalize_optional(run.source.image.clone()),
             ) {
-                (Some(file), None, None) => ServiceSource::WasmtimeFile {
+                (Some(file), None) => ServiceSource::WasmtimeFile {
                     component: resolve_manifest_path(&file, base_dir, path_roots),
                 },
-                (None, Some(url), None) => ServiceSource::WasmtimeUrl { url },
-                (None, None, Some(_)) => {
-                    bail!("provider: wasmtime requires source.url or source.file, not source.image")
-                }
-                (None, None, None) => {
+                (None, Some(url)) => ServiceSource::WasmtimeUrl { url },
+                (None, None) => {
                     bail!("provider: wasmtime requires source.url or source.file")
                 }
                 _ => bail!("provider: wasmtime accepts exactly one of source.url or source.file"),
@@ -563,32 +534,6 @@ fn parse_fungi_run(
                 source,
             })
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum SourceField {
-    Image,
-}
-
-fn exactly_one_source(
-    source: &FungiServiceSource,
-    field_name: &str,
-    expected: SourceField,
-) -> Result<String> {
-    let url = normalize_optional(source.url.clone());
-    let file = normalize_optional(source.file.clone());
-    let image = normalize_optional(source.image.clone());
-    let source_count =
-        usize::from(url.is_some()) + usize::from(file.is_some()) + usize::from(image.is_some());
-    if source_count != 1 {
-        bail!("{field_name} must set exactly one of url, file, or image");
-    }
-
-    match expected {
-        SourceField::Image => image.ok_or_else(|| {
-            anyhow::anyhow!("provider: docker requires source.image, not source.url or source.file")
-        }),
     }
 }
 
@@ -643,20 +588,6 @@ fn parse_fungi_publish_entry(
 
     match runtime {
         RuntimeKind::Unknown => bail!("unknown service runtime"),
-        RuntimeKind::Docker => {
-            if entry.tcp.host.is_some() {
-                bail!("publish.{name}.tcp.host is not used with provider: docker; omit it");
-            }
-            let resolved_port =
-                allocate_auto_host_port(ServicePortProtocol::Tcp, reserved_host_ports)?;
-            Ok(ServicePort {
-                name: Some(name),
-                host_port: resolved_port.port,
-                host_port_allocation: resolved_port.allocation,
-                service_port,
-                protocol: ServicePortProtocol::Tcp,
-            })
-        }
         RuntimeKind::Wasmtime | RuntimeKind::External => {
             let host = normalize_fungi_tcp_host(
                 entry.tcp.host.as_deref(),
@@ -671,7 +602,6 @@ fn parse_fungi_publish_entry(
             Ok(ServicePort {
                 name: Some(name),
                 host_port: service_port,
-                host_port_allocation: ServicePortAllocation::Fixed,
                 service_port,
                 protocol: ServicePortProtocol::Tcp,
             })
@@ -799,43 +729,6 @@ pub fn service_expose_endpoint_bindings(
 
     endpoints.sort_by(|left, right| left.name.cmp(&right.name));
     endpoints
-}
-
-struct ResolvedManifestHostPort {
-    port: u16,
-    allocation: ServicePortAllocation,
-}
-
-fn allocate_auto_host_port(
-    protocol: ServicePortProtocol,
-    reserved_host_ports: &mut BTreeSet<u16>,
-) -> Result<ResolvedManifestHostPort> {
-    for _ in 0..64 {
-        let port = reserve_ephemeral_host_port(protocol)?;
-        if reserved_host_ports.insert(port) {
-            return Ok(ResolvedManifestHostPort {
-                port,
-                allocation: ServicePortAllocation::Auto,
-            });
-        }
-    }
-
-    bail!("failed to allocate host port automatically from the operating system")
-}
-
-fn reserve_ephemeral_host_port(protocol: ServicePortProtocol) -> Result<u16> {
-    match protocol {
-        ServicePortProtocol::Tcp => {
-            let listener = StdTcpListener::bind(("127.0.0.1", 0))
-                .context("failed to reserve an automatic TCP host port")?;
-            Ok(listener.local_addr()?.port())
-        }
-        ServicePortProtocol::Udp => {
-            let socket = StdUdpSocket::bind(("127.0.0.1", 0))
-                .context("failed to reserve an automatic UDP host port")?;
-            Ok(socket.local_addr()?.port())
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

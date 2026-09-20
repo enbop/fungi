@@ -166,10 +166,6 @@ fn migrate_legacy_service_manifest(
 ) -> Result<CurrentServiceManifestDocument> {
     let runtime = manifest._runtime;
     let source = match manifest.source {
-        LegacyServiceSource::Docker { image } => CurrentServiceSource {
-            image: Some(image),
-            ..CurrentServiceSource::default()
-        },
         LegacyServiceSource::WasmtimeFile { component } => CurrentServiceSource {
             file: Some(migrate_wasmtime_component(
                 &component,
@@ -218,7 +214,6 @@ fn migrate_legacy_service_manifest(
                 }
             });
             let current_port = match runtime {
-                LegacyRuntimeKind::Docker => port.service_port,
                 LegacyRuntimeKind::Wasmtime => {
                     if port.host_port == 0 {
                         port.service_port
@@ -375,13 +370,11 @@ struct LegacyServiceManifest {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 enum LegacyRuntimeKind {
-    Docker,
     Wasmtime,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 enum LegacyServiceSource {
-    Docker { image: String },
     WasmtimeFile { component: PathBuf },
     WasmtimeUrl { url: String },
 }
@@ -495,14 +488,12 @@ struct CurrentServiceManifestDocument {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum CurrentServiceProvider {
-    Docker,
     Wasmtime,
 }
 
 impl From<LegacyRuntimeKind> for CurrentServiceProvider {
     fn from(value: LegacyRuntimeKind) -> Self {
         match value {
-            LegacyRuntimeKind::Docker => Self::Docker,
             LegacyRuntimeKind::Wasmtime => Self::Wasmtime,
         }
     }
@@ -526,8 +517,6 @@ struct CurrentServiceSource {
     file: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    image: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

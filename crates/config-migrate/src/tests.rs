@@ -336,7 +336,6 @@ fn migration_removes_config_sections_that_no_longer_exist() {
             "client = []\n",
             "\n",
             "[runtime]\n",
-            "disable_docker = true\n",
             "disable_wasmtime = false\n",
             "allowed_ports = [18080]\n",
             "\n",
@@ -358,7 +357,7 @@ fn migration_removes_config_sections_that_no_longer_exist() {
     assert!(migrated.contains("listen_tcp_port = 4101"));
     assert!(migrated.contains("listen_udp_port = 4102"));
     assert!(migrated.contains("relay_enabled = false"));
-    assert!(migrated.contains("disable_docker = true"));
+    assert!(migrated.contains("disable_wasmtime = false"));
 }
 
 #[test]

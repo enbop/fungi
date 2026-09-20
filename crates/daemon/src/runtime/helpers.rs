@@ -5,7 +5,6 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use fungi_config::paths::FungiPaths;
-use fungi_docker_agent::{ContainerSpec, DockerAgentError, PortProtocol};
 use tokio::process::Command;
 
 use crate::http_client::http_client;
@@ -13,49 +12,6 @@ use crate::http_client::http_client;
 use super::{
     manifest::service_expose_endpoint_bindings, model::*, providers::WasmtimeServiceState,
 };
-
-pub(crate) fn docker_spec_from_manifest_with_name(
-    manifest: &ServiceManifest,
-    container_name: &str,
-) -> Result<ContainerSpec> {
-    if manifest.runtime != RuntimeKind::Docker {
-        bail!("service manifest runtime does not match docker provider")
-    }
-
-    let ServiceSource::Docker { image } = &manifest.source else {
-        bail!("docker runtime requires a docker image source")
-    };
-
-    Ok(ContainerSpec {
-        name: Some(container_name.to_string()),
-        image: image.clone(),
-        env: manifest.env.clone(),
-        mounts: manifest
-            .mounts
-            .iter()
-            .map(|mount| fungi_docker_agent::BindMount {
-                host_path: mount.host_path.clone(),
-                container_path: mount.runtime_path.clone(),
-            })
-            .collect(),
-        ports: manifest
-            .ports
-            .iter()
-            .map(|port| fungi_docker_agent::PortBinding {
-                host_port: port.host_port,
-                container_port: port.service_port,
-                protocol: match port.protocol {
-                    ServicePortProtocol::Tcp => PortProtocol::Tcp,
-                    ServicePortProtocol::Udp => PortProtocol::Udp,
-                },
-            })
-            .collect(),
-        command: manifest.command.clone(),
-        entrypoint: manifest.entrypoint.clone(),
-        working_dir: manifest.working_dir.clone(),
-        labels: manifest.labels.clone(),
-    })
-}
 
 fn ensure_wasmtime_manifest(manifest: &ServiceManifest) -> Result<()> {
     if manifest.runtime != RuntimeKind::Wasmtime {
@@ -75,7 +31,6 @@ fn ensure_wasmtime_manifest(manifest: &ServiceManifest) -> Result<()> {
             }
             Ok(())
         }
-        ServiceSource::Docker { .. } => bail!("wasmtime runtime requires a wasm component source"),
         ServiceSource::ExistingTcp { .. } => {
             bail!("wasmtime runtime requires a wasm component source")
         }
@@ -125,13 +80,6 @@ pub(crate) fn ensure_services_root_exists(fungi_home: &Path) -> Result<()> {
         )
     })?;
     Ok(())
-}
-
-pub(crate) fn is_missing_docker_container_error(error: &anyhow::Error) -> bool {
-    matches!(
-        error.downcast_ref::<DockerAgentError>(),
-        Some(DockerAgentError::DockerApi { status, .. }) if status.as_u16() == 404
-    )
 }
 
 fn validate_allowed_host_paths(
@@ -193,7 +141,7 @@ async fn stage_wasmtime_component(
                 )
             })?;
         }
-        ServiceSource::Docker { .. } | ServiceSource::ExistingTcp { .. } => {
+        ServiceSource::ExistingTcp { .. } => {
             bail!("invalid wasmtime source type")
         }
     }
@@ -326,22 +274,6 @@ pub(crate) fn refresh_child_state(state: &mut WasmtimeServiceState) -> Result<()
     Ok(())
 }
 
-pub(crate) fn map_docker_instance(
-    details: fungi_docker_agent::ContainerDetails,
-) -> ServiceInstance {
-    ServiceInstance {
-        id: details.id.clone(),
-        runtime: RuntimeKind::Docker,
-        name: details.name,
-        definition_id: None,
-        source: details.image,
-        labels: details.labels,
-        ports: Vec::new(),
-        exposed_endpoints: Vec::new(),
-        status: docker_service_status(details.state.status, details.state.running),
-    }
-}
-
 pub(crate) fn map_wasmtime_instance(handle: &str, state: &WasmtimeServiceState) -> ServiceInstance {
     let running = state.child.is_some();
     let status = if running {
@@ -363,20 +295,6 @@ pub(crate) fn map_wasmtime_instance(handle: &str, state: &WasmtimeServiceState) 
         exposed_endpoints: Vec::new(),
         status,
     }
-}
-
-fn docker_service_status(runtime_state: String, running: bool) -> ServiceStatus {
-    let phase = if running {
-        ServicePhase::Running
-    } else {
-        match runtime_state.as_str() {
-            "created" => ServicePhase::Stopped,
-            "exited" | "dead" => ServicePhase::Exited,
-            _ => ServicePhase::Unknown,
-        }
-    };
-
-    ServiceStatus::new(phase).with_detail(runtime_state)
 }
 
 pub(crate) fn missing_instance_from_manifest(manifest: &ServiceManifest) -> ServiceInstance {
@@ -410,7 +328,6 @@ pub(crate) fn enrich_instance_from_manifest(
 fn service_instance_id(runtime: RuntimeKind, name: &str) -> String {
     let runtime_name = match runtime {
         RuntimeKind::Unknown => "unknown",
-        RuntimeKind::Docker => "docker",
         RuntimeKind::Wasmtime => "wasmtime",
         RuntimeKind::External => "external",
     };
@@ -419,7 +336,6 @@ fn service_instance_id(runtime: RuntimeKind, name: &str) -> String {
 
 fn source_display(source: &ServiceSource) -> String {
     match source {
-        ServiceSource::Docker { image } => image.clone(),
         ServiceSource::WasmtimeFile { component } => component.display().to_string(),
         ServiceSource::WasmtimeUrl { url } => url.clone(),
         ServiceSource::ExistingTcp { host, port } => format!("{host}:{port}"),

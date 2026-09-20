@@ -505,7 +505,6 @@ fn failed_service_instance(service_dir: &Path, error: &anyhow::Error) -> Service
         .unwrap_or_else(|| id.clone());
     let runtime = match document["run"]["provider"].as_str() {
         Some("wasmtime") => RuntimeKind::Wasmtime,
-        Some("docker") => RuntimeKind::Docker,
         None if document["run"].is_null() && document["publish"].is_mapping() => {
             RuntimeKind::External
         }
@@ -628,9 +627,7 @@ fn local_service_id_from_service_dir(service_dir: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::{
-        RuntimeKind, ServicePort, ServicePortAllocation, ServicePortProtocol, ServiceSource,
-    };
+    use crate::runtime::{RuntimeKind, ServicePort, ServicePortProtocol, ServiceSource};
     use fungi_config::paths::FungiPaths;
 
     #[test]
@@ -686,9 +683,9 @@ mod tests {
         let manifest = ServiceManifest {
             name: "demo".into(),
             definition_id: Some("demo-definition".into()),
-            runtime: RuntimeKind::Docker,
-            source: ServiceSource::Docker {
-                image: "nginx:latest".into(),
+            runtime: RuntimeKind::Wasmtime,
+            source: ServiceSource::WasmtimeUrl {
+                url: "https://example.test/demo.wasm".into(),
             },
             expose: None,
             env: BTreeMap::new(),
@@ -696,12 +693,10 @@ mod tests {
             ports: vec![ServicePort {
                 name: Some("http".into()),
                 host_port: 18080,
-                host_port_allocation: ServicePortAllocation::Fixed,
-                service_port: 80,
+                service_port: 18080,
                 protocol: ServicePortProtocol::Tcp,
             }],
             command: Vec::new(),
-            entrypoint: Vec::new(),
             working_dir: None,
             labels: BTreeMap::new(),
         };
@@ -758,9 +753,9 @@ mod tests {
         let manifest = ServiceManifest {
             name: "demo".into(),
             definition_id: None,
-            runtime: RuntimeKind::Docker,
-            source: ServiceSource::Docker {
-                image: "nginx:latest".into(),
+            runtime: RuntimeKind::Wasmtime,
+            source: ServiceSource::WasmtimeUrl {
+                url: "https://example.test/demo.wasm".into(),
             },
             expose: None,
             env: BTreeMap::new(),
@@ -768,12 +763,10 @@ mod tests {
             ports: vec![ServicePort {
                 name: Some("http".into()),
                 host_port: 18080,
-                host_port_allocation: ServicePortAllocation::Fixed,
-                service_port: 80,
+                service_port: 18080,
                 protocol: ServicePortProtocol::Tcp,
             }],
             command: Vec::new(),
-            entrypoint: Vec::new(),
             working_dir: None,
             labels: BTreeMap::new(),
         };

@@ -7,20 +7,12 @@ use crate::paths::FungiPaths;
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Runtime {
     #[serde(default)]
-    pub disable_docker: bool,
-    #[serde(default)]
     pub disable_wasmtime: bool,
-    #[serde(default)]
-    pub docker_socket_path: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allowed_host_paths: Vec<PathBuf>,
 }
 
 impl Runtime {
-    pub fn docker_enabled(&self) -> bool {
-        !self.disable_docker
-    }
-
     pub fn wasmtime_enabled(&self) -> bool {
         !self.disable_wasmtime
     }
@@ -91,7 +83,6 @@ mod tests {
     #[test]
     fn default_runtime_policy_is_enabled_with_safe_defaults() {
         let runtime = Runtime::default();
-        assert!(runtime.docker_enabled());
         assert!(runtime.wasmtime_enabled());
         assert!(runtime.allowed_host_paths.is_empty());
     }

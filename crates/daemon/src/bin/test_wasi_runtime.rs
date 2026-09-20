@@ -46,12 +46,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.mount_dir.clone(),
         vec![args.mount_dir.clone()],
     );
-    let runtime = RuntimeControl::with_wasmtime_provider(
-        provider,
-        None,
-        args.mount_dir.join("services"),
-        true,
-    )?;
+    let runtime =
+        RuntimeControl::with_wasmtime_provider(provider, args.mount_dir.join("services"), true)?;
 
     let source = if let Some(path) = args.wasm_path.clone() {
         ServiceSource::WasmtimeFile { component: path }
@@ -75,12 +71,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ports: vec![ServicePort {
             name: None,
             host_port: args.port,
-            host_port_allocation: fungi_daemon::ServicePortAllocation::Fixed,
             service_port: args.port,
             protocol: ServicePortProtocol::Tcp,
         }],
         command: args.component_args,
-        entrypoint: Vec::new(),
         working_dir: None,
         labels: BTreeMap::new(),
     };

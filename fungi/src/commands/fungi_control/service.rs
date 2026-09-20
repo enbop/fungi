@@ -932,7 +932,6 @@ fn recipe_summary(detail: &RecipeDetail) -> &RecipeSummary {
 
 fn recipe_runtime_label(kind: i32) -> &'static str {
     match RecipeRuntimeKind::try_from(kind) {
-        Ok(RecipeRuntimeKind::Docker) => "docker",
         Ok(RecipeRuntimeKind::Wasmtime) => "wasmtime",
         Ok(RecipeRuntimeKind::Tcp) => "tcp",
         _ => "unknown",
@@ -1033,11 +1032,6 @@ fn print_recipe_warnings(warnings: &[String]) {
 fn print_recipe_runtime_wait_notice(detail: &RecipeDetail) {
     let summary = recipe_summary(detail);
     match RecipeRuntimeKind::try_from(summary.runtime) {
-        Ok(RecipeRuntimeKind::Docker) => {
-            eprintln!(
-                "Preparing Docker service; the first run may take a while while the image is pulled..."
-            );
-        }
         Ok(RecipeRuntimeKind::Wasmtime) => {
             eprintln!(
                 "Preparing Wasmtime service; downloading the component if it is not cached..."
@@ -2189,15 +2183,7 @@ fn print_service_apply_dry_run(created: &CreatedServiceManifest, args: &CommonAr
     println!("Publish:");
     for port in &manifest.ports {
         let name = port.name.as_deref().unwrap_or("main");
-        println!(
-            "  {name}: tcp service:{} daemon:{} ({})",
-            port.service_port,
-            port.host_port,
-            match port.host_port_allocation {
-                fungi_daemon::ServicePortAllocation::Auto => "auto",
-                fungi_daemon::ServicePortAllocation::Fixed => "fixed",
-            }
-        );
+        println!("  {name}: tcp 127.0.0.1:{}", port.host_port);
     }
     if manifest.runtime == RuntimeKind::Wasmtime {
         println!("Runtime grants:");
@@ -2411,7 +2397,6 @@ fn print_existing_apply_notice(
 fn runtime_kind_label(runtime: RuntimeKind) -> &'static str {
     match runtime {
         RuntimeKind::Unknown => "unknown",
-        RuntimeKind::Docker => "docker",
         RuntimeKind::Wasmtime => "wasmtime",
         RuntimeKind::External => "external",
     }
@@ -3091,7 +3076,7 @@ mod tests {
 
     use fungi_daemon::{
         DeviceServiceEndpoint, ServiceAccessEndpoint, ServiceExposeUsage, ServicePort,
-        ServicePortAllocation, ServiceStatus,
+        ServiceStatus,
     };
 
     use super::*;
@@ -3180,7 +3165,7 @@ mod tests {
                 id: "code-server".to_string(),
                 name: "code-server".to_string(),
                 description: "Browser-based VS Code.".to_string(),
-                runtime: RecipeRuntimeKind::Docker as i32,
+                runtime: RecipeRuntimeKind::Tcp as i32,
                 stability: "experimental".to_string(),
                 source_label: "enbop/fungi-service-recipes".to_string(),
                 release_version: "v0.5.1".to_string(),
@@ -3199,7 +3184,7 @@ mod tests {
         assert_eq!(
             format_service_recipe_list(&recipes),
             "Recipe catalog: enbop/fungi-service-recipes (release v0.5.1)\n\n\
-code-server          docker    Browser-based VS Code.\n\
+code-server          tcp       Browser-based VS Code.\n\
 webdav               wasmtime  A WebDAV server."
         );
     }
@@ -3592,7 +3577,7 @@ publish:
     fn remote_web_service(path: &str) -> RemoteService {
         RemoteService {
             name: "demo".to_string(),
-            runtime: RuntimeKind::Docker,
+            runtime: RuntimeKind::Wasmtime,
             metadata: fungi_daemon::DeviceServiceMetadata {
                 usage: Some(ServiceExposeUsage {
                     kind: ServiceExposeUsageKind::Web,
@@ -3610,11 +3595,11 @@ publish:
 
     fn service_instance(ports: Vec<ServicePort>) -> ServiceInstance {
         ServiceInstance {
-            id: "docker:demo".to_string(),
-            runtime: RuntimeKind::Docker,
+            id: "wasmtime:demo".to_string(),
+            runtime: RuntimeKind::Wasmtime,
             name: "demo".to_string(),
             definition_id: None,
-            source: "demo:latest".to_string(),
+            source: "demo.wasm".to_string(),
             labels: BTreeMap::new(),
             ports,
             exposed_endpoints: Vec::new(),
@@ -3641,7 +3626,6 @@ publish:
         ServicePort {
             name: Some(name.to_string()),
             host_port,
-            host_port_allocation: ServicePortAllocation::Auto,
             service_port: 80,
             protocol: ServicePortProtocol::Tcp,
         }

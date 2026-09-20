@@ -1581,7 +1581,6 @@ dependencies = [
  "env_logger 0.11.11",
  "flume",
  "fungi-config",
- "fungi-docker-agent",
  "fungi-stream",
  "fungi-swarm",
  "fungi-util",
@@ -1627,23 +1626,6 @@ dependencies = [
  "tonic",
  "tonic-prost",
  "tonic-prost-build",
-]
-
-[[package]]
-name = "fungi-docker-agent"
-version = "0.7.1"
-dependencies = [
- "bytes",
- "clap",
- "http-body-util",
- "hyper",
- "hyper-util",
- "percent-encoding",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
 ]
 
 [[package]]

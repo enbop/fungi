@@ -37,7 +37,7 @@
 
 - **Private Device Network**: Connect your devices with end-to-end encryption, directly when possible or through a relay when needed.
 - **Explicit Device Trust**: Only devices you approve can initiate service access and management.
-- **Sandboxed Apps as Services**: Run portable WebAssembly apps as services in the built-in WASI sandbox(Wasmtime), or use an optional constrained Docker backend.
+- **Sandboxed Apps as Services**: Run portable WebAssembly apps as services in the built-in WASI sandbox (Wasmtime).
 - **Easy Service Access**: Access services across your device network without exposing them to the public internet.
 - **Cross-Platform**: Run Fungi on macOS, Windows, Linux, and Android.
 
