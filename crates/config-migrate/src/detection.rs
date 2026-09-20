@@ -178,6 +178,8 @@ fn config_requires_current_normalization(
 
     if runtime_table.contains_key("allowed_ports")
         || runtime_table.contains_key("allowed_port_ranges")
+        || runtime_table.contains_key("disable_docker")
+        || runtime_table.contains_key("docker_socket_path")
     {
         return Ok(true);
     }

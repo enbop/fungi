@@ -336,6 +336,8 @@ fn migration_removes_config_sections_that_no_longer_exist() {
             "client = []\n",
             "\n",
             "[runtime]\n",
+            "disable_docker = true\n",
+            "docker_socket_path = \"/tmp/docker.sock\"\n",
             "disable_wasmtime = false\n",
             "allowed_ports = [18080]\n",
             "\n",
@@ -353,11 +355,51 @@ fn migration_removes_config_sections_that_no_longer_exist() {
     assert!(!migrated.contains("file_transfer"));
     assert!(!migrated.contains("allowed_ports"));
     assert!(!migrated.contains("allowed_port_ranges"));
+    assert!(!migrated.contains("disable_docker"));
+    assert!(!migrated.contains("docker_socket_path"));
     assert!(migrated.contains("listen_address = \"127.0.0.1:6601\""));
     assert!(migrated.contains("listen_tcp_port = 4101"));
     assert!(migrated.contains("listen_udp_port = 4102"));
     assert!(migrated.contains("relay_enabled = false"));
     assert!(migrated.contains("disable_wasmtime = false"));
+}
+
+#[test]
+fn current_version_with_removed_docker_options_is_normalized_once() {
+    for removed_options in [
+        "disable_docker = false\n",
+        "docker_socket_path = \"/tmp/docker.sock\"\n",
+        "disable_docker = true\ndocker_socket_path = \"/tmp/docker.sock\"\n",
+    ] {
+        let dir = TempDir::new().unwrap();
+        let config_path = dir.path().join(CONFIG_FILE);
+        let original = format!(
+            "version = 3\n[runtime]\n{removed_options}disable_wasmtime = true\nallowed_host_paths = [\"/opt/fungi-data\"]\n"
+        );
+        fs::write(&config_path, &original).unwrap();
+
+        let report = migrate_if_needed(dir.path()).unwrap();
+        assert!(report.changed, "{removed_options}");
+        let migrated = fs::read_to_string(&config_path).unwrap();
+        let value: toml::Value = toml::from_str(&migrated).unwrap();
+        let runtime = value["runtime"].as_table().unwrap();
+        assert!(!runtime.contains_key("disable_docker"));
+        assert!(!runtime.contains_key("docker_socket_path"));
+        assert_eq!(runtime["disable_wasmtime"].as_bool(), Some(true));
+        assert_eq!(
+            runtime["allowed_host_paths"][0].as_str(),
+            Some("/opt/fungi-data")
+        );
+        assert_eq!(value["version"].as_integer(), Some(3));
+
+        let backup = report.backup_dir.unwrap();
+        assert_eq!(
+            fs::read_to_string(backup.join(CONFIG_FILE)).unwrap(),
+            original
+        );
+        assert!(!migrate_if_needed(dir.path()).unwrap().changed);
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), migrated);
+    }
 }
 
 #[test]

@@ -45,6 +45,8 @@ pub(crate) fn migrate_config_toml_to_current(staging_root: &Path, fungi_dir: &Pa
     if let Some(runtime_table) = table.get_mut("runtime").and_then(toml::Value::as_table_mut) {
         runtime_table.remove("allowed_ports");
         runtime_table.remove("allowed_port_ranges");
+        runtime_table.remove("disable_docker");
+        runtime_table.remove("docker_socket_path");
         remove_legacy_services_allowlist(runtime_table, fungi_dir);
     }
 
