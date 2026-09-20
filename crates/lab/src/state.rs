@@ -176,7 +176,18 @@ impl Lab {
 }
 
 // One lock for each mutating invocation. There is no background state writer.
-pub(crate) fn lock_lab(root: &Path, initialize: bool) -> Result<File> {
+#[derive(Debug)]
+pub(crate) struct LabLock(File);
+
+impl Drop for LabLock {
+    fn drop(&mut self) {
+        // A concurrently spawned child can briefly inherit the descriptor before
+        // exec. Closing our copy alone would leave the lock held by that child.
+        let _ = self.0.unlock();
+    }
+}
+
+pub(crate) fn lock_lab(root: &Path, initialize: bool) -> Result<LabLock> {
     reject_symlink(root)?;
     if initialize {
         fs::create_dir_all(root)?;
@@ -203,7 +214,28 @@ pub(crate) fn lock_lab(root: &Path, initialize: bool) -> Result<File> {
     // ownership marker readable while a mutating command holds the lock.
     file.try_lock()
         .context("another command is managing this lab; try again after it finishes")?;
-    Ok(file)
+    Ok(LabLock(file))
+}
+
+#[cfg(test)]
+mod lock_tests {
+    use super::*;
+
+    #[test]
+    fn dropping_guard_unlocks_even_with_a_duplicated_handle() {
+        let temp = tempfile::tempdir().unwrap();
+        let lock = lock_lab(temp.path(), true).unwrap();
+        // Model a descriptor inherited by a child that has not exec'd yet.
+        let inherited = lock.0.try_clone().unwrap();
+        assert!(lock_lab(temp.path(), false).is_err());
+        drop(lock);
+        let next = lock_lab(temp.path(), false).expect("guard must release the lock immediately");
+        assert!(lock_lab(temp.path(), false).is_err());
+        drop(inherited);
+        assert!(lock_lab(temp.path(), false).is_err());
+        drop(next);
+        lock_lab(temp.path(), false).unwrap();
+    }
 }
 
 fn reject_symlink(path: &Path) -> Result<()> {
