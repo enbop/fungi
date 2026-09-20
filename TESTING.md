@@ -115,25 +115,3 @@ cargo test -p fungi-lab real_ -- --ignored --test-threads=1
 The checks cover state/ownership, scoped rollback and timeout cleanup, dynamic
 node configuration, CLI persistence and RPC discovery after restart, trust
 directions, and log retention.
-
-### WASI lifecycle and external TCP services
-
-```bash
-rustup target add wasm32-wasip2
-cargo build
-cargo run -p fungi-tests --bin test-service-apply-cli
-```
-
-This smoke test uses a disposable local two-node lab and a loopback HTTP fixture
-server. It compiles a repository-owned Rust fixture to a WASIp2 component, serves
-it over loopback HTTP, and starts it through
-the real embedded Wasmtime CLI, and checks its version markers in local and remote
-logs. It covers running/stopped updates, repeated apply, and published entry
-replacement. The fixture sleeps through WASI; it does not serve application TCP
-requests or require a Docker engine or internet downloads.
-
-The same run exposes the host HTTP fixture through a remote TCP service and
-checks the response through the controller's forwarded port. Stopping and removing
-that Fungi service must leave the host server reachable. Cleanup removes service
-records and stops/cleans the lab. If lab cleanup fails, its directory is retained
-and printed for manual recovery.
