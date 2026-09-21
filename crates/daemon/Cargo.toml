@@ -12,7 +12,6 @@ test-support = []
 
 [dependencies]
 fungi-config = { workspace = true }
-fungi-docker-agent = { workspace = true }
 fungi-swarm = { workspace = true }
 fungi-util = { workspace = true }
 log = { workspace = true }

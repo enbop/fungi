@@ -37,7 +37,6 @@ pub async fn execute_security(args: CommonArgs, cmd: SecurityCommands) {
         SecurityCommands::Show => match client.get_runtime_config(Request::new(Empty {})).await {
             Ok(resp) => {
                 let config = resp.into_inner();
-                println!("disable_docker: {}", config.disable_docker);
                 println!("disable_wasmtime: {}", config.disable_wasmtime);
                 println!("allowed_host_paths:");
                 for path in config.allowed_host_paths {

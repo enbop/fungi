@@ -7,15 +7,11 @@ use std::{
 use anyhow::{Result, bail};
 use parking_lot::Mutex;
 
-use crate::{
-    controls::DockerControl,
-    service_state::{DesiredServiceState, PersistedService, ServiceStateStore},
-};
+use crate::service_state::{DesiredServiceState, PersistedService, ServiceStateStore};
 
 use super::{
     helpers::{
-        enrich_instance_from_manifest, ensure_services_root_exists,
-        is_missing_docker_container_error, missing_instance_from_manifest,
+        enrich_instance_from_manifest, ensure_services_root_exists, missing_instance_from_manifest,
     },
     manifest::{
         ManifestPathRoots, parse_service_manifest_yaml_with_policy,
@@ -23,12 +19,11 @@ use super::{
     },
     model::*,
     parse_service_manifest_yaml_with_policy_for_service_paths, peek_service_manifest_name,
-    providers::{DockerRuntimeProvider, RuntimeProvider, WasmtimeRuntimeProvider},
+    providers::WasmtimeRuntimeProvider,
 };
 
 #[derive(Clone)]
 pub struct RuntimeControl {
-    docker: Option<DockerRuntimeProvider>,
     wasmtime: WasmtimeRuntimeProvider,
     wasmtime_enabled: bool,
     service_index: Arc<Mutex<HashMap<String, RuntimeKind>>>,
@@ -58,14 +53,12 @@ impl RuntimeControl {
         runtime_root: PathBuf,
         launcher_path: PathBuf,
         fungi_home: PathBuf,
-        docker: Option<DockerControl>,
         service_state_file: PathBuf,
         allowed_host_paths: Vec<PathBuf>,
         wasmtime_enabled: bool,
     ) -> Result<Self> {
         ensure_services_root_exists(&fungi_home)?;
         Ok(Self {
-            docker: docker.map(DockerRuntimeProvider::new),
             wasmtime: WasmtimeRuntimeProvider::new(
                 runtime_root,
                 launcher_path,
@@ -83,12 +76,10 @@ impl RuntimeControl {
 
     pub fn with_wasmtime_provider(
         wasmtime: WasmtimeRuntimeProvider,
-        docker: Option<DockerControl>,
         service_state_file: PathBuf,
         wasmtime_enabled: bool,
     ) -> Result<Self> {
         Ok(Self {
-            docker: docker.map(DockerRuntimeProvider::new),
             wasmtime,
             wasmtime_enabled,
             service_index: Arc::new(Mutex::new(HashMap::new())),
@@ -102,7 +93,6 @@ impl RuntimeControl {
     pub fn supports(&self, runtime: RuntimeKind) -> bool {
         match runtime {
             RuntimeKind::Unknown => false,
-            RuntimeKind::Docker => self.docker.is_some(),
             RuntimeKind::Wasmtime => self.wasmtime_enabled,
             RuntimeKind::External => true,
         }
@@ -213,11 +203,6 @@ impl RuntimeControl {
 
         let instance = match manifest.runtime {
             RuntimeKind::Unknown => bail!("unknown service runtime"),
-            RuntimeKind::Docker => {
-                self.docker_provider()?
-                    .pull_with_container_name(manifest, &resolved_local_service_id)
-                    .await
-            }
             RuntimeKind::Wasmtime => {
                 if replacing_existing {
                     self.wasmtime
@@ -390,11 +375,6 @@ impl RuntimeControl {
         self.ensure_runtime_service(runtime, name).await?;
         match runtime {
             RuntimeKind::Unknown => bail!("unknown service runtime"),
-            RuntimeKind::Docker => {
-                self.docker_provider()?
-                    .start(&self.docker_runtime_handle_or_name(name))
-                    .await
-            }
             RuntimeKind::Wasmtime => self.wasmtime.start(name).await,
             RuntimeKind::External => Ok(()),
         }?;
@@ -411,27 +391,11 @@ impl RuntimeControl {
         let _ = self.ensure_runtime_service(runtime, name).await;
         let stop_result = match runtime {
             RuntimeKind::Unknown => bail!("unknown service runtime"),
-            RuntimeKind::Docker => {
-                self.docker_provider()?
-                    .stop(&self.docker_runtime_handle_or_name(name))
-                    .await
-            }
             RuntimeKind::Wasmtime => self.wasmtime.stop(name).await,
             RuntimeKind::External => Ok(()),
         };
 
-        match stop_result {
-            Ok(()) => {}
-            Err(error)
-                if runtime == RuntimeKind::Docker && is_missing_docker_container_error(&error) =>
-            {
-                log::warn!(
-                    "Docker service '{}' is already missing during stop; reconciling local state only",
-                    name
-                );
-            }
-            Err(error) => return Err(error),
-        }
+        stop_result?;
 
         self.set_desired_state(name, DesiredServiceState::Stopped)
     }
@@ -454,11 +418,6 @@ impl RuntimeControl {
         }
         let remove_result = match runtime {
             RuntimeKind::Unknown => bail!("unknown service runtime"),
-            RuntimeKind::Docker => {
-                self.docker_provider()?
-                    .remove(&self.docker_runtime_handle_or_name(name))
-                    .await
-            }
             RuntimeKind::Wasmtime => {
                 let local_service_id = self.service_state.lock().local_service_id(name)?;
                 self.wasmtime
@@ -468,18 +427,7 @@ impl RuntimeControl {
             RuntimeKind::External => Ok(()),
         };
 
-        match remove_result {
-            Ok(()) => {}
-            Err(error)
-                if runtime == RuntimeKind::Docker && is_missing_docker_container_error(&error) =>
-            {
-                log::warn!(
-                    "Docker service '{}' is already missing during remove; cleaning up local state only",
-                    name
-                );
-            }
-            Err(error) => return Err(error),
-        }
+        remove_result?;
 
         self.service_index.lock().remove(name);
         self.service_manifests.lock().remove(name);
@@ -537,20 +485,6 @@ impl RuntimeControl {
         self.ensure_runtime_enabled(runtime)?;
         self.ensure_runtime_service(runtime, name).await?;
         match runtime {
-            RuntimeKind::Docker => {
-                let logs = self
-                    .docker_provider()?
-                    .logs(
-                        &self.docker_runtime_handle_or_name(name),
-                        &ServiceLogsOptions {
-                            tail: Some(tail.to_string()),
-                        },
-                    )
-                    .await?;
-                Ok(super::providers::limit_text_bytes_from_end(
-                    logs.text, max_bytes,
-                ))
-            }
             RuntimeKind::Wasmtime => self.wasmtime.logs_text_bounded(name, tail, max_bytes),
             RuntimeKind::External => bail!("external TCP services do not have runtime logs"),
             RuntimeKind::Unknown => bail!("unknown service runtime"),
@@ -674,11 +608,6 @@ impl RuntimeControl {
 
         let inspect_result = match runtime {
             RuntimeKind::Unknown => bail!("unknown service runtime"),
-            RuntimeKind::Docker => {
-                self.docker_provider()?
-                    .inspect(&self.docker_runtime_handle_or_name(name))
-                    .await
-            }
             RuntimeKind::Wasmtime => self.wasmtime.inspect(name).await,
             RuntimeKind::External => {
                 let manifest = self
@@ -693,22 +622,7 @@ impl RuntimeControl {
             }
         };
 
-        let instance = match inspect_result {
-            Ok(instance) => instance,
-            Err(error)
-                if runtime == RuntimeKind::Docker && is_missing_docker_container_error(&error) =>
-            {
-                if let Some(manifest) = self.get_service_manifest(name) {
-                    log::warn!(
-                        "Docker service '{}' is missing during inspect; reporting missing instance",
-                        name
-                    );
-                    return Ok(missing_instance_from_manifest(&manifest));
-                }
-                return Err(error);
-            }
-            Err(error) => return Err(error),
-        };
+        let instance = inspect_result?;
 
         if let Some(manifest) = self.get_service_manifest(name) {
             Ok(enrich_instance_from_manifest(instance, &manifest))
@@ -737,11 +651,6 @@ impl RuntimeControl {
         self.ensure_runtime_enabled(runtime)?;
         self.ensure_runtime_service(runtime, name).await?;
         match runtime {
-            RuntimeKind::Docker => {
-                self.docker_provider()?
-                    .logs(&self.docker_runtime_handle_or_name(name), options)
-                    .await
-            }
             RuntimeKind::Wasmtime => self.wasmtime.logs(name, options).await,
             RuntimeKind::External => bail!("external TCP services do not have runtime logs"),
             RuntimeKind::Unknown => bail!("unknown service runtime"),
@@ -800,20 +709,9 @@ impl RuntimeControl {
             .collect()
     }
 
-    fn docker_provider(&self) -> Result<&DockerRuntimeProvider> {
-        self.docker
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("docker runtime is not enabled in config"))
-    }
-
     fn ensure_runtime_enabled(&self, runtime: RuntimeKind) -> Result<()> {
         match runtime {
             RuntimeKind::Unknown => bail!("unknown service runtime"),
-            RuntimeKind::Docker => {
-                if self.docker.is_none() {
-                    bail!("docker runtime is not available");
-                }
-            }
             RuntimeKind::Wasmtime => {
                 if !self.wasmtime_enabled {
                     bail!("wasmtime runtime is disabled in config");
@@ -822,13 +720,6 @@ impl RuntimeControl {
             RuntimeKind::External => {}
         }
         Ok(())
-    }
-
-    fn docker_runtime_handle_or_name(&self, name: &str) -> String {
-        self.service_state
-            .lock()
-            .local_service_id(name)
-            .unwrap_or_else(|_| name.to_string())
     }
 
     async fn ensure_runtime_service(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
@@ -945,26 +836,12 @@ impl RuntimeControl {
     async fn stop_runtime_only(&self, runtime: RuntimeKind, name: &str) -> Result<()> {
         let stop_result = match runtime {
             RuntimeKind::Unknown => bail!("unknown service runtime"),
-            RuntimeKind::Docker => {
-                self.docker_provider()?
-                    .stop(&self.docker_runtime_handle_or_name(name))
-                    .await
-            }
             RuntimeKind::Wasmtime => self.wasmtime.stop(name).await,
             RuntimeKind::External => Ok(()),
         };
 
         match stop_result {
             Ok(()) => Ok(()),
-            Err(error)
-                if runtime == RuntimeKind::Docker && is_missing_docker_container_error(&error) =>
-            {
-                log::warn!(
-                    "Docker service '{}' is already missing during apply stop; replacing local state only",
-                    name
-                );
-                Ok(())
-            }
             Err(error)
                 if runtime == RuntimeKind::Wasmtime
                     && error.to_string().contains("wasmtime service not found") =>
@@ -988,7 +865,6 @@ impl RuntimeControl {
     ) -> Result<()> {
         let remove_result = match runtime {
             RuntimeKind::Unknown => bail!("unknown service runtime"),
-            RuntimeKind::Docker => self.docker_provider()?.remove(local_service_id).await,
             RuntimeKind::Wasmtime => {
                 self.wasmtime
                     .remove_with_local_service_id(name, local_service_id)
@@ -997,19 +873,7 @@ impl RuntimeControl {
             RuntimeKind::External => Ok(()),
         };
 
-        match remove_result {
-            Ok(()) => Ok(()),
-            Err(error)
-                if runtime == RuntimeKind::Docker && is_missing_docker_container_error(&error) =>
-            {
-                log::warn!(
-                    "Docker service '{}' is already missing during apply remove; replacing local state only",
-                    name
-                );
-                Ok(())
-            }
-            Err(error) => Err(error),
-        }
+        remove_result
     }
 
     fn external_instance_from_manifest(
@@ -1092,7 +956,6 @@ mod rollback_tests {
             );
             let control = RuntimeControl::with_wasmtime_provider(
                 provider.clone(),
-                None,
                 home.join("services"),
                 true,
             )
@@ -1152,7 +1015,6 @@ mod rollback_tests {
             home.join("runtime"),
             PathBuf::from("unused"),
             home.to_path_buf(),
-            None,
             home.join("services"),
             vec![],
             false,

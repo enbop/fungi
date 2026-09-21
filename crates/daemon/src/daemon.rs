@@ -10,8 +10,8 @@ use crate::{
     Connectivity, DaemonArgs, InboundAccessPolicy, Settings,
     control::{FungiControl, FungiControlInit},
     controls::{
-        DockerControl, NodeCapabilitiesControl, ServiceControlProtocolControl,
-        ServiceDiscoveryControl, TcpTunnelingControl, mdns::MdnsControl,
+        NodeCapabilitiesControl, ServiceControlProtocolControl, ServiceDiscoveryControl,
+        TcpTunnelingControl, mdns::MdnsControl,
     },
     runtime::{RuntimeControl, wasmtime_runtime_supported},
 };
@@ -132,7 +132,6 @@ impl FungiDaemon {
             .parent()
             .unwrap_or_else(|| std::path::Path::new("."))
             .to_path_buf();
-        let docker_control = DockerControl::from_config(&config.runtime, &fungi_home)?;
         let settings = Settings::new(config.clone());
         let runtime_root = config
             .config_file_path()
@@ -144,7 +143,6 @@ impl FungiDaemon {
             env::current_exe()
                 .map_err(|e| anyhow::anyhow!("Failed to resolve current executable: {e}"))?,
             fungi_home.clone(),
-            docker_control.clone(),
             fungi_home.join("services"),
             config.runtime.allowed_host_paths.clone(),
             config.runtime.wasmtime_enabled() && wasmtime_runtime_supported(),
@@ -176,7 +174,6 @@ impl FungiDaemon {
             local_device_id: device_info.peer_id,
             fungi_dir: fungi_home,
             runtime: runtime_control,
-            docker: docker_control,
             service_discovery: service_discovery_control,
             service_control: service_control_protocol_control,
             tcp_tunneling: tcp_tunneling_control,

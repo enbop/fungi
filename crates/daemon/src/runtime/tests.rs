@@ -2,14 +2,13 @@ use super::*;
 use crate::service_state::DesiredServiceState;
 use anyhow::Result;
 use fungi_config::paths::FungiPaths;
-use fungi_docker_agent::DockerAgentError;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
-    net::{SocketAddr, TcpListener as StdTcpListener},
+    net::SocketAddr,
     path::{Path, PathBuf},
 };
 use tempfile::TempDir;
@@ -19,70 +18,8 @@ use tokio::{
     time::{Duration, sleep},
 };
 
-use super::helpers::{
-    build_wasmtime_command, docker_spec_from_manifest_with_name, ensure_manifest_mount_dirs,
-    is_missing_docker_container_error,
-};
+use super::helpers::{build_wasmtime_command, ensure_manifest_mount_dirs};
 use super::providers::WasmtimeServiceState;
-
-#[test]
-fn docker_manifest_maps_to_container_spec() {
-    let manifest = ServiceManifest {
-        name: "filebrowser".into(),
-        definition_id: None,
-        runtime: RuntimeKind::Docker,
-        source: ServiceSource::Docker {
-            image: "filebrowser/filebrowser:latest".into(),
-        },
-        expose: None,
-        env: BTreeMap::from([(String::from("FB_NOAUTH"), String::from("true"))]),
-        mounts: vec![ServiceMount {
-            host_path: PathBuf::from("/tmp/fungi/data"),
-            runtime_path: "/srv".into(),
-        }],
-        ports: vec![ServicePort {
-            name: None,
-            host_port: 8080,
-            host_port_allocation: ServicePortAllocation::Fixed,
-            service_port: 80,
-            protocol: ServicePortProtocol::Tcp,
-        }],
-        command: vec!["serve".into()],
-        entrypoint: Vec::new(),
-        working_dir: None,
-        labels: BTreeMap::new(),
-    };
-
-    let spec = docker_spec_from_manifest_with_name(&manifest, &manifest.name).unwrap();
-    assert_eq!(spec.name.as_deref(), Some("filebrowser"));
-    assert_eq!(spec.image, "filebrowser/filebrowser:latest");
-    assert_eq!(spec.ports[0].host_port, 8080);
-}
-
-#[test]
-fn docker_manifest_can_use_internal_container_name() {
-    let manifest = ServiceManifest {
-        name: "c".into(),
-        definition_id: Some("code-server".into()),
-        runtime: RuntimeKind::Docker,
-        source: ServiceSource::Docker {
-            image: "ghcr.io/coder/code-server:latest".into(),
-        },
-        expose: None,
-        env: BTreeMap::new(),
-        mounts: Vec::new(),
-        ports: Vec::new(),
-        command: Vec::new(),
-        entrypoint: Vec::new(),
-        working_dir: None,
-        labels: BTreeMap::new(),
-    };
-
-    let spec =
-        docker_spec_from_manifest_with_name(&manifest, "svc_01hz7j7n3evh1q4j1a8g9c2d3e").unwrap();
-
-    assert_eq!(spec.name.as_deref(), Some("svc_01hz7j7n3evh1q4j1a8g9c2d3e"));
-}
 
 #[test]
 fn ensure_manifest_mount_dirs_creates_missing_host_paths() {
@@ -103,7 +40,6 @@ fn ensure_manifest_mount_dirs_creates_missing_host_paths() {
         }],
         ports: Vec::new(),
         command: Vec::new(),
-        entrypoint: Vec::new(),
         working_dir: None,
         labels: BTreeMap::new(),
     };
@@ -124,7 +60,6 @@ fn runtime_control_new_creates_services_root() {
         runtime_root,
         PathBuf::from("/bin/echo"),
         fungi_home.clone(),
-        None,
         services_root,
         Vec::new(),
         false,
@@ -135,28 +70,6 @@ fn runtime_control_new_creates_services_root() {
     assert!(fungi_home.join("appdata/services").is_dir());
     assert!(fungi_home.join("artifacts/services").is_dir());
     assert!(paths.user_home().is_dir());
-}
-
-#[test]
-fn docker_manifest_rejects_wrong_source_type() {
-    let manifest = ServiceManifest {
-        name: "bad".into(),
-        definition_id: None,
-        runtime: RuntimeKind::Docker,
-        source: ServiceSource::WasmtimeFile {
-            component: PathBuf::from("/tmp/app.wasm"),
-        },
-        expose: None,
-        env: BTreeMap::new(),
-        mounts: Vec::new(),
-        ports: Vec::new(),
-        command: Vec::new(),
-        entrypoint: Vec::new(),
-        working_dir: None,
-        labels: BTreeMap::new(),
-    };
-
-    assert!(docker_spec_from_manifest_with_name(&manifest, &manifest.name).is_err());
 }
 
 #[tokio::test]
@@ -197,12 +110,10 @@ async fn wasmtime_provider_runs_fake_launcher_and_collects_logs() {
         ports: vec![ServicePort {
             name: None,
             host_port: 18081,
-            host_port_allocation: ServicePortAllocation::Fixed,
             service_port: 8081,
             protocol: ServicePortProtocol::Tcp,
         }],
         command: Vec::new(),
-        entrypoint: Vec::new(),
         working_dir: None,
         labels: BTreeMap::new(),
     };
@@ -281,12 +192,10 @@ fn wasmtime_tcp_entry_runs_command_with_network_permissions() {
         ports: vec![ServicePort {
             name: Some("socks5".into()),
             host_port: 18081,
-            host_port_allocation: ServicePortAllocation::Fixed,
             service_port: 1080,
             protocol: ServicePortProtocol::Tcp,
         }],
         command: vec!["--listen".into(), "127.0.0.1:1080".into()],
-        entrypoint: Vec::new(),
         working_dir: None,
         labels: BTreeMap::new(),
     };
@@ -353,7 +262,6 @@ fn wasmtime_command_android_home_override_matches_target_behavior() {
         mounts: Vec::new(),
         ports: Vec::new(),
         command: Vec::new(),
-        entrypoint: Vec::new(),
         working_dir: None,
         labels: BTreeMap::new(),
     };
@@ -414,7 +322,6 @@ fn wasmtime_command_without_tcp_ports_omits_network_permissions() {
         mounts: Vec::new(),
         ports: Vec::new(),
         command: Vec::new(),
-        entrypoint: Vec::new(),
         working_dir: None,
         labels: BTreeMap::new(),
     };
@@ -445,14 +352,14 @@ fn wasmtime_command_without_tcp_ports_omits_network_permissions() {
 }
 
 #[test]
-fn fungi_service_document_supports_fungi_workspace_and_auto_host_port() {
+fn fungi_service_document_supports_fungi_workspace_and_fixed_host_port() {
     let yaml = r#"
 fungi: service/v1
 id: filebrowser
 run:
-  provider: docker
+  provider: wasmtime
   source:
-    image: filebrowser/filebrowser:latest
+    file: demo.wasm
   mounts:
     - from: $fungi.workspace
       to: /srv
@@ -464,9 +371,7 @@ publish:
       kind: web
 "#;
 
-    let occupied_allowed_port = StdTcpListener::bind(("127.0.0.1", 0)).unwrap();
-    let occupied_allowed_port_number = occupied_allowed_port.local_addr().unwrap().port();
-    let used_host_ports = BTreeSet::from([occupied_allowed_port_number]);
+    let used_host_ports = BTreeSet::from([8081]);
     let fungi_home = PathBuf::from("/tmp/fungi-home");
     let paths = FungiPaths::from_fungi_home(&fungi_home);
     let manifest = parse_service_manifest_yaml_with_policy(
@@ -479,11 +384,8 @@ publish:
     .unwrap();
 
     assert_eq!(manifest.mounts[0].host_path, paths.user_home());
-    assert_ne!(manifest.ports[0].host_port, occupied_allowed_port_number);
-    assert_eq!(
-        manifest.ports[0].host_port_allocation,
-        ServicePortAllocation::Auto
-    );
+    assert_eq!(manifest.ports[0].host_port, 80);
+    assert_eq!(manifest.ports[0].service_port, 80);
 }
 
 #[test]
@@ -492,9 +394,9 @@ fn fungi_service_document_supports_explicit_service_path_roots() {
 fungi: service/v1
 id: filebrowser
 run:
-  provider: docker
+  provider: wasmtime
   source:
-    image: filebrowser/filebrowser:latest
+    file: demo.wasm
   mounts:
     - from: $fungi.service.data/db
       to: /srv
@@ -534,14 +436,14 @@ publish:
 }
 
 #[test]
-fn fungi_service_file_maps_docker_workload_port_and_workspace_mount() {
+fn fungi_service_file_maps_wasmtime_workload_port_and_workspace_mount() {
     let content = r#"---
 fungi: service/v1
 id: code-server
 run:
-  provider: docker
+  provider: wasmtime
   source:
-    image: ghcr.io/coder/code-server:4.117.0
+    file: demo.wasm
   args:
     - --bind-addr
     - 0.0.0.0:8080
@@ -565,13 +467,9 @@ publish:
     let manifest = parse_service_manifest_yaml(content, Path::new("."), &fungi_home).unwrap();
 
     assert_eq!(manifest.name, "code-server");
-    assert_eq!(manifest.runtime, RuntimeKind::Docker);
+    assert_eq!(manifest.runtime, RuntimeKind::Wasmtime);
     assert_eq!(manifest.mounts[0].host_path, paths.user_home());
     assert_eq!(manifest.ports[0].service_port, 8080);
-    assert_eq!(
-        manifest.ports[0].host_port_allocation,
-        ServicePortAllocation::Auto
-    );
     assert_eq!(
         manifest
             .expose
@@ -640,10 +538,6 @@ publish:
         ["--listen".to_string(), "127.0.0.1:8082".to_string()]
     );
     assert_eq!(manifest.ports[0].host_port, 8082);
-    assert_eq!(
-        manifest.ports[0].host_port_allocation,
-        ServicePortAllocation::Fixed
-    );
 }
 
 #[test]
@@ -688,9 +582,9 @@ fn fungi_service_file_rejects_mixed_client_metadata() {
 fungi: service/v1
 id: mixed
 run:
-  provider: docker
+  provider: wasmtime
   source:
-    image: example/mixed:latest
+    file: demo.wasm
 publish:
   web:
     tcp:
@@ -802,38 +696,14 @@ publish:
 }
 
 #[test]
-fn fungi_service_docker_publish_allocates_host_port() {
-    let yaml = r#"
-fungi: service/v1
-id: filebrowser
-run:
-  provider: docker
-  source:
-    image: filebrowser/filebrowser:latest
-publish:
-  http:
-    tcp:
-      port: 80
-"#;
-
-    let manifest = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp")).unwrap();
-
-    assert!(manifest.ports[0].host_port > 0);
-    assert_eq!(
-        manifest.ports[0].host_port_allocation,
-        ServicePortAllocation::Auto
-    );
-}
-
-#[test]
 fn service_manifest_to_yaml_renders_current_fungi_service_format() {
     let yaml = r#"
 fungi: service/v1
 id: code-server
 run:
-  provider: docker
+  provider: wasmtime
   source:
-    image: ghcr.io/coder/code-server:4.117.0
+    file: demo.wasm
 publish:
   http:
     tcp:
@@ -844,10 +714,6 @@ publish:
 
     let manifest =
         parse_service_manifest_yaml(yaml, Path::new("."), Path::new("/tmp/fungi-home")).unwrap();
-    assert_eq!(
-        manifest.ports[0].host_port_allocation,
-        ServicePortAllocation::Auto
-    );
 
     let rendered = service_manifest_to_yaml(&manifest).unwrap();
     assert!(rendered.contains("fungi: service/v1"));
@@ -863,10 +729,6 @@ publish:
     )
     .unwrap();
     assert_eq!(reparsed.ports[0].service_port, 8080);
-    assert_eq!(
-        reparsed.ports[0].host_port_allocation,
-        ServicePortAllocation::Auto
-    );
 }
 
 #[test]
@@ -890,10 +752,6 @@ publish:
         parse_service_manifest_yaml(yaml, Path::new("."), Path::new("/tmp/fungi-home")).unwrap();
     assert_eq!(manifest.ports[0].service_port, 8080);
     assert_eq!(manifest.ports[0].host_port, 8080);
-    assert_eq!(
-        manifest.ports[0].host_port_allocation,
-        ServicePortAllocation::Fixed
-    );
 
     let rendered = service_manifest_to_yaml(&manifest).unwrap();
     assert!(rendered.contains("fungi: service/v1"));
@@ -907,10 +765,6 @@ publish:
     )
     .unwrap();
     assert_eq!(reparsed.ports[0].host_port, 8080);
-    assert_eq!(
-        reparsed.ports[0].host_port_allocation,
-        ServicePortAllocation::Fixed
-    );
 }
 
 #[test]
@@ -991,7 +845,6 @@ async fn wasmtime_provider_downloads_remote_component() {
         mounts: Vec::new(),
         ports: Vec::new(),
         command: vec!["--help".into()],
-        entrypoint: Vec::new(),
         working_dir: None,
         labels: BTreeMap::new(),
     };
@@ -1024,7 +877,6 @@ async fn runtime_control_apply_reuses_local_id_and_restages_wasmtime_component()
         fungi_home.join("runtime"),
         launcher,
         fungi_home.clone(),
-        None,
         fungi_home.join("services"),
         vec![temp_dir.path().to_path_buf()],
         true,
@@ -1169,7 +1021,6 @@ async fn runtime_control_apply_reports_restart_failure_after_persisting_manifest
         fungi_home.join("runtime"),
         launcher.clone(),
         fungi_home.clone(),
-        None,
         fungi_home.join("services"),
         vec![temp_dir.path().to_path_buf()],
         true,
@@ -1265,8 +1116,7 @@ async fn first_apply_persistence_failure_can_be_retried_without_restart() {
     );
     let services = home.join("services");
     let control =
-        RuntimeControl::with_wasmtime_provider(provider.clone(), None, services.clone(), true)
-            .unwrap();
+        RuntimeControl::with_wasmtime_provider(provider.clone(), services.clone(), true).unwrap();
 
     // A non-directory obstruction fails identically for root and non-root test runners.
     fs::remove_dir(&services).unwrap();
@@ -1325,7 +1175,7 @@ async fn failed_upgrade_restores_manifest_and_remains_retryable() {
         vec![home.to_path_buf()],
     );
     let control =
-        RuntimeControl::with_wasmtime_provider(provider.clone(), None, home.join("services"), true)
+        RuntimeControl::with_wasmtime_provider(provider.clone(), home.join("services"), true)
             .unwrap();
     control.restore_persisted_state().await.unwrap();
 
@@ -1403,7 +1253,6 @@ async fn invalid_persisted_services_are_isolated_and_can_be_upgraded_or_removed(
         home.join("runtime"),
         create_fake_launcher(temp.path()).unwrap(),
         home.clone(),
-        None,
         home.join("services"),
         vec![temp.path().to_path_buf()],
         true,
@@ -1528,7 +1377,6 @@ async fn state_errors_do_not_block_healthy_services_and_apply_clears_migration_e
         home.join("runtime"),
         PathBuf::from("unused"),
         home.to_path_buf(),
-        None,
         home.join("services"),
         vec![],
         false,
@@ -1583,7 +1431,6 @@ async fn runtime_control_apply_uses_in_memory_manifest_when_persisted_state_is_m
         fungi_home.join("runtime"),
         PathBuf::from("/bin/echo"),
         fungi_home.clone(),
-        None,
         fungi_home.join("services"),
         Vec::new(),
         false,
@@ -1618,7 +1465,6 @@ async fn apply_manifest_yaml_allows_same_service_fixed_host_port_reapply_only() 
         fungi_home.join("runtime"),
         launcher,
         fungi_home.clone(),
-        None,
         fungi_home.join("services"),
         vec![temp_dir.path().to_path_buf()],
         true,
@@ -1670,7 +1516,6 @@ async fn apply_manifest_yaml_rejects_definition_id_mismatch() {
         fungi_home.join("runtime"),
         PathBuf::from("/bin/echo"),
         fungi_home.clone(),
-        None,
         fungi_home.join("services"),
         Vec::new(),
         false,
@@ -1731,9 +1576,9 @@ fn parse_fungi_service_expose_defaults_service_identity() {
 fungi: service/v1
 id: filebrowser
 run:
-  provider: docker
+  provider: wasmtime
   source:
-    image: filebrowser/filebrowser:latest
+    file: demo.wasm
 publish:
   http:
     tcp:
@@ -1757,9 +1602,9 @@ fn parse_fungi_service_expose_maps_icon_url() {
 fungi: service/v1
 id: filebrowser
 run:
-  provider: docker
+  provider: wasmtime
   source:
-    image: filebrowser/filebrowser:latest
+    file: demo.wasm
 publish:
   http:
     tcp:
@@ -1787,9 +1632,9 @@ fn parse_fungi_service_rejects_mismatched_multi_entry_client_metadata() {
 fungi: service/v1
 id: multi
 run:
-  provider: docker
+  provider: wasmtime
   source:
-    image: example/multi:latest
+    file: demo.wasm
 publish:
   api:
     tcp:
@@ -1810,10 +1655,9 @@ publish:
 }
 
 #[test]
-fn parse_fungi_service_rejects_docker_publish_host() {
-    let yaml = r#"
-fungi: service/v1
-id: web-service
+fn parse_fungi_service_rejects_removed_docker_provider() {
+    let yaml = r#"fungi: service/v1
+id: old-container
 run:
   provider: docker
   source:
@@ -1821,17 +1665,67 @@ run:
 publish:
   main:
     tcp:
-      host: 127.0.0.1
-      port: 1234
+      port: 8080
 "#;
+    let error = parse_service_manifest_yaml(yaml, Path::new("."), Path::new("/tmp"))
+        .expect_err("Docker must not remain an executable provider");
+    assert!(format!("{error:#}").contains("docker"));
+}
 
-    let error = parse_service_manifest_yaml(yaml, Path::new("/tmp"), Path::new("/tmp"))
-        .expect_err("docker publish host should be rejected");
+#[tokio::test]
+async fn removed_docker_state_does_not_block_tcp_restore_or_removal() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path();
+    let legacy_dir = home.join("services/svc_container");
+    fs::create_dir_all(&legacy_dir).unwrap();
+    fs::write(legacy_dir.join("service.yaml"), "fungi: service/v1\nid: old-container\nrun:\n  provider: docker\n  source:\n    image: example/web:latest\npublish:\n  main:\n    tcp:\n      port: 8080\n").unwrap();
+    fs::write(
+        legacy_dir.join("state.json"),
+        r#"{"schema_version":2,"local_service_id":"svc_container","desired_state":"running"}"#,
+    )
+    .unwrap();
+    let appdata = home.join("appdata/services/svc_container");
+    fs::create_dir_all(&appdata).unwrap();
+    fs::write(appdata.join("keep.txt"), "user data").unwrap();
+    let make_control = || {
+        RuntimeControl::new(
+            home.join("runtime"),
+            PathBuf::from("unused"),
+            home.to_path_buf(),
+            home.join("services"),
+            vec![],
+            false,
+        )
+        .unwrap()
+    };
+    let control = make_control();
+    control
+        .apply(&existing_tcp_manifest("host-app", "127.0.0.1", 54321))
+        .await
+        .unwrap();
+    control.start_by_name("host-app").await.unwrap();
+    drop(control);
+
+    let control = make_control();
+    control.restore_persisted_state().await.unwrap();
     assert!(
-        error
-            .to_string()
-            .contains("publish.main.tcp.host is not used with provider: docker")
+        control
+            .inspect_by_name("host-app")
+            .await
+            .unwrap()
+            .status
+            .is_running()
     );
+    let old = control.inspect_by_name("old-container").await.unwrap();
+    assert_eq!(old.runtime, RuntimeKind::Unknown);
+    assert!(old.status.state_label().contains("configuration error"));
+    assert!(control.start_by_name("old-container").await.is_err());
+    assert_eq!(
+        fs::read_to_string(appdata.join("keep.txt")).unwrap(),
+        "user data"
+    );
+    control.remove_by_name("old-container").await.unwrap();
+    assert_eq!(control.list_services().await.unwrap().len(), 1);
 }
 
 #[test]
@@ -1853,26 +1747,6 @@ publish:
             .to_string()
             .contains("publish.main.tcp.port must be greater than 0")
     );
-}
-
-#[test]
-fn missing_docker_container_error_is_detected() {
-    let error = anyhow::Error::new(DockerAgentError::DockerApi {
-        status: "404".parse().unwrap(),
-        message: "No such container: filebrowser".into(),
-    });
-
-    assert!(is_missing_docker_container_error(&error));
-}
-
-#[test]
-fn non_404_docker_error_is_not_detected_as_missing_container() {
-    let error = anyhow::Error::new(DockerAgentError::DockerApi {
-        status: "500".parse().unwrap(),
-        message: "daemon broke".into(),
-    });
-
-    assert!(!is_missing_docker_container_error(&error));
 }
 
 fn create_fake_launcher(dir: &Path) -> Result<PathBuf> {
@@ -1941,12 +1815,10 @@ fn existing_tcp_manifest(name: &str, host: &str, port: u16) -> ServiceManifest {
         ports: vec![ServicePort {
             name: Some("main".to_string()),
             host_port: port,
-            host_port_allocation: ServicePortAllocation::Fixed,
             service_port: port,
             protocol: ServicePortProtocol::Tcp,
         }],
         command: Vec::new(),
-        entrypoint: Vec::new(),
         working_dir: None,
         labels: BTreeMap::new(),
     }

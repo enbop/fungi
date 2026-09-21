@@ -92,8 +92,6 @@ pub struct RuntimeAllowedHostPathRequest {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RuntimeConfigResponse {
-    #[prost(bool, tag = "1")]
-    pub disable_docker: bool,
     #[prost(bool, tag = "2")]
     pub disable_wasmtime: bool,
     #[prost(string, repeated, tag = "3")]
@@ -112,8 +110,6 @@ pub struct RuntimeAvailabilityStatus {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct LocalRuntimeStatusResponse {
-    #[prost(message, optional, tag = "1")]
-    pub docker: ::core::option::Option<RuntimeAvailabilityStatus>,
     #[prost(message, optional, tag = "2")]
     pub wasmtime: ::core::option::Option<RuntimeAvailabilityStatus>,
 }
@@ -625,7 +621,6 @@ pub struct ServiceAccessesResponse {
 #[repr(i32)]
 pub enum ServiceRuntimeKind {
     Unspecified = 0,
-    Docker = 1,
     Wasmtime = 2,
 }
 impl ServiceRuntimeKind {
@@ -636,7 +631,6 @@ impl ServiceRuntimeKind {
     pub fn as_str_name(&self) -> &'static str {
         match self {
             Self::Unspecified => "SERVICE_RUNTIME_KIND_UNSPECIFIED",
-            Self::Docker => "SERVICE_RUNTIME_KIND_DOCKER",
             Self::Wasmtime => "SERVICE_RUNTIME_KIND_WASMTIME",
         }
     }
@@ -644,7 +638,6 @@ impl ServiceRuntimeKind {
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "SERVICE_RUNTIME_KIND_UNSPECIFIED" => Some(Self::Unspecified),
-            "SERVICE_RUNTIME_KIND_DOCKER" => Some(Self::Docker),
             "SERVICE_RUNTIME_KIND_WASMTIME" => Some(Self::Wasmtime),
             _ => None,
         }
@@ -654,7 +647,6 @@ impl ServiceRuntimeKind {
 #[repr(i32)]
 pub enum RecipeRuntimeKind {
     Unspecified = 0,
-    Docker = 1,
     Wasmtime = 2,
     Tcp = 3,
 }
@@ -666,7 +658,6 @@ impl RecipeRuntimeKind {
     pub fn as_str_name(&self) -> &'static str {
         match self {
             Self::Unspecified => "RECIPE_RUNTIME_KIND_UNSPECIFIED",
-            Self::Docker => "RECIPE_RUNTIME_KIND_DOCKER",
             Self::Wasmtime => "RECIPE_RUNTIME_KIND_WASMTIME",
             Self::Tcp => "RECIPE_RUNTIME_KIND_TCP",
         }
@@ -675,7 +666,6 @@ impl RecipeRuntimeKind {
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "RECIPE_RUNTIME_KIND_UNSPECIFIED" => Some(Self::Unspecified),
-            "RECIPE_RUNTIME_KIND_DOCKER" => Some(Self::Docker),
             "RECIPE_RUNTIME_KIND_WASMTIME" => Some(Self::Wasmtime),
             "RECIPE_RUNTIME_KIND_TCP" => Some(Self::Tcp),
             _ => None,

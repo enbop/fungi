@@ -6,7 +6,6 @@ members = [
     "crates/config",
     "crates/config-migrate",
     "crates/daemon",
-    "crates/docker-agent",
     "crates/stream",
     "crates/swarm",
     "crates/util",
@@ -34,15 +33,11 @@ env_logger = "0.11"
 flexi_logger = "0.31"
 flume = "0.12"
 home = "0.5"
-http-body-util = "0.1"
-hyper = "1.1.0"
-hyper-util = "0.1.2"
 interprocess = { version = "2.2.3", features = ["tokio"] }
 libp2p-core = "0.43.1"
 libp2p-swarm-test = "0.6.0"
 mdns-sd = "0.20"
 multiaddr = "0.18"
-percent-encoding = "2.3"
 prost = "0.14"
 rand = "0.8"
 reqwest = { version = "0.13", default-features = false }
@@ -118,7 +113,6 @@ fungi-config = { path = "crates/config" }
 fungi-config-migrate = { path = "crates/config-migrate" }
 fungi-daemon = { path = "crates/daemon" }
 fungi-daemon-grpc = { path = "crates/daemon-grpc" }
-fungi-docker-agent = { path = "crates/docker-agent" }
 fungi-stream = { path = "crates/stream" }
 fungi-swarm = { path = "crates/swarm" }
 fungi-util = { path = "crates/util" }

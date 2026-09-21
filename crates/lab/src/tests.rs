@@ -150,7 +150,7 @@ fn replacing_a_binary_does_not_lose_ownership_of_its_running_process() {
 #[test]
 fn dynamic_node_config_preserves_other_settings() {
     let temp = tempfile::tempdir().unwrap();
-    fs::write(temp.path().join("config.toml"), "version = 3\n[rpc]\nlisten_address='127.0.0.1:1234'\n[network]\nlisten_tcp_port=2345\nlisten_udp_port=3456\n[runtime]\ndisable_docker=true\nallowed_host_paths=['/example']\n").unwrap();
+    fs::write(temp.path().join("config.toml"), "version = 3\n[rpc]\nlisten_address='127.0.0.1:1234'\n[network]\nlisten_tcp_port=2345\nlisten_udp_port=3456\n[runtime]\ndisable_wasmtime=true\nallowed_host_paths=['/example']\n").unwrap();
     adapter::configure_node(temp.path(), &["/ip4/127.0.0.1/tcp/4567/p2p/peer".into()]).unwrap();
     let cfg: toml::Value =
         toml::from_str(&fs::read_to_string(temp.path().join("config.toml")).unwrap()).unwrap();
@@ -161,7 +161,7 @@ fn dynamic_node_config_preserves_other_settings() {
         cfg["network"]["use_community_relays"].as_bool(),
         Some(false)
     );
-    assert_eq!(cfg["runtime"]["disable_docker"].as_bool(), Some(true));
+    assert_eq!(cfg["runtime"]["disable_wasmtime"].as_bool(), Some(true));
     assert_eq!(
         cfg["runtime"]["allowed_host_paths"][0].as_str(),
         Some("/example")

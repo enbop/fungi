@@ -18,6 +18,4 @@ pub(crate) use manifest::{
     parse_managed_service_manifest_yaml, parse_service_manifest_yaml_with_policy_for_service_paths,
 };
 pub use model::*;
-pub use providers::{
-    DockerRuntimeProvider, RuntimeProvider, WasmtimeRuntimeProvider, wasmtime_runtime_supported,
-};
+pub use providers::{WasmtimeRuntimeProvider, wasmtime_runtime_supported};

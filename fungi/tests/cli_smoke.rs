@@ -200,7 +200,7 @@ fn service_apply_dry_run_prints_resolved_intent() {
     assert!(
         output
             .stdout
-            .contains("Publish:\n  main: tcp service:8080 daemon:8080 (fixed)")
+            .contains("Publish:\n  main: tcp 127.0.0.1:8080")
     );
     assert!(output.stdout.contains("Runtime grants:"));
     assert!(output.stdout.contains("  - tcp"));

@@ -122,7 +122,6 @@ fn print_build_info(json_output: bool) {
 }
 
 fn print_runtime_status(status: &fungi_daemon_grpc::fungi_daemon_grpc::LocalRuntimeStatusResponse) {
-    print_runtime_entry("docker", status.docker.as_ref());
     print_runtime_entry("wasmtime", status.wasmtime.as_ref());
 }
 

@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "lowercase")]
 pub enum RuntimeKind {
     Unknown,
-    Docker,
     Wasmtime,
     External,
 }
@@ -23,14 +22,12 @@ pub struct ServiceManifest {
     pub mounts: Vec<ServiceMount>,
     pub ports: Vec<ServicePort>,
     pub command: Vec<String>,
-    pub entrypoint: Vec<String>,
     pub working_dir: Option<String>,
     pub labels: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ServiceSource {
-    Docker { image: String },
     WasmtimeFile { component: PathBuf },
     WasmtimeUrl { url: String },
     ExistingTcp { host: String, port: u16 },
@@ -79,19 +76,8 @@ pub struct ServiceMount {
 pub struct ServicePort {
     pub name: Option<String>,
     pub host_port: u16,
-    #[serde(default)]
-    pub host_port_allocation: ServicePortAllocation,
     pub service_port: u16,
     pub protocol: ServicePortProtocol,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-#[derive(Default)]
-pub enum ServicePortAllocation {
-    Auto,
-    #[default]
-    Fixed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

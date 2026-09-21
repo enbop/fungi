@@ -114,4 +114,4 @@ cargo test -p fungi-lab real_ -- --ignored --test-threads=1
 
 The checks cover state/ownership, scoped rollback and timeout cleanup, dynamic
 node configuration, CLI persistence and RPC discovery after restart, trust
-directions, and log retention. They do not deploy Docker services.
+directions, and log retention.
