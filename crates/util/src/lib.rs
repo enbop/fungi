@@ -1,3 +1,4 @@
+pub mod address_policy;
 pub mod keypair;
 pub mod protocols;
 
