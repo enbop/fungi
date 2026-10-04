@@ -11,22 +11,43 @@ pub fn address_within_retention(observed_at: SystemTime, now: SystemTime) -> boo
     now.duration_since(observed_at).unwrap_or_default() <= DIRECT_ADDRESS_RETENTION
 }
 
-/// IP family and transport are independent: preserve both TCP and QUIC options.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AddressFamily {
+    Unknown,
+    Ipv4,
+    Ipv6,
+    Dns,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Transport {
+    Unknown,
+    Tcp,
+    Udp,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AddressBucket {
+    pub family: AddressFamily,
+    pub transport: Transport,
+}
+
+/// Address family and transport are independent: preserve both TCP and QUIC options.
 /// DNS and unknown families have their own buckets instead of masquerading as IPv4.
-pub fn address_bucket(address: &Multiaddr) -> (u8, u8) {
-    let mut family = 0;
-    let mut transport = 0;
+pub fn address_bucket(address: &Multiaddr) -> AddressBucket {
+    let mut family = AddressFamily::Unknown;
+    let mut transport = Transport::Unknown;
     for protocol in address.iter() {
         match protocol {
-            Protocol::Ip4(_) => family = 1,
-            Protocol::Ip6(_) => family = 2,
-            Protocol::Dns(_) | Protocol::Dns4(_) | Protocol::Dns6(_) => family = 3,
-            Protocol::Tcp(_) => transport = 1,
-            Protocol::Udp(_) => transport = 2,
+            Protocol::Ip4(_) => family = AddressFamily::Ipv4,
+            Protocol::Ip6(_) => family = AddressFamily::Ipv6,
+            Protocol::Dns(_) | Protocol::Dns4(_) | Protocol::Dns6(_) => family = AddressFamily::Dns,
+            Protocol::Tcp(_) => transport = Transport::Tcp,
+            Protocol::Udp(_) => transport = Transport::Udp,
             _ => {}
         }
     }
-    (family, transport)
+    AddressBucket { family, transport }
 }
 
 /// Keep candidates from a priority-sorted list, taking one per bucket each round.
@@ -63,6 +84,30 @@ pub fn retain_diverse<T, K: Eq>(candidates: &mut Vec<T>, limit: usize, bucket: i
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selection_preserves_family_and_transport_diversity() {
+        let addresses = [
+            "/ip4/192.168.1.1/tcp/4001",
+            "/ip4/192.168.1.2/tcp/4001",
+            "/ip4/192.168.1.1/udp/4001/quic-v1",
+            "/ip6/::1/tcp/4001",
+            "/ip6/::1/udp/4001/quic-v1",
+            "/dns/example.com/udp/4001/quic-v1",
+            "/dns4/example.com/udp/4001/quic-v1",
+            "/dns6/example.com/udp/4001/quic-v1",
+            "/udp/4001",
+            "/ip4/192.168.1.1",
+            "/tcp/4001",
+        ]
+        .map(|address| address.parse::<Multiaddr>().unwrap());
+        let mut candidates = addresses.to_vec();
+        retain_diverse(&mut candidates, 8, address_bucket);
+        // DNS variants share a bucket. Unknown family/transport remain distinct,
+        // and neither duplicate IPv4/TCP nor DNS consumes another bucket's slot.
+        let expected = [0, 2, 3, 4, 5, 8, 9, 10].map(|index| addresses[index].clone());
+        assert_eq!(candidates, expected);
+    }
 
     #[test]
     fn balances_buckets_without_wasting_spare_capacity() {

@@ -126,7 +126,7 @@ fn candidate_priority(left: &DialCandidate, right: &DialCandidate) -> std::cmp::
         .then(source_rank(left.source).cmp(&source_rank(right.source)))
         .then(right.last_observed_at.cmp(&left.last_observed_at))
         .then(kind_rank(&left.kind).cmp(&kind_rank(&right.kind)))
-        .then(left.addr.to_string().cmp(&right.addr.to_string()))
+        .then_with(|| left.addr.to_string().cmp(&right.addr.to_string()))
 }
 
 fn freshness_rank(freshness: AddressFreshness) -> u8 {

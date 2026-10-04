@@ -129,16 +129,19 @@ fn maintain_direct_address_cache(
     last_synced_pairs: &mut BTreeSet<(String, String)>,
     now: SystemTime,
 ) -> bool {
-    let new_successes = new_direct_address_successes(active.clone(), last_synced_pairs);
+    let new_successes = new_direct_address_successes(&active, last_synced_pairs);
     let mut changed = false;
     for (peer_id, addresses) in new_successes {
-        changed |= cache.record_successes(peer_id, addresses, now);
+        let recorded = cache.record_successes(peer_id, addresses, now);
+        changed |= recorded;
     }
     for (peer_id, addresses) in active {
-        changed |= cache.refresh_active_addresses(&peer_id, &addresses, now);
+        let refreshed = cache.refresh_active_addresses(&peer_id, &addresses, now);
+        changed |= refreshed;
     }
     // Cleanup must run even when every peer is offline and there are no successes.
-    changed | cache.prune(now)
+    let pruned = cache.prune(now);
+    changed || pruned
 }
 
 pub(crate) fn hydrate_direct_address_cache(state: &State, cache: &DirectAddressCache) {
@@ -210,10 +213,10 @@ fn collect_direct_connection_addresses(state: &State) -> BTreeMap<String, Vec<St
 }
 
 fn new_direct_address_successes(
-    grouped: BTreeMap<String, Vec<String>>,
+    grouped: &BTreeMap<String, Vec<String>>,
     last_synced_pairs: &mut BTreeSet<(String, String)>,
 ) -> BTreeMap<String, Vec<String>> {
-    let current_pairs = direct_address_pairs(&grouped);
+    let current_pairs = direct_address_pairs(grouped);
     let mut new_pairs = BTreeMap::<String, Vec<String>>::new();
 
     for (peer_id, address) in current_pairs.difference(last_synced_pairs) {
@@ -262,7 +265,7 @@ mod tests {
         let mut last_synced_pairs = BTreeSet::new();
 
         let first = new_direct_address_successes(
-            BTreeMap::from([
+            &BTreeMap::from([
                 (
                     "peer-a".to_string(),
                     vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
@@ -277,7 +280,7 @@ mod tests {
         assert_eq!(first.len(), 2);
 
         let second = new_direct_address_successes(
-            BTreeMap::from([
+            &BTreeMap::from([
                 (
                     "peer-a".to_string(),
                     vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
@@ -301,7 +304,7 @@ mod tests {
         );
 
         let third = new_direct_address_successes(
-            BTreeMap::from([
+            &BTreeMap::from([
                 (
                     "peer-a".to_string(),
                     vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
@@ -318,11 +321,11 @@ mod tests {
         );
         assert!(third.is_empty());
 
-        let empty = new_direct_address_successes(BTreeMap::new(), &mut last_synced_pairs);
+        let empty = new_direct_address_successes(&BTreeMap::new(), &mut last_synced_pairs);
         assert!(empty.is_empty());
 
         let after_disconnect = new_direct_address_successes(
-            BTreeMap::from([(
+            &BTreeMap::from([(
                 "peer-a".to_string(),
                 vec!["/ip4/192.168.1.7/tcp/4001".to_string()],
             )]),
@@ -439,12 +442,13 @@ mod tests {
         assert!(persist_direct_address_cache(&loaded, &mut dirty).is_err());
         assert!(dirty);
         std::fs::remove_dir(&file).unwrap();
-        dirty |= maintain_direct_address_cache(
+        let changed = maintain_direct_address_cache(
             &mut loaded,
             BTreeMap::new(),
             &mut synced,
             now + Duration::from_secs(30),
         );
+        dirty |= changed;
         persist_direct_address_cache(&loaded, &mut dirty).unwrap();
         assert!(!dirty);
         let disk: DirectAddressCache =
