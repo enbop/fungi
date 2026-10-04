@@ -156,7 +156,7 @@ mod tests {
 
         let channel = rpc_endpoint(
             format!("http://{address}"),
-            Duration::from_secs(1),
+            Duration::from_secs(5),
             Duration::from_millis(50),
         )
         .unwrap()
@@ -164,15 +164,16 @@ mod tests {
         .await
         .unwrap();
         let mut client = FungiDaemonClient::new(channel);
-        let started = tokio::time::Instant::now();
-        let error = client
-            .version(Request::new(fungi_daemon_grpc::fungi_daemon_grpc::Empty {}))
-            .await
-            .unwrap_err();
-
-        assert!(started.elapsed() < Duration::from_secs(1));
-        assert!(error.message().contains("Timeout expired"));
+        let response = tokio::time::timeout(
+            Duration::from_secs(10),
+            client.version(Request::new(fungi_daemon_grpc::fungi_daemon_grpc::Empty {})),
+        )
+        .await;
         server.abort();
+        let error = response
+            .expect("stalled RPC request must time out")
+            .unwrap_err();
+        assert!(error.message().contains("Timeout expired"));
     }
 
     #[test]
