@@ -21,6 +21,9 @@ pub struct DirectAddressCache {
 
     #[serde(skip)]
     cache_file: PathBuf,
+
+    #[serde(skip)]
+    pending_persistence: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -59,10 +62,16 @@ impl DirectAddressCache {
             )
         })?;
         cache.cache_file = cache_file;
-        if cache.prune(SystemTime::now()) {
-            cache.save_to_file()?;
-        }
+        // Reading an existing cache must not require write access. Hand cleanup
+        // persistence to the manager, which can retry without blocking startup.
+        cache.pending_persistence = cache.prune(SystemTime::now());
         Ok(cache)
+    }
+
+    /// Transfer startup cleanup to the owner's persistence retry state.
+    /// The owner must retain this work until a save succeeds, even on idle ticks.
+    pub fn take_pending_persistence(&mut self) -> bool {
+        std::mem::take(&mut self.pending_persistence)
     }
 
     pub fn init_cache_file(cache_file: PathBuf) -> Result<()> {
@@ -120,8 +129,9 @@ impl DirectAddressCache {
         let mut updated = self.clone();
         let recorded = updated.record_successes(peer_id, addresses, now);
         let pruned = updated.prune(now);
-        if recorded || pruned {
+        if recorded || pruned || updated.pending_persistence {
             updated.save_to_file()?;
+            updated.pending_persistence = false;
         }
         Ok(updated)
     }
@@ -313,7 +323,7 @@ mod tests {
         );
     }
     #[test]
-    fn loading_legacy_cache_prunes_disk_and_preserves_recent_transport_choices() {
+    fn loading_legacy_cache_defers_cleanup_and_preserves_recent_transport_choices() {
         use fungi_util::address_policy::DIRECT_ADDRESS_RETENTION;
         let dir = TempDir::new().unwrap();
         let mut cache = DirectAddressCache::apply_from_dir(dir.path()).unwrap();
@@ -341,7 +351,7 @@ mod tests {
         );
         cache.save_to_file().unwrap();
 
-        let loaded = DirectAddressCache::apply_from_dir(dir.path()).unwrap();
+        let mut loaded = DirectAddressCache::apply_from_dir(dir.path()).unwrap();
         let addresses = loaded.get_device_addresses("peer-a");
         assert_eq!(addresses.len(), MAX_CACHED_ADDRESSES_PER_PEER);
         assert!(addresses.contains(&ipv4));
@@ -351,7 +361,12 @@ mod tests {
         assert!(loaded.get_device_addresses("expired-peer").is_empty());
         let persisted: DirectAddressCache =
             serde_json::from_str(&std::fs::read_to_string(&loaded.cache_file).unwrap()).unwrap();
-        assert_eq!(persisted.devices, loaded.devices);
+        assert_eq!(persisted.devices, cache.devices);
+        assert!(loaded.take_pending_persistence());
+        loaded.save_to_file().unwrap();
+        let mut reloaded = DirectAddressCache::apply_from_dir(dir.path()).unwrap();
+        assert_eq!(reloaded.devices, loaded.devices);
+        assert!(!reloaded.take_pending_persistence());
         assert!(
             loaded.devices[0]
                 .addresses
@@ -360,6 +375,68 @@ mod tests {
         );
         let mut same = loaded.clone();
         assert!(!same.prune(now));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn startup_cleanup_does_not_require_writable_cache_directory() {
+        use fungi_util::address_policy::DIRECT_ADDRESS_RETENTION;
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = TempDir::new().unwrap();
+        let mut cache = DirectAddressCache::apply_from_dir(dir.path()).unwrap();
+        cache.record_successes(
+            "peer".into(),
+            vec!["/ip4/192.168.1.145/tcp/4001".into()],
+            SystemTime::now() - DIRECT_ADDRESS_RETENTION - Duration::from_secs(86400),
+        );
+        cache.save_to_file().unwrap();
+        let before = std::fs::read(&cache.cache_file).unwrap();
+        let cache_dir = dir.path().join("cache");
+        let permissions = std::fs::metadata(&cache_dir).unwrap().permissions();
+        std::fs::set_permissions(&cache_dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let result = DirectAddressCache::apply_from_dir(dir.path());
+        // Restore permissions before any assertion, including on the failing implementation.
+        std::fs::set_permissions(&cache_dir, permissions).unwrap();
+
+        let mut loaded =
+            result.expect("readable cache must load even when cleanup cannot be saved");
+        assert!(loaded.devices.is_empty());
+        assert!(loaded.take_pending_persistence());
+        assert!(!loaded.take_pending_persistence());
+        let json = serde_json::to_value(&loaded).unwrap();
+        assert_eq!(json, serde_json::json!({"devices": []}));
+        // This also detects unwanted startup writes when the test runs as root.
+        assert_eq!(std::fs::read(&cache.cache_file).unwrap(), before);
+    }
+
+    #[test]
+    fn explicit_persistence_flushes_pending_cleanup_without_new_addresses() {
+        use fungi_util::address_policy::DIRECT_ADDRESS_RETENTION;
+        let dir = TempDir::new().unwrap();
+        let mut cache = DirectAddressCache::apply_from_dir(dir.path()).unwrap();
+        cache.record_successes(
+            "peer".into(),
+            vec!["/ip4/192.168.1.9/tcp/4001".into()],
+            SystemTime::now() - DIRECT_ADDRESS_RETENTION - Duration::from_secs(1),
+        );
+        cache.save_to_file().unwrap();
+        let loaded = DirectAddressCache::apply_from_dir(dir.path()).unwrap();
+        let mut saved = loaded
+            .record_successful_addresses("peer".into(), Vec::new())
+            .unwrap();
+        assert!(!saved.take_pending_persistence());
+        let disk: DirectAddressCache =
+            serde_json::from_slice(&std::fs::read(&cache.cache_file).unwrap()).unwrap();
+        assert!(disk.devices.is_empty());
+    }
+
+    #[test]
+    fn invalid_cache_json_still_fails_loading() {
+        let dir = TempDir::new().unwrap();
+        let cache = DirectAddressCache::apply_from_dir(dir.path()).unwrap();
+        std::fs::write(&cache.cache_file, b"invalid JSON").unwrap();
+        assert!(DirectAddressCache::apply_from_dir(dir.path()).is_err());
     }
 
     #[test]

@@ -79,7 +79,7 @@ impl Connectivity {
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             let mut last_synced_pairs = BTreeSet::<(String, String)>::new();
 
-            let mut dirty = false;
+            let mut dirty = direct_address_cache.lock().take_pending_persistence();
             loop {
                 interval.tick().await;
 
@@ -406,6 +406,49 @@ mod tests {
         persist_direct_address_cache(&cache, &mut dirty).unwrap();
         assert!(!dirty);
         let disk = DirectAddressCache::apply_from_dir(dir.path()).unwrap();
+        assert!(disk.devices.is_empty());
+    }
+
+    #[test]
+    fn startup_cleanup_is_retried_on_idle_ticks_until_persistence_succeeds() {
+        use fungi_util::address_policy::DIRECT_ADDRESS_RETENTION;
+        let dir = tempfile::tempdir().unwrap();
+        let mut cache = DirectAddressCache::apply_from_dir(dir.path()).unwrap();
+        let now = SystemTime::now();
+        cache.record_successes(
+            "peer".into(),
+            vec!["/ip4/192.168.1.9/tcp/4001".into()],
+            now - DIRECT_ADDRESS_RETENTION - Duration::from_secs(1),
+        );
+        cache.save_to_file().unwrap();
+        let mut loaded = DirectAddressCache::apply_from_dir(dir.path()).unwrap();
+        assert!(loaded.devices.is_empty());
+        let mut dirty = loaded.take_pending_persistence();
+        let mut synced = BTreeSet::new();
+        assert!(!maintain_direct_address_cache(
+            &mut loaded,
+            BTreeMap::new(),
+            &mut synced,
+            now
+        ));
+        assert!(dirty); // startup work survives an idle tick with no further pruning
+
+        let file = dir.path().join("cache/direct_addresses.json");
+        std::fs::remove_file(&file).unwrap();
+        std::fs::create_dir(&file).unwrap();
+        assert!(persist_direct_address_cache(&loaded, &mut dirty).is_err());
+        assert!(dirty);
+        std::fs::remove_dir(&file).unwrap();
+        dirty |= maintain_direct_address_cache(
+            &mut loaded,
+            BTreeMap::new(),
+            &mut synced,
+            now + Duration::from_secs(30),
+        );
+        persist_direct_address_cache(&loaded, &mut dirty).unwrap();
+        assert!(!dirty);
+        let disk: DirectAddressCache =
+            serde_json::from_slice(&std::fs::read(file).unwrap()).unwrap();
         assert!(disk.devices.is_empty());
     }
 
