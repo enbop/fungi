@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fungi"
+  short_description: "Install and operate Fungi across devices"
+  default_prompt: "Use $fungi to set up my devices and deploy a service safely."

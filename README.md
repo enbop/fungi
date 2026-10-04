@@ -70,6 +70,16 @@ Start with the quick starts:
 
 Full documentation: [fungi.rs/docs](https://fungi.rs/docs/intro).
 
+## Agent skill
+
+Install the Fungi skill to let a compatible agent help with installation, device trust, services, and diagnosis:
+
+```bash
+npx skills@latest add enbop/fungi --skill fungi
+```
+
+Add `--global` to use it across projects. See [skills/README.md](skills/README.md) for discovery, agent selection, and migration from the former skills repository.
+
 ## Platform Support
 
 | Platform | Status         |

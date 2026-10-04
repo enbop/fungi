@@ -1,0 +1,38 @@
+name: Skills
+
+on:
+  push:
+    branches: ["master"]
+    paths:
+      - "skills/**"
+      - "README.md"
+      - ".github/workflows/skills.yml"
+  pull_request:
+    paths:
+      - "skills/**"
+      - "README.md"
+      - ".github/workflows/skills.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: Discover and install Fungi skill
+    runs-on: ubuntu-latest
+    env:
+      DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.20.0"
+      - name: Discover and install from repository root
+        shell: bash
+        run: |
+          npx --yes skills@1.5.20 add "$GITHUB_WORKSPACE" --list
+          test_project=$(mktemp -d "$RUNNER_TEMP/fungi-skill-install.XXXXXX")
+          cd "$test_project"
+          npx --yes skills@1.5.20 add "$GITHUB_WORKSPACE" --skill fungi --agent claude-code --copy --yes
+          diff -ru "$GITHUB_WORKSPACE/skills/fungi" "$test_project/.claude/skills/fungi"
