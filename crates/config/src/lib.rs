@@ -1,3 +1,4 @@
+mod atomic_file;
 mod build_info;
 mod daemon_lock;
 pub mod devices;

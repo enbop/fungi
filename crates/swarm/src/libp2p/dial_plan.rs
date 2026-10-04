@@ -1,6 +1,10 @@
 use crate::{AddressFreshness, AddressTransportKind, PeerAddressRecord, PeerAddressSource, State};
+use fungi_util::address_policy::{address_bucket, address_within_retention, retain_diverse};
 use libp2p::{Multiaddr, PeerId};
 use std::time::SystemTime;
+
+const MAX_LEARNED_DIAL_ADDRESSES: usize = 8;
+const MAX_STALE_DIAL_ADDRESSES: usize = 2;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(super) enum DialCandidateKind {
@@ -14,6 +18,7 @@ pub(super) struct DialCandidate {
     pub(super) kind: DialCandidateKind,
     pub(super) source: PeerAddressSource,
     pub(super) freshness: AddressFreshness,
+    pub(super) last_observed_at: SystemTime,
 }
 
 #[derive(Debug, Default)]
@@ -26,11 +31,17 @@ pub(super) struct DialPlan {
 
 impl DialPlan {
     pub(super) fn for_peer(state: &State, peer_id: PeerId) -> Self {
-        let now = SystemTime::now();
+        Self::for_peer_at(state, peer_id, SystemTime::now())
+    }
+
+    fn for_peer_at(state: &State, peer_id: PeerId, now: SystemTime) -> Self {
         let mut plan = Self::default();
 
-        for record in state.list_peer_addresses() {
-            if record.peer_id != peer_id {
+        for record in state.peer_addresses(&peer_id) {
+            if !record.source.is_user_managed()
+                && !address_within_retention(record.last_observed_at, now)
+            {
+                plan.skipped_expired += 1;
                 continue;
             }
 
@@ -59,14 +70,35 @@ impl DialPlan {
     }
 
     pub(super) fn direct_addresses(&self) -> Vec<Multiaddr> {
-        let candidates = if self.direct_candidates.is_empty() {
-            &self.stale_direct_candidates
-        } else {
-            &self.direct_candidates
-        };
-
-        candidates
+        // Explicit configuration remains usable regardless of age or learned limits.
+        let mut configured: Vec<_> = self
+            .direct_candidates
             .iter()
+            .chain(&self.stale_direct_candidates)
+            .filter(|candidate| candidate.source.is_user_managed())
+            .collect();
+        let mut learned: Vec<_> = self
+            .direct_candidates
+            .iter()
+            .filter(|candidate| !candidate.source.is_user_managed())
+            .collect();
+        let limit = if learned.is_empty() {
+            learned = self
+                .stale_direct_candidates
+                .iter()
+                .filter(|candidate| !candidate.source.is_user_managed())
+                .collect();
+            MAX_STALE_DIAL_ADDRESSES
+        } else {
+            MAX_LEARNED_DIAL_ADDRESSES
+        };
+        retain_diverse(&mut learned, limit, |candidate| {
+            address_bucket(&candidate.addr)
+        });
+        configured.extend(learned);
+        configured.sort_by(|a, b| candidate_priority(a, b));
+        configured
+            .into_iter()
             .map(|candidate| candidate.addr.clone())
             .collect()
     }
@@ -84,6 +116,7 @@ fn candidate_from_record(record: PeerAddressRecord, now: SystemTime) -> Option<D
         kind,
         source: record.source,
         freshness: record.freshness(now),
+        last_observed_at: record.last_observed_at,
     })
 }
 
@@ -91,8 +124,9 @@ fn candidate_priority(left: &DialCandidate, right: &DialCandidate) -> std::cmp::
     freshness_rank(left.freshness)
         .cmp(&freshness_rank(right.freshness))
         .then(source_rank(left.source).cmp(&source_rank(right.source)))
+        .then(right.last_observed_at.cmp(&left.last_observed_at))
         .then(kind_rank(&left.kind).cmp(&kind_rank(&right.kind)))
-        .then(left.addr.to_string().cmp(&right.addr.to_string()))
+        .then_with(|| left.addr.to_string().cmp(&right.addr.to_string()))
 }
 
 fn freshness_rank(freshness: AddressFreshness) -> u8 {
@@ -188,6 +222,7 @@ mod tests {
             kind: DialCandidateKind::DirectTcp,
             source: PeerAddressSource::DeviceConfig,
             freshness: AddressFreshness::Stale,
+            last_observed_at: SystemTime::now(),
         };
         let plan = DialPlan {
             direct_candidates: Vec::new(),
@@ -199,5 +234,109 @@ mod tests {
         assert!(plan.direct_candidates.is_empty());
         assert_eq!(plan.stale_direct_candidates.len(), 1);
         assert_eq!(plan.direct_addresses(), vec![stale_addr]);
+    }
+    fn observe(
+        state: &State,
+        peer: PeerId,
+        address: &str,
+        source: PeerAddressSource,
+        at: SystemTime,
+    ) {
+        state.restore_peer_address_record(peer, address.parse().unwrap(), source, at, at, 1);
+    }
+
+    #[test]
+    fn bounds_140_stale_addresses_and_drops_expired_memory_without_restart() {
+        use fungi_util::address_policy::DIRECT_ADDRESS_RETENTION;
+        use std::time::Duration;
+        let peer = PeerId::random();
+        let state = State::default();
+        let now = SystemTime::now();
+        for index in 0..140 {
+            observe(
+                &state,
+                peer,
+                &format!("/ip4/192.168.1.145/udp/{}/quic-v1", 4000 + index),
+                PeerAddressSource::DirectCache,
+                now - Duration::from_secs(3600 + 140 - index),
+            );
+        }
+        let addresses = DialPlan::for_peer_at(&state, peer, now).direct_addresses();
+        assert_eq!(
+            addresses,
+            vec![
+                "/ip4/192.168.1.145/udp/4139/quic-v1"
+                    .parse::<Multiaddr>()
+                    .unwrap(),
+                "/ip4/192.168.1.145/udp/4138/quic-v1"
+                    .parse::<Multiaddr>()
+                    .unwrap(),
+            ]
+        );
+        let expired = DialPlan::for_peer_at(&state, peer, now + DIRECT_ADDRESS_RETENTION);
+        assert!(expired.direct_addresses().is_empty());
+        assert_eq!(expired.skipped_expired, 140);
+        assert_eq!(state.peer_addresses(&peer).len(), 140);
+    }
+
+    #[test]
+    fn fresh_discovery_is_bounded_diverse_and_keeps_explicit_addresses() {
+        use fungi_util::address_policy::DIRECT_ADDRESS_RETENTION;
+        use std::time::Duration;
+        let peer = PeerId::random();
+        let state = State::default();
+        let now = SystemTime::now();
+        for index in 1..=20 {
+            observe(
+                &state,
+                peer,
+                &format!("/ip6/2001:db8::{index}/udp/4001/quic-v1"),
+                PeerAddressSource::Mdns,
+                now,
+            );
+        }
+        let ipv4 = "/ip4/192.168.1.145/udp/5001/quic-v1";
+        let tcp = "/ip6/2001:db8::ffff/tcp/5002";
+        observe(&state, peer, ipv4, PeerAddressSource::Mdns, now);
+        observe(&state, peer, tcp, PeerAddressSource::Mdns, now);
+        // Explicit fixed addresses remain available even when older than cache TTL.
+        for port in 6000..6010 {
+            observe(
+                &state,
+                peer,
+                &format!("/ip4/192.168.1.146/tcp/{port}"),
+                PeerAddressSource::DeviceConfig,
+                now - DIRECT_ADDRESS_RETENTION - Duration::from_secs(1),
+            );
+        }
+        let stale = "/ip4/192.168.1.145/tcp/9";
+        observe(
+            &state,
+            peer,
+            stale,
+            PeerAddressSource::DirectCache,
+            now - Duration::from_secs(3600),
+        );
+        let unrelated_peer = PeerId::random();
+        observe(
+            &state,
+            unrelated_peer,
+            "/ip4/192.168.1.200/tcp/8",
+            PeerAddressSource::Mdns,
+            now,
+        );
+
+        let addresses = DialPlan::for_peer_at(&state, peer, now).direct_addresses();
+        assert_eq!(addresses.len(), MAX_LEARNED_DIAL_ADDRESSES + 10);
+        assert!(addresses.contains(&ipv4.parse().unwrap()));
+        assert!(addresses.contains(&tcp.parse().unwrap()));
+        assert!(!addresses.contains(&stale.parse().unwrap()));
+        assert_eq!(
+            addresses
+                .iter()
+                .filter(|a| a.to_string().contains("192.168.1.146"))
+                .count(),
+            10
+        );
     }
 }

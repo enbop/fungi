@@ -53,6 +53,10 @@ pub enum PeerAddressSource {
 }
 
 impl PeerAddressSource {
+    pub fn is_user_managed(self) -> bool {
+        matches!(self, Self::DeviceConfig | Self::Manual)
+    }
+
     pub fn as_str(&self) -> &'static str {
         match self {
             PeerAddressSource::Identify => "identify",
@@ -456,7 +460,9 @@ impl ConnectivityState {
                 record.last_observed_at = now;
                 record.expired_at = None;
                 record.observation_count += 1;
-                record.source = source;
+                if !record.source.is_user_managed() {
+                    record.source = source;
+                }
                 PeerAddressObservation::Refreshed
             }
             None => {
@@ -507,7 +513,11 @@ impl ConnectivityState {
                 record.last_observed_at = last_observed_at;
                 record.expired_at = None;
                 record.observation_count = record.observation_count.max(observation_count);
-                record.source = source;
+                // Restored successes refresh reachability without replacing discovery
+                // provenance or explicit configuration.
+                if !record.source.is_user_managed() && source != PeerAddressSource::DirectCache {
+                    record.source = source;
+                }
                 PeerAddressObservation::Refreshed
             }
             None => {
@@ -540,11 +550,23 @@ impl ConnectivityState {
             return false;
         };
 
+        if record.source.is_user_managed() {
+            return false;
+        }
         if record.expired_at.is_none() {
             record.expired_at = Some(SystemTime::now());
         }
 
         true
+    }
+
+    /// Select before cloning; dialing one peer need not copy/sort every peer's addresses.
+    pub fn peer_addresses(&self, peer_id: &PeerId) -> Vec<PeerAddressRecord> {
+        self.peer_address_records
+            .values()
+            .filter(|record| &record.peer_id == peer_id)
+            .cloned()
+            .collect()
     }
 
     pub fn list_peer_addresses(&self) -> Vec<PeerAddressRecord> {
@@ -913,6 +935,21 @@ mod tests {
             records[0].freshness(SystemTime::now()),
             AddressFreshness::Expired
         );
+    }
+
+    #[test]
+    fn configured_address_survives_discovery_refresh_and_expiry() {
+        let peer = PeerId::random();
+        let address: Multiaddr = "/ip4/192.168.1.7/tcp/4001".parse().unwrap();
+        let mut state = ConnectivityState::default();
+        state.record_peer_address(peer, address.clone(), PeerAddressSource::DeviceConfig);
+        state.record_peer_address(peer, address.clone(), PeerAddressSource::Mdns);
+        state.record_peer_address(peer, address.clone(), PeerAddressSource::Identify);
+        assert!(!state.expire_peer_address(peer, address));
+        let records = state.peer_addresses(&peer);
+        assert_eq!(records[0].source, PeerAddressSource::DeviceConfig);
+        assert!(records[0].expired_at.is_none());
+        assert!(state.peer_addresses(&PeerId::random()).is_empty());
     }
 
     #[test]

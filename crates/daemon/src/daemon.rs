@@ -8,6 +8,7 @@ use std::{
 
 use crate::{
     Connectivity, DaemonArgs, InboundAccessPolicy, Settings,
+    connectivity::hydrate_direct_address_cache,
     control::{FungiControl, FungiControlInit},
     controls::{
         NodeCapabilitiesControl, ServiceControlProtocolControl, ServiceDiscoveryControl,
@@ -40,7 +41,7 @@ use crate::{
 pub struct FungiDaemon {
     control: FungiControl,
     swarm_task: Option<JoinHandle<()>>,
-    direct_address_cache_sync_task: Option<JoinHandle<()>>,
+    direct_address_cache_manager_task: Option<JoinHandle<()>>,
 }
 
 impl FungiDaemon {
@@ -186,7 +187,7 @@ impl FungiDaemon {
             node_capabilities: node_capabilities_control,
         });
 
-        let direct_address_cache_sync_task = connectivity.spawn_direct_address_cache_sync();
+        let direct_address_cache_manager_task = connectivity.spawn_direct_address_cache_manager();
         let control = FungiControl::new(FungiControlInit {
             settings,
             devices,
@@ -201,7 +202,7 @@ impl FungiDaemon {
         Ok(Self {
             control,
             swarm_task: Some(swarm_task),
-            direct_address_cache_sync_task: Some(direct_address_cache_sync_task),
+            direct_address_cache_manager_task: Some(direct_address_cache_manager_task),
         })
     }
 
@@ -217,14 +218,14 @@ impl FungiDaemon {
 
     pub async fn shutdown(mut self) {
         abort_and_join_task(&mut self.swarm_task).await;
-        abort_and_join_task(&mut self.direct_address_cache_sync_task).await;
+        abort_and_join_task(&mut self.direct_address_cache_manager_task).await;
     }
 }
 
 impl Drop for FungiDaemon {
     fn drop(&mut self) {
         abort_task(&self.swarm_task);
-        abort_task(&self.direct_address_cache_sync_task);
+        abort_task(&self.direct_address_cache_manager_task);
     }
 }
 
@@ -327,54 +328,6 @@ fn hydrate_device_addresses(state: &State, devices_config: &DevicesConfig) {
     if loaded > 0 || ignored > 0 {
         log::info!(
             "Loaded {} device address(es) into dial planner state (ignored={})",
-            loaded,
-            ignored
-        );
-    }
-}
-
-fn hydrate_direct_address_cache(state: &State, cache: &DirectAddressCache) {
-    let mut loaded = 0usize;
-    let mut ignored = 0usize;
-
-    for device in &cache.devices {
-        let Ok(peer_id) = device.peer_id.parse::<libp2p::PeerId>() else {
-            ignored += device.addresses.len();
-            continue;
-        };
-
-        for entry in &device.addresses {
-            match entry.address.parse::<Multiaddr>() {
-                Ok(multiaddr) => {
-                    match state.restore_peer_address_record(
-                        peer_id,
-                        multiaddr,
-                        PeerAddressSource::DirectCache,
-                        entry.first_success_at,
-                        entry.last_success_at,
-                        entry.success_count,
-                    ) {
-                        fungi_swarm::PeerAddressObservation::New
-                        | fungi_swarm::PeerAddressObservation::Refreshed => loaded += 1,
-                        fungi_swarm::PeerAddressObservation::Ignored => ignored += 1,
-                    }
-                }
-                Err(error) => {
-                    ignored += 1;
-                    log::debug!(
-                        "Ignoring invalid cached direct address for peer {}: {} ({})",
-                        device.peer_id,
-                        entry.address,
-                        error
-                    );
-                }
-            }
-        }
-    }
-
-    if loaded > 0 || ignored > 0 {
-        log::info!(
-            "Loaded {} cached direct address(es) into dial planner state (ignored={})",
             loaded,
             ignored
         );

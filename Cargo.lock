@@ -1694,6 +1694,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "log",
+ "multiaddr",
  "serde",
  "sysinfo",
  "tokio",

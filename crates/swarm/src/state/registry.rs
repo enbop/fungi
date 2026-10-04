@@ -328,6 +328,10 @@ impl State {
             .expire_peer_address(peer_id, address)
     }
 
+    pub fn peer_addresses(&self, peer_id: &PeerId) -> Vec<PeerAddressRecord> {
+        self.connectivity_state.lock().peer_addresses(peer_id)
+    }
+
     pub fn list_peer_addresses(&self) -> Vec<PeerAddressRecord> {
         self.connectivity_state.lock().list_peer_addresses()
     }
