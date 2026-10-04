@@ -2,17 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.8.0] - 2026-10-04
 
-### Removed
+### Added
 
-- **Breaking:** removed the managed Docker service runtime, Docker configuration and capability fields, Docker RPC enum values, and Docker image manifests. Managed execution uses Wasmtime; existing host services remain accessible through TCP forwarding.
-- Removed the shared runtime-provider trait, container port allocation policy, and Docker-only entrypoint field.
+- Official Fungi agent skill in this repository. Install with `npx skills@latest add enbop/fungi --skill fungi` ([#87](https://github.com/enbop/fungi/pull/87)).
 
 ### Changed
 
-- Recipe lists omit unsupported runtimes in older cached catalogs. Direct requests for unsupported recipes fail before downloading or creating a service.
-- Saved unsupported service manifests remain isolated as configuration errors, without preventing healthy services from restoring.
+- Wasmtime services use command components with their own TCP listeners ([#79](https://github.com/enbop/fungi/pull/79)).
+- Direct-address caches retain at most 8 addresses per peer for 7 days and clean up automatically. Connection attempts use a limited set of learned addresses; explicitly configured addresses remain unaffected ([#86](https://github.com/enbop/fungi/pull/86)).
+- `fungi-lab` uses a command-driven lifecycle and dynamic node ports. Relay and daemon processes require explicit stop; older lab directories require cleanup with their matching binary ([#80](https://github.com/enbop/fungi/pull/80)).
+
+### Fixed
+
+- Repeated `fungi service apply --start` is idempotent and reports the verified final state ([#78](https://github.com/enbop/fungi/pull/78)).
+- Invalid service configurations no longer prevent healthy services from restoring. Failed apply operations roll back changes and expose actionable errors ([#79](https://github.com/enbop/fungi/pull/79), [#85](https://github.com/enbop/fungi/pull/85)).
+- Fixed macOS lab lock release and improved CLI startup failure logs ([#84](https://github.com/enbop/fungi/pull/84)).
+
+### Removed
+
+- **Breaking:** removed managed Docker services. Existing containers and host applications can still be exposed through TCP forwarding ([#85](https://github.com/enbop/fungi/pull/85)).
+- **Breaking:** removed Wasmtime `serve` and `run.mode` ([#79](https://github.com/enbop/fungi/pull/79)).
+
+### Upgrade notes
+
+- Upgrade old File Browser Lite and WebDAV HTTP services by applying the updated recipe under the **same instance name** to preserve service ID and data. Catalog refresh alone does not upgrade installed services; deleting `run.mode` alone does not upgrade old components.
 
 ## [0.7.1] - 2026-08-29
 
