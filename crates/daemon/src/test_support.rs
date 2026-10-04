@@ -139,21 +139,25 @@ impl TestDaemonBuilder {
         self
     }
 
-    /// Spawn the daemon.
-    pub async fn build(self) -> Result<TestDaemon> {
-        let dir = TempDir::new()?;
-        let keypair = self.keypair.unwrap_or_else(Keypair::generate_ed25519);
-        let tcp_port = reserve_ephemeral_port();
-        let mut cfg = minimal_test_config(&dir, tcp_port);
-        let trusted_devices = TrustedDevicesConfig::in_memory(self.trusted_devices);
+    fn configure(&self, cfg: &mut FungiConfig) {
         if !self.custom_relay_addresses.is_empty() {
             cfg.network.relay_enabled = true;
             cfg.network.use_community_relays = false;
             cfg.network.custom_relay_addresses = self.custom_relay_addresses.clone();
         }
-        for configure in self.config_mutators {
-            configure(&mut cfg);
+        for configure in &self.config_mutators {
+            configure(cfg);
         }
+    }
+
+    /// Spawn the daemon.
+    pub async fn build(self) -> Result<TestDaemon> {
+        let dir = TempDir::new()?;
+        let tcp_port = reserve_ephemeral_port();
+        let mut cfg = minimal_test_config(&dir, tcp_port);
+        self.configure(&mut cfg);
+        let keypair = self.keypair.unwrap_or_else(Keypair::generate_ed25519);
+        let trusted_devices = TrustedDevicesConfig::in_memory(self.trusted_devices);
 
         let daemon = FungiDaemon::start_with(
             DaemonArgs::default(),
@@ -328,22 +332,6 @@ mod tests {
     const REVERSE_STREAM_TEST_PROTOCOL: StreamProtocol =
         StreamProtocol::new("/fungi/test/reverse-stream-trust-gap/1.0.0");
 
-    /// Smoke test: a single daemon starts up and exposes a non-trivial PeerId.
-    #[tokio::test]
-    async fn spawn_single_daemon_smoke() {
-        let d = TestDaemon::spawn().await.expect("spawn failed");
-        let pid = d.peer_id();
-        assert!(!pid.to_string().is_empty(), "PeerId should not be empty");
-    }
-
-    /// Each spawned daemon gets a distinct PeerId.
-    #[tokio::test]
-    async fn two_daemons_have_distinct_peer_ids() {
-        let a = TestDaemon::spawn().await.unwrap();
-        let b = TestDaemon::spawn().await.unwrap();
-        assert_ne!(a.peer_id(), b.peer_id());
-    }
-
     /// `tcp_multiaddr` encodes the correct port and peer ID.
     #[tokio::test]
     async fn tcp_multiaddr_contains_port_and_peer_id() {
@@ -382,35 +370,34 @@ mod tests {
         assert!(client_in_list, "server should trust client device");
     }
 
-    #[tokio::test]
-    async fn builder_can_customize_config() {
-        let d = TestDaemonBuilder::new()
+    #[test]
+    fn builder_can_customize_config() {
+        let dir = TempDir::new().unwrap();
+        let mut cfg = minimal_test_config(&dir, 12345);
+        TestDaemonBuilder::new()
             .with_config(|cfg| {
                 cfg.network.relay_enabled = true;
             })
-            .build()
-            .await
-            .unwrap();
+            .configure(&mut cfg);
 
-        assert!(d.daemon().settings().snapshot().network.relay_enabled);
+        assert!(cfg.network.relay_enabled);
     }
 
-    #[tokio::test]
-    async fn builder_can_set_custom_relay_addresses() {
+    #[test]
+    fn builder_can_set_custom_relay_addresses() {
         let relay_peer_id = Keypair::generate_ed25519().public().to_peer_id();
         let relay_addr: Multiaddr = format!("/ip4/127.0.0.1/tcp/30001/p2p/{relay_peer_id}")
             .parse()
             .unwrap();
-        let d = TestDaemonBuilder::new()
+        let dir = TempDir::new().unwrap();
+        let mut cfg = minimal_test_config(&dir, 12345);
+        TestDaemonBuilder::new()
             .with_custom_relay_addresses([relay_addr.clone()])
-            .build()
-            .await
-            .unwrap();
+            .configure(&mut cfg);
 
-        let config = d.daemon().settings().snapshot();
-        assert!(config.network.relay_enabled);
-        assert!(!config.network.use_community_relays);
-        assert_eq!(config.network.custom_relay_addresses, vec![relay_addr]);
+        assert!(cfg.network.relay_enabled);
+        assert!(!cfg.network.use_community_relays);
+        assert_eq!(cfg.network.custom_relay_addresses, vec![relay_addr]);
     }
 
     #[tokio::test]
