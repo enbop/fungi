@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Security
+
+- Upgrade the embedded Wasmtime runtime from 46.0.1 to 48.0.8 LTS, including fixes for async component callbacks overwriting the host stack, AArch64 Cranelift sandbox escapes, and filesystem sandbox escapes.
+- Raise the Rustls dependency minimum to 0.23.46 to include TLS handshake and key-share cache security fixes.
+
+### Upgrade notes
+
+- Building requires Rust 1.95.0 or newer. Legacy WASI threads support is removed, following its removal in Wasmtime 47.
+
 ## [0.8.0] - 2026-10-04
 
 ### Added
