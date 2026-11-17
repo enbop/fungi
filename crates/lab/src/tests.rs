@@ -117,7 +117,8 @@ fn process_identity_mismatch_never_signals_the_process() {
 #[test]
 fn replacing_a_binary_does_not_lose_ownership_of_its_running_process() {
     let temp = tempfile::tempdir().unwrap();
-    let bin = temp.path().join("test-process");
+    // Multicall implementations of sleep dispatch on the executable basename.
+    let bin = temp.path().join("sleep");
     fs::copy("/bin/sleep", &bin).unwrap();
     let mut command = Command::new(&bin);
     command
