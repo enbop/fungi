@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Security
 
-- Upgrade the embedded Wasmtime runtime from 46.0.1 to 48.0.8 LTS, including fixes for async component callbacks overwriting the host stack, AArch64 Cranelift sandbox escapes, and filesystem sandbox escapes.
+- Upgrade the embedded Wasmtime runtime from 46.0.1 to 48.0.9 LTS, including fixes for async component callbacks overwriting the host stack, AArch64 Cranelift and filesystem sandbox escapes, and bugs that could exhaust host memory or terminate the host process.
 - Raise the Rustls dependency minimum to 0.23.46 to include TLS handshake and key-share cache security fixes.
 
 ### Upgrade notes

@@ -59,7 +59,7 @@ tonic-prost-build = "0.14.2"
 typed-path = "0.12"
 ulid = "1"
 void = "1"
-wasmtime-cli = { version = "48.0.8", default-features = false, features = [
+wasmtime-cli = { version = "48.0.9", default-features = false, features = [
     "run",
     "wasi-nn",
     "wasi-http",
